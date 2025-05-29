@@ -1,0 +1,10 @@
+[workspace]
+members = ["r2l-core", "r2l-gym", "r2l-macros", "r2l-tui"]
+resolver = "2"
+
+[workspace.dependencies]
+candle-core = { version = "0.9.1", features = ["cuda"] }
+candle-nn = { version = "0.9.1" }
+r2l-macros = { path = "r2l-macros" }
+r2l-core = { path = "r2l-core" }
+r2l-gym = { path = "r2l-gym" }

@@ -1,0 +1,13 @@
+[package]
+name = "r2l-gym"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+r2l-core= { workspace = true }
+candle-core = { workspace = true }
+pyo3 = { version = "0.24.1", features = ["auto-initialize", "abi3-py311"] } 
+
+[dev-dependencies]
+once_cell = "1.21.3"
+

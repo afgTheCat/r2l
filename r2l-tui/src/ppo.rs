@@ -1,0 +1,243 @@
+use crate::{ENV_NAME, PPOEvent, PPOProgress};
+use candle_core::{Device, Error, Tensor};
+use once_cell::sync::Lazy;
+use r2l_core::{
+    Algorithm,
+    agents::ppo::{
+        builder::PPOBuilder,
+        hooks::{PPOBatchData, PPOHooks},
+    },
+    distributions::Distribution,
+    env::{RolloutMode, dummy_vec_env::DummyVecEnv},
+    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm},
+    policies::{Policy, PolicyKind},
+    tensors::{PolicyLoss, ValueLoss},
+    utils::rollout_buffer::RolloutBuffer,
+};
+use r2l_gym::GymEnv;
+use std::sync::{Mutex, mpsc::Sender};
+
+#[allow(dead_code)]
+#[derive(Default)]
+struct AppData {
+    current_epoch: usize,                 // to control the learning
+    total_epochs: usize,                  // to control the learning
+    current_rollout: usize,               // does not need it any more
+    total_rollouts: usize,                // does not need it any more
+    ent_coeff: f32,                       // to control the learning
+    clip_range: f32,                      // for logging
+    target_kl: f32,                       // to control the learning
+    current_progress_report: PPOProgress, // collect the learning stuff
+}
+
+// maybe I will try channels at one point, for now a mutex is fine
+static SHARED_APP_DATA: Lazy<Mutex<AppData>> = Lazy::new(|| {
+    let app_data = AppData::default();
+    Mutex::new(app_data)
+});
+
+fn batch_hook(
+    policy: &mut PolicyKind,
+    policy_loss: &mut PolicyLoss,
+    value_loss: &mut ValueLoss,
+    batch_data: &PPOBatchData,
+) -> candle_core::Result<bool> {
+    let entropy = policy.distribution().entropy()?;
+    let mut app_data = SHARED_APP_DATA.lock().unwrap();
+    let entropy_loss =
+        (Tensor::full(app_data.ent_coeff, (), &candle_core::Device::Cpu)? * entropy.neg()?)?;
+    app_data.current_progress_report.collect_batch_data(
+        &batch_data.ratio,
+        &entropy_loss,
+        value_loss,
+        policy_loss,
+    )?;
+
+    // TODO: this breaks the computation graph. We need to explore our options here. The most
+    // reasonable choice seems to be that we switch up our hook interface by not only allowing
+    // booleans to be returned, but that seems a lot of work right now
+    // *policy_loss = PolicyLoss(policy_loss.add(&entropy_loss)?);
+
+    // TODO: this seems to slow down the learning process quite a bit. Maybe there is an issue with
+    // the learning rate?
+    // let approx_kl = (batch_data
+    //     .ratio
+    //     .exp()?
+    //     .sub(&Tensor::ones_like(&batch_data.ratio)?))?
+    // .sub(&batch_data.ratio)?
+    // .mean_all()?
+    // .to_scalar::<f32>()?;
+    // Ok(approx_kl > 1.5 * app_data.target_kl)
+    Ok(false)
+}
+
+fn before_learning_hook(rollout_buffers: &mut Vec<RolloutBuffer>) -> candle_core::Result<bool> {
+    let mut app_data = SHARED_APP_DATA.lock().unwrap();
+    app_data.current_epoch = 0;
+    let mut total_rewards: f32 = 0.;
+    let mut total_episodes: usize = 0;
+    for rb in rollout_buffers {
+        total_rewards += rb.rewards.iter().sum::<f32>();
+        total_episodes += rb.dones.iter().filter(|x| **x).count();
+        rb.normalize_advantage();
+    }
+    let avarage_reward = total_rewards / total_episodes as f32;
+    let progress = app_data.current_rollout as f64 / app_data.total_rollouts as f64;
+    app_data.current_progress_report.avarage_reward = avarage_reward;
+    app_data.current_progress_report.progress = progress;
+    Ok(false)
+}
+
+enum AfterLearningHookResult {
+    ShouldStop,
+    ShouldContinue,
+}
+
+#[allow(clippy::ptr_arg)]
+fn after_learning_hook_inner(
+    policy: &mut PolicyKind,
+) -> candle_core::Result<AfterLearningHookResult> {
+    let mut app_data = SHARED_APP_DATA.lock().unwrap();
+    app_data.current_epoch += 1;
+    let should_stop = app_data.current_epoch == app_data.total_epochs;
+    if should_stop {
+        // snapshot the learned things, API can be much better
+        app_data.current_rollout += 1;
+        // the std after learning
+        app_data.current_progress_report.std = policy.distribution().std()?;
+        app_data.current_progress_report.learning_rate = policy.policy_learning_rate();
+        Ok(AfterLearningHookResult::ShouldStop)
+    } else {
+        Ok(AfterLearningHookResult::ShouldContinue)
+    }
+}
+
+pub fn train_ppo(tx: Sender<PPOEvent>) -> candle_core::Result<()> {
+    let total_rollouts = 300;
+    // Set up things in the app data that we will need
+    {
+        let mut app_data = SHARED_APP_DATA.lock().unwrap();
+        app_data.total_epochs = 10;
+        app_data.target_kl = 0.01;
+        app_data.total_rollouts = total_rollouts;
+        app_data.current_rollout = 0;
+    }
+    let after_learning_hook =
+        move |policy: &mut PolicyKind| match after_learning_hook_inner(policy)? {
+            AfterLearningHookResult::ShouldStop => {
+                let mut app_data = SHARED_APP_DATA.lock().unwrap();
+                let progress = app_data.current_progress_report.clear();
+                tx.send(PPOEvent::Progress(progress)).map_err(Error::wrap)?;
+                Ok(true)
+            }
+            AfterLearningHookResult::ShouldContinue => Ok(false),
+        };
+
+    let device = Device::Cpu;
+    let env = GymEnv::new(ENV_NAME, None, &device)?;
+    let (input_dim, out_dim) = env.io_sizes();
+    let builder = PPOBuilder {
+        input_dim,
+        out_dim,
+        sample_size: 64,
+        ..Default::default()
+    };
+    let mut agent = builder.build()?;
+    let hooks = PPOHooks::empty()
+        .add_before_learning_hook(before_learning_hook)
+        .add_batching_hook(batch_hook)
+        .add_after_learning_hook(after_learning_hook);
+    agent.hooks = hooks;
+    let env_pool = DummyVecEnv {
+        n_env: 10,
+        env,
+        rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
+    };
+    let mut algo = OnPolicyAlgorithm {
+        env_pool,
+        agent,
+        learning_schedule: LearningSchedule {
+            total_rollouts,
+            current_rollout: 0,
+        },
+    };
+    algo.train()
+}
+
+#[cfg(test)]
+mod test {
+    use super::{SHARED_APP_DATA, batch_hook, before_learning_hook};
+    use crate::ENV_NAME;
+    use candle_core::Device;
+    use r2l_core::{
+        Algorithm,
+        agents::ppo::{builder::PPOBuilder, hooks::PPOHooks},
+        distributions::Distribution,
+        env::{RolloutMode, dummy_vec_env::DummyVecEnv},
+        on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm},
+        policies::{Policy, PolicyKind},
+        utils::rollout_buffer::RolloutBuffer,
+    };
+    use r2l_gym::GymEnv;
+
+    fn after_learning_hook_inner(
+        policy: &mut PolicyKind,
+        rollout_buffers: &Vec<RolloutBuffer>,
+    ) -> candle_core::Result<bool> {
+        let mut app_data = SHARED_APP_DATA.lock().unwrap();
+        app_data.current_epoch += 1;
+        let should_stop = app_data.current_epoch == app_data.total_epochs;
+        if should_stop {
+            // snapshot the learned things, API can be much better
+            app_data.current_rollout += 1;
+            // the std after learning
+            app_data.current_progress_report.std = policy.distribution().std()?;
+            // TODO: calculate explained variance + approx kl, this can be done easily
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    #[test]
+    fn training_only() -> candle_core::Result<()> {
+        let total_rollouts = 300;
+        {
+            let mut app_data = SHARED_APP_DATA.lock().unwrap();
+            app_data.total_epochs = 10;
+            app_data.target_kl = 0.01;
+            app_data.total_rollouts = total_rollouts;
+            app_data.current_rollout = 0;
+        }
+        let device = Device::Cpu;
+        let env = GymEnv::new(ENV_NAME, None, &device)?;
+        let input_dim = env.observation_size();
+        let out_dim = env.action_size().or(Some(env.action_dim())).unwrap();
+        let builder = PPOBuilder {
+            input_dim,
+            out_dim,
+            sample_size: 64,
+            ..Default::default()
+        };
+        let mut agent = builder.build()?;
+        let hooks = PPOHooks::empty()
+            .add_before_learning_hook(before_learning_hook)
+            .add_batching_hook(batch_hook)
+            .add_after_learning_hook(after_learning_hook_inner);
+        agent.hooks = hooks;
+        let env_pool = DummyVecEnv {
+            n_env: 10,
+            env,
+            rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
+        };
+        let mut algo = OnPolicyAlgorithm {
+            env_pool,
+            agent,
+            learning_schedule: LearningSchedule {
+                total_rollouts,
+                current_rollout: 0,
+            },
+        };
+        algo.train()
+    }
+}
