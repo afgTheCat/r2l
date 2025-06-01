@@ -132,7 +132,6 @@ pub fn train_ppo(tx: Sender<PPOEvent>) -> candle_core::Result<()> {
             }
             AfterLearningHookResult::ShouldContinue => Ok(false),
         };
-
     let device = Device::Cpu;
     let env = GymEnv::new(ENV_NAME, None, &device)?;
     let (input_dim, out_dim) = env.io_sizes();
@@ -173,7 +172,7 @@ mod test {
         Algorithm,
         agents::ppo::{builder::PPOBuilder, hooks::PPOHooks},
         distributions::Distribution,
-        env::{RolloutMode, dummy_vec_env::DummyVecEnv},
+        env::sub_processing_vec_env::SubprocessingEnv,
         on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm},
         policies::{Policy, PolicyKind},
         utils::rollout_buffer::RolloutBuffer,
@@ -225,11 +224,12 @@ mod test {
             .add_batching_hook(batch_hook)
             .add_after_learning_hook(after_learning_hook_inner);
         agent.hooks = hooks;
-        let env_pool = DummyVecEnv {
-            n_env: 10,
-            env,
-            rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
-        };
+        let env_pool = SubprocessingEnv::build("my_sock", 4)?;
+        // let env_pool = DummyVecEnv {
+        //     n_env: 10,
+        //     env,
+        //     rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
+        // };
         let mut algo = OnPolicyAlgorithm {
             env_pool,
             agent,

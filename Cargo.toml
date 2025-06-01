@@ -1,5 +1,5 @@
 [workspace]
-members = ["r2l-core", "r2l-gym", "r2l-macros", "r2l-tui"]
+members = ["r2l-core", "r2l-gym", "r2l-macros", "r2l-tui", "r2l-subproc-env"]
 resolver = "2"
 
 [workspace.dependencies]

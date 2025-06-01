@@ -17,7 +17,8 @@ pub trait Env {
 }
 
 pub trait EnvPool {
-    fn collect_rollouts<D: Distribution>(&self, distribution: &D) -> Result<Vec<RolloutBuffer>>;
+    fn collect_rollouts<D: Distribution>(&mut self, distribution: &D)
+    -> Result<Vec<RolloutBuffer>>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -42,7 +43,7 @@ fn single_step_env<D: Distribution, E: Env>(
     Ok((next_state, action, reward, terminated || trancuated, logp))
 }
 
-fn run_rollout<D: Distribution, E: Env>(
+pub fn run_rollout<D: Distribution, E: Env>(
     dist: &D,
     env: &E,
     collection_type: RolloutMode,

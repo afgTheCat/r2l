@@ -1,12 +1,12 @@
 use super::{Policy, PolicyWithValueFunction};
-use crate::distributions::DistributionKind;
 use crate::utils::clip_grad::clip_grad;
+use crate::{distributions::DistributionKind, thread_safe_sequential::ThreadSafeSequential};
 use candle_core::{Result, Tensor};
-use candle_nn::{AdamW, Module, Optimizer, Sequential, VarMap};
+use candle_nn::{AdamW, Module, Optimizer, VarMap};
 
 pub struct ParalellActorCritic {
     distribution: DistributionKind,
-    value_net: Sequential,
+    value_net: ThreadSafeSequential,
     optimizer: AdamW,
     max_grad_norm: Option<f32>,
     varmap: VarMap,
@@ -21,7 +21,7 @@ impl ParalellActorCritic {
 impl ParalellActorCritic {
     pub fn new(
         distribution: DistributionKind,
-        value_net: Sequential,
+        value_net: ThreadSafeSequential,
         optimizer: AdamW,
         max_grad_norm: Option<f32>,
         varmap: VarMap,

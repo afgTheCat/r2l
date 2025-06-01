@@ -1,8 +1,15 @@
-use crate::utils::build_sequential::build_sequential;
-
-use super::{Distribution, ThreadSafeSequential};
-use candle_core::{Result, Tensor};
+use super::Distribution;
+use crate::{
+    thread_safe_sequential::ThreadSafeSequential, utils::build_sequential::build_sequential,
+};
+use bincode::{
+    Decode, Encode,
+    de::read,
+    error::{DecodeError, EncodeError},
+};
+use candle_core::{Device, Result, Tensor, safetensors::BufferedSafetensors};
 use candle_nn::{Module, VarBuilder};
+use safetensors::serialize;
 use std::f32;
 
 // TODO: we may want to resample the noise better than it is now
@@ -10,6 +17,45 @@ pub struct DiagGaussianDistribution {
     pub noise: Tensor,
     pub mu_net: ThreadSafeSequential,
     pub log_std: Tensor,
+}
+
+impl Encode for DiagGaussianDistribution {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
+        let writer_config = bincode::config::standard();
+        self.mu_net.encode(encoder)?;
+        let data = [("noise", &self.noise), ("log_std", &self.log_std)];
+        bincode::encode_into_writer(
+            serialize(data, &None).map_err(|err| EncodeError::OtherString(err.to_string()))?,
+            &mut encoder.writer(),
+            writer_config,
+        )
+    }
+}
+
+impl Decode<()> for DiagGaussianDistribution {
+    fn decode<D: bincode::de::Decoder<Context = ()>>(
+        decoder: &mut D,
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
+        // todo!()
+        let mu_net: ThreadSafeSequential = ThreadSafeSequential::decode(decoder)?;
+        let encoded_data: Vec<u8> = Vec::decode(decoder)?;
+        let buffered_safetensors = BufferedSafetensors::new(encoded_data)
+            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
+        let noise = buffered_safetensors
+            .load("noise", &Device::Cpu)
+            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
+        let log_std = buffered_safetensors
+            .load("log_std", &Device::Cpu)
+            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
+        Ok(Self {
+            noise,
+            mu_net,
+            log_std,
+        })
+    }
 }
 
 impl DiagGaussianDistribution {
@@ -28,11 +74,11 @@ impl DiagGaussianDistribution {
         log_std: Tensor,
         prefix: &str,
     ) -> Result<Self> {
-        let (logits, _) = build_sequential(input_dim, layers, vb, prefix)?;
+        let (mu_net, _) = build_sequential(input_dim, layers, vb, prefix)?;
         let noise = Tensor::randn(0f32, 1., log_std.shape(), log_std.device()).unwrap();
         Ok(Self {
             log_std,
-            mu_net: ThreadSafeSequential(logits),
+            mu_net,
             noise,
         })
     }

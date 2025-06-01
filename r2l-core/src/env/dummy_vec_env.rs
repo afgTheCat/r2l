@@ -9,7 +9,10 @@ pub struct DummyVecEnv<E: Env> {
 }
 
 impl<E: Env> EnvPool for DummyVecEnv<E> {
-    fn collect_rollouts<D: Distribution>(&self, distribution: &D) -> Result<Vec<RolloutBuffer>> {
+    fn collect_rollouts<D: Distribution>(
+        &mut self,
+        distribution: &D,
+    ) -> Result<Vec<RolloutBuffer>> {
         (0..self.n_env)
             .map(|_| run_rollout(distribution, &self.env, self.rollout_mode))
             .collect::<Result<Vec<_>>>()

@@ -36,7 +36,7 @@ impl<E: EnvPool, A: Agent> OnPolicyAlgorithm<E, A> {
 
 impl<E: EnvPool, A: Agent> Algorithm for OnPolicyAlgorithm<E, A> {
     fn train(&mut self) -> Result<()> {
-        for _ in 0..self.learning_schedule.total_rollouts {
+        for epoch_idx in 0..self.learning_schedule.total_rollouts {
             let distr = self.agent.distribution();
             let rollouts = self.env_pool.collect_rollouts(distr)?;
             // TODO: debug logging here in a hook

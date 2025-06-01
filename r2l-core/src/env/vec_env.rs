@@ -11,7 +11,10 @@ pub struct VecEnv<E: Env + Sync> {
 }
 
 impl<E: Env + Sync> EnvPool for VecEnv<E> {
-    fn collect_rollouts<D: Distribution>(&self, distribution: &D) -> Result<Vec<RolloutBuffer>> {
+    fn collect_rollouts<D: Distribution>(
+        &mut self,
+        distribution: &D,
+    ) -> Result<Vec<RolloutBuffer>> {
         (0..self.envs.len())
             .into_par_iter()
             .map(|env_idx| run_rollout(distribution, &self.envs[env_idx], self.rollout_mode))

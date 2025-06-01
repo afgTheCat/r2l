@@ -1,12 +1,15 @@
 use super::{Policy, PolicyWithValueFunction};
-use crate::{distributions::DistributionKind, utils::clip_grad::clip_grad};
+use crate::{
+    distributions::DistributionKind, thread_safe_sequential::ThreadSafeSequential,
+    utils::clip_grad::clip_grad,
+};
 use candle_core::{Result, Tensor};
-use candle_nn::{AdamW, Module, Optimizer, Sequential, VarMap};
+use candle_nn::{AdamW, Module, Optimizer, VarMap};
 
 #[allow(dead_code)]
 pub struct DecoupledActorCritic {
     pub distribution: DistributionKind,
-    pub value_net: Sequential,
+    pub value_net: ThreadSafeSequential,
     pub policy_optimizer: AdamW,
     pub value_optimizer: AdamW,
     pub policy_max_grad_norm: Option<f32>, // TODO: not here dude
