@@ -1,9 +1,5 @@
-// TODO: probably needs to make this event driven
-mod ppo;
-
-use candle_core::{DType, Tensor};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use ppo::train_ppo;
+use r2l_tui::{EventBox, PPOProgress, train_ppo};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -13,14 +9,49 @@ use ratatui::{
     text::Line,
     widgets::{Axis, Block, Borders, Chart, Dataset, Gauge, GraphType, Row, Table, Widget},
 };
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 use std::{f64, io, sync::mpsc};
-
-const ENV_NAME: &str = "Pendulum-v1";
 
 fn mean(numbers: &[f32]) -> f32 {
     let sum: f32 = numbers.iter().sum();
     sum / numbers.len() as f32
+}
+
+fn ppo_progres_to_table<'a>(ppo_progress: &'a PPOProgress, name: &'a str) -> Table<'a> {
+    let block = Block::bordered().title(name).border_set(border::THICK);
+    let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
+    let entropy_loss = mean(&ppo_progress.entropy_losses);
+    let value_loss = mean(&ppo_progress.value_losses);
+    let policy_loss = mean(&ppo_progress.policy_losses);
+    let clip_fraction = mean(&ppo_progress.clip_fractions);
+    let rows = vec![
+        // Row::new(vec!["approx_kl".into(), ppo_progress.approx_kl.to_string()]),
+        Row::new(vec![
+            "Avarage reward".into(),
+            ppo_progress.avarage_reward.to_string(),
+        ]),
+        Row::new(vec!["Clip fraction".into(), clip_fraction.to_string()]),
+        Row::new(vec![
+            "Clip range".into(),
+            ppo_progress.clip_range.to_string(),
+        ]),
+        Row::new(vec!["Policy gradient loss".into(), policy_loss.to_string()]),
+        Row::new(vec!["Entropy loss".into(), entropy_loss.to_string()]),
+        Row::new(vec!["Value loss".into(), value_loss.to_string()]),
+        // Row::new(vec![
+        //     "explained_variance".into(),
+        //     ppo_progress.explained_variance.to_string(),
+        // ]),
+        Row::new(vec![
+            "Learning rate".into(),
+            ppo_progress.learning_rate.to_string(),
+        ]),
+        Row::new(vec![
+            "Standard deviation".into(),
+            ppo_progress.std.to_string(),
+        ]),
+    ];
+    Table::new(rows, widths).block(block)
 }
 
 #[derive(Debug, Default)]
@@ -49,12 +80,20 @@ impl Widget for &App {
 }
 
 impl App {
-    pub fn run(mut self, terminal: &mut DefaultTerminal, rx: Receiver<PPOEvent>) -> io::Result<()> {
+    pub fn run(mut self, terminal: &mut DefaultTerminal, rx: Receiver<EventBox>) -> io::Result<()> {
         while !self.exit {
-            match rx.recv().unwrap() {
-                PPOEvent::Input(key_event) => self.handle_events(key_event)?,
-                PPOEvent::Progress(progress) => self.handle_progress(progress),
-            }
+            let event = rx.recv().unwrap();
+            event
+                .downcast::<PPOProgress>()
+                .map(|progress| {
+                    self.handle_progress(*progress);
+                })
+                .or_else(|event| {
+                    event.downcast::<KeyEvent>().map(|key_event| {
+                        self.handle_events(*key_event).unwrap();
+                    })
+                })
+                .unwrap_or_else(|_| unreachable!("Unknown event type received"));
             terminal.draw(|frame| self.draw(frame))?;
         }
         Ok(())
@@ -99,12 +138,8 @@ impl App {
             let vertical_area =
                 Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
             let [latest_stat_area, best_stat_area] = vertical_area.areas(statistics_area);
-            latest_update
-                .to_table("Latest update")
-                .render(latest_stat_area, buf);
-            best_update
-                .to_table("Best update")
-                .render(best_stat_area, buf);
+            ppo_progres_to_table(latest_update, "Latest update").render(latest_stat_area, buf);
+            ppo_progres_to_table(best_update, "Best update").render(best_stat_area, buf);
         }
     }
 
@@ -177,92 +212,14 @@ impl App {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Default, Clone)]
-pub struct PPOProgress {
-    clip_fractions: Vec<f32>,
-    entropy_losses: Vec<f32>,
-    policy_losses: Vec<f32>,
-    value_losses: Vec<f32>,
-    clip_range: f32,
-    approx_kl: f32,
-    explained_variance: f32,
-    progress: f64,
-    std: f32,
-    avarage_reward: f32,
-    learning_rate: f64,
-}
-
-impl PPOProgress {
-    pub fn clear(&mut self) -> Self {
-        std::mem::take(self)
-    }
-
-    pub fn collect_batch_data(
-        &mut self,
-        // clip_range: f32,
-        ratio: &Tensor,
-        entropy_loss: &Tensor,
-        value_loss: &Tensor,
-        policy_loss: &Tensor,
-    ) -> candle_core::Result<()> {
-        let clip_fraction = (ratio - 1.)?
-            .abs()?
-            .gt(self.clip_range)?
-            .to_dtype(DType::F32)?
-            .mean_all()?
-            .to_scalar::<f32>()?;
-        self.clip_fractions.push(clip_fraction);
-        self.entropy_losses.push(entropy_loss.to_scalar()?);
-        self.value_losses.push(value_loss.to_scalar()?);
-        self.policy_losses.push(policy_loss.to_scalar()?);
-        Ok(())
-    }
-}
-
-impl PPOProgress {
-    fn to_table<'a>(&'a self, name: &'a str) -> Table<'a> {
-        let block = Block::bordered().title(name).border_set(border::THICK);
-        let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
-        let entropy_loss = mean(&self.entropy_losses);
-        let value_loss = mean(&self.value_losses);
-        let policy_loss = mean(&self.policy_losses);
-        let clip_fraction = mean(&self.clip_fractions);
-        let rows = vec![
-            // Row::new(vec!["approx_kl".into(), self.approx_kl.to_string()]),
-            Row::new(vec![
-                "Avarage reward".into(),
-                self.avarage_reward.to_string(),
-            ]),
-            Row::new(vec!["Clip fraction".into(), clip_fraction.to_string()]),
-            Row::new(vec!["Clip range".into(), self.clip_range.to_string()]),
-            Row::new(vec!["Policy gradient loss".into(), policy_loss.to_string()]),
-            Row::new(vec!["Entropy loss".into(), entropy_loss.to_string()]),
-            Row::new(vec!["Value loss".into(), value_loss.to_string()]),
-            // Row::new(vec![
-            //     "explained_variance".into(),
-            //     self.explained_variance.to_string(),
-            // ]),
-            Row::new(vec!["Learning rate".into(), self.learning_rate.to_string()]),
-            Row::new(vec!["Standard deviation".into(), self.std.to_string()]),
-        ];
-        Table::new(rows, widths).block(block)
-    }
-}
-
-pub enum PPOEvent {
-    Progress(PPOProgress),
-    Input(KeyEvent),
-}
-
-fn handle_input_events(tx: mpsc::Sender<PPOEvent>) {
+fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
-        tx.send(PPOEvent::Input(key_event)).unwrap()
+        tx.send(Box::new(key_event)).unwrap()
     }
 }
 
 fn main() -> io::Result<()> {
-    let (event_tx, event_rx) = mpsc::channel::<PPOEvent>();
+    let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
     let tx_to_input_events = event_tx.clone();
     std::thread::spawn(move || {
         handle_input_events(tx_to_input_events);

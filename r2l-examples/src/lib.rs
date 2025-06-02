@@ -1,5 +1,4 @@
-use crate::{ENV_NAME, PPOEvent, PPOProgress};
-use candle_core::{Device, Error, Tensor};
+use candle_core::{DType, Device, Error, Tensor};
 use once_cell::sync::Lazy;
 use r2l_core::{
     Algorithm,
@@ -9,13 +8,61 @@ use r2l_core::{
     },
     distributions::Distribution,
     env::{RolloutMode, dummy_vec_env::DummyVecEnv},
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm},
+    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
     policies::{Policy, PolicyKind},
     tensors::{PolicyLoss, ValueLoss},
     utils::rollout_buffer::RolloutBuffer,
 };
 use r2l_gym::GymEnv;
 use std::sync::{Mutex, mpsc::Sender};
+use std::{any::Any, f64};
+
+const ENV_NAME: &str = "Pendulum-v1";
+
+pub type EventBox = Box<dyn Any + Send + Sync>;
+
+#[allow(dead_code)]
+#[derive(Debug, Default, Clone)]
+pub struct PPOProgress {
+    pub clip_fractions: Vec<f32>,
+    pub entropy_losses: Vec<f32>,
+    pub policy_losses: Vec<f32>,
+    pub value_losses: Vec<f32>,
+    pub clip_range: f32,
+    pub approx_kl: f32,
+    pub explained_variance: f32,
+    pub progress: f64,
+    pub std: f32,
+    pub avarage_reward: f32,
+    pub learning_rate: f64,
+}
+
+impl PPOProgress {
+    pub fn clear(&mut self) -> Self {
+        std::mem::take(self)
+    }
+
+    pub fn collect_batch_data(
+        &mut self,
+        // clip_range: f32,
+        ratio: &Tensor,
+        entropy_loss: &Tensor,
+        value_loss: &Tensor,
+        policy_loss: &Tensor,
+    ) -> candle_core::Result<()> {
+        let clip_fraction = (ratio - 1.)?
+            .abs()?
+            .gt(self.clip_range)?
+            .to_dtype(DType::F32)?
+            .mean_all()?
+            .to_scalar::<f32>()?;
+        self.clip_fractions.push(clip_fraction);
+        self.entropy_losses.push(entropy_loss.to_scalar()?);
+        self.value_losses.push(value_loss.to_scalar()?);
+        self.policy_losses.push(policy_loss.to_scalar()?);
+        Ok(())
+    }
+}
 
 #[allow(dead_code)]
 #[derive(Default)]
@@ -112,7 +159,7 @@ fn after_learning_hook_inner(
     }
 }
 
-pub fn train_ppo(tx: Sender<PPOEvent>) -> candle_core::Result<()> {
+pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
     let total_rollouts = 300;
     // Set up things in the app data that we will need
     {
@@ -127,7 +174,7 @@ pub fn train_ppo(tx: Sender<PPOEvent>) -> candle_core::Result<()> {
             AfterLearningHookResult::ShouldStop => {
                 let mut app_data = SHARED_APP_DATA.lock().unwrap();
                 let progress = app_data.current_progress_report.clear();
-                tx.send(PPOEvent::Progress(progress)).map_err(Error::wrap)?;
+                tx.send(Box::new(progress)).map_err(Error::wrap)?;
                 Ok(true)
             }
             AfterLearningHookResult::ShouldContinue => Ok(false),
@@ -159,6 +206,7 @@ pub fn train_ppo(tx: Sender<PPOEvent>) -> candle_core::Result<()> {
             total_rollouts,
             current_rollout: 0,
         },
+        hooks: OnPolicyHooks::default(),
     };
     algo.train()
 }
@@ -173,16 +221,12 @@ mod test {
         agents::ppo::{builder::PPOBuilder, hooks::PPOHooks},
         distributions::Distribution,
         env::sub_processing_vec_env::SubprocessingEnv,
-        on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm},
+        on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
         policies::{Policy, PolicyKind},
-        utils::rollout_buffer::RolloutBuffer,
     };
     use r2l_gym::GymEnv;
 
-    fn after_learning_hook_inner(
-        policy: &mut PolicyKind,
-        rollout_buffers: &Vec<RolloutBuffer>,
-    ) -> candle_core::Result<bool> {
+    fn after_learning_hook_inner(policy: &mut PolicyKind) -> candle_core::Result<bool> {
         let mut app_data = SHARED_APP_DATA.lock().unwrap();
         app_data.current_epoch += 1;
         let should_stop = app_data.current_epoch == app_data.total_epochs;
@@ -237,6 +281,7 @@ mod test {
                 total_rollouts,
                 current_rollout: 0,
             },
+            hooks: OnPolicyHooks::default(),
         };
         algo.train()
     }
