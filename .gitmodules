@@ -1,0 +1,3 @@
+[submodule "r2l-verification/rl-trained-agents"]
+	path = r2l-verification/rl-trained-agents
+	url = git@github.com:DLR-RM/rl-trained-agents.git

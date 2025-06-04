@@ -1,7 +1,7 @@
 use crate::tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred};
 use crate::utils::rollout_buffer::{RolloutBatch, RolloutBuffer};
 use candle_core::{Result, Tensor};
-use r2l_macros::rlhook;
+use r2l_macros::policy_hook;
 
 pub struct PPOBatchData {
     pub logp: Logp,
@@ -11,7 +11,7 @@ pub struct PPOBatchData {
 }
 
 // TODO: maybe we want the PPO<P> to be an argument instead of just P?
-#[rlhook]
+#[policy_hook]
 pub trait BatchHook<P> {
     fn call_hook(
         &mut self,
@@ -23,7 +23,7 @@ pub trait BatchHook<P> {
     ) -> candle_core::Result<bool>;
 }
 
-#[rlhook]
+#[policy_hook]
 #[allow(clippy::ptr_arg)]
 trait BeforeLearningHook<P> {
     fn call_hook(
@@ -33,7 +33,7 @@ trait BeforeLearningHook<P> {
     ) -> candle_core::Result<bool>;
 }
 
-#[rlhook]
+#[policy_hook]
 #[allow(clippy::ptr_arg)]
 trait AfterTrainingHook<P> {
     fn call_hook(

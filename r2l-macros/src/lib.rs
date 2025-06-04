@@ -1,14 +1,26 @@
-use hook::HookTrait;
+mod policy_hook;
+mod training_hook;
+
+use policy_hook::PolicyTrait;
 use quote::quote;
 use syn::parse_macro_input;
 
-mod hook;
+use crate::training_hook::TrainingHook;
 
 #[proc_macro_attribute]
-pub fn rlhook(
+pub fn policy_hook(
     _attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    let hook = parse_macro_input! { item as HookTrait };
+    let hook = parse_macro_input! { item as PolicyTrait };
+    quote! { #hook }.into()
+}
+
+#[proc_macro_attribute]
+pub fn training_hook(
+    _attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let hook = parse_macro_input! { item as TrainingHook };
     quote! { #hook }.into()
 }

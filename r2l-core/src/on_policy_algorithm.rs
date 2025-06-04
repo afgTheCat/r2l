@@ -3,6 +3,7 @@ use crate::agents::Agent;
 use crate::env::EnvPool;
 use crate::utils::rollout_buffer::RolloutBuffer;
 use candle_core::Result;
+use r2l_macros::training_hook;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LearningSchedule {
@@ -19,17 +20,24 @@ impl LearningSchedule {
     }
 }
 
+#[training_hook]
 trait BeforeTrainingHook {
-    fn call_hook(&mut self) -> Result<bool>;
+    fn call_hook(&mut self) -> candle_core::Result<bool>;
 }
 
+#[training_hook]
 #[allow(clippy::ptr_arg)]
 trait TrainingHook {
-    fn call_hook(&mut self, epoch_idx: usize, rollouts: &Vec<RolloutBuffer>) -> Result<bool>;
+    fn call_hook(
+        &mut self,
+        epoch_idx: &usize,
+        rollouts: &Vec<RolloutBuffer>,
+    ) -> candle_core::Result<bool>;
 }
 
+#[training_hook]
 trait AfterTrainingHook {
-    fn call_hook(&mut self) -> Result<()>;
+    fn call_hook(&mut self) -> candle_core::Result<bool>;
 }
 
 #[derive(Default)]
@@ -50,7 +58,7 @@ impl OnPolicyHooks {
 
     fn call_training_hook(
         &mut self,
-        epoch_idx: usize,
+        epoch_idx: &usize,
         rollouts: &Vec<RolloutBuffer>,
     ) -> Result<bool> {
         if let Some(hook) = &mut self.training_hook {
@@ -60,11 +68,11 @@ impl OnPolicyHooks {
         }
     }
 
-    fn call_after_training_hook(&mut self) -> Result<()> {
+    fn call_after_training_hook(&mut self) -> Result<bool> {
         if let Some(hook) = &mut self.after_training_hook {
             hook.call_hook()
         } else {
-            Ok(())
+            Ok(false)
         }
     }
 }
@@ -105,11 +113,12 @@ impl<E: EnvPool, A: Agent> Algorithm for OnPolicyAlgorithm<E, A> {
             //     total_reward,
             //     total_reward / episodes as f32
             // );
-            if self.hooks.call_training_hook(epoch_idx, &rollouts)? {
+            if self.hooks.call_training_hook(&epoch_idx, &rollouts)? {
                 break;
             }
             self.agent.learn(rollouts)?;
         }
-        self.hooks.call_after_training_hook()
+        self.hooks.call_after_training_hook()?;
+        Ok(())
     }
 }

@@ -3,24 +3,23 @@ use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
 use syn::{
     Error, FnArg, Ident, ItemTrait, ReturnType, TraitItem, Type, TypePath, TypeReference,
-    parse::{Parse, ParseStream},
-    parse_quote,
-    spanned::Spanned,
+    parse::Parse, parse_quote, spanned::Spanned,
 };
 
-#[derive(Debug)]
-pub struct HookTrait {
+// TODO: we might not even need this at the end, one hook seems enough for now, this is mostly
+// copy+pase for now
+pub struct TrainingHook {
     hook_trait: ItemTrait,
     arg_types: Vec<TypeReference>,
 }
 
-impl Parse for HookTrait {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+impl Parse for TrainingHook {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let hook_trait: ItemTrait = input.parse()?;
-        if hook_trait.generics.params.len() != 1 {
+        if hook_trait.generics.params.len() != 0 {
             return syn::Result::Err(Error::new(
                 hook_trait.span(),
-                "Hooktrait needs exactly one generic policy parameter",
+                "Training hook should be have no generics",
             ));
         }
         let call_hook = if hook_trait.items.len() == 1
@@ -83,7 +82,7 @@ impl Parse for HookTrait {
                 ));
             }
         }
-        Ok(HookTrait {
+        Ok(TrainingHook {
             hook_trait,
             arg_types,
         })
@@ -99,13 +98,13 @@ fn build_implementation(
     marker: TokenStream,                // the marker to avoid ambigous implemnations
 ) -> TokenStream {
     quote! {
-        impl<F, P> #into_trait_name<P, #marker> for F
+        impl<F> #into_trait_name<#marker> for F
         where
-            F: FnMut(#implementor_arg_types) -> Result<bool> + Send + 'static,
+            F: FnMut(#implementor_arg_types) -> candle_core::Result<bool> + Send + 'static,
         {
-            fn into_boxed(self) -> Box<dyn #trait_name<P>> {
+            fn into_boxed(self) -> Box<dyn #trait_name> {
                 struct Hook<F>(F);
-                impl<F, P> #trait_name<P> for Hook<F>
+                impl<F> #trait_name for Hook<F>
                 where
                     F: FnMut(#implementor_arg_types) -> candle_core::Result<bool>,
                 {
@@ -117,26 +116,6 @@ fn build_implementation(
             }
         }
     }
-}
-
-// TODO: this hacky as it replaces the generic P with the unit type () in order to avoid collusions
-// Will probably need to make better marker types in the future, but life is too short
-fn create_marker_type(implementor_arg_types: &[TypeReference]) -> TokenStream {
-    fn replace_generic_with_unit_type(type_ref: &TypeReference) -> TypeReference {
-        let mut new_ref = type_ref.clone();
-        if let Type::Path(TypePath { qself: None, path }) = new_ref.elem.as_ref()
-            && path.segments.len() == 1
-            && path.segments[0].ident == "P"
-        {
-            new_ref.elem = Box::new(parse_quote!(()));
-        }
-        new_ref
-    }
-    let implementor_arg_types = implementor_arg_types
-        .iter()
-        .map(replace_generic_with_unit_type)
-        .collect::<Vec<_>>();
-    quote! { fn(#(#implementor_arg_types,)*) -> candle_core::Result<bool> }
 }
 
 // TODO:  This generates a lot of code! There might be an easier way to implement I want via
@@ -160,7 +139,8 @@ fn implement_all_fn_trait_permutations(
                 implementor_arg_names.push(all_args[i].0.clone());
                 implementor_arg_types.push(all_args[i].1.clone());
             }
-            let marker = create_marker_type(&implementor_arg_types);
+            let marker: TokenStream =
+                quote! { fn(#(#implementor_arg_types,)*) -> candle_core::Result<bool> };
             let implementor_arg_names: TokenStream = quote! { #(#implementor_arg_names,)* };
             let implementor_arg_types: TokenStream = quote! { #(#implementor_arg_types,)* };
             let implementation = build_implementation(
@@ -176,14 +156,14 @@ fn implement_all_fn_trait_permutations(
     }
 }
 
-impl ToTokens for HookTrait {
+impl ToTokens for TrainingHook {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         self.hook_trait.to_tokens(tokens);
         let trait_name = &self.hook_trait.ident;
         let into_trait_name = Ident::new(&format!("Into{trait_name}"), trait_name.span());
         tokens.extend(quote! {
-            pub trait #into_trait_name<P, Marker> {
-                fn into_boxed(self) -> Box<dyn #trait_name<P>>;
+            pub trait #into_trait_name<Marker> {
+                fn into_boxed(self) -> Box<dyn #trait_name>;
             }
         });
         let mut call_hook_args: Vec<FnArg> = vec![];
@@ -207,22 +187,17 @@ impl ToTokens for HookTrait {
 
 #[cfg(test)]
 mod test {
-    use super::HookTrait;
+    use super::TrainingHook;
     use quote::ToTokens;
     use syn::parse_quote;
 
     #[test]
-    fn building_it() {
-        let hooktrait: HookTrait = parse_quote! {
-            pub trait BatchHook<P> {
+    fn training_hook_test() {
+        let hooktrait: TrainingHook = parse_quote! {
+            pub trait BatchHook {
                 fn call_hook(
                     &mut self,
-                    policy: &mut P,
-                    policy_loss: &mut PolicyLoss,
-                    logp: &Logp,
-                    values_pred: &ValuesPred,
-                    value_loss: &ValueLoss,
-                    logp_diff: &LogpDiff,
+                    thing: &usize,
                 ) -> candle_core::Result<bool>;
             }
         };

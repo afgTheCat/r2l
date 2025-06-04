@@ -44,7 +44,6 @@ impl PPOProgress {
 
     pub fn collect_batch_data(
         &mut self,
-        // clip_range: f32,
         ratio: &Tensor,
         entropy_loss: &Tensor,
         value_loss: &Tensor,

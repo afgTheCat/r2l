@@ -7,9 +7,7 @@ use interprocess::local_socket::{
     GenericNamespaced, Stream, ToNsName, traits::Stream as StreamTrait,
 };
 use r2l_core::{
-    distributions::{
-        Distribution, DistributionKind, diagonal_distribution::DiagGaussianDistribution,
-    },
+    distributions::{Distribution, DistributionKind},
     env::{Env, RolloutMode, run_rollout},
     network::{PacketToReceive, PacketToSend, receive_packet, send_packet},
 };
