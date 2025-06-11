@@ -10,9 +10,9 @@ use std::{collections::HashMap, fs, path::Path};
 
 #[derive(Debug)]
 pub struct EnvConfig {
-    env_name: String,
-    args: HashMap<String, String>,
-    config: HashMap<String, String>,
+    pub env_name: String,
+    pub args: HashMap<String, String>,
+    pub config: HashMap<String, String>,
 }
 
 #[derive(Debug)]

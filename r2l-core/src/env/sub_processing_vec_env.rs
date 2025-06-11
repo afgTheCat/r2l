@@ -1,7 +1,6 @@
-use super::{Env, EnvPool, RolloutMode};
+use super::EnvPool;
 use crate::{
     distributions::Distribution,
-    env::run_rollout,
     network::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     utils::rollout_buffer::RolloutBuffer,
 };
@@ -18,31 +17,6 @@ struct SubprocessEnvHandle {
 
 pub struct SubprocessingEnv {
     handles: Vec<SubprocessEnvHandle>,
-}
-
-pub struct Rollout<E: Env> {
-    env: E,
-    conn: BufReader<Stream>,
-    collection_type: RolloutMode,
-}
-
-impl<E: Env> Rollout<E> {
-    fn handle_packet<D: Distribution>(&mut self) -> Result<bool> {
-        let packet: PacketToReceive<D> = receive_packet(&mut self.conn);
-        match packet {
-            PacketToReceive::Halt => {
-                send_packet(&mut self.conn, PacketToSend::<D>::Halting);
-                Ok(false)
-            }
-            PacketToReceive::StartRollout { distribution } => {
-                let rollout = run_rollout(&distribution, &self.env, self.collection_type)?;
-                let packet: PacketToSend<D> = PacketToSend::RolloutResult { rollout };
-                send_packet(&mut self.conn, packet);
-                Ok(true)
-            }
-            _ => unreachable!(),
-        }
-    }
 }
 
 impl EnvPool for SubprocessingEnv {
