@@ -1,4 +1,4 @@
-use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
+use crate::{distributions::Distribution, env::RolloutMode, utils::rollout_buffer::RolloutBuffer};
 use bincode::{Decode, Encode};
 use interprocess::local_socket::Stream;
 use std::io::{BufReader, Read, Write};
@@ -10,9 +10,14 @@ pub enum PacketToSend<'a, D: Distribution> {
     // Ack halting command
     Halting,
     // Train an epoch with current logits
-    StartRollout { distribution: &'a D },
+    StartRollout {
+        distribution: &'a D,
+        rollout_mode: RolloutMode,
+    },
     // Return the trained amount
-    RolloutResult { rollout: RolloutBuffer },
+    RolloutResult {
+        rollout: RolloutBuffer,
+    },
 }
 
 #[derive(Debug, Decode)]
@@ -22,9 +27,14 @@ pub enum PacketToReceive<D: Distribution> {
     // Ack halting command
     Halting,
     // Train an epoch with current logits
-    StartRollout { distribution: D },
+    StartRollout {
+        distribution: D,
+        rollout_mode: RolloutMode,
+    },
     // Return the trained amount
-    RolloutResult { rollout: RolloutBuffer },
+    RolloutResult {
+        rollout: RolloutBuffer,
+    },
 }
 
 // Custom low level protocol to send data

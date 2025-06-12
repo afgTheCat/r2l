@@ -4,6 +4,7 @@ pub mod sub_processing_vec_env;
 pub mod vec_env;
 
 use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
+use bincode::{Decode, Encode};
 use candle_core::{Result, Tensor};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::cell::RefCell;
@@ -17,15 +18,18 @@ pub trait Env {
     fn step(&self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)>;
 }
 
-pub trait EnvPool {
-    fn collect_rollouts<D: Distribution>(&mut self, distribution: &D)
-    -> Result<Vec<RolloutBuffer>>;
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Encode, Decode)]
 pub enum RolloutMode {
     EpisodeBound { n_steps: usize },
     StepBound { n_steps: usize },
+}
+
+pub trait EnvPool {
+    fn collect_rollouts<D: Distribution>(
+        &mut self,
+        distribution: &D,
+        rollout_mode: RolloutMode,
+    ) -> Result<Vec<RolloutBuffer>>;
 }
 
 fn single_step_env<D: Distribution, E: Env>(

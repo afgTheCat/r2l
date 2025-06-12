@@ -1,6 +1,7 @@
 use super::EnvPool;
 use crate::{
     distributions::Distribution,
+    env::RolloutMode,
     network::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     utils::rollout_buffer::RolloutBuffer,
 };
@@ -23,9 +24,13 @@ impl EnvPool for SubprocessingEnv {
     fn collect_rollouts<D: Distribution>(
         &mut self,
         distribution: &D,
+        rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
         for SubprocessEnvHandle { conn, .. } in self.handles.iter_mut() {
-            let packet = PacketToSend::StartRollout { distribution };
+            let packet = PacketToSend::StartRollout {
+                distribution,
+                rollout_mode,
+            };
             send_packet(conn, packet);
         }
         let mut rollouts = vec![];

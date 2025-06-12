@@ -94,7 +94,10 @@ impl<E: Env> Rollout<E> {
                 send_packet(&mut self.conn, PacketToSend::<D>::Halting);
                 Ok(false)
             }
-            PacketToReceive::StartRollout { distribution } => {
+            PacketToReceive::StartRollout {
+                distribution,
+                rollout_mode,
+            } => {
                 let rollout = run_rollout(&distribution, &self.env, self.collection_mode)?;
                 let packet: PacketToSend<D> = PacketToSend::RolloutResult { rollout };
                 send_packet(&mut self.conn, packet);

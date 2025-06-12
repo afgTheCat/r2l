@@ -193,18 +193,15 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
         .add_batching_hook(batch_hook)
         .add_after_learning_hook(after_learning_hook);
     agent.hooks = hooks;
-    let env_pool = DummyVecEnv {
-        n_env: 10,
-        env,
-        rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
-    };
+    let env_pool = DummyVecEnv { n_env: 10, env };
     let mut algo = OnPolicyAlgorithm {
         env_pool,
         agent,
-        learning_schedule: LearningSchedule {
+        learning_schedule: LearningSchedule::RolloutBound {
             total_rollouts,
             current_rollout: 0,
         },
+        rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
         hooks: OnPolicyHooks::default(),
     };
     algo.train()
@@ -219,7 +216,7 @@ mod test {
         Algorithm,
         agents::ppo::{builder::PPOBuilder, hooks::PPOHooks},
         distributions::Distribution,
-        env::sub_processing_vec_env::SubprocessingEnv,
+        env::{RolloutMode, sub_processing_vec_env::SubprocessingEnv},
         on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
         policies::{Policy, PolicyKind},
     };
@@ -276,7 +273,8 @@ mod test {
         let mut algo = OnPolicyAlgorithm {
             env_pool,
             agent,
-            learning_schedule: LearningSchedule {
+            rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
+            learning_schedule: LearningSchedule::RolloutBound {
                 total_rollouts,
                 current_rollout: 0,
             },

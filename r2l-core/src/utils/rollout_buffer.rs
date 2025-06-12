@@ -3,7 +3,7 @@ use bincode::{
     BorrowDecode, Decode, Encode,
     error::{DecodeError, EncodeError},
 };
-use candle_core::{Device, Result, Tensor, op::Op};
+use candle_core::{Device, Result, Tensor};
 
 #[derive(Debug, Default)]
 pub struct RolloutBuffer {

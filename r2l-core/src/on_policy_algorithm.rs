@@ -1,23 +1,19 @@
 use crate::Algorithm;
 use crate::agents::Agent;
-use crate::env::EnvPool;
+use crate::env::{EnvPool, RolloutMode};
 use crate::utils::rollout_buffer::RolloutBuffer;
 use candle_core::Result;
 use r2l_macros::training_hook;
 
-#[derive(Debug, Clone, Copy)]
-pub struct LearningSchedule {
-    pub total_rollouts: usize,
-    pub current_rollout: usize,
-}
-
-impl LearningSchedule {
-    pub fn new(total_rollouts: usize) -> Self {
-        Self {
-            total_rollouts,
-            current_rollout: 0,
-        }
-    }
+pub enum LearningSchedule {
+    RolloutBound {
+        total_rollouts: usize,
+        current_rollout: usize,
+    },
+    TotalStepBound {
+        total_steps: usize,
+        current_step: usize,
+    },
 }
 
 #[training_hook]
@@ -30,7 +26,7 @@ trait BeforeTrainingHook {
 trait TrainingHook {
     fn call_hook(
         &mut self,
-        epoch_idx: &usize,
+        learning_schedule: &LearningSchedule,
         rollouts: &Vec<RolloutBuffer>,
     ) -> candle_core::Result<bool>;
 }
@@ -58,11 +54,11 @@ impl OnPolicyHooks {
 
     fn call_training_hook(
         &mut self,
-        epoch_idx: &usize,
+        learning_schedule: &LearningSchedule,
         rollouts: &Vec<RolloutBuffer>,
     ) -> Result<bool> {
         if let Some(hook) = &mut self.training_hook {
-            hook.call_hook(epoch_idx, rollouts)
+            hook.call_hook(learning_schedule, rollouts)
         } else {
             Ok(false)
         }
@@ -81,16 +77,55 @@ pub struct OnPolicyAlgorithm<E: EnvPool, A: Agent> {
     pub env_pool: E,
     pub agent: A,
     pub learning_schedule: LearningSchedule,
+    pub rollout_mode: RolloutMode,
     pub hooks: OnPolicyHooks,
 }
 
 impl<E: EnvPool, A: Agent> OnPolicyAlgorithm<E, A> {
-    pub fn new(env_pool: E, agent: A, learning_schedule: LearningSchedule) -> Self {
+    pub fn new(
+        env_pool: E,
+        agent: A,
+        rollout_mode: RolloutMode,
+        learning_schedule: LearningSchedule,
+    ) -> Self {
         Self {
             env_pool,
             agent,
+            rollout_mode,
             learning_schedule,
             hooks: OnPolicyHooks::default(),
+        }
+    }
+
+    fn collect_rollout(&mut self) -> Result<Option<Vec<RolloutBuffer>>> {
+        let distr = self.agent.distribution();
+        match &mut self.learning_schedule {
+            LearningSchedule::TotalStepBound {
+                total_steps,
+                current_step,
+            } => {
+                let remaining_steps = *total_steps as isize - *current_step as isize;
+                if remaining_steps <= 0 {
+                    Ok(None)
+                } else {
+                    let rollouts = self.env_pool.collect_rollouts(distr, self.rollout_mode)?;
+                    let rollout_steps: usize = rollouts.iter().map(|e| e.actions.len()).sum();
+                    *total_steps += rollout_steps;
+                    Ok(Some(rollouts))
+                }
+            }
+            LearningSchedule::RolloutBound {
+                total_rollouts,
+                current_rollout,
+            } => {
+                if current_rollout == total_rollouts {
+                    Ok(None)
+                } else {
+                    let rollouts = self.env_pool.collect_rollouts(distr, self.rollout_mode)?;
+                    *current_rollout += 1;
+                    Ok(Some(rollouts))
+                }
+            }
         }
     }
 }
@@ -100,20 +135,11 @@ impl<E: EnvPool, A: Agent> Algorithm for OnPolicyAlgorithm<E, A> {
         if self.hooks.call_before_training_hook()? {
             return Ok(());
         }
-        for epoch_idx in 0..self.learning_schedule.total_rollouts {
-            let distr = self.agent.distribution();
-            let rollouts = self.env_pool.collect_rollouts(distr)?;
-            // TODO: debug logging here in a hook
-            // let total_reward: f32 = rollouts[0].rewards.iter().sum();
-            // let episodes = rollouts[0].dones.iter().filter(|x| **x).count();
-            // println!(
-            //     "epoch: {:<3} episodes: {:<5} total reward: {:<5.2} avg reward per episode: {:.2}",
-            //     epoch_idx,
-            //     episodes,
-            //     total_reward,
-            //     total_reward / episodes as f32
-            // );
-            if self.hooks.call_training_hook(&epoch_idx, &rollouts)? {
+        while let Some(rollouts) = self.collect_rollout()? {
+            if self
+                .hooks
+                .call_training_hook(&self.learning_schedule, &rollouts)?
+            {
                 break;
             }
             self.agent.learn(rollouts)?;
