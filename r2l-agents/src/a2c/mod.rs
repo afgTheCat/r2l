@@ -1,14 +1,15 @@
-use super::Agent;
-use crate::{
+use candle_core::{Device, Result};
+use r2l_core::{
+    agents::Agent,
+    distributions::Distribution,
     policies::{Policy, PolicyWithValueFunction},
     utils::{
         mini_batching::create_rollout_buffer_iterator,
         rollout_buffer::{RolloutBatch, RolloutBuffer},
     },
 };
-use candle_core::{Device, Result};
 
-pub struct VPG<P: PolicyWithValueFunction> {
+pub struct A2C<P: PolicyWithValueFunction> {
     policy: P,
     device: Device,
     gamma: f32,
@@ -16,17 +17,20 @@ pub struct VPG<P: PolicyWithValueFunction> {
     sample_size: usize,
 }
 
-impl<P: PolicyWithValueFunction> VPG<P> {
+impl<P: PolicyWithValueFunction> A2C<P> {
     fn train_single_batch(&mut self, batch: RolloutBatch) -> Result<bool> {
-        let policy_loss = batch.advantages.mul(&batch.logp_old)?.neg()?.mean_all()?;
+        let distribution = self.policy.distribution();
+        let logps = distribution.log_probs(&batch.observations, &batch.actions)?;
+        // TODO: this one is ugly, value prediction is not neccessarly implemented for all policies
         let values_pred = self.policy.calculate_values(&batch.observations)?;
-        let value_loss = batch.returns.sub(&values_pred)?.sqr()?.mean_all()?;
-        self.policy.update(&policy_loss, &value_loss)?;
-        Ok(true)
+        let value_loss = &batch.returns.sub(&values_pred)?.sqr()?.mean_all()?;
+        let policy_loss = &batch.advantages.mul(&logps)?.neg()?.mean_all()?;
+        self.policy.update(policy_loss, value_loss)?;
+        Ok(false)
     }
 }
 
-impl<P: PolicyWithValueFunction> Agent for VPG<P> {
+impl<P: PolicyWithValueFunction> Agent for A2C<P> {
     fn policy(&self) -> &impl Policy {
         &self.policy
     }

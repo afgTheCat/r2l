@@ -1,8 +1,10 @@
 pub mod builder;
 pub mod hooks;
 
-use super::Agent;
-use crate::{
+use candle_core::{Device, Result, Tensor};
+use hooks::{PPOBatchData, PPOHooks};
+use r2l_core::{
+    agents::Agent,
     distributions::Distribution,
     on_policy_algorithm::OnPolicyAlgorithm,
     policies::{Policy, PolicyWithValueFunction},
@@ -12,8 +14,6 @@ use crate::{
         rollout_buffer::{RolloutBatch, RolloutBuffer},
     },
 };
-use candle_core::{Device, Result, Tensor};
-use hooks::{PPOBatchData, PPOHooks};
 use std::ops::Deref;
 
 pub struct PPO<P: PolicyWithValueFunction> {

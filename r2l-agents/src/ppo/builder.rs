@@ -1,7 +1,7 @@
 use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 
-use crate::{
+use r2l_core::{
     distributions::{
         DistributionKind, categorical_distribution::CategoricalDistribution,
         diagonal_distribution::DiagGaussianDistribution,

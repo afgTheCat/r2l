@@ -1,7 +1,6 @@
 pub mod agents;
 pub mod distributions;
 pub mod env;
-pub mod network;
 pub mod on_policy_algorithm;
 pub mod policies;
 pub mod tensors;

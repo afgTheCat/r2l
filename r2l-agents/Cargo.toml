@@ -1,0 +1,11 @@
+[package]
+name = "r2l-agents"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+r2l-core = { workspace = true }
+r2l-macros = { workspace = true }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+

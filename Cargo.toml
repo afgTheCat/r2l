@@ -1,5 +1,5 @@
 [workspace]
-members = ["r2l-core", "r2l-gym", "r2l-macros", "r2l-examples", "r2l-subproc-env", "r2l-verification"]
+members = ["r2l-core", "r2l-gym", "r2l-macros", "r2l-examples", "r2l-subproc-env", "r2l-verification", "r2l-agents"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -8,3 +8,4 @@ candle-nn = { version = "0.9.1" }
 r2l-macros = { path = "r2l-macros" }
 r2l-core = { path = "r2l-core" }
 r2l-gym = { path = "r2l-gym" }
+r2l-agents = { path = "r2l-agents" }

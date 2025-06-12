@@ -8,8 +8,10 @@ use interprocess::local_socket::{
 };
 use r2l_core::{
     distributions::{Distribution, DistributionKind},
-    env::{Env, RolloutMode, run_rollout},
-    network::{PacketToReceive, PacketToSend, receive_packet, send_packet},
+    env::{
+        Env, RolloutMode, run_rollout,
+        sub_processing_vec_env::{PacketToReceive, PacketToSend, receive_packet, send_packet},
+    },
 };
 use r2l_gym::GymEnv;
 use std::io::BufReader;
@@ -147,7 +149,7 @@ mod test {
     };
     use r2l_core::{
         distributions::diagonal_distribution::DiagGaussianDistribution,
-        network::{PacketToReceive, PacketToSend, receive_packet, send_packet},
+        env::sub_processing_vec_env::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     };
     use r2l_gym::GymEnv;
     use std::io::BufReader;

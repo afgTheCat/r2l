@@ -1,11 +1,11 @@
 use candle_core::{DType, Device, Error, Tensor};
 use once_cell::sync::Lazy;
+use r2l_agents::ppo::{
+    builder::PPOBuilder,
+    hooks::{PPOBatchData, PPOHooks},
+};
 use r2l_core::{
     Algorithm,
-    agents::ppo::{
-        builder::PPOBuilder,
-        hooks::{PPOBatchData, PPOHooks},
-    },
     distributions::Distribution,
     env::{RolloutMode, dummy_vec_env::DummyVecEnv},
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
@@ -212,9 +212,9 @@ mod test {
     use super::{SHARED_APP_DATA, batch_hook, before_learning_hook};
     use crate::ENV_NAME;
     use candle_core::Device;
+    use r2l_agents::ppo::{builder::PPOBuilder, hooks::PPOHooks};
     use r2l_core::{
         Algorithm,
-        agents::ppo::{builder::PPOBuilder, hooks::PPOHooks},
         distributions::Distribution,
         env::{RolloutMode, sub_processing_vec_env::SubprocessingEnv},
         on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},

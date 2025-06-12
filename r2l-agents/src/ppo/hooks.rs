@@ -1,6 +1,8 @@
-use crate::tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred};
-use crate::utils::rollout_buffer::{RolloutBatch, RolloutBuffer};
 use candle_core::{Result, Tensor};
+use r2l_core::{
+    tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
+    utils::rollout_buffer::{RolloutBatch, RolloutBuffer},
+};
 use r2l_macros::policy_hook;
 
 pub struct PPOBatchData {

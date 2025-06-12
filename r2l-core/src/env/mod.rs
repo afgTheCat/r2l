@@ -1,5 +1,4 @@
 pub mod dummy_vec_env;
-pub mod sub_proc_vec_env2;
 pub mod sub_processing_vec_env;
 pub mod vec_env;
 
