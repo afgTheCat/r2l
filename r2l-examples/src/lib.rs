@@ -11,7 +11,7 @@ use r2l_core::{
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
     policies::{Policy, PolicyKind},
     tensors::{PolicyLoss, ValueLoss},
-    utils::rollout_buffer::RolloutBuffer,
+    utils::rollout_buffer::{Advantages, RolloutBuffer},
 };
 use r2l_gym::GymEnv;
 use std::sync::{Mutex, mpsc::Sender};
@@ -117,7 +117,10 @@ fn batch_hook(
     Ok(false)
 }
 
-fn before_learning_hook(rollout_buffers: &mut Vec<RolloutBuffer>) -> candle_core::Result<bool> {
+fn before_learning_hook(
+    rollout_buffers: &mut Vec<RolloutBuffer>,
+    advantages: &mut Advantages,
+) -> candle_core::Result<bool> {
     let mut app_data = SHARED_APP_DATA.lock().unwrap();
     app_data.current_epoch = 0;
     let mut total_rewards: f32 = 0.;
@@ -125,8 +128,8 @@ fn before_learning_hook(rollout_buffers: &mut Vec<RolloutBuffer>) -> candle_core
     for rb in rollout_buffers {
         total_rewards += rb.rewards.iter().sum::<f32>();
         total_episodes += rb.dones.iter().filter(|x| **x).count();
-        rb.normalize_advantage();
     }
+    advantages.normalize();
     let avarage_reward = total_rewards / total_episodes as f32;
     let progress = app_data.current_rollout as f64 / app_data.total_rollouts as f64;
     app_data.current_progress_report.avarage_reward = avarage_reward;

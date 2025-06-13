@@ -1,7 +1,7 @@
 use candle_core::{Result, Tensor};
 use r2l_core::{
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
-    utils::rollout_buffer::{RolloutBatch, RolloutBuffer},
+    utils::rollout_buffer::{Advantages, Returns, RolloutBatch, RolloutBuffer},
 };
 use r2l_macros::policy_hook;
 
@@ -32,6 +32,8 @@ trait BeforeLearningHook<P> {
         &mut self,
         policy: &mut P,
         rollout_buffers: &mut Vec<RolloutBuffer>,
+        advantages: &mut Advantages,
+        returns: &mut Returns,
     ) -> candle_core::Result<bool>;
 }
 
@@ -64,9 +66,11 @@ impl<P> PPOHooks<P> {
         &mut self,
         policy: &mut P,
         rollout_buffers: &mut Vec<RolloutBuffer>,
+        advantages: &mut Advantages,
+        returns: &mut Returns,
     ) -> Result<bool> {
         if let Some(hook) = &mut self.before_learning {
-            hook.call_hook(policy, rollout_buffers)
+            hook.call_hook(policy, rollout_buffers, advantages, returns)
         } else {
             Ok(false)
         }

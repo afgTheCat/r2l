@@ -4,7 +4,10 @@ use bincode::{
     error::{DecodeError, EncodeError},
 };
 use candle_core::{Device, Result, Tensor};
+use derive_more::Deref;
+use rand::seq::SliceRandom;
 
+// TODO: do we need Tensors here? Maybe it would be easier to not use them
 #[derive(Debug, Default)]
 pub struct RolloutBuffer {
     pub states: Vec<Tensor>,
@@ -12,8 +15,6 @@ pub struct RolloutBuffer {
     pub rewards: Vec<f32>,
     pub dones: Vec<bool>,
     pub logps: Vec<f32>,
-    pub advantages: Option<Vec<f32>>,
-    pub returns: Option<Vec<f32>>,
 }
 
 impl Encode for RolloutBuffer {
@@ -39,8 +40,6 @@ impl Encode for RolloutBuffer {
         bincode::encode_into_writer(&self.rewards, &mut encoder.writer(), writer_config)?;
         bincode::encode_into_writer(&self.dones, &mut encoder.writer(), writer_config)?;
         bincode::encode_into_writer(&self.logps, &mut encoder.writer(), writer_config)?;
-        bincode::encode_into_writer(&self.advantages, &mut encoder.writer(), writer_config)?;
-        bincode::encode_into_writer(&self.returns, &mut encoder.writer(), writer_config)?;
         Ok(())
     }
 }
@@ -65,16 +64,12 @@ impl<C> Decode<C> for RolloutBuffer {
         let rewards: Vec<f32> = Vec::decode(decoder)?;
         let dones: Vec<bool> = Vec::decode(decoder)?;
         let logps: Vec<f32> = Vec::decode(decoder)?;
-        let advantages: Option<Vec<f32>> = Option::decode(decoder)?;
-        let returns: Option<Vec<f32>> = Option::decode(decoder)?;
         Ok(Self {
             states,
             actions,
             rewards,
             dones,
             logps,
-            advantages,
-            returns,
         })
     }
 }
@@ -100,12 +95,12 @@ impl RolloutBuffer {
         self.states.push(state);
     }
 
-    pub fn calculate_advantages_and_returns<P: PolicyWithValueFunction>(
-        &mut self,
-        policy: &P,
+    pub fn calculate_advantages_and_returns(
+        &self,
+        policy: &impl PolicyWithValueFunction,
         gamma: f32,
         lambda: f32,
-    ) -> Result<()> {
+    ) -> Result<(Vec<f32>, Vec<f32>)> {
         let states = Tensor::stack(&self.states, 0)?;
         let values: Vec<f32> = policy.calculate_values(&states)?.to_vec1()?;
         let total_steps = self.rewards.len();
@@ -124,30 +119,11 @@ impl RolloutBuffer {
             advantages[i] = last_gae_lam;
             returns[i] = last_gae_lam + values[i];
         }
-        self.advantages = Some(advantages);
-        self.returns = Some(returns);
-        Ok(())
+        Ok((advantages, returns))
     }
 
-    pub fn sample_point(&self, index: usize) -> (&Tensor, &Tensor, Option<f32>, Option<f32>, f32) {
-        (
-            &self.states[index],
-            &self.actions[index],
-            self.advantages.as_ref().map(|adv| adv[index]),
-            self.returns.as_ref().map(|ret| ret[index]),
-            self.logps[index],
-        )
-    }
-
-    pub fn normalize_advantage(&mut self) {
-        let advantage = self.advantages.as_mut().unwrap();
-        let mean = advantage.iter().sum::<f32>() / advantage.len() as f32;
-        let variance =
-            advantage.iter().map(|x| (*x - mean).powi(2)).sum::<f32>() / advantage.len() as f32;
-        let std = variance.sqrt() + 1e-8;
-        for x in advantage.iter_mut() {
-            *x = (*x - mean) / std;
-        }
+    pub fn sample_point(&self, index: usize) -> (&Tensor, &Tensor, f32) {
+        (&self.states[index], &self.actions[index], self.logps[index])
     }
 }
 
@@ -157,4 +133,118 @@ pub struct RolloutBatch {
     pub returns: Tensor,
     pub advantages: Tensor,
     pub logp_old: Tensor,
+}
+
+#[derive(Deref)]
+pub struct Advantages(Vec<Vec<f32>>);
+
+impl Advantages {
+    pub fn normalize(&mut self) {
+        for advantage in self.0.iter_mut() {
+            let mean = advantage.iter().sum::<f32>() / advantage.len() as f32;
+            let variance =
+                advantage.iter().map(|x| (*x - mean).powi(2)).sum::<f32>() / advantage.len() as f32;
+            let std = variance.sqrt() + 1e-8;
+            for x in advantage.iter_mut() {
+                *x = (*x - mean) / std;
+            }
+        }
+    }
+}
+
+#[derive(Deref)]
+pub struct Returns(Vec<Vec<f32>>);
+
+pub fn calculate_advantages_and_returns(
+    rollouts: &[RolloutBuffer],
+    policy: &impl PolicyWithValueFunction,
+    gamma: f32,
+    lambda: f32,
+) -> (Advantages, Returns) {
+    let (advantages, returns): (Vec<Vec<f32>>, Vec<Vec<f32>>) = rollouts
+        .iter()
+        .map(|rollout| {
+            rollout
+                .calculate_advantages_and_returns(policy, gamma, lambda)
+                .unwrap() // TODO: get rid of this unwrap
+        })
+        .unzip();
+    (Advantages(advantages), Returns(returns))
+}
+
+pub struct RolloutBatchIterator<'a> {
+    rollouts: &'a [RolloutBuffer],
+    advantages: &'a Advantages,
+    returns: &'a Returns,
+    indicies: Vec<(usize, usize)>,
+    current: usize,
+    sample_size: usize,
+    device: Device,
+}
+
+impl<'a> RolloutBatchIterator<'a> {
+    pub fn new(
+        rollouts: &'a [RolloutBuffer],
+        advantages: &'a Advantages,
+        returns: &'a Returns,
+        sample_size: usize,
+        device: Device,
+    ) -> Self {
+        let mut indicies = (0..rollouts.len())
+            .flat_map(|i| {
+                let rb = &rollouts[i];
+                (0..rb.rewards.len()).map(|j| (i, j)).collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        indicies.shuffle(&mut rand::rng());
+        Self {
+            rollouts,
+            advantages,
+            returns,
+            indicies,
+            current: 0,
+            sample_size,
+            device,
+        }
+    }
+}
+
+impl<'a> Iterator for RolloutBatchIterator<'a> {
+    type Item = RolloutBatch;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let total_episodes = self.indicies.len() - 1;
+        if self.current + self.sample_size >= total_episodes {
+            return None;
+        }
+        let batch_indicies = &self.indicies[self.current..self.current + self.sample_size];
+        self.current += self.sample_size;
+        let (states, actions, advantages, returns, logps) = batch_indicies.iter().fold(
+            (vec![], vec![], vec![], vec![], vec![]),
+            |(mut states, mut actions, mut advantages, mut returns, mut logps),
+             (rollout_idx, idx)| {
+                let (state, action, logp) = self.rollouts[*rollout_idx].sample_point(*idx);
+                let adv = self.advantages[*rollout_idx][*idx];
+                let ret = self.returns[*rollout_idx][*idx];
+                states.push(state);
+                actions.push(action);
+                advantages.push(adv);
+                returns.push(ret);
+                logps.push(logp);
+                (states, actions, advantages, returns, logps)
+            },
+        );
+        let states = Tensor::stack(&states, 0).ok()?;
+        let actions = Tensor::stack(&actions, 0).ok()?;
+        let returns = Tensor::from_slice(&returns, returns.len(), &self.device).ok()?;
+        let advantages = Tensor::from_slice(&advantages, advantages.len(), &self.device).ok()?;
+        let logp_old = Tensor::from_slice(&logps, logps.len(), &self.device).ok()?;
+        Some(RolloutBatch {
+            observations: states,
+            actions,
+            returns,
+            advantages,
+            logp_old,
+        })
+    }
 }

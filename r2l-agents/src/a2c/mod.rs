@@ -3,9 +3,8 @@ use r2l_core::{
     agents::Agent,
     distributions::Distribution,
     policies::{Policy, PolicyWithValueFunction},
-    utils::{
-        mini_batching::create_rollout_buffer_iterator,
-        rollout_buffer::{RolloutBatch, RolloutBuffer},
+    utils::rollout_buffer::{
+        RolloutBatch, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns,
     },
 };
 
@@ -35,13 +34,17 @@ impl<P: PolicyWithValueFunction> Agent for A2C<P> {
         &self.policy
     }
 
-    fn learn(&mut self, mut rollout_buffers: Vec<RolloutBuffer>) -> candle_core::Result<()> {
-        for rollout in rollout_buffers.iter_mut() {
-            rollout.calculate_advantages_and_returns(&self.policy, self.gamma, self.lambda)?;
-        }
-        let rollout_buffer_iter =
-            create_rollout_buffer_iterator(&rollout_buffers, self.sample_size, self.device.clone());
-        for batch in rollout_buffer_iter {
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer>) -> candle_core::Result<()> {
+        let (advantages, returns) =
+            calculate_advantages_and_returns(&rollouts, &self.policy, self.gamma, self.lambda);
+        let rollout_batch_iter = RolloutBatchIterator::new(
+            &rollouts,
+            &advantages,
+            &returns,
+            self.sample_size,
+            self.device.clone(),
+        );
+        for batch in rollout_batch_iter {
             self.train_single_batch(batch)?;
         }
         Ok(())

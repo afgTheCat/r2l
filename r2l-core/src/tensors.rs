@@ -22,6 +22,3 @@ pub struct ValueLoss(pub Tensor);
 
 #[derive(Deref, DerefMut)]
 pub struct LogpDiff(pub Tensor);
-
-#[derive(Deref, DerefMut)]
-pub struct NotUsed(pub Tensor);

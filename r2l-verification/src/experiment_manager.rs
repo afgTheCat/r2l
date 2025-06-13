@@ -1,7 +1,13 @@
+use pyo3::{
+    Bound, IntoPyObject, PyErr, PyResult, Python,
+    exceptions::PyTypeError,
+    types::{PyAnyMethods, PyDict},
+};
+
 use crate::parse_config::ModelConfigs;
 
-#[derive(Debug, Default)]
-struct Builder {
+#[derive(Debug)]
+struct Builder<'py> {
     eval_episodes: Option<i64>,
     eval_freq: Option<i64>,
     n_timesteps: Option<i64>,
@@ -10,65 +16,95 @@ struct Builder {
     normalize: Option<bool>, // advantage normalization
     policy: Option<String>,
     learning_rate: Option<f64>,
+    py_exp_manager_args: Bound<'py, PyDict>, // TODO: we have to prepare the python dict so that we
 }
 
-impl Builder {
-    fn process_arg(mut self, arg_name: &str, arg_val: &str) -> Option<Self> {
+impl<'py> Builder<'py> {
+    fn new(py: Python<'py>) -> Self {
+        let dict = PyDict::new(py);
+        Self {
+            eval_episodes: Default::default(),
+            eval_freq: Default::default(),
+            n_timesteps: Default::default(),
+            n_eval_envs: Default::default(),
+            ent_coef: Default::default(),
+            normalize: Default::default(),
+            policy: Default::default(),
+            learning_rate: Default::default(),
+            py_exp_manager_args: dict,
+        }
+    }
+
+    fn set_py_arg<K, V>(&mut self, py: Python<'py>, key: K, value: V) -> PyResult<()>
+    where
+        K: IntoPyObject<'py>,
+        V: IntoPyObject<'py>,
+    {
+        self.py_exp_manager_args.set_item(key, value)
+    }
+
+    fn process_arg(
+        mut self,
+        py: Python<'py>,
+        arg_name: &str,
+        arg_val: &str,
+    ) -> PyResult<Option<Self>> {
         match arg_name {
             // we already kinda new this one
             "env_kwargs" => {
                 if arg_val == "null" {
-                    Some(self)
+                    self.set_py_arg(py, "env_kwargs", py.None())?;
+                    Ok(Some(self))
                 } else {
-                    None
+                    Ok(None)
                 }
             }
             "eval_episodes" => {
-                let eval_ep = arg_val.parse::<i64>().ok()?;
+                let eval_ep = arg_val.parse::<i64>().map_err(PyErr::new::<PyTypeError, _>)?;
                 self.eval_episodes = Some(eval_ep);
-                Some(self)
+                Ok(Some(self))
             }
             "eval_freq" => {
-                let eval_freq = arg_val.parse::<i64>().ok()?;
+                let eval_freq = arg_val.parse::<i64>().map_err(PyErr::new::<PyTypeError, _>)?;
                 self.eval_freq = Some(eval_freq);
-                Some(self)
+                Ok(Some(self))
             }
             "gym_packages" => {
                 if arg_val == "[]" {
-                    Some(self)
+                    Ok(Some(self))
                 } else {
-                    None
+                    Ok(None)
                 }
             }
             "n_eval_envs" => {
-                let n_eval_envs = arg_val.parse().ok()?;
+                let n_eval_envs = arg_val.parse().map_err(PyErr::new::<PyTypeError, _>)?;
                 self.n_eval_envs = Some(n_eval_envs);
-                Some(self)
+                Ok(Some(self))
             }
             "optimize_hyperparameters" => {
                 if arg_val == "false" {
-                    Some(self)
+                    Ok(Some(self))
                 } else {
-                    None
+                    Ok(None)
                 }
             }
             // we want to use the n_timesteps from the config.yml
             "n_timesteps" => {
-                let timesteps: i64 = arg_val.parse().ok()?;
-                if timesteps == -1 { Some(self) } else { None }
+                let timesteps: i64 = arg_val.parse().map_err(PyErr::new::<PyTypeError, _>)?;
+                if timesteps == -1 { Ok(Some(self)) } else { Ok(None) }
             }
             "trained_agent" => {
                 if arg_val == "''" {
-                    Some(self)
+                    Ok(Some(self))
                 } else {
-                    None
+                    Ok(None)
                 }
             }
             "hyperparams" => {
                 if arg_val == "null" {
-                    Some(self)
+                    Ok(Some(self))
                 } else {
-                    None
+                    Ok(None)
                 }
             }
             "algo" // we already know this
@@ -98,10 +134,10 @@ impl Builder {
             | "track" // we don't use wandb
             | "optimization_log_path" // only when hyperparameter is optimized
             | "num_threads" // Should not matter really
-            => Some(self),
+            => Ok(Some(self)),
             _ => {
                 println!("Unhandled arg type: {arg_name}");
-                None
+                Ok(None)
             }
         }
     }
@@ -148,25 +184,29 @@ impl Builder {
 
 // we probably need a discriminator on why we are rejecting a model
 pub fn test_construct_configs(configs: Vec<ModelConfigs>) {
-    let a2c_config = configs.into_iter().find(|c| c.model == "a2c").unwrap();
-    let mut builders = vec![];
-    // TODO: ehh, loop labels, whatever
-    'builder_iter: for env_config in a2c_config.envs.iter() {
-        let mut builder = Builder::default();
-        for (arg_name, arg_val) in env_config.args.iter() {
-            let Some(next_builer) = builder.process_arg(arg_name, arg_val) else {
-                continue 'builder_iter;
-            };
-            builder = next_builer
+    Python::with_gil(|py| {
+        let a2c_config = configs.into_iter().find(|c| c.model == "a2c").unwrap();
+        let mut builders = vec![];
+        // TODO: ehh, loop labels, whatever
+        'builder_iter: for env_config in a2c_config.envs.iter() {
+            let mut builder = Builder::new(py);
+            for (arg_name, arg_val) in env_config.args.iter() {
+                let Some(next_builer) = builder.process_arg(py, arg_name, arg_val)? else {
+                    continue 'builder_iter;
+                };
+                builder = next_builer
+            }
+            for (config_name, config_val) in env_config.config.iter() {
+                let Some(next_builer) = builder.process_config(config_name, config_val) else {
+                    continue 'builder_iter;
+                };
+                builder = next_builer
+            }
+            builders.push(builder);
         }
-        for (config_name, config_val) in env_config.config.iter() {
-            let Some(next_builer) = builder.process_config(config_name, config_val) else {
-                continue 'builder_iter;
-            };
-            builder = next_builer
-        }
-        builders.push(builder);
-    }
 
-    println!("{:#?}", builders);
+        println!("{:#?}", builders);
+        PyResult::Ok(())
+    })
+    .unwrap();
 }

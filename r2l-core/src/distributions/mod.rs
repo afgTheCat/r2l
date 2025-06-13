@@ -1,9 +1,10 @@
+// TODO: should distributions be their own crate?
+
 pub mod categorical_distribution;
 pub mod diagonal_distribution;
 
 use bincode::{Decode, Encode};
 use candle_core::{Result, Tensor};
-use candle_nn::encoding;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
 use enum_dispatch::enum_dispatch;

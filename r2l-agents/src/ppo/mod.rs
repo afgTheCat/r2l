@@ -9,9 +9,8 @@ use r2l_core::{
     on_policy_algorithm::OnPolicyAlgorithm,
     policies::{Policy, PolicyWithValueFunction},
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
-    utils::{
-        mini_batching::create_rollout_buffer_iterator,
-        rollout_buffer::{RolloutBatch, RolloutBuffer},
+    utils::rollout_buffer::{
+        RolloutBatch, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns,
     },
 };
 use std::ops::Deref;
@@ -65,30 +64,33 @@ impl<P: PolicyWithValueFunction> Agent for PPO<P> {
     }
 
     // TODO: functinally done, but could be made more readable
-    fn learn(&mut self, mut rollout_buffers: Vec<RolloutBuffer>) -> candle_core::Result<()> {
-        for rollout in rollout_buffers.iter_mut() {
-            rollout.calculate_advantages_and_returns(&self.policy, self.gamma, self.lambda)?;
-        }
-        if self
-            .hooks
-            .call_before_training_hook(&mut self.policy, &mut rollout_buffers)?
-        {
+    fn learn(&mut self, mut rollouts: Vec<RolloutBuffer>) -> candle_core::Result<()> {
+        let (mut advantages, mut returns) =
+            calculate_advantages_and_returns(&rollouts, &self.policy, self.gamma, self.lambda);
+        if self.hooks.call_before_training_hook(
+            &mut self.policy,
+            &mut rollouts,
+            &mut advantages,
+            &mut returns,
+        )? {
             return Ok(());
         }
         loop {
-            let rollout_buffer_iter = create_rollout_buffer_iterator(
-                &rollout_buffers,
+            let rollout_batch_iter = RolloutBatchIterator::new(
+                &rollouts,
+                &advantages,
+                &returns,
                 self.sample_size,
                 self.device.clone(),
             );
-            for batch in rollout_buffer_iter {
+            for batch in rollout_batch_iter {
                 if self.train_single_batch(batch)? {
                     break;
                 }
             }
             if self
                 .hooks
-                .call_after_training_hook(&mut self.policy, &rollout_buffers)?
+                .call_after_training_hook(&mut self.policy, &rollouts)?
             {
                 return Ok(());
             }

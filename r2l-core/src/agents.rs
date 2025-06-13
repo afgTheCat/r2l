@@ -12,5 +12,5 @@ pub trait Agent {
     }
 
     /// Instruments learnging with the rollout buffers collected
-    fn learn(&mut self, rollout_buffer: Vec<RolloutBuffer>) -> Result<()>;
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer>) -> Result<()>;
 }

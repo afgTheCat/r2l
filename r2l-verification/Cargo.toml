@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 nom = "8.0.0"
 r2l-core = { workspace = true }
+pyo3 = { version = "0.24.1", features = ["auto-initialize", "abi3-py311"] } 
