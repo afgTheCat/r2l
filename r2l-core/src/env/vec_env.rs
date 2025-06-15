@@ -1,13 +1,14 @@
 use super::RolloutMode;
-use super::{Env, EnvPool, run_rollout};
+use super::{Env, EnvPool};
+use crate::env::run_rollout;
 use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
 use candle_core::Result;
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::ParallelIterator;
+use rayon::iter::IntoParallelRefMutIterator;
+use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 
 pub struct VecEnv<E: Env + Sync> {
     envs: Vec<E>,
-    rollout_mode: RolloutMode,
+    buffers: Vec<RolloutBuffer>,
 }
 
 impl<E: Env + Sync> EnvPool for VecEnv<E> {
@@ -16,9 +17,13 @@ impl<E: Env + Sync> EnvPool for VecEnv<E> {
         distribution: &D,
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
-        (0..self.envs.len())
-            .into_par_iter()
-            .map(|env_idx| run_rollout(distribution, &self.envs[env_idx], rollout_mode))
-            .collect::<Result<Vec<_>>>()
+        self.buffers
+            .par_iter_mut()
+            .enumerate()
+            .try_for_each(|(idx, buffer)| {
+                let env = &self.envs[idx];
+                run_rollout(distribution, env, rollout_mode, buffer)
+            })?;
+        Ok(self.buffers.clone())
     }
 }

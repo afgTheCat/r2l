@@ -1,4 +1,4 @@
-use crate::policies::PolicyWithValueFunction;
+use crate::{env::Env, policies::PolicyWithValueFunction};
 use bincode::{
     BorrowDecode, Decode, Encode,
     error::{DecodeError, EncodeError},
@@ -8,13 +8,14 @@ use derive_more::Deref;
 use rand::seq::SliceRandom;
 
 // TODO: do we need Tensors here? Maybe it would be easier to not use them
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RolloutBuffer {
     pub states: Vec<Tensor>,
     pub actions: Vec<Tensor>,
     pub rewards: Vec<f32>,
     pub dones: Vec<bool>,
     pub logps: Vec<f32>,
+    pub last_state: Option<Tensor>,
 }
 
 impl Encode for RolloutBuffer {
@@ -40,6 +41,16 @@ impl Encode for RolloutBuffer {
         bincode::encode_into_writer(&self.rewards, &mut encoder.writer(), writer_config)?;
         bincode::encode_into_writer(&self.dones, &mut encoder.writer(), writer_config)?;
         bincode::encode_into_writer(&self.logps, &mut encoder.writer(), writer_config)?;
+        match &self.last_state {
+            None => 0u32.encode(encoder)?,
+            Some(last_state) => {
+                1u32.encode(encoder)?;
+                let last_state = last_state
+                    .to_vec1::<f32>()
+                    .map_err(|err| EncodeError::OtherString(err.to_string()))?;
+                bincode::encode_into_writer(&last_state, &mut encoder.writer(), writer_config)?;
+            }
+        };
         Ok(())
     }
 }
@@ -64,12 +75,24 @@ impl<C> Decode<C> for RolloutBuffer {
         let rewards: Vec<f32> = Vec::decode(decoder)?;
         let dones: Vec<bool> = Vec::decode(decoder)?;
         let logps: Vec<f32> = Vec::decode(decoder)?;
+        let last_state_type = u32::decode(decoder)?;
+        let last_state: Option<Tensor> = match last_state_type {
+            0 => None,
+            1 => {
+                let last_state: Vec<f32> = Vec::decode(decoder)?;
+                let last_state = Tensor::from_slice(&last_state, last_state.len(), &Device::Cpu)
+                    .map_err(|err| DecodeError::OtherString(err.to_string()))?;
+                Some(last_state)
+            }
+            _ => unreachable!(),
+        };
         Ok(Self {
             states,
             actions,
             rewards,
             dones,
             logps,
+            last_state,
         })
     }
 }
@@ -91,8 +114,10 @@ impl RolloutBuffer {
         self.logps.push(logp);
     }
 
+    // TODO: this should be the last state
     pub fn push_state(&mut self, state: Tensor) {
-        self.states.push(state);
+        self.states.push(state.clone());
+        self.last_state = Some(state);
     }
 
     pub fn calculate_advantages_and_returns(
@@ -124,6 +149,19 @@ impl RolloutBuffer {
 
     pub fn sample_point(&self, index: usize) -> (&Tensor, &Tensor, f32) {
         (&self.states[index], &self.actions[index], self.logps[index])
+    }
+
+    pub fn reset(&mut self, env: &impl Env, seed: u64) -> Result<Tensor> {
+        self.states.clear();
+        self.actions.clear();
+        self.rewards.clear();
+        self.dones.clear();
+        self.logps.clear();
+        if let Some(last_state) = self.last_state.take() {
+            Ok(last_state)
+        } else {
+            env.reset(seed)
+        }
     }
 }
 

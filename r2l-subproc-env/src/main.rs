@@ -9,9 +9,10 @@ use interprocess::local_socket::{
 use r2l_core::{
     distributions::{Distribution, DistributionKind},
     env::{
-        Env, RolloutMode, run_rollout,
+        Env, run_rollout,
         sub_processing_vec_env::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     },
+    utils::rollout_buffer::RolloutBuffer,
 };
 use r2l_gym::GymEnv;
 use std::io::BufReader;
@@ -73,9 +74,6 @@ struct Args {
     env_name: String,
 
     #[arg(long)]
-    rollout_type: RolloutType,
-
-    #[arg(long)]
     steps: usize,
 
     #[arg(long)]
@@ -85,7 +83,7 @@ struct Args {
 pub struct Rollout<E: Env> {
     env: E,
     conn: BufReader<Stream>,
-    collection_mode: RolloutMode,
+    rollout_buffer: RolloutBuffer,
 }
 
 impl<E: Env> Rollout<E> {
@@ -100,8 +98,15 @@ impl<E: Env> Rollout<E> {
                 distribution,
                 rollout_mode,
             } => {
-                let rollout = run_rollout(&distribution, &self.env, self.collection_mode)?;
-                let packet: PacketToSend<D> = PacketToSend::RolloutResult { rollout };
+                run_rollout(
+                    &distribution,
+                    &self.env,
+                    rollout_mode,
+                    &mut self.rollout_buffer,
+                )?;
+                let packet: PacketToSend<D> = PacketToSend::RolloutResult {
+                    rollout: self.rollout_buffer.clone(),
+                };
                 send_packet(&mut self.conn, packet);
                 Ok(true)
             }
@@ -112,14 +117,6 @@ impl<E: Env> Rollout<E> {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let collection_mode = match args.rollout_type {
-        RolloutType::EpisodeBound => RolloutMode::EpisodeBound {
-            n_steps: args.steps,
-        },
-        RolloutType::StepBound => RolloutMode::StepBound {
-            n_steps: args.steps,
-        },
-    };
     match &args.env_construction_method {
         EnvConstructionMethod::GymEnv => {
             let env = GymEnv::new(&args.env_name, None, &Device::Cpu)?;
@@ -131,8 +128,8 @@ fn main() -> Result<()> {
             let conn = BufReader::new(conn);
             let mut rollout = Rollout {
                 conn,
-                collection_mode,
                 env,
+                rollout_buffer: RolloutBuffer::default(),
             };
             // TODO: other distributions/custom distributions need to be encoded
             while rollout.handle_packet::<DistributionKind>()? {}

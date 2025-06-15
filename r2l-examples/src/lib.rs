@@ -196,7 +196,8 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
         .add_batching_hook(batch_hook)
         .add_after_learning_hook(after_learning_hook);
     agent.hooks = hooks;
-    let env_pool = DummyVecEnv { n_env: 10, env };
+    let buffers = vec![RolloutBuffer::default(); 10];
+    let env_pool = DummyVecEnv { buffers, env };
     let mut algo = OnPolicyAlgorithm {
         env_pool,
         agent,

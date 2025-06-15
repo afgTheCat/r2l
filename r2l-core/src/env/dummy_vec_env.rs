@@ -1,9 +1,9 @@
-use super::{Env, EnvPool, RolloutMode, run_rollout};
-use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
+use super::{Env, EnvPool, RolloutMode};
+use crate::{distributions::Distribution, env::run_rollout, utils::rollout_buffer::RolloutBuffer};
 use candle_core::Result;
 
 pub struct DummyVecEnv<E: Env> {
-    pub n_env: usize,
+    pub buffers: Vec<RolloutBuffer>,
     pub env: E,
 }
 
@@ -13,8 +13,9 @@ impl<E: Env> EnvPool for DummyVecEnv<E> {
         distribution: &D,
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
-        (0..self.n_env)
-            .map(|_| run_rollout(distribution, &self.env, rollout_mode))
-            .collect::<Result<Vec<_>>>()
+        for buffer in self.buffers.iter_mut() {
+            run_rollout(distribution, &self.env, rollout_mode, buffer)?;
+        }
+        Ok(self.buffers.clone())
     }
 }

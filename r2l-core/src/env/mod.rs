@@ -31,10 +31,10 @@ pub trait EnvPool {
     ) -> Result<Vec<RolloutBuffer>>;
 }
 
-fn single_step_env<D: Distribution, E: Env>(
-    dist: &D,
+fn single_step_env(
+    dist: &impl Distribution,
     state: &Tensor,
-    env: &E,
+    env: &impl Env,
 ) -> Result<(Tensor, Tensor, f32, bool, Tensor)> {
     // TODO: unsqueezing here is kinda ugly, we probably need the dist to enforce some shape
     // requirement
@@ -47,14 +47,14 @@ fn single_step_env<D: Distribution, E: Env>(
     Ok((next_state, action, reward, terminated || trancuated, logp))
 }
 
-pub fn run_rollout<D: Distribution, E: Env>(
-    dist: &D,
-    env: &E,
+pub fn run_rollout(
+    dist: &impl Distribution,
+    env: &impl Env,
     collection_type: RolloutMode,
-) -> Result<RolloutBuffer> {
-    let mut rollout_buffer = RolloutBuffer::default();
+    rollout_buffer: &mut RolloutBuffer,
+) -> Result<()> {
     let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-    let mut state = env.reset(seed)?;
+    let mut state = rollout_buffer.reset(env, seed)?;
     match collection_type {
         RolloutMode::EpisodeBound { n_steps } => loop {
             let (next_state, action, reward, done, logp) = single_step_env(dist, &state, env)?;
@@ -75,5 +75,5 @@ pub fn run_rollout<D: Distribution, E: Env>(
         }
     }
     rollout_buffer.push_state(state);
-    Ok(rollout_buffer)
+    Ok(())
 }

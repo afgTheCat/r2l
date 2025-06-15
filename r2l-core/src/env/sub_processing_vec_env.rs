@@ -120,6 +120,7 @@ impl SubprocessingEnv {
         let listener = opts.create_sync().map_err(Error::wrap)?;
         let mut handles = vec![];
         for _ in 0..num_proc {
+            // TODO: we should make the args type safe
             let child = std::process::Command::new("cargo")
                 .args([
                     "run",
@@ -133,8 +134,6 @@ impl SubprocessingEnv {
                     "gym-env",
                     "--env-name",
                     "Pendulum-v1",
-                    "--rollout-type",
-                    "step-bound",
                     "--steps",
                     "1024",
                     "--socket-name",
