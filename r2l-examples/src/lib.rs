@@ -194,7 +194,7 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
     let hooks = PPOHooks::empty()
         .add_before_learning_hook(before_learning_hook)
         .add_batching_hook(batch_hook)
-        .add_after_learning_hook(after_learning_hook);
+        .add_rollout_hook(after_learning_hook);
     agent.hooks = hooks;
     let buffers = vec![RolloutBuffer::default(); 10];
     let env_pool = DummyVecEnv { buffers, env };
@@ -266,7 +266,7 @@ mod test {
         let hooks = PPOHooks::empty()
             .add_before_learning_hook(before_learning_hook)
             .add_batching_hook(batch_hook)
-            .add_after_learning_hook(after_learning_hook_inner);
+            .add_rollout_hook(after_learning_hook_inner);
         agent.hooks = hooks;
         let env_pool = SubprocessingEnv::build("my_sock", 4)?;
         // let env_pool = DummyVecEnv {

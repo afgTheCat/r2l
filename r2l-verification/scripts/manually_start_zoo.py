@@ -27,9 +27,11 @@ class EpisodeLogger(BaseCallback):
 
     def _on_rollout_end(self) -> None:
         self.rollout_end_count += 1
-        print("ROLLOUT END")
 
-def manual_training_reproduction(model_name: str, env_name: str, exp_manager_args: Dict):
+
+def manual_training_reproduction(
+    model_name: str, env_name: str, exp_manager_args: Dict
+):
     def odict_ctor(loader, node):
         data = loader.construct_sequence(node, deep=True)
         inner = collections.OrderedDict(data[0])
@@ -50,9 +52,6 @@ def manual_training_reproduction(model_name: str, env_name: str, exp_manager_arg
     if results is not None:
         model, saved_hyperparams = results
         exp_manager.learn(model)
-    print(len(logger.episode_data))
-    print(logger.rollout_end_count)
-
 
 if __name__ == "__main__":
     config_file = "/home/gabor/projects/r2l/r2l-verification/rl-trained-agents/a2c/Acrobot-v1_1/Acrobot-v1/config.yml"

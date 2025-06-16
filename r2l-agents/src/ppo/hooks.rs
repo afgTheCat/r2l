@@ -5,6 +5,11 @@ use r2l_core::{
 };
 use r2l_macros::policy_hook;
 
+pub enum HookResult {
+    Continue,
+    Break,
+}
+
 pub struct PPOBatchData {
     pub logp: Logp,
     pub values_pred: ValuesPred,
@@ -39,7 +44,7 @@ trait BeforeLearningHook<P> {
 
 #[policy_hook]
 #[allow(clippy::ptr_arg)]
-trait AfterTrainingHook<P> {
+trait RolloutHook<P> {
     fn call_hook(
         &mut self,
         policy: &mut P,
@@ -47,10 +52,15 @@ trait AfterTrainingHook<P> {
     ) -> candle_core::Result<bool>;
 }
 
+// TODO: should we add after learning hook?
+// before_learning -> preprocessing hook?
 pub struct PPOHooks<P> {
+    // called before the rollout loop is called
     before_learning: Option<Box<dyn BeforeLearningHook<P>>>,
+    // called at the end of each rollout cycle
+    rollout_hook: Box<dyn RolloutHook<P>>,
+    // called before training the model actually happens
     batch_hook: Option<Box<dyn BatchHook<P>>>,
-    after_training: Box<dyn AfterTrainingHook<P>>,
 }
 
 impl<P> PPOHooks<P> {
@@ -58,7 +68,7 @@ impl<P> PPOHooks<P> {
         Self {
             before_learning: None,
             batch_hook: None,
-            after_training: IntoAfterTrainingHook::into_boxed(|| Ok(true)),
+            rollout_hook: IntoRolloutHook::into_boxed(|| Ok(true)),
         }
     }
 
@@ -68,11 +78,16 @@ impl<P> PPOHooks<P> {
         rollout_buffers: &mut Vec<RolloutBuffer>,
         advantages: &mut Advantages,
         returns: &mut Returns,
-    ) -> Result<bool> {
+    ) -> Result<HookResult> {
         if let Some(hook) = &mut self.before_learning {
-            hook.call_hook(policy, rollout_buffers, advantages, returns)
+            let should_stop = hook.call_hook(policy, rollout_buffers, advantages, returns)?;
+            if should_stop {
+                Ok(HookResult::Break)
+            } else {
+                Ok(HookResult::Continue)
+            }
         } else {
-            Ok(false)
+            Ok(HookResult::Continue)
         }
     }
 
@@ -83,20 +98,32 @@ impl<P> PPOHooks<P> {
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
-    ) -> Result<bool> {
+    ) -> Result<HookResult> {
         if let Some(hook) = &mut self.batch_hook {
-            hook.call_hook(policy, rollout_batch, policy_loss, value_loss, data)
+            let should_stop =
+                hook.call_hook(policy, rollout_batch, policy_loss, value_loss, data)?;
+            if should_stop {
+                Ok(HookResult::Break)
+            } else {
+                Ok(HookResult::Continue)
+            }
         } else {
-            Ok(false)
+            Ok(HookResult::Break)
         }
     }
 
-    pub fn call_after_training_hook(
+    // TODO: this is confusing
+    pub fn call_rollout_hook(
         &mut self,
         policy: &mut P,
         rollout_buffers: &Vec<RolloutBuffer>,
-    ) -> Result<bool> {
-        self.after_training.call_hook(policy, rollout_buffers)
+    ) -> Result<HookResult> {
+        let should_stop = self.rollout_hook.call_hook(policy, rollout_buffers)?;
+        if should_stop {
+            Ok(HookResult::Break)
+        } else {
+            Ok(HookResult::Continue)
+        }
     }
 
     pub fn add_batching_hook<H>(mut self, batch_hook: impl IntoBatchHook<P, H>) -> Self {
@@ -108,19 +135,13 @@ impl<P> PPOHooks<P> {
         self.batch_hook = Some(batch_hook.into_boxed());
     }
 
-    pub fn add_after_learning_hook<H>(
-        mut self,
-        after_learning_hook: impl IntoAfterTrainingHook<P, H>,
-    ) -> Self {
-        self.after_training = after_learning_hook.into_boxed();
+    pub fn add_rollout_hook<H>(mut self, rollout_hook: impl IntoRolloutHook<P, H>) -> Self {
+        self.rollout_hook = rollout_hook.into_boxed();
         self
     }
 
-    pub fn set_after_learning_hook<H>(
-        &mut self,
-        after_learning_hook: impl IntoAfterTrainingHook<P, H>,
-    ) {
-        self.after_training = after_learning_hook.into_boxed()
+    pub fn set_after_learning_hook<H>(&mut self, rollout_hook: impl IntoRolloutHook<P, H>) {
+        self.rollout_hook = rollout_hook.into_boxed()
     }
 
     pub fn add_before_learning_hook<H>(

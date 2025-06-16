@@ -11,6 +11,7 @@ use std::{collections::HashMap, fs, path::Path};
 #[derive(Debug)]
 pub struct EnvConfig {
     pub env_name: String,
+    pub config_file: String,
     pub args: HashMap<String, String>,
     pub config: HashMap<String, String>,
 }
@@ -62,7 +63,7 @@ pub fn parse_config_files() -> std::io::Result<Vec<ModelConfigs>> {
             .collect();
         for env_path in env_paths {
             // TODO: unwrap hell
-            let env_name = env_path.file_name().unwrap().to_str().unwrap().to_owned();
+            // let env_name = env_path.file_name().unwrap().to_str().unwrap().to_owned();
             let config_dir = fs::read_dir(env_path)?
                 .find_map(|s| s.ok().and_then(|s| s.path().is_dir().then(|| s.path())))
                 .unwrap(); // NOTE: this directory always exists, so it's safe to unwrap
@@ -70,13 +71,17 @@ pub fn parse_config_files() -> std::io::Result<Vec<ModelConfigs>> {
             let args_file_content = std::fs::read_to_string(args_file)?;
             let (_, args) = parse_file(&args_file_content)
                 .map_err(|err| std::io::Error::other(err.to_owned()))?;
+            let env_name = args.get("env").unwrap().to_owned();
             let config_file = config_dir.join("config.yml");
-            let config_file_content = std::fs::read_to_string(config_file)?;
+            let config_file_content = std::fs::read_to_string(config_file.clone())?;
             let (_, config) = parse_file(&config_file_content)
                 .map_err(|err| std::io::Error::other(err.to_owned()))?;
+            let config_file = fs::canonicalize(&config_file)?;
+            let config_file = config_file.to_string_lossy().into_owned();
             model_config.envs.push(EnvConfig {
                 env_name,
                 args,
+                config_file,
                 config,
             });
         }

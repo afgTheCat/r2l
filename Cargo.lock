@@ -1621,6 +1621,7 @@ name = "r2l-verification"
 version = "0.1.0"
 dependencies = [
  "nom",
+ "once_cell",
  "pyo3",
  "r2l-core",
 ]

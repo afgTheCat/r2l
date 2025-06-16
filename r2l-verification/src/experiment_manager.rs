@@ -1,10 +1,29 @@
+use crate::parse_config::ModelConfigs;
+use once_cell::sync::Lazy;
 use pyo3::{
-    Bound, IntoPyObject, PyErr, PyResult, Python,
+    Bound, IntoPyObject, PyErr, PyObject, PyResult, Python,
     exceptions::PyTypeError,
     types::{PyAnyMethods, PyDict},
 };
+use std::{collections::HashMap, sync::Mutex};
 
-use crate::parse_config::ModelConfigs;
+type Converter = fn(String, Python) -> Option<PyObject>;
+
+fn parse_env_kwarg(arg_val: String, py: Python) -> Option<PyObject> {
+    if arg_val == "null" {
+        Some(py.None())
+    } else {
+        None
+    }
+}
+
+static MAP_CONFIG_TO_EXP_MANAGER: Lazy<
+    Mutex<HashMap<String, fn(String, Python) -> Option<PyObject>>>,
+> = Lazy::new(|| {
+    let mut m = HashMap::new();
+    m.insert("env_kwargs".to_string(), parse_env_kwarg as Converter);
+    Mutex::new(m)
+});
 
 #[derive(Debug)]
 struct Builder<'py> {
@@ -35,7 +54,7 @@ impl<'py> Builder<'py> {
         }
     }
 
-    fn set_py_arg<K, V>(&mut self, py: Python<'py>, key: K, value: V) -> PyResult<()>
+    fn set_py_arg<K, V>(&mut self, key: K, value: V) -> PyResult<()>
     where
         K: IntoPyObject<'py>,
         V: IntoPyObject<'py>,
@@ -53,7 +72,7 @@ impl<'py> Builder<'py> {
             // we already kinda new this one
             "env_kwargs" => {
                 if arg_val == "null" {
-                    self.set_py_arg(py, "env_kwargs", py.None())?;
+                    self.set_py_arg( "env_kwargs", py.None())?;
                     Ok(Some(self))
                 } else {
                     Ok(None)
@@ -67,6 +86,7 @@ impl<'py> Builder<'py> {
             "eval_freq" => {
                 let eval_freq = arg_val.parse::<i64>().map_err(PyErr::new::<PyTypeError, _>)?;
                 self.eval_freq = Some(eval_freq);
+                self.set_py_arg( "eval_freq", eval_freq)?;
                 Ok(Some(self))
             }
             "gym_packages" => {
@@ -204,8 +224,6 @@ pub fn test_construct_configs(configs: Vec<ModelConfigs>) {
             }
             builders.push(builder);
         }
-
-        println!("{:#?}", builders);
         PyResult::Ok(())
     })
     .unwrap();
