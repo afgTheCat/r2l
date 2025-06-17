@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use pyo3::ffi::c_str;
 use pyo3::{PyObject, prelude::*, types::PyDict};
-use std::{collections::HashMap, ffi::CString, sync::Mutex};
+use std::{collections::HashMap, ffi::CString};
 
 use crate::parse_config::ModelConfigs;
 
@@ -26,10 +26,6 @@ fn parse_bool(arg_val: &String, py: Python) -> Option<PyObject> {
 static CONVERTERS: Lazy<HashMap<String, (String, Converter)>> = Lazy::new(|| {
     let mut m: HashMap<String, (String, Converter)> = HashMap::new();
     m.insert("env".into(), ("env".into(), parse_str));
-    // m.insert("log_folder".into(), ("log_folder".into(), parse_str)); // TODO: verify
-    // m.insert("gym_packages".into(), ("gym_packages".into(), parse_str)); // TODO: verify
-    // m.insert("algo".into(), ("algo".into(), parse_str)); // TODO: verify
-    // m.insert("num_threads".into(), ("num_threads".into(), parse_str)); // TODO: verify
     m.insert("env_kwargs".into(), ("env_kwargs".into(), parse_null));
     m.insert("hyperparams".into(), ("hyperparams".into(), parse_null));
     m.insert("storage".into(), ("storage".into(), parse_null));
@@ -75,10 +71,15 @@ static CONVERTERS: Lazy<HashMap<String, (String, Converter)>> = Lazy::new(|| {
     m
 });
 
-struct PythonBuilder<'py> {
+pub struct PythonBuilder<'py> {
     model_name: String,
     env_name: String,
     py_dict: Bound<'py, PyDict>, // TODO: we have to prepare the python dict so that we
+}
+
+pub struct PythonResult {
+    mean_rewards: Vec<f64>,
+    std_rewards: Vec<f64>,
 }
 
 impl<'py> PythonBuilder<'py> {
@@ -100,56 +101,83 @@ impl<'py> PythonBuilder<'py> {
     }
 }
 
-pub fn python_verification_pass(configs: Vec<ModelConfigs>) {
+fn construct_builers<'py>(
+    configs: &ModelConfigs,
+    py: Python<'py>,
+) -> PyResult<Vec<PythonBuilder<'py>>> {
+    let mut builders = vec![];
+    'builder_iter: for env_config in configs.envs.iter() {
+        let mut builder =
+            PythonBuilder::new(configs.model.to_owned(), env_config.env_name.clone(), py);
+        // TODO: add some explanation here + better filtering, maybe separate filtering stage?
+        for (arg_name, arg_val) in env_config.args.iter().filter(|(arg_name, _)| {
+            ![
+                "log_folder",
+                "gym_packages",
+                "algo",
+                "num_threads",
+                "uuid",
+                "save_replay_buffer",
+                "env",
+            ]
+            .contains(&arg_name.as_str())
+        }) {
+            if let Some((py_name, py_val)) = CONVERTERS
+                .get(arg_name)
+                .and_then(|(out_key, conv)| conv(arg_val, py).map(|obj| (out_key.clone(), obj)))
+            {
+                builder.set_py_arg(py_name, py_val)?;
+            } else {
+                println!("env name: {} arg name: {arg_name}", env_config.env_name);
+                continue 'builder_iter;
+            };
+            builder.set_py_arg("config", env_config.config_file.clone())?;
+        }
+        builders.push(builder);
+    }
+    Ok(builders)
+}
+
+fn analyze_python_model<'py>(
+    func: Bound<'py, PyAny>,
+    builder: &PythonBuilder<'py>,
+    py: Python<'py>,
+) -> PyResult<(Vec<f64>, Vec<f64>)> {
+    let exp_manager_args = PyDict::new(py);
+    exp_manager_args.set_item("exp_manager_args", builder.py_dict.clone())?;
+    let rewards = func.call(
+        (&builder.model_name, &builder.env_name),
+        Some(&exp_manager_args),
+    )?;
+    let mean_rewards = rewards.get_item(0)?.extract()?;
+    let std_rewards = rewards.get_item(1)?.extract()?;
+    Ok((mean_rewards, std_rewards))
+}
+
+pub fn python_verification_pass(configs: Vec<ModelConfigs>) -> Vec<PythonResult> {
+    let mut python_results = vec![];
     Python::with_gil(|py| {
         let a2c_config = configs.into_iter().find(|c| c.model == "a2c").unwrap();
-        let mut builders = vec![];
-        // TODO: ehh, loop labels, whatever
-        'builder_iter: for env_config in a2c_config.envs.iter() {
-            let mut builder =
-                PythonBuilder::new(a2c_config.model.to_owned(), env_config.env_name.clone(), py);
-            // TODO: add some explanation here
-            for (arg_name, arg_val) in env_config.args.iter().filter(|(arg_name, _)| {
-                ![
-                    "log_folder",
-                    "gym_packages",
-                    "algo",
-                    "num_threads",
-                    "uuid",
-                    "save_replay_buffer",
-                    "env",
-                ]
-                .contains(&arg_name.as_str())
-            }) {
-                if let Some((py_name, py_val)) = CONVERTERS
-                    .get(arg_name)
-                    .and_then(|(out_key, conv)| conv(arg_val, py).map(|obj| (out_key.clone(), obj)))
-                {
-                    builder.set_py_arg(py_name, py_val)?;
-                } else {
-                    println!("env name: {} arg name: {arg_name}", env_config.env_name);
-                    continue 'builder_iter;
-                };
-                builder.set_py_arg("config", env_config.config_file.clone())?;
-            }
-            builders.push(builder);
-        }
-        let module_path = "/home/gabor/projects/r2l/r2l-verification/scripts/manually_start_zoo.py";
-        let code = std::fs::read_to_string(module_path)?;
+        let builders = construct_builers(&a2c_config, py)?;
+        let module_path = format!(
+            "{}/scripts/manually_start_zoo.py",
+            env!("CARGO_MANIFEST_DIR")
+        );
         let module = PyModule::from_code(
             py,
-            CString::new(code)?.as_c_str(),
+            CString::new(std::fs::read_to_string(module_path)?)?.as_c_str(),
             c_str!("manually_start_zoo.py"),
             c_str!("manually_start_zoo"),
         )?;
         let func = module.getattr("manual_training_reproduction")?;
-        let exp_manager_args = PyDict::new(py);
-        exp_manager_args.set_item("exp_manager_args", builders[0].py_dict.clone())?;
-        func.call(
-            (&builders[0].model_name, &builders[0].env_name),
-            Some(&exp_manager_args),
-        )?;
+        let (mean_rewards, std_rewards) = analyze_python_model(func, &builders[0], py)?;
+        println!("{mean_rewards:?}, {std_rewards:?}");
+        python_results.push(PythonResult {
+            mean_rewards,
+            std_rewards,
+        });
         PyResult::Ok(())
     })
     .unwrap();
+    python_results
 }

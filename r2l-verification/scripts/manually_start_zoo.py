@@ -1,37 +1,15 @@
-from typing import Dict
+from typing import Dict, Tuple
 import yaml, collections
 import argparse
 from rl_zoo3.exp_manager import ExperimentManager
-from stable_baselines3.common.callbacks import BaseCallback
-
-
-class EpisodeLogger(BaseCallback):
-    def __init__(self):
-        super().__init__()
-        self.episode_data = []
-        self.rollout_end_count = 0
-
-    def _on_step(self) -> bool:
-        info = self.locals["infos"]
-        for i in info:
-            if "episode" in i:
-                self.episode_data.append(
-                    {
-                        "reward": i["episode"]["r"],
-                        "length": i["episode"]["l"],
-                        "time": self.num_timesteps,  # or time.time()
-                    }
-                )
-                print("Last episode data", self.episode_data[-1])
-        return True
-
-    def _on_rollout_end(self) -> None:
-        self.rollout_end_count += 1
+from stable_baselines3.common.callbacks import EvalCallback
+import numpy as np
+from numpy.typing import NDArray
 
 
 def manual_training_reproduction(
     model_name: str, env_name: str, exp_manager_args: Dict
-):
+) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
     def odict_ctor(loader, node):
         data = loader.construct_sequence(node, deep=True)
         inner = collections.OrderedDict(data[0])
@@ -41,17 +19,23 @@ def manual_training_reproduction(
         "tag:yaml.org,2002:python/object/apply:collections.OrderedDict",
         odict_ctor,
     )
-
     exp_manager = ExperimentManager(
         argparse.Namespace(), model_name, env_name, "/tmp/", **exp_manager_args
     )
-
-    logger = EpisodeLogger()
     results = exp_manager.setup_experiment()
-    exp_manager.callbacks = [logger]
     if results is not None:
         model, saved_hyperparams = results
         exp_manager.learn(model)
+    if isinstance(exp_manager.callbacks[0], EvalCallback):
+        eval_callback = exp_manager.callbacks[0]  # Safe to use as EvalCallback
+    else:
+        raise TypeError("Expected EvalCallback")
+    results = eval_callback.evaluations_results
+    mean_rewards = np.array([np.mean(r) for r in results], dtype=np.float64)
+    std_rewards = np.array([np.std(r) for r in results], dtype=np.float64)
+
+    return mean_rewards, std_rewards
+
 
 if __name__ == "__main__":
     config_file = "/home/gabor/projects/r2l/r2l-verification/rl-trained-agents/a2c/Acrobot-v1_1/Acrobot-v1/config.yml"

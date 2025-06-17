@@ -25,7 +25,7 @@ mod test {
         let configs = parse_config_files().unwrap();
         // Step 2: Try constructing each model according to the configuration
         // test_construct_configs(configs);
-        python_verification_pass(configs);
+        let py_results = python_verification_pass(configs);
 
         // let a2c_config = configs.into_iter().find(|c| c.model == "a2c").unwrap();
         // let mut exp_manager = ExperimentManager {};
