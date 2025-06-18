@@ -1,9 +1,8 @@
+use crate::parse_config::ModelConfigs;
 use once_cell::sync::Lazy;
 use pyo3::ffi::c_str;
 use pyo3::{PyObject, prelude::*, types::PyDict};
 use std::{collections::HashMap, ffi::CString};
-
-use crate::parse_config::ModelConfigs;
 
 pub type Converter = fn(&String, Python<'_>) -> Option<PyObject>;
 

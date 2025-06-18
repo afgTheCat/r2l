@@ -182,8 +182,11 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
             AfterLearningHookResult::ShouldContinue => Ok(false),
         };
     let device = Device::Cpu;
-    let env = GymEnv::new(ENV_NAME, None, &device)?;
-    let (input_dim, out_dim) = env.io_sizes();
+    // let env = vec![GymEnv::new(ENV_NAME, None, &device)?; 10];
+    let env = (0..10)
+        .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
+        .collect::<Vec<_>>();
+    let (input_dim, out_dim) = env[0].io_sizes();
     let builder = PPOBuilder {
         input_dim,
         out_dim,

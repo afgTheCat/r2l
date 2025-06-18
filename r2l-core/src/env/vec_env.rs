@@ -22,7 +22,7 @@ impl<E: Env + Sync> EnvPool for VecEnv<E> {
             .enumerate()
             .try_for_each(|(idx, buffer)| {
                 let env = &self.envs[idx];
-                run_rollout(distribution, env, rollout_mode, buffer)
+                run_rollout(distribution, env, rollout_mode, buffer, None)
             })?;
         Ok(self.buffers.clone())
     }

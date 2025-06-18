@@ -2,6 +2,7 @@
 mod experiment_manager;
 mod parse_config;
 mod python_verifier;
+mod r2l_verifier;
 
 // TODO: move this to a dedicated tests folder
 #[cfg(test)]
@@ -23,9 +24,10 @@ mod test {
     fn verification() {
         // Step 1: Parse the configuration files for the pre trained model
         let configs = parse_config_files().unwrap();
-        // Step 2: Try constructing each model according to the configuration
-        // test_construct_configs(configs);
+        // Step 2: Try constructing each model according to the configuration in python
         let py_results = python_verification_pass(configs);
+        // Step 3: Try constructing each model in r2l and do performance testing aganist the python
+        // version. Ideally we would want more than a single run for each
 
         // let a2c_config = configs.into_iter().find(|c| c.model == "a2c").unwrap();
         // let mut exp_manager = ExperimentManager {};
