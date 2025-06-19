@@ -1,4 +1,4 @@
-use crate::parse_config::ModelConfigs;
+use crate::parse_config::{EnvConfig, ModelConfigs};
 use once_cell::sync::Lazy;
 use pyo3::ffi::c_str;
 use pyo3::{PyObject, prelude::*, types::PyDict};
@@ -35,6 +35,7 @@ static CONVERTERS: Lazy<HashMap<String, (String, Converter)>> = Lazy::new(|| {
     );
     m.insert("eval_freq".into(), ("eval_freq".into(), parse_int));
     m.insert("log_interval".into(), ("log_interval".into(), parse_int));
+    // TODO: This is possibly irrelevant
     m.insert("n_evaluations".into(), ("n_evaluations".into(), parse_int));
     m.insert("n_jobs".into(), ("n_jobs".into(), parse_int));
     m.insert(
@@ -73,20 +74,23 @@ static CONVERTERS: Lazy<HashMap<String, (String, Converter)>> = Lazy::new(|| {
 pub struct PythonBuilder<'py> {
     model_name: String,
     env_name: String,
+    env_config: EnvConfig,
     py_dict: Bound<'py, PyDict>, // TODO: we have to prepare the python dict so that we
 }
 
 pub struct PythonResult {
-    mean_rewards: Vec<f64>,
-    std_rewards: Vec<f64>,
+    pub mean_rewards: Vec<f64>,
+    pub std_rewards: Vec<f64>,
+    pub env_config: EnvConfig,
 }
 
 impl<'py> PythonBuilder<'py> {
-    fn new(model_name: String, env_name: String, py: Python<'py>) -> Self {
+    fn new(model_name: String, env_name: String, py: Python<'py>, env_config: EnvConfig) -> Self {
         let dict = PyDict::new(py);
         Self {
             model_name,
             env_name,
+            env_config,
             py_dict: dict,
         }
     }
@@ -106,8 +110,12 @@ fn construct_builers<'py>(
 ) -> PyResult<Vec<PythonBuilder<'py>>> {
     let mut builders = vec![];
     'builder_iter: for env_config in configs.envs.iter() {
-        let mut builder =
-            PythonBuilder::new(configs.model.to_owned(), env_config.env_name.clone(), py);
+        let mut builder = PythonBuilder::new(
+            configs.model.to_owned(),
+            env_config.env_name.clone(),
+            py,
+            env_config.clone(),
+        );
         // TODO: add some explanation here + better filtering, maybe separate filtering stage?
         for (arg_name, arg_val) in env_config.args.iter().filter(|(arg_name, _)| {
             ![
@@ -174,6 +182,7 @@ pub fn python_verification_pass(configs: Vec<ModelConfigs>) -> Vec<PythonResult>
         python_results.push(PythonResult {
             mean_rewards,
             std_rewards,
+            env_config: builders[0].env_config.clone(),
         });
         PyResult::Ok(())
     })

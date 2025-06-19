@@ -1620,10 +1620,13 @@ dependencies = [
 name = "r2l-verification"
 version = "0.1.0"
 dependencies = [
+ "candle-core",
  "nom",
  "once_cell",
  "pyo3",
+ "r2l-agents",
  "r2l-core",
+ "r2l-gym",
 ]
 
 [[package]]

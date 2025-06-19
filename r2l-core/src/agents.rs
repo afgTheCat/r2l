@@ -1,13 +1,15 @@
-use super::{distributions::Distribution, policies::Policy};
+use super::policies::Policy;
 use crate::utils::rollout_buffer::RolloutBuffer;
 use candle_core::Result;
 
 pub trait Agent {
+    type Policy: Policy;
+
     /// Retrieves the underlying policy
-    fn policy(&self) -> &impl Policy;
+    fn policy(&self) -> &Self::Policy;
 
     /// Retriesve the underlying distribution throught the policy
-    fn distribution(&self) -> &impl Distribution {
+    fn distribution(&self) -> &<Self::Policy as Policy>::Dist {
         self.policy().distribution()
     }
 

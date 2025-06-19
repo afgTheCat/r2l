@@ -25,9 +25,9 @@ impl<E: Env> EnvPool for DummyVecEnv<E> {
     }
 }
 
-struct Evaluator<E: Env> {
-    env: E,
-    eval_episodes: usize,
+pub struct Evaluator<E: Env> {
+    pub env: E,
+    pub eval_episodes: usize,
 }
 
 impl<E: Env> Evaluator<E> {
@@ -50,9 +50,9 @@ impl<E: Env> Evaluator<E> {
 pub struct DummyVecEnvWithEvaluator<E: Env> {
     pub buffers: Vec<RolloutBuffer>,
     pub env: Vec<E>,
-    evaluator: Evaluator<E>,
-    eval_freq: usize,
-    eval_step: usize,
+    pub evaluator: Evaluator<E>,
+    pub eval_freq: usize,
+    pub eval_step: usize,
 }
 
 impl<E: Env> EnvPool for DummyVecEnvWithEvaluator<E> {

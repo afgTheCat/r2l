@@ -182,7 +182,6 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
             AfterLearningHookResult::ShouldContinue => Ok(false),
         };
     let device = Device::Cpu;
-    // let env = vec![GymEnv::new(ENV_NAME, None, &device)?; 10];
     let env = (0..10)
         .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
         .collect::<Vec<_>>();

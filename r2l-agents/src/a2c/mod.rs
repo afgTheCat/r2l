@@ -1,3 +1,6 @@
+pub mod builder;
+pub mod hooks;
+
 use candle_core::{Device, Result};
 use r2l_core::{
     agents::Agent,
@@ -30,7 +33,9 @@ impl<P: PolicyWithValueFunction> A2C<P> {
 }
 
 impl<P: PolicyWithValueFunction> Agent for A2C<P> {
-    fn policy(&self) -> &impl Policy {
+    type Policy = P;
+
+    fn policy(&self) -> &Self::Policy {
         &self.policy
     }
 

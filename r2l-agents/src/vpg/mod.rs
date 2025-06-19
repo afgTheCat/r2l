@@ -26,7 +26,9 @@ impl<P: PolicyWithValueFunction> VPG<P> {
 }
 
 impl<P: PolicyWithValueFunction> Agent for VPG<P> {
-    fn policy(&self) -> &impl Policy {
+    type Policy = P;
+
+    fn policy(&self) -> &Self::Policy {
         &self.policy
     }
 

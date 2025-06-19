@@ -77,7 +77,6 @@ impl<P: PolicyWithValueFunction> PPO<P> {
         }
     }
 
-    // rollout loop
     fn rollout_loop(
         &mut self,
         rollouts: &Vec<RolloutBuffer>,
@@ -99,7 +98,9 @@ impl<P: PolicyWithValueFunction> PPO<P> {
 }
 
 impl<P: PolicyWithValueFunction> Agent for PPO<P> {
-    fn policy(&self) -> &impl Policy {
+    type Policy = P;
+
+    fn policy(&self) -> &Self::Policy {
         &self.policy
     }
 

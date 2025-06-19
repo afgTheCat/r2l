@@ -8,7 +8,7 @@ use nom::{
 };
 use std::{collections::HashMap, fs, path::Path};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EnvConfig {
     pub env_name: String,
     pub config_file: String,
