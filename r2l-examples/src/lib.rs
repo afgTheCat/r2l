@@ -271,11 +271,6 @@ mod test {
             .add_rollout_hook(after_learning_hook_inner);
         agent.hooks = hooks;
         let env_pool = SubprocessingEnv::build("my_sock", 4)?;
-        // let env_pool = DummyVecEnv {
-        //     n_env: 10,
-        //     env,
-        //     rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
-        // };
         let mut algo = OnPolicyAlgorithm {
             env_pool,
             agent,

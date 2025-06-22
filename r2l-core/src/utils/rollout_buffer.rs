@@ -115,7 +115,7 @@ impl RolloutBuffer {
     }
 
     // TODO: this should be the last state
-    pub fn push_state(&mut self, state: Tensor) {
+    pub fn set_last_state(&mut self, state: Tensor) {
         self.states.push(state.clone());
         self.last_state = Some(state);
     }

@@ -1,5 +1,5 @@
 use crate::{
-    a2c::A2C,
+    a2c::{A2C, hooks::A2CHooks},
     ppo::builder::{PPODistributionKind, PPOPolicyType},
 };
 use candle_core::{DType, Device, Result};
@@ -51,6 +51,7 @@ impl Default for A2CBuilder {
 
 impl A2CBuilder {
     pub fn build(&self) -> Result<A2C<PolicyKind>> {
+        assert!(self.input_dim > 0, "Input dimensions should be set");
         let optimizer_params = ParamsAdamW {
             lr: 0.001,
             weight_decay: 0.01,
@@ -162,8 +163,10 @@ impl A2CBuilder {
                 PolicyKind::Decoupled(policy)
             }
         };
+        let hooks = A2CHooks::empty();
         Ok(A2C {
             policy,
+            hooks,
             device: self.device.clone(),
             gamma: self.gamma,
             lambda: self.lambda,

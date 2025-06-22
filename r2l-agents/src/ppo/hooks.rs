@@ -56,36 +56,34 @@ trait RolloutHook<P> {
 // before_learning -> preprocessing hook?
 pub struct PPOHooks<P> {
     // called before the rollout loop is called
-    before_learning: Option<Box<dyn BeforeLearningHook<P>>>,
+    before_learning: Box<dyn BeforeLearningHook<P>>,
     // called at the end of each rollout cycle
     rollout_hook: Box<dyn RolloutHook<P>>,
     // called before training the model actually happens
-    batch_hook: Option<Box<dyn BatchHook<P>>>,
+    batch_hook: Box<dyn BatchHook<P>>,
 }
 
 impl<P> PPOHooks<P> {
     pub fn empty() -> Self {
         Self {
-            before_learning: None,
-            batch_hook: None,
+            before_learning: IntoBeforeLearningHook::into_boxed(|| Ok(false)),
+            batch_hook: IntoBatchHook::into_boxed(|| Ok(false)),
             rollout_hook: IntoRolloutHook::into_boxed(|| Ok(true)),
         }
     }
 
-    pub fn call_before_training_hook(
+    pub fn call_before_learning_hook(
         &mut self,
         policy: &mut P,
         rollout_buffers: &mut Vec<RolloutBuffer>,
         advantages: &mut Advantages,
         returns: &mut Returns,
     ) -> Result<HookResult> {
-        if let Some(hook) = &mut self.before_learning {
-            let should_stop = hook.call_hook(policy, rollout_buffers, advantages, returns)?;
-            if should_stop {
-                Ok(HookResult::Break)
-            } else {
-                Ok(HookResult::Continue)
-            }
+        let should_stop =
+            self.before_learning
+                .call_hook(policy, rollout_buffers, advantages, returns)?;
+        if should_stop {
+            Ok(HookResult::Break)
         } else {
             Ok(HookResult::Continue)
         }
@@ -99,16 +97,13 @@ impl<P> PPOHooks<P> {
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
     ) -> Result<HookResult> {
-        if let Some(hook) = &mut self.batch_hook {
-            let should_stop =
-                hook.call_hook(policy, rollout_batch, policy_loss, value_loss, data)?;
-            if should_stop {
-                Ok(HookResult::Break)
-            } else {
-                Ok(HookResult::Continue)
-            }
-        } else {
+        let should_stop =
+            self.batch_hook
+                .call_hook(policy, rollout_batch, policy_loss, value_loss, data)?;
+        if should_stop {
             Ok(HookResult::Break)
+        } else {
+            Ok(HookResult::Continue)
         }
     }
 
@@ -127,12 +122,12 @@ impl<P> PPOHooks<P> {
     }
 
     pub fn add_batching_hook<H>(mut self, batch_hook: impl IntoBatchHook<P, H>) -> Self {
-        self.batch_hook = Some(batch_hook.into_boxed());
+        self.batch_hook = batch_hook.into_boxed();
         self
     }
 
     pub fn set_batching_hook<H>(&mut self, batch_hook: impl IntoBatchHook<P, H>) {
-        self.batch_hook = Some(batch_hook.into_boxed());
+        self.batch_hook = batch_hook.into_boxed();
     }
 
     pub fn add_rollout_hook<H>(mut self, rollout_hook: impl IntoRolloutHook<P, H>) -> Self {
@@ -148,7 +143,7 @@ impl<P> PPOHooks<P> {
         mut self,
         before_learning_hook: impl IntoBeforeLearningHook<P, H>,
     ) -> Self {
-        self.before_learning = Some(before_learning_hook.into_boxed());
+        self.before_learning = before_learning_hook.into_boxed();
         self
     }
 
@@ -156,6 +151,6 @@ impl<P> PPOHooks<P> {
         &mut self,
         before_learning_hook: impl IntoBeforeLearningHook<P, H>,
     ) {
-        self.before_learning = Some(before_learning_hook.into_boxed());
+        self.before_learning = before_learning_hook.into_boxed();
     }
 }

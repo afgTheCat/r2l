@@ -3,6 +3,7 @@ pub mod ppo;
 pub mod vpg;
 
 use crate::{a2c::A2C, ppo::PPO, vpg::VPG};
+use candle_core::Result;
 use r2l_core::{agents::Agent, policies::PolicyKind, utils::rollout_buffer::RolloutBuffer};
 
 pub enum AgentKind {
@@ -23,7 +24,11 @@ impl Agent for AgentKind {
         }
     }
 
-    fn learn(&mut self, rollouts: Vec<RolloutBuffer>) -> candle_core::Result<()> {
-        todo!()
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer>) -> Result<()> {
+        match self {
+            Self::A2C(a2c) => a2c.learn(rollouts),
+            Self::PPO(ppo) => ppo.learn(rollouts),
+            Self::VPG(vpg) => vpg.learn(rollouts),
+        }
     }
 }

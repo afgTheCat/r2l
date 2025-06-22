@@ -1,5 +1,5 @@
 use crate::{parse_config::EnvConfig, python_verifier::PythonResult};
-use candle_core::Device;
+use candle_core::{DType, Device, Tensor};
 use r2l_agents::{AgentKind, a2c::builder::A2CBuilder, ppo::builder::PPOBuilder};
 use r2l_core::{
     Algorithm,
@@ -8,7 +8,7 @@ use r2l_core::{
         dummy_vec_env::{DummyVecEnvWithEvaluator, Evaluator},
     },
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
-    utils::rollout_buffer::RolloutBuffer,
+    utils::{rollout_buffer::RolloutBuffer, running_mean_std::RunningMeanStd},
 };
 use r2l_gym::GymEnv;
 
@@ -28,12 +28,21 @@ fn r2l_verify(env_config: &EnvConfig) {
     let env = (0..n_envs)
         .map(|_| GymEnv::new(env_name, None, &device).unwrap())
         .collect::<Vec<_>>();
+    let input_dim = env[0].observation_size();
+    let out_dim = env[0].action_size().or(Some(env[0].action_dim())).unwrap();
     let env_pool = DummyVecEnvWithEvaluator {
         buffers: vec![RolloutBuffer::default(); n_envs],
         env,
         evaluator,
         eval_freq,
         eval_step: 0,
+        obs_rms: RunningMeanStd::new((n_envs, input_dim), device.clone()), // we will need the obs shape
+        ret_rms: RunningMeanStd::new(n_envs, device.clone()),
+        clip_obs: 10.,
+        clip_rew: 10.,
+        epsilon: 1e-8,
+        returns: Tensor::zeros(n_envs, DType::F32, &device).unwrap(),
+        gamma: 0.99,
     };
     let learning_schedule = LearningSchedule::TotalStepBound {
         total_steps: n_timesteps as usize,
@@ -49,7 +58,13 @@ fn r2l_verify(env_config: &EnvConfig) {
             (agent, rollout_mode)
         }
         "a2c" => {
-            let a2c = A2CBuilder::default().build().unwrap();
+            let a2c = A2CBuilder {
+                input_dim,
+                out_dim,
+                ..Default::default()
+            }
+            .build()
+            .unwrap();
             let agent = AgentKind::A2C(a2c);
             // sb3 defaults to 5 as n_steps
             let rollout_mode = RolloutMode::StepBound { n_steps: 5 };

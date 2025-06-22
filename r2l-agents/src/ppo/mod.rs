@@ -8,7 +8,7 @@ use r2l_core::{
     agents::Agent,
     distributions::Distribution,
     on_policy_algorithm::OnPolicyAlgorithm,
-    policies::{Policy, PolicyWithValueFunction},
+    policies::PolicyWithValueFunction,
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
     utils::rollout_buffer::{
         Advantages, Returns, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns,
@@ -17,7 +17,7 @@ use r2l_core::{
 use std::ops::Deref;
 
 // This changes the contorlflow, returning on hook break
-macro_rules! process_hook {
+macro_rules! process_hook_result {
     ($hook_res:expr) => {
         match $hook_res? {
             HookResult::Continue => {}
@@ -92,7 +92,8 @@ impl<P: PolicyWithValueFunction> PPO<P> {
                 self.device.clone(),
             );
             self.batching_loop(&mut batch_iter)?;
-            process_hook!(self.hooks.call_rollout_hook(&mut self.policy, &rollouts));
+            let rollout_hook_res = self.hooks.call_rollout_hook(&mut self.policy, &rollouts);
+            process_hook_result!(rollout_hook_res);
         }
     }
 }
@@ -108,12 +109,13 @@ impl<P: PolicyWithValueFunction> Agent for PPO<P> {
     fn learn(&mut self, mut rollouts: Vec<RolloutBuffer>) -> Result<()> {
         let (mut advantages, mut returns) =
             calculate_advantages_and_returns(&rollouts, &self.policy, self.gamma, self.lambda);
-        process_hook!(self.hooks.call_before_training_hook(
+        let before_learning_hook_res = self.hooks.call_before_learning_hook(
             &mut self.policy,
             &mut rollouts,
             &mut advantages,
             &mut returns,
-        ));
+        );
+        process_hook_result!(before_learning_hook_res);
         // we could handle rollout loop here, and use it in the after learning hoop
         self.rollout_loop(&rollouts, &mut advantages, &mut returns)?;
         Ok(())

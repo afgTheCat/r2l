@@ -1,11 +1,11 @@
+mod hook_container;
 mod policy_hook;
 mod training_hook;
 
+use crate::training_hook::TrainingHook;
 use policy_hook::PolicyTrait;
 use quote::quote;
 use syn::parse_macro_input;
-
-use crate::training_hook::TrainingHook;
 
 #[proc_macro_attribute]
 pub fn policy_hook(

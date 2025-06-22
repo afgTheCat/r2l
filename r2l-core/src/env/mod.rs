@@ -31,15 +31,12 @@ pub trait EnvPool {
     ) -> Result<Vec<RolloutBuffer>>;
 }
 
-// Should this accept a rollout buffer? I think it should
 pub fn single_step_env(
     dist: &impl Distribution,
     state: &Tensor,
     env: &impl Env,
-    rollout_buffer: &mut RolloutBuffer,
-) -> Result<(Tensor, bool)> {
+) -> Result<(Tensor, Tensor, f32, f32, bool)> {
     // TODO: unsqueezing here is kinda ugly, we probably need the dist to enforce some shape
-    // requirement
     let (action, logp) = dist.get_action(&state.unsqueeze(0)?)?;
     let (mut next_state, reward, terminated, trancuated) = env.step(&action)?;
     let done = terminated || trancuated;
@@ -47,7 +44,17 @@ pub fn single_step_env(
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         next_state = env.reset(seed)?;
     }
-    let logp = logp.squeeze(0)?.to_scalar()?;
+    let logp: f32 = logp.squeeze(0)?.to_scalar()?;
+    Ok((next_state, action, reward, logp, done))
+}
+
+pub fn single_step_env_with_buffer(
+    dist: &impl Distribution,
+    state: &Tensor,
+    env: &impl Env,
+    rollout_buffer: &mut RolloutBuffer,
+) -> Result<(Tensor, bool)> {
+    let (next_state, action, reward, logp, done) = single_step_env(dist, state, env)?;
     rollout_buffer.push_step(state.clone(), action, reward, done, logp);
     Ok((next_state, done))
 }
@@ -65,7 +72,8 @@ pub fn run_rollout<D: Distribution>(
     let mut state = rollout_buffer.reset(env, seed)?;
     match rollout_mode {
         RolloutMode::EpisodeBound { n_steps } => loop {
-            let (next_state, done) = single_step_env(dist, &state, env, rollout_buffer)?;
+            let (next_state, done) =
+                single_step_env_with_buffer(dist, &state, env, rollout_buffer)?;
             if let Some(step_hook) = &step_hook {
                 step_hook(dist)?;
             };
@@ -76,7 +84,8 @@ pub fn run_rollout<D: Distribution>(
         },
         RolloutMode::StepBound { n_steps } => {
             for _ in 0..n_steps {
-                let (next_state, _done) = single_step_env(dist, &state, env, rollout_buffer)?;
+                let (next_state, _done) =
+                    single_step_env_with_buffer(dist, &state, env, rollout_buffer)?;
                 if let Some(step_hook) = &step_hook {
                     step_hook(dist)?;
                 };
@@ -84,6 +93,6 @@ pub fn run_rollout<D: Distribution>(
             }
         }
     }
-    rollout_buffer.push_state(state);
+    rollout_buffer.set_last_state(state);
     Ok(())
 }
