@@ -15,6 +15,7 @@ use r2l_core::{
 
 use super::{PPO, hooks::PPOHooks};
 
+// TODO: Rename this
 pub enum PPODistributionKind {
     CategoricalDistribution {
         action_size: usize,
@@ -73,6 +74,8 @@ impl Default for PPOBuilder {
 
 impl PPOBuilder {
     pub fn build(&self) -> Result<PPO<PolicyKind>> {
+        assert!(self.input_dim > 0, "Input dim has to be larger than 0");
+        assert!(self.out_dim > 0, "Output dim has to be larger than 0");
         let optimizer_params = ParamsAdamW {
             lr: 0.001,
             weight_decay: 0.01,

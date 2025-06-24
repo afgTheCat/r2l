@@ -2,7 +2,11 @@ pub mod dummy_vec_env;
 pub mod sub_processing_vec_env;
 pub mod vec_env;
 
-use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
+use crate::{
+    distributions::Distribution,
+    env::{dummy_vec_env::DummyVecEnv, sub_processing_vec_env::SubprocessingEnv, vec_env::VecEnv},
+    utils::rollout_buffer::RolloutBuffer,
+};
 use bincode::{Decode, Encode};
 use candle_core::{Result, Tensor};
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -95,4 +99,20 @@ pub fn run_rollout<D: Distribution>(
     }
     rollout_buffer.set_last_state(state);
     Ok(())
+}
+
+pub enum EnvPoolType<E: Env + Sync> {
+    Dummy(DummyVecEnv<E>),
+    VecEnv(VecEnv<E>),
+    Subprocessing(SubprocessingEnv),
+}
+
+impl<E: Env + Sync> EnvPool for EnvPoolType<E> {
+    fn collect_rollouts<D: Distribution>(
+        &mut self,
+        distribution: &D,
+        rollout_mode: RolloutMode,
+    ) -> Result<Vec<RolloutBuffer>> {
+        todo!()
+    }
 }

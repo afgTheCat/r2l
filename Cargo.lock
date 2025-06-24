@@ -1566,6 +1566,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "r2l-api"
+version = "0.1.0"
+dependencies = [
+ "candle-core",
+ "candle-nn",
+ "r2l-agents",
+ "r2l-core",
+ "r2l-gym",
+]
+
+[[package]]
 name = "r2l-core"
 version = "0.0.1"
 dependencies = [

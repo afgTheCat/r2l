@@ -12,8 +12,9 @@ pub struct DecoupledActorCritic {
     pub value_net: ThreadSafeSequential,
     pub policy_optimizer: AdamW,
     pub value_optimizer: AdamW,
-    pub policy_max_grad_norm: Option<f32>, // TODO: not here dude
-    pub value_max_grad_norm: Option<f32>,  // TODO: not here dude
+    // TODO: this should probably be part of the thread safe sequential at one, point, or we could create a new abstraction
+    pub policy_max_grad_norm: Option<f32>,
+    pub value_max_grad_norm: Option<f32>, // TODO: not here dude
     pub policy_varmap: VarMap,
     pub value_varmap: VarMap,
 }

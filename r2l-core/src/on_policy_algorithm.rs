@@ -5,6 +5,7 @@ use crate::utils::rollout_buffer::RolloutBuffer;
 use candle_core::Result;
 use r2l_macros::training_hook;
 
+#[derive(Debug, Clone, Copy)]
 pub enum LearningSchedule {
     RolloutBound {
         total_rollouts: usize,
@@ -44,6 +45,10 @@ pub struct OnPolicyHooks {
 }
 
 impl OnPolicyHooks {
+    pub fn add_training_hook<H>(&mut self, training_hook: impl IntoTrainingHook<H>) {
+        self.training_hook = Some(training_hook.into_boxed())
+    }
+
     fn call_before_training_hook(&mut self) -> Result<bool> {
         if let Some(hook) = &mut self.before_training_hook {
             hook.call_hook()

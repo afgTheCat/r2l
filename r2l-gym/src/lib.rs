@@ -3,7 +3,10 @@ use pyo3::{
     PyObject, PyResult, Python,
     types::{PyAnyMethods, PyDict},
 };
-use r2l_core::env::Env;
+use r2l_core::{
+    env::{Env, dummy_vec_env::DummyVecEnv},
+    utils::rollout_buffer::RolloutBuffer,
+};
 
 #[derive(Debug, Clone)]
 pub enum ActionSpace {
@@ -120,4 +123,16 @@ impl Env for GymEnv {
         })
         .map_err(Error::wrap)
     }
+}
+
+pub fn gym_dummy_vec_env(
+    env_name: &str,
+    device: &Device,
+    n_env: usize,
+) -> Result<DummyVecEnv<GymEnv>> {
+    let buffers = vec![RolloutBuffer::default(); n_env];
+    let env = (0..10)
+        .map(|_| GymEnv::new(env_name, None, &device))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(DummyVecEnv { buffers, env })
 }
