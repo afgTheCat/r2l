@@ -18,13 +18,13 @@ pub enum LearningSchedule {
 }
 
 #[training_hook]
-trait BeforeTrainingHook {
+pub trait BeforeTrainingHook {
     fn call_hook(&mut self) -> candle_core::Result<bool>;
 }
 
 #[training_hook]
 #[allow(clippy::ptr_arg)]
-trait TrainingHook {
+pub trait TrainingHook {
     fn call_hook(
         &mut self,
         learning_schedule: &LearningSchedule,
@@ -33,7 +33,7 @@ trait TrainingHook {
 }
 
 #[training_hook]
-trait AfterTrainingHook {
+pub trait AfterTrainingHook {
     fn call_hook(&mut self) -> candle_core::Result<bool>;
 }
 

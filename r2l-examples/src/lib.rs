@@ -199,7 +199,14 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
         .add_rollout_hook(after_learning_hook);
     agent.hooks = hooks;
     let buffers = vec![RolloutBuffer::default(); 10];
-    let env_pool = DummyVecEnv { buffers, env };
+    let observation_space = env[0].observation_space();
+    let action_space = env[0].action_space();
+    let env_pool = DummyVecEnv {
+        buffers,
+        env,
+        observation_space,
+        action_space,
+    };
     let mut algo = OnPolicyAlgorithm {
         env_pool,
         agent,
@@ -258,7 +265,7 @@ mod test {
         let device = Device::Cpu;
         let env = GymEnv::new(ENV_NAME, None, &device)?;
         let input_dim = env.observation_size();
-        let out_dim = env.action_size().or(Some(env.action_dim())).unwrap();
+        let out_dim = env.action_size();
         let builder = PPOBuilder {
             input_dim,
             out_dim,
@@ -308,7 +315,7 @@ mod test {
         let device = Device::Cpu;
         let env = GymEnv::new("CartPole-v1", None, &device)?;
         let input_dim = env.observation_size();
-        let out_dim = env.action_size().or(Some(env.action_dim())).unwrap();
+        let out_dim = env.action_size();
         let builder = PPOBuilder {
             input_dim,
             out_dim,
@@ -326,7 +333,14 @@ mod test {
         let env = (0..10)
             .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
             .collect::<Vec<_>>();
-        let env_pool = DummyVecEnv { buffers, env };
+        let observation_space = env[0].observation_space();
+        let action_space = env[0].action_space();
+        let env_pool = DummyVecEnv {
+            buffers,
+            env,
+            observation_space,
+            action_space,
+        };
         let mut algo = OnPolicyAlgorithm {
             env_pool,
             agent,

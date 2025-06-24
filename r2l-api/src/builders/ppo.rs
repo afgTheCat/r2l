@@ -5,7 +5,6 @@ use r2l_core::policies::PolicyKind;
 use r2l_gym::GymEnv;
 
 pub struct PPOBuilder {
-    pub device: Device,
     pub distribution_kind: PPODistributionKind,
     pub policy_builder: PolicyBuilder,
     pub clip_range: f32,
@@ -17,7 +16,6 @@ pub struct PPOBuilder {
 impl Default for PPOBuilder {
     fn default() -> Self {
         PPOBuilder {
-            device: Device::Cpu,
             distribution_kind: PPODistributionKind::DiagGaussianDistribution {
                 hidden_layers: vec![64, 64],
             },
@@ -38,24 +36,19 @@ impl Default for PPOBuilder {
 }
 
 impl PPOBuilder {
-    pub fn build(&self) -> Result<PPO<PolicyKind>> {
+    pub fn build(&self, device: &Device) -> Result<PPO<PolicyKind>> {
         let policy = self
             .policy_builder
-            .build_policy(&self.distribution_kind, &self.device)?;
+            .build_policy(&self.distribution_kind, &device)?;
         Ok(PPO {
             policy,
             hooks: PPOHooks::empty(),
             clip_range: self.clip_range,
-            device: self.device.clone(),
+            device: device.clone(),
             gamma: self.gamma,
             lambda: self.lambda,
             sample_size: self.sample_size,
         })
-    }
-
-    pub fn set_gym_env_io(&mut self, env: &GymEnv) {
-        let io_dim = env.io_sizes();
-        self.policy_builder.set_io_dim(io_dim);
     }
 
     pub fn from_gym_env(env: &GymEnv) -> Self {

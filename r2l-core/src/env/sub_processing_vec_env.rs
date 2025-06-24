@@ -1,5 +1,9 @@
 use super::EnvPool;
-use crate::{distributions::Distribution, env::RolloutMode, utils::rollout_buffer::RolloutBuffer};
+use crate::{
+    distributions::Distribution,
+    env::{RolloutMode, Space},
+    utils::rollout_buffer::RolloutBuffer,
+};
 use bincode::{Decode, Encode};
 use candle_core::{Error, Result};
 use interprocess::local_socket::{
@@ -98,6 +102,14 @@ impl EnvPool for SubprocessingEnv {
             rollouts.push(rollout);
         }
         Ok(rollouts)
+    }
+
+    fn action_space(&self) -> Space {
+        todo!()
+    }
+
+    fn observation_space(&self) -> Space {
+        todo!()
     }
 }
 

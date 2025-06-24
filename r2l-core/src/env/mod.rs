@@ -16,9 +16,38 @@ thread_local! {
     static RNG: RefCell<StdRng> = RefCell::new(StdRng::seed_from_u64(0));
 }
 
+#[derive(Debug, Clone)]
+pub enum Space {
+    Discrete(usize),
+    Continous {
+        min: Option<Tensor>,
+        max: Option<Tensor>,
+        size: usize,
+    },
+}
+
+impl Space {
+    pub fn continous_from_dims(dims: Vec<usize>) -> Self {
+        Self::Continous {
+            min: None,
+            max: None,
+            size: dims.iter().product(),
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        match &self {
+            Self::Discrete(size) => *size,
+            Self::Continous { size, .. } => *size,
+        }
+    }
+}
+
 pub trait Env {
     fn reset(&self, seed: u64) -> Result<Tensor>;
     fn step(&self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)>;
+    fn action_space(&self) -> Space;
+    fn observation_space(&self) -> Space;
 }
 
 #[derive(Debug, Clone, Copy, Encode, Decode)]
@@ -33,6 +62,8 @@ pub trait EnvPool {
         distribution: &D,
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>>;
+    fn action_space(&self) -> Space;
+    fn observation_space(&self) -> Space;
 }
 
 pub fn single_step_env(
@@ -113,6 +144,23 @@ impl<E: Env + Sync> EnvPool for EnvPoolType<E> {
         distribution: &D,
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
-        todo!()
+        match self {
+            Self::Dummy(vec_env) => vec_env.collect_rollouts(distribution, rollout_mode),
+            _ => todo!(),
+        }
+    }
+
+    fn observation_space(&self) -> Space {
+        match &self {
+            Self::Dummy(vec_env) => vec_env.observation_space(),
+            _ => todo!(),
+        }
+    }
+
+    fn action_space(&self) -> Space {
+        match &self {
+            Self::Dummy(vec_env) => vec_env.action_space(),
+            _ => todo!(),
+        }
     }
 }

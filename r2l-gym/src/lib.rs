@@ -3,26 +3,13 @@ use pyo3::{
     PyObject, PyResult, Python,
     types::{PyAnyMethods, PyDict},
 };
-use r2l_core::{
-    env::{Env, dummy_vec_env::DummyVecEnv},
-    utils::rollout_buffer::RolloutBuffer,
-};
-
-#[derive(Debug, Clone)]
-pub enum ActionSpace {
-    Discrete(usize),
-    Continous {
-        min: Tensor,
-        max: Tensor,
-        action_size: usize,
-    },
-}
+use r2l_core::env::{Env, Space};
 
 pub struct GymEnv {
     env: PyObject,
     device: Device,
-    action_space: ActionSpace,
-    observation_space: Vec<usize>,
+    action_space: Space,
+    observation_space: Space,
 }
 
 impl GymEnv {
@@ -39,23 +26,24 @@ impl GymEnv {
             let gym_spaces = py.import("gymnasium.spaces")?;
             let action_space = if action_space.is_instance(&gym_spaces.getattr("Discrete")?)? {
                 let val = action_space.getattr("n")?.extract()?;
-                ActionSpace::Discrete(val)
+                Space::Discrete(val)
             } else if action_space.is_instance(&gym_spaces.getattr("Box")?)? {
                 let low: Vec<f32> = action_space.getattr("low")?.extract()?;
                 let action_size = low.len();
                 let low = Tensor::from_slice(&low, low.len(), device).unwrap();
                 let high: Vec<f32> = action_space.getattr("high")?.extract()?;
                 let high = Tensor::from_slice(&high, high.len(), device).unwrap();
-                ActionSpace::Continous {
-                    min: low,
-                    max: high,
-                    action_size,
+                Space::Continous {
+                    min: Some(low),
+                    max: Some(high),
+                    size: action_size,
                 }
             } else {
                 todo!("Other actions spaces are not yet supported");
             };
             let observation_space = env.getattr("observation_space")?;
-            let observation_space = observation_space.getattr("shape")?.extract()?;
+            let observation_space: Vec<usize> = observation_space.getattr("shape")?.extract()?;
+            let observation_space = Space::continous_from_dims(observation_space);
             PyResult::Ok(GymEnv {
                 env: env.into(),
                 action_space,
@@ -67,28 +55,23 @@ impl GymEnv {
     }
 
     pub fn observation_size(&self) -> usize {
-        self.observation_space.iter().product()
+        self.observation_space.size()
     }
 
-    pub fn action_size(&self) -> Option<usize> {
-        match &self.action_space {
-            ActionSpace::Discrete(num_actions) => Some(*num_actions),
-            ActionSpace::Continous { .. } => None,
-        }
+    pub fn action_size(&self) -> usize {
+        self.action_space.size()
     }
 
-    pub fn action_dim(&self) -> usize {
-        match &self.action_space {
-            ActionSpace::Discrete(_) => 1,
-            ActionSpace::Continous { action_size, .. } => *action_size,
-        }
+    pub fn observation_space(&self) -> Space {
+        self.observation_space.clone()
+    }
+
+    pub fn action_space(&self) -> Space {
+        self.action_space.clone()
     }
 
     pub fn io_sizes(&self) -> (usize, usize) {
-        (
-            self.observation_size(),
-            self.action_size().unwrap_or(self.action_dim()),
-        )
+        (self.action_size(), self.observation_size())
     }
 }
 
@@ -106,8 +89,12 @@ impl Env for GymEnv {
 
     fn step(&self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)> {
         let clipped_action = match &self.action_space {
-            ActionSpace::Continous { min, max, .. } => action.clamp(min, max)?,
-            ActionSpace::Discrete(_) => action.clone(),
+            Space::Continous {
+                min: Some(min),
+                max: Some(max),
+                ..
+            } => action.clamp(min, max)?,
+            _ => action.clone(),
         };
         Python::with_gil(|py| {
             let action_vec: Vec<f32> = clipped_action.to_vec1().unwrap();
@@ -123,16 +110,12 @@ impl Env for GymEnv {
         })
         .map_err(Error::wrap)
     }
-}
 
-pub fn gym_dummy_vec_env(
-    env_name: &str,
-    device: &Device,
-    n_env: usize,
-) -> Result<DummyVecEnv<GymEnv>> {
-    let buffers = vec![RolloutBuffer::default(); n_env];
-    let env = (0..10)
-        .map(|_| GymEnv::new(env_name, None, &device))
-        .collect::<Result<Vec<_>>>()?;
-    Ok(DummyVecEnv { buffers, env })
+    fn action_space(&self) -> Space {
+        self.action_space.clone()
+    }
+
+    fn observation_space(&self) -> Space {
+        todo!()
+    }
 }
