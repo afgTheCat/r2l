@@ -5,12 +5,14 @@ use r2l_core::{
         DistributionKind, categorical_distribution::CategoricalDistribution,
         diagonal_distribution::DiagGaussianDistribution,
     },
+    env::{EnvironmentDescription, Space},
     policies::{
         PolicyKind, decoupled_actor_critic::DecoupledActorCritic,
         paralell_actor_critic::ParalellActorCritic,
     },
     utils::build_sequential::build_sequential,
 };
+use r2l_gym::GymEnv;
 
 pub enum PolicyType {
     Paralell {
@@ -25,64 +27,94 @@ pub enum PolicyType {
 }
 
 pub enum PPODistributionKind {
-    CategoricalDistribution {
-        action_size: usize,
-        hidden_layers: Vec<usize>,
-    },
-    DiagGaussianDistribution {
-        hidden_layers: Vec<usize>,
-    },
+    Dynamic { hidden_layers: Vec<usize> },
+    CategoricalDistribution { hidden_layers: Vec<usize> },
+    DiagGaussianDistribution { hidden_layers: Vec<usize> },
 }
 
 impl PPODistributionKind {
+    fn build_diag_gaussian(
+        vb: &VarBuilder,
+        env_description: &EnvironmentDescription,
+        hidden_layers: &[usize],
+    ) -> Result<DistributionKind> {
+        let action_size = env_description.action_size();
+        let observation_size = env_description.observation_size();
+        let log_std = vb.get(action_size, "log_std")?;
+        let layers = &[&hidden_layers[..], &[action_size]].concat();
+        let distr =
+            DiagGaussianDistribution::build(observation_size, layers, &vb, log_std, "policy")?;
+        Ok(DistributionKind::DiagGaussian(distr))
+    }
+
+    fn build_categorical(
+        vb: &VarBuilder,
+        env_description: &EnvironmentDescription,
+        device: &Device,
+        hidden_layers: &[usize],
+    ) -> Result<DistributionKind> {
+        let action_size = env_description.action_size();
+        let obseravation_size = env_description.observation_size();
+        let layers = &[&hidden_layers[..], &[action_size]].concat();
+        let distr = CategoricalDistribution::build(
+            obseravation_size,
+            action_size,
+            layers,
+            &vb,
+            device.clone(),
+            "policy",
+        )?;
+        Ok(DistributionKind::Categorical(distr))
+    }
+
     pub fn build(
         &self,
         vb: &VarBuilder,
-        input_dim: usize,
-        out_dim: usize,
         device: &Device,
+        env_description: &EnvironmentDescription,
     ) -> Result<DistributionKind> {
         match &self {
             Self::DiagGaussianDistribution { hidden_layers } => {
-                let log_std = vb.get(out_dim, "log_std")?;
-                let layers = &[&hidden_layers[..], &[out_dim]].concat();
-                let distr =
-                    DiagGaussianDistribution::build(input_dim, layers, &vb, log_std, "policy")?;
-                Ok(DistributionKind::DiagGaussian(distr))
+                Self::build_diag_gaussian(vb, env_description, hidden_layers)
             }
-            Self::CategoricalDistribution {
-                action_size,
-                hidden_layers,
-            } => {
-                let layers = &[&hidden_layers[..], &[out_dim]].concat();
-                let distr = CategoricalDistribution::build(
-                    input_dim,
-                    *action_size,
-                    layers,
-                    &vb,
-                    device.clone(),
-                    "policy",
-                )?;
-                Ok(DistributionKind::Categorical(distr))
+            Self::CategoricalDistribution { hidden_layers } => {
+                Self::build_categorical(vb, env_description, device, hidden_layers)
             }
+            Self::Dynamic { hidden_layers } => match env_description.action_space {
+                Space::Discrete(..) => {
+                    Self::build_categorical(vb, env_description, device, &hidden_layers)
+                }
+                Space::Continous { .. } => {
+                    Self::build_diag_gaussian(vb, env_description, hidden_layers)
+                }
+            },
+        }
+    }
+
+    pub fn from_env(env: &GymEnv) -> Self {
+        match env.action_space() {
+            Space::Discrete(..) => PPODistributionKind::CategoricalDistribution {
+                hidden_layers: vec![64, 64],
+            },
+            Space::Continous { .. } => PPODistributionKind::DiagGaussianDistribution {
+                hidden_layers: vec![64, 64],
+            },
         }
     }
 }
 
 pub struct PolicyBuilder {
-    pub in_dim: usize,
-    pub out_dim: usize,
     pub policy_type: PolicyType,
 }
 
 impl PolicyBuilder {
     pub fn build_policy(
         &self,
-        distribuition_kind: &PPODistributionKind,
+        distribution_kind: &PPODistributionKind,
+        env_description: &EnvironmentDescription,
         device: &Device,
     ) -> Result<PolicyKind> {
-        assert!(self.in_dim > 0, "Input dim has to be larger than 0");
-        assert!(self.out_dim > 0, "Output dim has to be larger than 0");
+        let input_size = env_description.observation_size();
         let optimizer_params = ParamsAdamW {
             lr: 0.001,
             weight_decay: 0.01,
@@ -90,14 +122,14 @@ impl PolicyBuilder {
         };
         let varmap = VarMap::new();
         let vb = VarBuilder::from_varmap(&varmap, DType::F32, device);
-        let distribution = distribuition_kind.build(&vb, self.in_dim, self.out_dim, &device)?;
+        let distribution = distribution_kind.build(&vb, &device, env_description)?;
         match &self.policy_type {
             PolicyType::Paralell {
                 value_layers,
                 max_grad_norm,
             } => {
                 let value_layers = &[&value_layers[..], &[1]].concat();
-                let (value_net, _) = build_sequential(self.in_dim, value_layers, &vb, "value")?;
+                let (value_net, _) = build_sequential(input_size, value_layers, &vb, "value")?;
                 let optimizer = AdamW::new(varmap.all_vars(), optimizer_params.clone())?;
                 let policy = ParalellActorCritic::new(
                     distribution,
@@ -117,7 +149,7 @@ impl PolicyBuilder {
                 let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, &device);
                 let value_layers = &[&value_layers[..], &[1]].concat();
                 let (value_net, _) =
-                    build_sequential(self.in_dim, value_layers, &critic_vb, "value")?;
+                    build_sequential(input_size, value_layers, &critic_vb, "value")?;
                 let policy_optimizer = AdamW::new(varmap.all_vars(), optimizer_params.clone())?;
                 let value_optimizer = AdamW::new(critic_varmap.all_vars(), optimizer_params)?;
                 let policy = DecoupledActorCritic {
@@ -133,10 +165,5 @@ impl PolicyBuilder {
                 Ok(PolicyKind::Decoupled(policy))
             }
         }
-    }
-
-    pub fn set_io_dim(&mut self, (in_dim, out_dim): (usize, usize)) {
-        self.in_dim = in_dim;
-        self.out_dim = out_dim;
     }
 }

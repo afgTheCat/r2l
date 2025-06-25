@@ -2,7 +2,7 @@
 use super::{Env, EnvPool, RolloutMode};
 use crate::{
     distributions::Distribution,
-    env::{Space, run_rollout, single_step_env, single_step_env_with_buffer},
+    env::{EnvironmentDescription, run_rollout, single_step_env, single_step_env_with_buffer},
     utils::{rollout_buffer::RolloutBuffer, running_mean_std::RunningMeanStd},
 };
 use candle_core::{Result, Tensor};
@@ -10,8 +10,7 @@ use candle_core::{Result, Tensor};
 pub struct DummyVecEnv<E: Env> {
     pub buffers: Vec<RolloutBuffer>,
     pub env: Vec<E>,
-    pub action_space: Space,
-    pub observation_space: Space,
+    pub env_description: EnvironmentDescription,
 }
 
 impl<E: Env> EnvPool for DummyVecEnv<E> {
@@ -26,12 +25,8 @@ impl<E: Env> EnvPool for DummyVecEnv<E> {
         Ok(self.buffers.clone())
     }
 
-    fn action_space(&self) -> Space {
-        self.action_space.clone()
-    }
-
-    fn observation_space(&self) -> Space {
-        self.observation_space.clone()
+    fn env_description(&self) -> EnvironmentDescription {
+        self.env_description.clone()
     }
 }
 
@@ -71,8 +66,7 @@ pub struct DummyVecEnvWithEvaluator<E: Env> {
     pub epsilon: f32,
     pub returns: Tensor,
     pub gamma: f32,
-    pub action_space: Space,
-    pub observation_space: Space,
+    pub env_description: EnvironmentDescription,
 }
 
 impl<E: Env> DummyVecEnvWithEvaluator<E> {
@@ -197,11 +191,7 @@ impl<E: Env> EnvPool for DummyVecEnvWithEvaluator<E> {
         Ok(self.buffers.clone())
     }
 
-    fn action_space(&self) -> Space {
-        self.action_space.clone()
-    }
-
-    fn observation_space(&self) -> Space {
-        self.observation_space.clone()
+    fn env_description(&self) -> EnvironmentDescription {
+        self.env_description.clone()
     }
 }

@@ -1,8 +1,7 @@
 use crate::builders::policies::{PPODistributionKind, PolicyBuilder, PolicyType};
 use candle_core::{Device, Result};
 use r2l_agents::ppo::{PPO, hooks::PPOHooks};
-use r2l_core::policies::PolicyKind;
-use r2l_gym::GymEnv;
+use r2l_core::{env::EnvironmentDescription, policies::PolicyKind};
 
 pub struct PPOBuilder {
     pub distribution_kind: PPODistributionKind,
@@ -16,12 +15,10 @@ pub struct PPOBuilder {
 impl Default for PPOBuilder {
     fn default() -> Self {
         PPOBuilder {
-            distribution_kind: PPODistributionKind::DiagGaussianDistribution {
+            distribution_kind: PPODistributionKind::Dynamic {
                 hidden_layers: vec![64, 64],
             },
             policy_builder: PolicyBuilder {
-                in_dim: 0,
-                out_dim: 0,
                 policy_type: PolicyType::Paralell {
                     value_layers: vec![64, 64],
                     max_grad_norm: None,
@@ -36,10 +33,14 @@ impl Default for PPOBuilder {
 }
 
 impl PPOBuilder {
-    pub fn build(&self, device: &Device) -> Result<PPO<PolicyKind>> {
-        let policy = self
-            .policy_builder
-            .build_policy(&self.distribution_kind, &device)?;
+    pub fn build(
+        &self,
+        device: &Device,
+        env_description: &EnvironmentDescription,
+    ) -> Result<PPO<PolicyKind>> {
+        let policy =
+            self.policy_builder
+                .build_policy(&self.distribution_kind, env_description, &device)?;
         Ok(PPO {
             policy,
             hooks: PPOHooks::empty(),
@@ -49,20 +50,5 @@ impl PPOBuilder {
             lambda: self.lambda,
             sample_size: self.sample_size,
         })
-    }
-
-    pub fn from_gym_env(env: &GymEnv) -> Self {
-        let (in_dim, out_dim) = env.io_sizes();
-        PPOBuilder {
-            policy_builder: PolicyBuilder {
-                in_dim,
-                out_dim,
-                policy_type: PolicyType::Paralell {
-                    value_layers: vec![64, 64],
-                    max_grad_norm: None,
-                },
-            },
-            ..Default::default()
-        }
     }
 }

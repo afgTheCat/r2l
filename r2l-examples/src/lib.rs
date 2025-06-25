@@ -199,13 +199,11 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
         .add_rollout_hook(after_learning_hook);
     agent.hooks = hooks;
     let buffers = vec![RolloutBuffer::default(); 10];
-    let observation_space = env[0].observation_space();
-    let action_space = env[0].action_space();
+    let env_description = env[0].env_description();
     let env_pool = DummyVecEnv {
         buffers,
         env,
-        observation_space,
-        action_space,
+        env_description,
     };
     let mut algo = OnPolicyAlgorithm {
         env_pool,
@@ -333,13 +331,11 @@ mod test {
         let env = (0..10)
             .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
             .collect::<Vec<_>>();
-        let observation_space = env[0].observation_space();
-        let action_space = env[0].action_space();
+        let env_description = env[0].env_description();
         let env_pool = DummyVecEnv {
             buffers,
             env,
-            observation_space,
-            action_space,
+            env_description,
         };
         let mut algo = OnPolicyAlgorithm {
             env_pool,

@@ -1,5 +1,3 @@
-use std::thread::Thread;
-
 use super::Distribution;
 use crate::thread_safe_sequential::ThreadSafeSequential;
 use crate::utils::build_sequential::build_sequential;
@@ -84,15 +82,17 @@ impl Distribution for CategoricalDistribution {
         let action_probs: Vec<f32> = softmax(&logits, 1)?.squeeze(0)?.to_vec1()?;
         let distribution = WeightedIndex::new(&action_probs).map_err(Error::wrap)?;
         let action = distribution.sample(&mut rand::rng());
+        // TODO: there is a one_hot function in candle. Should we use it?
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
         let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
-        let logp = self.log_probs(observation, &action)?.detach();
+        let logp = self.log_probs(observation, &action.unsqueeze(0)?)?.detach();
         Ok((action, logp))
     }
 
     fn log_probs(&self, states: &Tensor, actions: &Tensor) -> Result<Tensor> {
-        let log_probs = log_softmax(&self.logits.forward(states)?, 1)?;
+        let logits = self.logits.forward(&states)?;
+        let log_probs = log_softmax(&logits, 1)?;
         actions.mul(&log_probs)?.sum(1)
     }
 

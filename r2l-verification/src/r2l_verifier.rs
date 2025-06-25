@@ -30,8 +30,7 @@ fn r2l_verify(env_config: &EnvConfig) {
         .collect::<Vec<_>>();
     let input_dim = env[0].observation_size();
     let out_dim = env[0].action_size();
-    let observation_space = env[0].observation_space();
-    let action_space = env[0].action_space();
+    let env_description = env[0].env_description();
     let env_pool = DummyVecEnvWithEvaluator {
         buffers: vec![RolloutBuffer::default(); n_envs],
         env,
@@ -45,8 +44,7 @@ fn r2l_verify(env_config: &EnvConfig) {
         epsilon: 1e-8,
         returns: Tensor::zeros(n_envs, DType::F32, &device).unwrap(),
         gamma: 0.99,
-        observation_space,
-        action_space,
+        env_description,
     };
     let learning_schedule = LearningSchedule::TotalStepBound {
         total_steps: n_timesteps as usize,

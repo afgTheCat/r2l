@@ -46,6 +46,7 @@ impl Space {
 pub trait Env {
     fn reset(&self, seed: u64) -> Result<Tensor>;
     fn step(&self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)>;
+    // TODO: do we need this?
     fn action_space(&self) -> Space;
     fn observation_space(&self) -> Space;
 }
@@ -56,14 +57,29 @@ pub enum RolloutMode {
     StepBound { n_steps: usize },
 }
 
+#[derive(Debug, Clone)]
+pub struct EnvironmentDescription {
+    pub observation_space: Space,
+    pub action_space: Space,
+}
+
+impl EnvironmentDescription {
+    pub fn action_size(&self) -> usize {
+        self.action_space.size()
+    }
+
+    pub fn observation_size(&self) -> usize {
+        self.observation_space.size()
+    }
+}
+
 pub trait EnvPool {
     fn collect_rollouts<D: Distribution>(
         &mut self,
         distribution: &D,
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>>;
-    fn action_space(&self) -> Space;
-    fn observation_space(&self) -> Space;
+    fn env_description(&self) -> EnvironmentDescription;
 }
 
 pub fn single_step_env(
@@ -150,16 +166,9 @@ impl<E: Env + Sync> EnvPool for EnvPoolType<E> {
         }
     }
 
-    fn observation_space(&self) -> Space {
+    fn env_description(&self) -> EnvironmentDescription {
         match &self {
-            Self::Dummy(vec_env) => vec_env.observation_space(),
-            _ => todo!(),
-        }
-    }
-
-    fn action_space(&self) -> Space {
-        match &self {
-            Self::Dummy(vec_env) => vec_env.action_space(),
+            Self::Dummy(vec_env) => vec_env.env_description(),
             _ => todo!(),
         }
     }

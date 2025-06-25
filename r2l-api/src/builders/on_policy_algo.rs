@@ -5,7 +5,7 @@ use crate::{
 use candle_core::{Device, Result};
 use r2l_agents::AgentKind;
 use r2l_core::{
-    env::{EnvPool, EnvPoolType, RolloutMode},
+    env::{EnvPool, EnvPoolType, RolloutMode, Space},
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
 };
 use r2l_gym::GymEnv;
@@ -49,14 +49,10 @@ impl Default for OnPolicyAlgorithmBuilder {
 impl OnPolicyAlgorithmBuilder {
     pub fn build(mut self) -> Result<OnPolicyAlgorithm<EnvPoolType<GymEnv>, AgentKind>> {
         let env_pool = self.env_pool_builder.build(&self.device);
-        let observation_space = env_pool.observation_space();
-        let action_space = env_pool.action_space();
+        let env_description = env_pool.env_description();
         let agent = match &mut self.agent_type {
             AgentType::PPO(builder) => {
-                builder
-                    .policy_builder
-                    .set_io_dim((observation_space.size(), action_space.size()));
-                let ppo = builder.build(&self.device)?;
+                let ppo = builder.build(&self.device, &env_description)?;
                 AgentKind::PPO(ppo)
             }
             _ => todo!(),
@@ -80,9 +76,11 @@ impl OnPolicyAlgorithmBuilder {
             gym_env_name: Some(gym_env_name),
             ..Default::default()
         };
+        let agent_type = AgentType::PPO(PPOBuilder::default());
         Self {
             env_pool_builder,
             rollout_mode: RolloutMode::StepBound { n_steps: 2048 },
+            agent_type,
             ..Default::default()
         }
     }

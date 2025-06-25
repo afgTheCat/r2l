@@ -3,7 +3,7 @@ use pyo3::{
     PyObject, PyResult, Python,
     types::{PyAnyMethods, PyDict},
 };
-use r2l_core::env::{Env, Space};
+use r2l_core::env::{Env, EnvironmentDescription, Space};
 
 pub struct GymEnv {
     env: PyObject,
@@ -73,6 +73,13 @@ impl GymEnv {
     pub fn io_sizes(&self) -> (usize, usize) {
         (self.action_size(), self.observation_size())
     }
+
+    pub fn env_description(&self) -> EnvironmentDescription {
+        EnvironmentDescription {
+            observation_space: self.observation_space.clone(),
+            action_space: self.action_space.clone(),
+        }
+    }
 }
 
 impl Env for GymEnv {
@@ -88,17 +95,23 @@ impl Env for GymEnv {
     }
 
     fn step(&self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)> {
-        let clipped_action = match &self.action_space {
-            Space::Continous {
-                min: Some(min),
-                max: Some(max),
-                ..
-            } => action.clamp(min, max)?,
-            _ => action.clone(),
-        };
         Python::with_gil(|py| {
-            let action_vec: Vec<f32> = clipped_action.to_vec1().unwrap();
-            let step = self.env.call_method(py, "step", (action_vec,), None)?;
+            let step = match &self.action_space {
+                Space::Continous {
+                    min: Some(min),
+                    max: Some(max),
+                    ..
+                } => {
+                    let clipped_action = action.clamp(min, max).unwrap();
+                    let action_vec: Vec<f32> = clipped_action.to_vec1().unwrap();
+                    self.env.call_method(py, "step", (action_vec,), None)?
+                }
+                _ => {
+                    let action: Vec<f32> = action.to_vec1().unwrap();
+                    let action = action.iter().position(|i| *i > 0.).unwrap();
+                    self.env.call_method(py, "step", (action,), None)?
+                }
+            };
             let step = step.bind(py);
             let state: Vec<f32> = step.get_item(0)?.extract()?;
             // TODO: remove unwrap

@@ -39,13 +39,11 @@ impl EnvPoolBuilder {
                 let env = (0..self.n_envs)
                     .map(|_| GymEnv::new(&gym_env_name, None, &device).unwrap())
                     .collect::<Vec<_>>();
-                let observation_space = env[0].observation_space();
-                let action_space = env[0].action_space();
+                let env_description = env[0].env_description();
                 EnvPoolType::Dummy(DummyVecEnv {
                     buffers,
                     env,
-                    observation_space,
-                    action_space,
+                    env_description,
                 })
             }
             _ => todo!(),
