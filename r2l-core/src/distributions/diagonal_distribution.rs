@@ -4,7 +4,6 @@ use crate::{
 };
 use bincode::{
     Decode, Encode,
-    de::read,
     error::{DecodeError, EncodeError},
 };
 use candle_core::{Device, Result, Tensor, safetensors::BufferedSafetensors};
@@ -39,7 +38,6 @@ impl Decode<()> for DiagGaussianDistribution {
     fn decode<D: bincode::de::Decoder<Context = ()>>(
         decoder: &mut D,
     ) -> std::result::Result<Self, bincode::error::DecodeError> {
-        // todo!()
         let mu_net: ThreadSafeSequential = ThreadSafeSequential::decode(decoder)?;
         let encoded_data: Vec<u8> = Vec::decode(decoder)?;
         let buffered_safetensors = BufferedSafetensors::new(encoded_data)

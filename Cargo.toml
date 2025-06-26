@@ -9,3 +9,4 @@ r2l-macros = { path = "r2l-macros" }
 r2l-core = { path = "r2l-core" }
 r2l-gym = { path = "r2l-gym" }
 r2l-agents = { path = "r2l-agents" }
+r2l-api = { path = "r2l-api" }

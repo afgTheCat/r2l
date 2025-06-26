@@ -1,9 +1,7 @@
 use candle_core::{DType, Device, Error, Tensor};
 use once_cell::sync::Lazy;
-use r2l_agents::ppo::{
-    builder::PPOBuilder,
-    hooks::{PPOBatchData, PPOHooks},
-};
+use r2l_agents::ppo::hooks::{PPOBatchData, PPOHooks};
+use r2l_api::builders::ppo::PPOBuilder;
 use r2l_core::{
     Algorithm,
     distributions::Distribution,
@@ -185,21 +183,16 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
     let env = (0..10)
         .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
         .collect::<Vec<_>>();
-    let (input_dim, out_dim) = env[0].io_sizes();
-    let builder = PPOBuilder {
-        input_dim,
-        out_dim,
-        sample_size: 64,
-        ..Default::default()
-    };
-    let mut agent = builder.build()?;
+    let mut builder = PPOBuilder::default();
+    builder.sample_size = 64;
     let hooks = PPOHooks::empty()
         .add_before_learning_hook(before_learning_hook)
         .add_batching_hook(batch_hook)
         .add_rollout_hook(after_learning_hook);
+    let env_description = env[0].env_description();
+    let mut agent = builder.build(&device, &env_description)?;
     agent.hooks = hooks;
     let buffers = vec![RolloutBuffer::default(); 10];
-    let env_description = env[0].env_description();
     let env_pool = DummyVecEnv {
         buffers,
         env,
@@ -216,147 +209,4 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
         hooks: OnPolicyHooks::default(),
     };
     algo.train()
-}
-
-#[cfg(test)]
-mod test {
-    use super::{SHARED_APP_DATA, batch_hook, before_learning_hook};
-    use crate::ENV_NAME;
-    use candle_core::Device;
-    use r2l_agents::ppo::{builder::PPOBuilder, hooks::PPOHooks};
-    use r2l_core::{
-        Algorithm,
-        distributions::Distribution,
-        env::{RolloutMode, dummy_vec_env::DummyVecEnv, sub_processing_vec_env::SubprocessingEnv},
-        on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
-        policies::{Policy, PolicyKind},
-        utils::rollout_buffer::RolloutBuffer,
-    };
-    use r2l_gym::GymEnv;
-
-    fn after_learning_hook_inner(policy: &mut PolicyKind) -> candle_core::Result<bool> {
-        let mut app_data = SHARED_APP_DATA.lock().unwrap();
-        app_data.current_epoch += 1;
-        let should_stop = app_data.current_epoch == app_data.total_epochs;
-        if should_stop {
-            // snapshot the learned things, API can be much better
-            app_data.current_rollout += 1;
-            // the std after learning
-            app_data.current_progress_report.std = policy.distribution().std()?;
-            // TODO: calculate explained variance + approx kl, this can be done easily
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-
-    #[test]
-    fn training_only() -> candle_core::Result<()> {
-        let total_rollouts = 300;
-        {
-            let mut app_data = SHARED_APP_DATA.lock().unwrap();
-            app_data.total_epochs = 10;
-            app_data.target_kl = 0.01;
-            app_data.total_rollouts = total_rollouts;
-            app_data.current_rollout = 0;
-        }
-        let device = Device::Cpu;
-        let env = GymEnv::new(ENV_NAME, None, &device)?;
-        let input_dim = env.observation_size();
-        let out_dim = env.action_size();
-        let builder = PPOBuilder {
-            input_dim,
-            out_dim,
-            sample_size: 64,
-            ..Default::default()
-        };
-        let mut agent = builder.build()?;
-        let hooks = PPOHooks::empty()
-            .add_before_learning_hook(before_learning_hook)
-            .add_batching_hook(batch_hook)
-            .add_rollout_hook(after_learning_hook_inner);
-        agent.hooks = hooks;
-        let env_pool = SubprocessingEnv::build("my_sock", 4)?;
-        let mut algo = OnPolicyAlgorithm {
-            env_pool,
-            agent,
-            rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
-            learning_schedule: LearningSchedule::RolloutBound {
-                total_rollouts,
-                current_rollout: 0,
-            },
-            hooks: OnPolicyHooks::default(),
-        };
-        algo.hooks
-            .add_training_hook(|rollout_buffer: &Vec<RolloutBuffer>| {
-                let total_rew = rollout_buffer
-                    .iter()
-                    .map(|rb| rb.rewards.iter().sum::<f32>())
-                    .sum::<f32>();
-                let rew_avg = total_rew / rollout_buffer.len() as f32;
-                println!("Avg reward: {rew_avg}");
-                Ok(false)
-            });
-        algo.train()
-    }
-
-    #[test]
-    fn cartpole_lololol() -> candle_core::Result<()> {
-        let total_rollouts = 300;
-        {
-            let mut app_data = SHARED_APP_DATA.lock().unwrap();
-            app_data.total_epochs = 10;
-            app_data.target_kl = 0.01;
-            app_data.total_rollouts = total_rollouts;
-            app_data.current_rollout = 0;
-        }
-        let device = Device::Cpu;
-        let env = GymEnv::new("CartPole-v1", None, &device)?;
-        let input_dim = env.observation_size();
-        let out_dim = env.action_size();
-        let builder = PPOBuilder {
-            input_dim,
-            out_dim,
-            sample_size: 64,
-            ..Default::default()
-        };
-        let mut agent = builder.build()?;
-        let hooks = PPOHooks::empty()
-            .add_before_learning_hook(before_learning_hook)
-            .add_batching_hook(batch_hook)
-            .add_rollout_hook(after_learning_hook_inner);
-        agent.hooks = hooks;
-
-        let buffers = vec![RolloutBuffer::default(); 10];
-        let env = (0..10)
-            .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
-            .collect::<Vec<_>>();
-        let env_description = env[0].env_description();
-        let env_pool = DummyVecEnv {
-            buffers,
-            env,
-            env_description,
-        };
-        let mut algo = OnPolicyAlgorithm {
-            env_pool,
-            agent,
-            rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
-            learning_schedule: LearningSchedule::RolloutBound {
-                total_rollouts,
-                current_rollout: 0,
-            },
-            hooks: OnPolicyHooks::default(),
-        };
-        algo.hooks
-            .add_training_hook(|rollout_buffer: &Vec<RolloutBuffer>| {
-                let total_rew = rollout_buffer
-                    .iter()
-                    .map(|rb| rb.rewards.iter().sum::<f32>())
-                    .sum::<f32>();
-                let rew_avg = total_rew / rollout_buffer.len() as f32;
-                println!("Avg reward: {rew_avg}");
-                Ok(false)
-            });
-        algo.train()
-    }
 }

@@ -1,10 +1,11 @@
 use crate::{parse_config::EnvConfig, python_verifier::PythonResult};
 use candle_core::{DType, Device, Tensor};
-use r2l_agents::{AgentKind, a2c::builder::A2CBuilder, ppo::builder::PPOBuilder};
+use r2l_agents::AgentKind;
+use r2l_api::builders::{a2c::A2CBuilder, ppo::PPOBuilder};
 use r2l_core::{
     Algorithm,
     env::{
-        RolloutMode,
+        EnvPool, RolloutMode,
         dummy_vec_env::{DummyVecEnvWithEvaluator, Evaluator},
     },
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
@@ -29,7 +30,6 @@ fn r2l_verify(env_config: &EnvConfig) {
         .map(|_| GymEnv::new(env_name, None, &device).unwrap())
         .collect::<Vec<_>>();
     let input_dim = env[0].observation_size();
-    let out_dim = env[0].action_size();
     let env_description = env[0].env_description();
     let env_pool = DummyVecEnvWithEvaluator {
         buffers: vec![RolloutBuffer::default(); n_envs],
@@ -37,7 +37,7 @@ fn r2l_verify(env_config: &EnvConfig) {
         evaluator,
         eval_freq,
         eval_step: 0,
-        obs_rms: RunningMeanStd::new((n_envs, input_dim), device.clone()), // we will need the obs shape
+        obs_rms: RunningMeanStd::new(input_dim, device.clone()), // we will need the obs shape
         ret_rms: RunningMeanStd::new(n_envs, device.clone()),
         clip_obs: 10.,
         clip_rew: 10.,
@@ -53,20 +53,18 @@ fn r2l_verify(env_config: &EnvConfig) {
     let algo = args.get("algo").unwrap();
     let (agent, rollout_mode) = match algo.as_str() {
         "ppo" => {
-            let ppo = PPOBuilder::default().build().unwrap();
+            let ppo = PPOBuilder::default()
+                .build(&device, &env_pool.env_description())
+                .unwrap();
             let agent = AgentKind::PPO(ppo);
             // sb3 defaults to 2048 as n_steps
             let rollout_mode = RolloutMode::StepBound { n_steps: 2048 };
             (agent, rollout_mode)
         }
         "a2c" => {
-            let a2c = A2CBuilder {
-                input_dim,
-                out_dim,
-                ..Default::default()
-            }
-            .build()
-            .unwrap();
+            let a2c = A2CBuilder::default()
+                .build(&device, &env_pool.env_description())
+                .unwrap();
             let agent = AgentKind::A2C(a2c);
             // sb3 defaults to 5 as n_steps
             let rollout_mode = RolloutMode::StepBound { n_steps: 5 };

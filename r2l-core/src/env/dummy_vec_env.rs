@@ -151,43 +151,6 @@ impl<E: Env> EnvPool for DummyVecEnvWithEvaluator<E> {
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
         self.collect_rollouts2(distribution, rollout_mode)?;
-        // match rollout_mode {
-        //     RolloutMode::StepBound { n_steps } => {
-        //         let mut env_states = self
-        //             .buffers
-        //             .iter_mut()
-        //             .enumerate()
-        //             .map(|(env_idx, rb)| rb.reset(&self.env[env_idx], rand::random()).unwrap())
-        //             .collect::<Vec<_>>();
-        //         for _ in 0..n_steps {
-        //             let mut states = vec![];
-        //             for (env_idx, rb) in self.buffers.iter_mut().enumerate() {
-        //                 let (next_state, _done) = single_step_env_with_buffer(
-        //                     distribution,
-        //                     &env_states[env_idx],
-        //                     &self.env[env_idx],
-        //                     rb,
-        //                 )?;
-        //                 states.push(next_state);
-        //             }
-        //             let obs = Tensor::stack(&states, 0)?;
-        //             self.obs_rms.update(&obs)?;
-        //             let obs = self.normalize_obs(obs)?;
-        //             // TODO: this obs should update the one in the Rollout Buffer
-        //             for (env_idx, state) in states.into_iter().enumerate() {
-        //                 env_states[env_idx] = state;
-        //             }
-        //             self.eval_step += 1;
-        //             if self.eval_step == self.eval_freq {
-        //                 self.eval_step = 0;
-        //                 self.evaluator.evaluate(distribution)?;
-        //             }
-        //         }
-        //     }
-        //     RolloutMode::EpisodeBound { .. } => {
-        //         unreachable!("Step rollout is not supported yet!");
-        //     }
-        // }
         Ok(self.buffers.clone())
     }
 

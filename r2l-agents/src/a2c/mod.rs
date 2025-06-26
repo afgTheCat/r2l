@@ -1,4 +1,3 @@
-pub mod builder;
 pub mod hooks;
 
 use crate::a2c::hooks::A2CHooks;
@@ -24,12 +23,12 @@ macro_rules! process_hook_result {
 }
 
 pub struct A2C<P: PolicyWithValueFunction> {
-    policy: P,
-    hooks: A2CHooks<P>,
-    device: Device,
-    gamma: f32,
-    lambda: f32,
-    sample_size: usize,
+    pub policy: P,
+    pub hooks: A2CHooks<P>,
+    pub device: Device,
+    pub gamma: f32,
+    pub lambda: f32,
+    pub sample_size: usize,
 }
 
 impl<P: PolicyWithValueFunction> A2C<P> {

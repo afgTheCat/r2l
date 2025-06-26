@@ -9,5 +9,6 @@ r2l-core = { workspace = true }
 candle-core = { workspace = true }
 r2l-gym = { workspace= true }
 r2l-agents = { workspace = true }
+r2l-api = { workspace = true }
 pyo3 = { version = "0.24.1", features = ["auto-initialize", "abi3-py311"] } 
 once_cell = "1.21.3"
