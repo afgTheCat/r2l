@@ -1,18 +1,22 @@
 use crate::{
-    builders::{env_pool::EnvPoolBuilder, ppo::PPOBuilder},
+    builders::{
+        a2c::A2CBuilder,
+        env_pool::{EnvPoolBuilder, EvaluatorNormalizerOptions, VecPoolType},
+        ppo::PPOBuilder,
+    },
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
 };
 use candle_core::{Device, Result};
 use r2l_agents::AgentKind;
 use r2l_core::{
-    env::{EnvPool, EnvPoolType, RolloutMode, Space},
+    env::{EnvPool, EnvPoolType, RolloutMode},
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
 };
 use r2l_gym::GymEnv;
 
 pub enum AgentType {
     PPO(PPOBuilder),
-    A2C,
+    A2C(A2CBuilder),
 }
 
 // Currently only works if a gym env is set,.
@@ -55,7 +59,10 @@ impl OnPolicyAlgorithmBuilder {
                 let ppo = builder.build(&self.device, &env_description)?;
                 AgentKind::PPO(ppo)
             }
-            _ => todo!(),
+            AgentType::A2C(builder) => {
+                let a2c = builder.build(&self.device, &env_description)?;
+                AgentKind::A2C(a2c)
+            }
         };
         Ok(OnPolicyAlgorithm {
             env_pool,
@@ -83,5 +90,23 @@ impl OnPolicyAlgorithmBuilder {
             agent_type,
             ..Default::default()
         }
+    }
+
+    pub fn a2c(gym_env_name: String) -> Self {
+        let env_pool_builder = EnvPoolBuilder {
+            gym_env_name: Some(gym_env_name),
+            ..Default::default()
+        };
+        let agent_type = AgentType::A2C(A2CBuilder::default());
+        Self {
+            env_pool_builder,
+            rollout_mode: RolloutMode::StepBound { n_steps: 5 },
+            agent_type,
+            ..Default::default()
+        }
+    }
+
+    pub fn set_normalize(&mut self, opt: EvaluatorNormalizerOptions) {
+        self.env_pool_builder.pool_type = VecPoolType::Sequential(Some(opt));
     }
 }

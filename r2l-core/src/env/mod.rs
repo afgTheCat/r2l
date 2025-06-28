@@ -1,10 +1,14 @@
 pub mod dummy_vec_env;
+pub mod sequential_vec_env;
 pub mod sub_processing_vec_env;
 pub mod vec_env;
 
 use crate::{
     distributions::Distribution,
-    env::{dummy_vec_env::DummyVecEnv, sub_processing_vec_env::SubprocessingEnv, vec_env::VecEnv},
+    env::{
+        dummy_vec_env::DummyVecEnv, sequential_vec_env::SequentialVecEnv,
+        sub_processing_vec_env::SubprocessingEnv, vec_env::VecEnv,
+    },
     utils::rollout_buffer::RolloutBuffer,
 };
 use bincode::{Decode, Encode};
@@ -53,7 +57,7 @@ pub trait Env {
 
 #[derive(Debug, Clone, Copy, Encode, Decode)]
 pub enum RolloutMode {
-    EpisodeBound { n_steps: usize },
+    EpisodeBound { n_episodes: usize },
     StepBound { n_steps: usize },
 }
 
@@ -83,7 +87,7 @@ pub trait EnvPool {
 }
 
 pub fn single_step_env(
-    dist: &impl Distribution,
+    dist: &dyn Distribution,
     state: &Tensor,
     env: &impl Env,
 ) -> Result<(Tensor, Tensor, f32, f32, bool)> {
@@ -99,8 +103,9 @@ pub fn single_step_env(
     Ok((next_state, action, reward, logp, done))
 }
 
+// TODO: do not use a trait object here
 pub fn single_step_env_with_buffer(
-    dist: &impl Distribution,
+    dist: &dyn Distribution,
     state: &Tensor,
     env: &impl Env,
     rollout_buffer: &mut RolloutBuffer,
@@ -122,7 +127,9 @@ pub fn run_rollout<D: Distribution>(
     let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
     let mut state = rollout_buffer.reset(env, seed)?;
     match rollout_mode {
-        RolloutMode::EpisodeBound { n_steps } => loop {
+        RolloutMode::EpisodeBound {
+            n_episodes: n_steps,
+        } => loop {
             let (next_state, done) =
                 single_step_env_with_buffer(dist, &state, env, rollout_buffer)?;
             if let Some(step_hook) = &step_hook {
@@ -152,6 +159,7 @@ pub enum EnvPoolType<E: Env + Sync> {
     Dummy(DummyVecEnv<E>),
     VecEnv(VecEnv<E>),
     Subprocessing(SubprocessingEnv),
+    Sequential(SequentialVecEnv<E>),
 }
 
 impl<E: Env + Sync> EnvPool for EnvPoolType<E> {
@@ -162,6 +170,7 @@ impl<E: Env + Sync> EnvPool for EnvPoolType<E> {
     ) -> Result<Vec<RolloutBuffer>> {
         match self {
             Self::Dummy(vec_env) => vec_env.collect_rollouts(distribution, rollout_mode),
+            Self::Sequential(vec_env) => vec_env.collect_rollouts(distribution, rollout_mode),
             _ => todo!(),
         }
     }
@@ -169,6 +178,7 @@ impl<E: Env + Sync> EnvPool for EnvPoolType<E> {
     fn env_description(&self) -> EnvironmentDescription {
         match &self {
             Self::Dummy(vec_env) => vec_env.env_description(),
+            Self::Sequential(vec_env) => vec_env.env_description(),
             _ => todo!(),
         }
     }

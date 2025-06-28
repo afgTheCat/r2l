@@ -115,7 +115,7 @@ impl<E: EnvPool, A: Agent> OnPolicyAlgorithm<E, A> {
                 } else {
                     let rollouts = self.env_pool.collect_rollouts(distr, self.rollout_mode)?;
                     let rollout_steps: usize = rollouts.iter().map(|e| e.actions.len()).sum();
-                    *total_steps += rollout_steps;
+                    *total_steps -= rollout_steps;
                     Ok(Some(rollouts))
                 }
             }

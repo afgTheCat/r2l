@@ -1,6 +1,7 @@
 // Eventually we want to load the environments as dynamic libraries via libloading or dlopen-rs
 // and supported gym env as well. Also we can experiment with fork/clone whatever on linux
 
+use bincode::{Decode, Encode};
 use candle_core::{Device, Error, Result};
 use clap::Parser;
 use interprocess::local_socket::{
@@ -87,7 +88,7 @@ pub struct Rollout<E: Env> {
 }
 
 impl<E: Env> Rollout<E> {
-    fn handle_packet<D: Distribution>(&mut self) -> Result<bool> {
+    fn handle_packet<D: Distribution + Decode<()> + Encode>(&mut self) -> Result<bool> {
         let packet: PacketToReceive<D> = receive_packet(&mut self.conn);
         match packet {
             PacketToReceive::Halt => {

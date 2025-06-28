@@ -1574,6 +1574,7 @@ dependencies = [
  "r2l-agents",
  "r2l-core",
  "r2l-gym",
+ "rand",
 ]
 
 [[package]]
@@ -1968,6 +1969,7 @@ dependencies = [
 name = "subproc_env"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "candle-core",
  "clap",
  "interprocess",

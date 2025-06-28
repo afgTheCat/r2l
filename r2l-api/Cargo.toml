@@ -9,3 +9,4 @@ r2l-gym = { workspace = true }
 r2l-agents = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
+rand = "0.9.0"

@@ -74,30 +74,35 @@ pub struct SubprocessingEnv {
     handles: Vec<SubprocessEnvHandle>,
 }
 
+// TODO: This needs to be reconsidered
 impl EnvPool for SubprocessingEnv {
     fn collect_rollouts<D: Distribution>(
         &mut self,
         distribution: &D,
         rollout_mode: RolloutMode,
-    ) -> Result<Vec<RolloutBuffer>> {
-        for SubprocessEnvHandle { conn, .. } in self.handles.iter_mut() {
-            let packet = PacketToSend::StartRollout {
-                distribution,
-                rollout_mode,
-            };
-            send_packet(conn, packet);
-        }
-        let mut rollouts = vec![];
-        // collecting all the environments in a loop is fine, since the bulk of the computation
-        // will happen in a different process anyways
-        for SubprocessEnvHandle { conn, .. } in self.handles.iter_mut() {
-            let recieved_packet: PacketToReceive<D> = receive_packet(conn);
-            let PacketToReceive::RolloutResult { rollout } = recieved_packet else {
-                unreachable!()
-            };
-            rollouts.push(rollout);
-        }
-        Ok(rollouts)
+    ) -> Result<Vec<RolloutBuffer>>
+// where
+//     D: Decode<()> + Encode,
+    {
+        todo!()
+        // for SubprocessEnvHandle { conn, .. } in self.handles.iter_mut() {
+        //     let packet = PacketToSend::StartRollout {
+        //         distribution,
+        //         rollout_mode,
+        //     };
+        //     send_packet(conn, packet);
+        // }
+        // let mut rollouts = vec![];
+        // // collecting all the environments in a loop is fine, since the bulk of the computation
+        // // will happen in a different process anyways
+        // for SubprocessEnvHandle { conn, .. } in self.handles.iter_mut() {
+        //     let recieved_packet: PacketToReceive<DistributionKind> = receive_packet(conn);
+        //     let PacketToReceive::RolloutResult { rollout } = recieved_packet else {
+        //         unreachable!()
+        //     };
+        //     rollouts.push(rollout);
+        // }
+        // Ok(rollouts)
     }
 
     fn env_description(&self) -> super::EnvironmentDescription {
@@ -107,7 +112,7 @@ impl EnvPool for SubprocessingEnv {
 
 impl SubprocessingEnv {
     // Graceful shutdown
-    fn shutdown_subprocesses<D: Distribution>(&mut self) {
+    fn shutdown_subprocesses<D: Distribution + Decode<()> + Encode>(&mut self) {
         for SubprocessEnvHandle { conn, .. } in self.handles.iter_mut() {
             let packet_sent: PacketToSend<D> = PacketToSend::Halt;
             send_packet(conn, packet_sent);

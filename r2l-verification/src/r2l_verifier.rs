@@ -1,7 +1,10 @@
 use crate::{parse_config::EnvConfig, python_verifier::PythonResult};
 use candle_core::{DType, Device, Tensor};
 use r2l_agents::AgentKind;
-use r2l_api::builders::{a2c::A2CBuilder, ppo::PPOBuilder};
+use r2l_api::{
+    builders::{a2c::A2CBuilder, ppo::PPOBuilder},
+    hooks::on_policy_algo_hooks::LoggerTrainingHook,
+};
 use r2l_core::{
     Algorithm,
     env::{
@@ -21,9 +24,12 @@ fn r2l_verify(env_config: &EnvConfig) {
     let eval_episodes = args.get("eval_episodes").unwrap().parse().unwrap();
     let env_name = args.get("env").unwrap();
     let n_timesteps: f64 = config.get("n_timesteps").unwrap().parse().unwrap();
+    println!("{}", eval_freq);
     let evaluator = Evaluator {
         env: GymEnv::new(env_name, None, &device).unwrap(),
         eval_episodes,
+        eval_freq,
+        eval_step: 0,
     };
     let n_envs = config.get("n_envs").unwrap().parse().unwrap();
     let env = (0..n_envs)
@@ -35,10 +41,8 @@ fn r2l_verify(env_config: &EnvConfig) {
         buffers: vec![RolloutBuffer::default(); n_envs],
         env,
         evaluator,
-        eval_freq,
-        eval_step: 0,
         obs_rms: RunningMeanStd::new(input_dim, device.clone()), // we will need the obs shape
-        ret_rms: RunningMeanStd::new(n_envs, device.clone()),
+        ret_rms: RunningMeanStd::new((), device.clone()),
         clip_obs: 10.,
         clip_rew: 10.,
         epsilon: 1e-8,
@@ -72,12 +76,14 @@ fn r2l_verify(env_config: &EnvConfig) {
         }
         _ => unreachable!(),
     };
+    let mut on_policy_hooks = OnPolicyHooks::default();
+    on_policy_hooks.add_training_hook(LoggerTrainingHook::default());
     let mut algo = OnPolicyAlgorithm {
         env_pool,
         agent,
         learning_schedule,
         rollout_mode,
-        hooks: OnPolicyHooks::default(),
+        hooks: on_policy_hooks,
     };
     algo.train().unwrap();
 }

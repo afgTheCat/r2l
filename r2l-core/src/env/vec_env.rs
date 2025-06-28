@@ -1,6 +1,6 @@
 use super::RolloutMode;
 use super::{Env, EnvPool};
-use crate::env::{EnvironmentDescription, Space, run_rollout};
+use crate::env::{EnvironmentDescription, run_rollout};
 use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
 use candle_core::Result;
 use rayon::iter::IntoParallelRefMutIterator;

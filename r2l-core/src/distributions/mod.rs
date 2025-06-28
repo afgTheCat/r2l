@@ -12,7 +12,7 @@ use std::f32;
 
 // TODO: Decoding will need a context to store what device we want the tensors to be decoded to
 #[enum_dispatch]
-pub trait Distribution: Sync + Decode<()> + Encode {
+pub trait Distribution: Sync {
     fn get_action(&self, observation: &Tensor) -> Result<(Tensor, Tensor)>;
     fn log_probs(&self, states: &Tensor, actions: &Tensor) -> Result<Tensor>;
     fn std(&self) -> Result<f32>;
