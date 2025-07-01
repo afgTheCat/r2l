@@ -83,7 +83,10 @@ pub trait EnvPool {
         distribution: &D,
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>>;
+
     fn env_description(&self) -> EnvironmentDescription;
+
+    fn num_env(&self) -> usize;
 }
 
 pub fn single_step_env(
@@ -179,6 +182,14 @@ impl<E: Env + Sync> EnvPool for EnvPoolType<E> {
         match &self {
             Self::Dummy(vec_env) => vec_env.env_description(),
             Self::Sequential(vec_env) => vec_env.env_description(),
+            _ => todo!(),
+        }
+    }
+
+    fn num_env(&self) -> usize {
+        match &self {
+            Self::Dummy(vec_env) => vec_env.num_env(),
+            Self::Sequential(vec_env) => vec_env.num_env(),
             _ => todo!(),
         }
     }

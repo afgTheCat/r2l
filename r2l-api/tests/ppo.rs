@@ -37,7 +37,7 @@ fn ppo_cart_pole() -> Result<()> {
         total_steps: 5000000,
         current_step: 0,
     });
-    // ppo.set_normalize(EvaluatorNormalizerOptions::default());
+    ppo.set_eval_normalize(EvaluatorNormalizerOptions::default());
     let mut ppo = ppo.build()?;
     ppo.train()?;
     run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;

@@ -7,7 +7,7 @@ use r2l_core::{
     },
     env::{EnvironmentDescription, Space},
     policies::{
-        PolicyKind, decoupled_actor_critic::DecoupledActorCritic,
+        OptimizerWithMaxGrad, PolicyKind, decoupled_actor_critic::DecoupledActorCritic,
         paralell_actor_critic::ParalellActorCritic,
     },
     utils::build_sequential::build_sequential,
@@ -116,7 +116,7 @@ impl PolicyBuilder {
     ) -> Result<PolicyKind> {
         let input_size = env_description.observation_size();
         let optimizer_params = ParamsAdamW {
-            lr: 0.001,
+            lr: 3e-4,
             weight_decay: 0.01,
             ..Default::default()
         };
@@ -131,13 +131,9 @@ impl PolicyBuilder {
                 let value_layers = &[&value_layers[..], &[1]].concat();
                 let (value_net, _) = build_sequential(input_size, value_layers, &vb, "value")?;
                 let optimizer = AdamW::new(varmap.all_vars(), optimizer_params.clone())?;
-                let policy = ParalellActorCritic::new(
-                    distribution,
-                    value_net,
-                    optimizer,
-                    *max_grad_norm,
-                    varmap,
-                );
+                let optimizer_with_grad =
+                    OptimizerWithMaxGrad::new(optimizer, *max_grad_norm, varmap);
+                let policy = ParalellActorCritic::new(distribution, value_net, optimizer_with_grad);
                 Ok(PolicyKind::Paralell(policy))
             }
             PolicyType::Decoupled {
@@ -152,15 +148,15 @@ impl PolicyBuilder {
                     build_sequential(input_size, value_layers, &critic_vb, "value")?;
                 let policy_optimizer = AdamW::new(varmap.all_vars(), optimizer_params.clone())?;
                 let value_optimizer = AdamW::new(critic_varmap.all_vars(), optimizer_params)?;
+                let policy_optimizer_with_grad =
+                    OptimizerWithMaxGrad::new(policy_optimizer, *policy_max_grad_norm, varmap);
+                let value_optimizer_with_grad =
+                    OptimizerWithMaxGrad::new(value_optimizer, *value_max_grad_norm, critic_varmap);
                 let policy = DecoupledActorCritic {
                     distribution,
                     value_net,
-                    policy_optimizer,
-                    value_optimizer,
-                    policy_max_grad_norm: *policy_max_grad_norm,
-                    value_max_grad_norm: *value_max_grad_norm,
-                    policy_varmap: varmap,
-                    value_varmap: critic_varmap,
+                    policy_optimizer_with_grad,
+                    value_optimizer_with_grad,
                 };
                 Ok(PolicyKind::Decoupled(policy))
             }

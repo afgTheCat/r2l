@@ -31,4 +31,8 @@ impl<E: Env + Sync> EnvPool for VecEnv<E> {
     fn env_description(&self) -> EnvironmentDescription {
         self.env_description.clone()
     }
+
+    fn num_env(&self) -> usize {
+        self.envs.len()
+    }
 }

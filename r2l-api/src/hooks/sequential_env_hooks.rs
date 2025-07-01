@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use candle_core::{Device, Result, Tensor};
 use r2l_core::{
     distributions::Distribution,
@@ -10,6 +12,7 @@ pub struct Evaluator<E: Env> {
     pub eval_episodes: usize,
     pub eval_freq: usize,
     pub eval_step: usize,
+    pub evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
 }
 
 impl<E: Env> Evaluator<E> {
@@ -19,12 +22,17 @@ impl<E: Env> Evaluator<E> {
             eval_episodes,
             eval_freq,
             eval_step,
+            evaluations_results: Arc::new(Mutex::new(vec![])),
         }
     }
 
-    fn evaluate(&mut self, dist: &dyn Distribution) -> Result<()> {
+    pub fn eval_res(&self) -> Arc<Mutex<Vec<Vec<f32>>>> {
+        self.evaluations_results.clone()
+    }
+
+    fn evaluate(&mut self, dist: &dyn Distribution, n_envs: usize) -> Result<()> {
         if self.eval_step < self.eval_freq {
-            self.eval_step += 1;
+            self.eval_step += n_envs;
             Ok(())
         } else {
             let mut all_rewards = vec![];
@@ -44,14 +52,31 @@ impl<E: Env> Evaluator<E> {
                 .iter()
                 .map(|x| x.iter().filter(|y| **y).count())
                 .sum::<usize>();
-            let total_rewards = all_rewards
-                .iter()
-                .map(|x| x.iter().sum::<f32>())
-                .sum::<f32>();
-            println!("estimated rew: {}", total_rewards / eps as f32);
+            let sum_rewards_per_eps: Vec<f32> =
+                all_rewards.iter().map(|x| x.iter().sum::<f32>()).collect();
+            let avg_rewards = sum_rewards_per_eps.iter().sum::<f32>() / eps as f32;
+            println!("Avg rew: {}", avg_rewards);
+            let mut eval_results = self.evaluations_results.lock().unwrap();
+            eval_results.push(sum_rewards_per_eps);
             self.eval_step = 0;
             Ok(())
         }
+    }
+}
+
+impl<E: Env> SequentialVecEnvHooks for Evaluator<E> {
+    fn step_hook(
+        &mut self,
+        distribution: &dyn Distribution,
+        states: &mut Vec<(Tensor, Tensor, f32, f32, bool)>,
+    ) -> candle_core::Result<bool> {
+        let n_envs = states.len();
+        self.evaluate(distribution, n_envs)?;
+        Ok(false)
+    }
+
+    fn post_step_hook(&mut self, last_states: &mut Vec<Tensor>) -> candle_core::Result<bool> {
+        Ok(false)
     }
 }
 
@@ -123,13 +148,13 @@ impl<E: Env> SequentialVecEnvHooks for EvaluatorNormalizer<E> {
         dist: &dyn Distribution,
         states: &mut Vec<(Tensor, Tensor, f32, f32, bool)>,
     ) -> candle_core::Result<bool> {
-        self.evaluator.evaluate(dist)?;
-        let states_len = states.len();
+        let n_envs = states.len();
+        self.evaluator.evaluate(dist, n_envs)?;
         let obs: Vec<_> = states.iter().map(|(obs, ..)| obs.clone()).collect();
         let obs = Tensor::stack(&obs, 0)?;
         self.normalizer.obs_rms.update(&obs)?;
         let obs = self.normalizer.normalize_obs(obs)?;
-        for (state_idx, obs) in obs.chunk(states_len, 0)?.into_iter().enumerate() {
+        for (state_idx, obs) in obs.chunk(n_envs, 0)?.into_iter().enumerate() {
             let obs = obs.squeeze(0)?;
             states[state_idx].0 = obs;
         }

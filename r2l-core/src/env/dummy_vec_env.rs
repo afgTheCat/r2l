@@ -28,6 +28,10 @@ impl<E: Env> EnvPool for DummyVecEnv<E> {
     fn env_description(&self) -> EnvironmentDescription {
         self.env_description.clone()
     }
+
+    fn num_env(&self) -> usize {
+        self.env.len()
+    }
 }
 
 pub struct Evaluator<E: Env> {
@@ -190,5 +194,9 @@ impl<E: Env> EnvPool for DummyVecEnvWithEvaluator<E> {
 
     fn env_description(&self) -> EnvironmentDescription {
         self.env_description.clone()
+    }
+
+    fn num_env(&self) -> usize {
+        self.env.len()
     }
 }

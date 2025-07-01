@@ -31,7 +31,9 @@ impl<E: Env> SequentialVecEnv<E> {
         env_states: &mut Vec<Tensor>,
         n_steps: usize,
     ) -> Result<Vec<RolloutBuffer>> {
-        for _ in 0..n_steps {
+        let mut steps_taken = 0;
+        let num_envs = self.buffers.len();
+        while steps_taken < n_steps {
             let mut states = self
                 .envs
                 .iter()
@@ -45,6 +47,7 @@ impl<E: Env> SequentialVecEnv<E> {
                 rb.push_step(state.clone(), action.clone(), *reward, *done, *logp);
                 env_states[idx] = next_state.clone();
             }
+            steps_taken += num_envs;
         }
         // TODO: having a separate trait for this is suboptimal
         self.hooks.post_step_hook(env_states)?;
@@ -81,5 +84,9 @@ impl<E: Env> EnvPool for SequentialVecEnv<E> {
 
     fn env_description(&self) -> EnvironmentDescription {
         self.env_description.clone()
+    }
+
+    fn num_env(&self) -> usize {
+        self.envs.len()
     }
 }

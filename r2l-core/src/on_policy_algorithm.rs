@@ -133,6 +133,10 @@ impl<E: EnvPool, A: Agent> OnPolicyAlgorithm<E, A> {
             }
         }
     }
+
+    pub fn num_env(&self) -> usize {
+        self.env_pool.num_env()
+    }
 }
 
 impl<E: EnvPool, A: Agent> Algorithm for OnPolicyAlgorithm<E, A> {

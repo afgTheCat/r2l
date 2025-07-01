@@ -1,8 +1,12 @@
 pub mod decoupled_actor_critic;
 pub mod paralell_actor_critic;
 
-use crate::distributions::{Distribution, DistributionKind};
+use crate::{
+    distributions::{Distribution, DistributionKind},
+    utils::clip_grad,
+};
 use candle_core::{Result, Tensor};
+use candle_nn::{AdamW, Optimizer, VarMap};
 use decoupled_actor_critic::DecoupledActorCritic;
 use paralell_actor_critic::ParalellActorCritic;
 
@@ -19,6 +23,32 @@ pub trait Policy {
 pub trait PolicyWithValueFunction: Policy {
     // some just needs value function
     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor>;
+}
+
+pub struct OptimizerWithMaxGrad {
+    pub optimizer: AdamW,
+    pub max_grad_norm: Option<f32>,
+    pub varmap: VarMap,
+}
+
+impl OptimizerWithMaxGrad {
+    pub fn new(optimizer: AdamW, max_grad_norm: Option<f32>, varmap: VarMap) -> Self {
+        Self {
+            optimizer,
+            max_grad_norm,
+            varmap,
+        }
+    }
+
+    pub fn backward_step(&mut self, loss: &Tensor) -> Result<()> {
+        let grads = if let Some(max_norm) = self.max_grad_norm {
+            clip_grad::clip_grad(loss, &self.varmap, max_norm)?
+        } else {
+            loss.backward()?
+        };
+        self.optimizer.step(&grads)?;
+        Ok(())
+    }
 }
 
 pub enum PolicyKind {

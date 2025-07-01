@@ -1,17 +1,13 @@
-pub mod hooks;
-pub mod ppo2;
-
-use crate::ppo::hooks::HookResult;
+use crate::ppo::hooks::{HookResult, PPOBatchData};
 use candle_core::{Device, Result, Tensor};
-use hooks::{PPOBatchData, PPOHooks};
 use r2l_core::{
     agents::Agent,
     distributions::Distribution,
-    on_policy_algorithm::OnPolicyAlgorithm,
     policies::PolicyWithValueFunction,
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
     utils::rollout_buffer::{
-        Advantages, Returns, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns,
+        Advantages, Returns, RolloutBatch, RolloutBatchIterator, RolloutBuffer,
+        calculate_advantages_and_returns,
     },
 };
 use std::ops::Deref;
@@ -26,9 +22,34 @@ macro_rules! process_hook_result {
     };
 }
 
-pub struct PPO<P: PolicyWithValueFunction> {
+pub trait PPOHooks<P: PolicyWithValueFunction> {
+    fn before_learning_hook(
+        &mut self,
+        policy: &mut P,
+        rollout_buffers: &mut Vec<RolloutBuffer>,
+        advantages: &mut Advantages,
+        returns: &mut Returns,
+    ) -> Result<HookResult>;
+
+    fn rollout_hook(
+        &mut self,
+        policy: &mut P,
+        rollout_buffers: &Vec<RolloutBuffer>,
+    ) -> Result<HookResult>;
+
+    fn batch_hook(
+        &mut self,
+        policy: &mut P,
+        rollout_batch: &RolloutBatch,
+        policy_loss: &mut PolicyLoss,
+        value_loss: &mut ValueLoss,
+        data: &PPOBatchData,
+    ) -> Result<HookResult>;
+}
+
+pub struct PPO2<P: PolicyWithValueFunction> {
     pub policy: P,
-    pub hooks: PPOHooks<P>,
+    pub hooks: Box<dyn PPOHooks<P>>,
     pub clip_range: f32,
     pub gamma: f32,
     pub lambda: f32,
@@ -36,7 +57,7 @@ pub struct PPO<P: PolicyWithValueFunction> {
     pub device: Device,
 }
 
-impl<P: PolicyWithValueFunction> PPO<P> {
+impl<P: PolicyWithValueFunction> PPO2<P> {
     // batch loop
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         loop {
@@ -62,7 +83,7 @@ impl<P: PolicyWithValueFunction> PPO<P> {
                 logp_diff,
                 ratio,
             };
-            let hook_result = self.hooks.call_batch_hook(
+            let hook_result = self.hooks.batch_hook(
                 &mut self.policy,
                 &batch,
                 &mut policy_loss,
@@ -92,13 +113,13 @@ impl<P: PolicyWithValueFunction> PPO<P> {
                 self.device.clone(),
             );
             self.batching_loop(&mut batch_iter)?;
-            let rollout_hook_res = self.hooks.call_rollout_hook(&mut self.policy, &rollouts);
+            let rollout_hook_res = self.hooks.rollout_hook(&mut self.policy, &rollouts);
             process_hook_result!(rollout_hook_res);
         }
     }
 }
 
-impl<P: PolicyWithValueFunction> Agent for PPO<P> {
+impl<P: PolicyWithValueFunction> Agent for PPO2<P> {
     type Policy = P;
 
     fn policy(&self) -> &Self::Policy {
@@ -109,7 +130,7 @@ impl<P: PolicyWithValueFunction> Agent for PPO<P> {
     fn learn(&mut self, mut rollouts: Vec<RolloutBuffer>) -> Result<()> {
         let (mut advantages, mut returns) =
             calculate_advantages_and_returns(&rollouts, &self.policy, self.gamma, self.lambda);
-        let before_learning_hook_res = self.hooks.call_before_learning_hook(
+        let before_learning_hook_res = self.hooks.before_learning_hook(
             &mut self.policy,
             &mut rollouts,
             &mut advantages,
@@ -121,5 +142,3 @@ impl<P: PolicyWithValueFunction> Agent for PPO<P> {
         Ok(())
     }
 }
-
-pub type PPOAlgorithm<E, Policy> = OnPolicyAlgorithm<E, PPO<Policy>>;

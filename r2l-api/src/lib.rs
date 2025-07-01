@@ -11,7 +11,8 @@ pub fn run_gym_episodes(env: &str, ep_count: usize, dist: &impl Distribution) ->
     for _ in 0..ep_count {
         let device = Device::Cpu;
         let env = GymEnv::new(env, Some("human".into()), &device)?;
-        let mut state = env.reset(rand::random())?;
+        let seed = rand::random();
+        let mut state = env.reset(seed)?;
         let (mut action, _) = dist.get_action(&state.unsqueeze(0)?)?;
         while let (next_state, _, false, false) = env.step(&action)? {
             state = next_state;

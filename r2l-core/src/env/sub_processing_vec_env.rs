@@ -108,6 +108,10 @@ impl EnvPool for SubprocessingEnv {
     fn env_description(&self) -> super::EnvironmentDescription {
         todo!()
     }
+
+    fn num_env(&self) -> usize {
+        todo!()
+    }
 }
 
 impl SubprocessingEnv {
