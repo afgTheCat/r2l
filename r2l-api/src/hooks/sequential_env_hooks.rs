@@ -127,9 +127,9 @@ impl EnvNormalizer {
 }
 
 pub struct EvaluatorNormalizer<E: Env> {
-    evaluator: Evaluator<E>,
-    normalizer: EnvNormalizer,
-    device: Device,
+    pub evaluator: Evaluator<E>,
+    pub normalizer: EnvNormalizer,
+    pub device: Device,
 }
 
 impl<E: Env> EvaluatorNormalizer<E> {

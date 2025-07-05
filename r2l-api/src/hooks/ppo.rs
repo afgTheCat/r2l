@@ -1,7 +1,7 @@
 use candle_core::{Result, Tensor};
 use r2l_agents::ppo::{
     hooks::{HookResult, PPOBatchData},
-    ppo2::PPOHooks,
+    ppo2::PPOHooksTrait,
 };
 use r2l_core::{
     distributions::Distribution,
@@ -33,7 +33,7 @@ impl<P: PolicyWithValueFunction> Default for DefaultPPOHooks<P> {
     }
 }
 
-impl<P: PolicyWithValueFunction> PPOHooks<P> for DefaultPPOHooks<P> {
+impl<P: PolicyWithValueFunction> PPOHooksTrait<P> for DefaultPPOHooks<P> {
     fn before_learning_hook(
         &mut self,
         _policy: &mut P,

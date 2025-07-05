@@ -5,6 +5,7 @@ use r2l_api::{
 };
 use r2l_core::agents::Agent;
 use r2l_core::{Algorithm, on_policy_algorithm::LearningSchedule};
+use r2l_gym::GymEnv;
 
 #[test]
 fn ppo_acrobat() -> Result<()> {
@@ -32,13 +33,13 @@ fn ppo_pendulum() -> Result<()> {
 
 #[test]
 fn ppo_cart_pole() -> Result<()> {
-    let mut ppo = OnPolicyAlgorithmBuilder::ppo("CartPole-v1".into());
-    ppo.set_learning_schedule(LearningSchedule::TotalStepBound {
+    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo("CartPole-v1".into());
+    ppo_builder.set_learning_schedule(LearningSchedule::TotalStepBound {
         total_steps: 5000000,
         current_step: 0,
     });
-    ppo.set_eval_normalize(EvaluatorNormalizerOptions::default());
-    let mut ppo = ppo.build()?;
+    ppo_builder.set_eval_normalize_opt(EvaluatorNormalizerOptions::default());
+    let mut ppo = ppo_builder.build()?;
     ppo.train()?;
     run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
     Ok(())

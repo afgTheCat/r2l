@@ -22,7 +22,7 @@ macro_rules! process_hook_result {
     };
 }
 
-pub trait PPOHooks<P: PolicyWithValueFunction> {
+pub trait PPOHooksTrait<P: PolicyWithValueFunction> {
     fn before_learning_hook(
         &mut self,
         policy: &mut P,
@@ -49,7 +49,7 @@ pub trait PPOHooks<P: PolicyWithValueFunction> {
 
 pub struct PPO2<P: PolicyWithValueFunction> {
     pub policy: P,
-    pub hooks: Box<dyn PPOHooks<P>>,
+    pub hooks: Box<dyn PPOHooksTrait<P>>,
     pub clip_range: f32,
     pub gamma: f32,
     pub lambda: f32,

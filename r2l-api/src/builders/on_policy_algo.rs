@@ -7,7 +7,10 @@ use crate::{
         },
         ppo::{PPOBuilder, PPOBuilder2},
     },
-    hooks::{on_policy_algo_hooks::LoggerTrainingHook, sequential_env_hooks::Evaluator},
+    hooks::{
+        on_policy_algo_hooks::LoggerTrainingHook,
+        sequential_env_hooks::{Evaluator, EvaluatorNormalizer},
+    },
 };
 use candle_core::{Device, Result};
 use r2l_agents::AgentKind;
@@ -128,7 +131,7 @@ impl OnPolicyAlgorithmBuilder<GymEnv> {
         }
     }
 
-    pub fn set_eval_normalize(&mut self, opt: EvaluatorNormalizerOptions) {
+    pub fn set_eval_normalize_opt(&mut self, opt: EvaluatorNormalizerOptions) {
         self.env_pool_builder.pool_type =
             VecPoolType::Sequential(Some(SequentialHook::EvaluatorNormalizer(opt)));
     }
@@ -141,5 +144,10 @@ impl OnPolicyAlgorithmBuilder<GymEnv> {
     pub fn set_eval(&mut self, eval: Evaluator<GymEnv>) {
         self.env_pool_builder.pool_type =
             VecPoolType::Sequential(Some(SequentialHook::WithEvaluator(eval)));
+    }
+
+    pub fn set_eval_normalize(&mut self, eval_norm: EvaluatorNormalizer<GymEnv>) {
+        self.env_pool_builder.pool_type =
+            VecPoolType::Sequential(Some(SequentialHook::WithEvaluatorNormalizer(eval_norm)))
     }
 }

@@ -1,9 +1,12 @@
 use candle_core::{Result, Tensor};
 use r2l_core::{
+    policies::PolicyWithValueFunction,
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
     utils::rollout_buffer::{Advantages, Returns, RolloutBatch, RolloutBuffer},
 };
 use r2l_macros::policy_hook;
+
+use crate::ppo::ppo2::PPOHooksTrait;
 
 pub enum HookResult {
     Continue,
@@ -32,7 +35,7 @@ pub trait BatchHook<P> {
 
 #[policy_hook]
 #[allow(clippy::ptr_arg)]
-trait BeforeLearningHook<P> {
+pub trait BeforeLearningHook<P> {
     fn call_hook(
         &mut self,
         policy: &mut P,
@@ -44,7 +47,7 @@ trait BeforeLearningHook<P> {
 
 #[policy_hook]
 #[allow(clippy::ptr_arg)]
-trait RolloutHook<P> {
+pub trait RolloutHook<P> {
     fn call_hook(
         &mut self,
         policy: &mut P,
@@ -56,11 +59,49 @@ trait RolloutHook<P> {
 // before_learning -> preprocessing hook?
 pub struct PPOHooks<P> {
     // called before the rollout loop is called
-    before_learning: Box<dyn BeforeLearningHook<P>>,
+    pub before_learning: Box<dyn BeforeLearningHook<P>>,
     // called at the end of each rollout cycle
-    rollout_hook: Box<dyn RolloutHook<P>>,
+    pub rollout_hook: Box<dyn RolloutHook<P>>,
     // called before training the model actually happens
-    batch_hook: Box<dyn BatchHook<P>>,
+    pub batch_hook: Box<dyn BatchHook<P>>,
+}
+
+impl<P: PolicyWithValueFunction> PPOHooksTrait<P> for PPOHooks<P> {
+    fn before_learning_hook(
+        &mut self,
+        policy: &mut P,
+        rollout_buffers: &mut Vec<RolloutBuffer>,
+        advantages: &mut Advantages,
+        returns: &mut Returns,
+    ) -> Result<HookResult> {
+        let should_stop =
+            self.before_learning
+                .call_hook(policy, rollout_buffers, advantages, returns)?;
+        if should_stop {
+            Ok(HookResult::Break)
+        } else {
+            Ok(HookResult::Continue)
+        }
+    }
+
+    fn rollout_hook(
+        &mut self,
+        policy: &mut P,
+        rollout_buffers: &Vec<RolloutBuffer>,
+    ) -> Result<HookResult> {
+        todo!()
+    }
+
+    fn batch_hook(
+        &mut self,
+        policy: &mut P,
+        rollout_batch: &RolloutBatch,
+        policy_loss: &mut PolicyLoss,
+        value_loss: &mut ValueLoss,
+        data: &PPOBatchData,
+    ) -> Result<HookResult> {
+        todo!()
+    }
 }
 
 impl<P> PPOHooks<P> {

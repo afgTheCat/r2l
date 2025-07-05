@@ -1,10 +1,10 @@
 use crate::hooks::sequential_env_hooks::{
     EmptySequentialVecEnv, EnvNormalizer, Evaluator, EvaluatorNormalizer,
 };
-use candle_core::{DType, Device, Tensor};
+use candle_core::{DType, Device, Tensor, cuda::cudarc::driver::result::device};
 use r2l_core::{
     env::{
-        Env, EnvPoolType,
+        Env, EnvPoolType, EnvironmentDescription,
         dummy_vec_env::DummyVecEnv,
         sequential_vec_env::{SequentialVecEnv, SequentialVecEnvHooks},
     },
@@ -12,27 +12,43 @@ use r2l_core::{
 };
 use r2l_gym::GymEnv;
 
-pub struct EvaluatorNormalizerOptions {
+pub struct NormalizerOptions {
     pub epsilon: f32,
     pub gamma: f32,
     pub clip_obs: f32,
     pub clip_rew: f32,
-    pub eval_episodes: usize,
-    pub eval_freq: usize,
-    pub eval_step: usize,
 }
 
-impl Default for EvaluatorNormalizerOptions {
+impl Default for NormalizerOptions {
     fn default() -> Self {
         Self {
             clip_obs: 10.,
             clip_rew: 10.,
             epsilon: 1e-8,
             gamma: 0.99,
-            eval_episodes: 5,
-            eval_freq: 10000,
-            eval_step: 0,
         }
+    }
+}
+
+impl NormalizerOptions {
+    fn build(
+        &self,
+        env_description: EnvironmentDescription,
+        n_envs: usize,
+        device: &Device,
+    ) -> EnvNormalizer {
+        let obs_rms = RunningMeanStd::new(env_description.observation_size(), device.clone());
+        let ret_rms = RunningMeanStd::new((), device.clone());
+        let returns = Tensor::zeros(n_envs, DType::F32, device).unwrap();
+        EnvNormalizer::new(
+            obs_rms,
+            ret_rms,
+            returns,
+            self.epsilon,
+            self.gamma,
+            self.clip_obs,
+            self.clip_rew,
+        )
     }
 }
 
@@ -63,11 +79,38 @@ impl Default for EvaluatorOptions {
     }
 }
 
+#[derive(Default)]
+pub struct EvaluatorNormalizerOptions {
+    pub evaluator_options: EvaluatorOptions,
+    pub normalizer_options: NormalizerOptions,
+}
+
+impl EvaluatorNormalizerOptions {
+    pub fn build(
+        &self,
+        eval_env: GymEnv,
+        n_envs: usize,
+        device: Device,
+    ) -> EvaluatorNormalizer<GymEnv> {
+        let env_description = eval_env.env_description();
+        let normalizer = self
+            .normalizer_options
+            .build(env_description, n_envs, &device);
+        let evaluator = self.evaluator_options.build(eval_env, n_envs);
+        EvaluatorNormalizer {
+            evaluator,
+            normalizer,
+            device,
+        }
+    }
+}
+
 pub enum SequentialHook<E: Env> {
     Evaluator(EvaluatorOptions),
     WithEvaluator(Evaluator<E>),
     Normalizer,
     EvaluatorNormalizer(EvaluatorNormalizerOptions),
+    WithEvaluatorNormalizer(EvaluatorNormalizer<E>),
 }
 
 pub enum VecPoolType<E: Env> {
@@ -122,26 +165,7 @@ impl EnvPoolBuilder<GymEnv> {
                     None => Box::new(EmptySequentialVecEnv),
                     Some(SequentialHook::EvaluatorNormalizer(eval_norm_opt)) => {
                         let eval_env = GymEnv::new(&gym_env_name, None, &device).unwrap();
-                        let evaluator = Evaluator::new(
-                            eval_env,
-                            eval_norm_opt.eval_episodes,
-                            eval_norm_opt.eval_freq * self.n_envs,
-                            eval_norm_opt.eval_step,
-                        );
-                        let obs_rms =
-                            RunningMeanStd::new(env_description.observation_size(), device.clone());
-                        let ret_rms = RunningMeanStd::new((), device.clone());
-                        let returns = Tensor::zeros(self.n_envs, DType::F32, device).unwrap();
-                        let normalizer = EnvNormalizer::new(
-                            obs_rms,
-                            ret_rms,
-                            returns,
-                            eval_norm_opt.epsilon,
-                            eval_norm_opt.gamma,
-                            eval_norm_opt.clip_obs,
-                            eval_norm_opt.clip_rew,
-                        );
-                        let hook = EvaluatorNormalizer::new(evaluator, normalizer, device.clone());
+                        let hook = eval_norm_opt.build(eval_env, self.n_envs, device.clone());
                         Box::new(hook)
                     }
                     Some(SequentialHook::Evaluator(eval_opt)) => {
@@ -150,6 +174,9 @@ impl EnvPoolBuilder<GymEnv> {
                         Box::new(evaluator)
                     }
                     Some(SequentialHook::WithEvaluator(evaluator)) => Box::new(evaluator),
+                    Some(SequentialHook::WithEvaluatorNormalizer(eval_normalizer)) => {
+                        Box::new(eval_normalizer)
+                    }
                     _ => todo!(),
                 };
                 EnvPoolType::Sequential(SequentialVecEnv {
