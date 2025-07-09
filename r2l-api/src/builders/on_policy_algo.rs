@@ -1,24 +1,18 @@
 use crate::{
     builders::{
         a2c::A2CBuilder,
-        env_pool::{
-            EnvPoolBuilder, EvaluatorNormalizerOptions, EvaluatorOptions, SequentialHook,
-            VecPoolType,
-        },
+        env_pool::EnvBuilderTrait,
+        env_pool::EnvPoolBuilder,
         ppo::{PPOBuilder, PPOBuilder2},
     },
-    hooks::{
-        on_policy_algo_hooks::LoggerTrainingHook,
-        sequential_env_hooks::{Evaluator, EvaluatorNormalizer},
-    },
+    hooks::on_policy_algo_hooks::LoggerTrainingHook,
 };
 use candle_core::{Device, Result};
 use r2l_agents::AgentKind;
 use r2l_core::{
-    env::{Env, EnvPool, EnvPoolType, RolloutMode},
+    env::{EnvPool, EnvPoolType, RolloutMode},
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
 };
-use r2l_gym::GymEnv;
 
 pub enum AgentType {
     PPO(PPOBuilder),
@@ -28,9 +22,9 @@ pub enum AgentType {
 
 // Currently only works if a gym env is set,.
 // TODO: proc macro for setters
-pub struct OnPolicyAlgorithmBuilder<E: Env> {
+pub struct OnPolicyAlgorithmBuilder {
     pub device: Device,
-    pub env_pool_builder: EnvPoolBuilder<E>,
+    pub env_pool_builder: EnvPoolBuilder,
     pub normalize_env: bool,
     pub hooks: OnPolicyHooks,
     pub rollout_mode: RolloutMode,
@@ -38,7 +32,7 @@ pub struct OnPolicyAlgorithmBuilder<E: Env> {
     pub agent_type: AgentType,
 }
 
-impl<E: Env> Default for OnPolicyAlgorithmBuilder<E> {
+impl Default for OnPolicyAlgorithmBuilder {
     fn default() -> Self {
         let mut hooks = OnPolicyHooks::default();
         hooks.add_training_hook(LoggerTrainingHook::default());
@@ -57,9 +51,15 @@ impl<E: Env> Default for OnPolicyAlgorithmBuilder<E> {
     }
 }
 
-impl OnPolicyAlgorithmBuilder<GymEnv> {
-    pub fn build(mut self) -> Result<OnPolicyAlgorithm<EnvPoolType<GymEnv>, AgentKind>> {
-        let env_pool = self.env_pool_builder.build(&self.device);
+impl OnPolicyAlgorithmBuilder {
+    pub fn build<EB: EnvBuilderTrait>(
+        mut self,
+        env_builder: EB,
+    ) -> Result<OnPolicyAlgorithm<EnvPoolType<EB::Env>, AgentKind>>
+    where
+        EB::Env: Sync + 'static,
+    {
+        let env_pool = self.env_pool_builder.build(&self.device, env_builder)?;
         let env_description = env_pool.env_description();
         let agent = match &mut self.agent_type {
             AgentType::PPO(builder) => {
@@ -89,11 +89,8 @@ impl OnPolicyAlgorithmBuilder<GymEnv> {
     }
 
     // TODO: once we have some better policies, we should add it here. That would correspond to the stable baselines API
-    pub fn ppo(gym_env_name: String) -> Self {
-        let env_pool_builder = EnvPoolBuilder {
-            gym_env_name: Some(gym_env_name),
-            ..Default::default()
-        };
+    pub fn ppo() -> Self {
+        let env_pool_builder = EnvPoolBuilder::default();
         let agent_type = AgentType::PPO(PPOBuilder::default());
         Self {
             env_pool_builder,
@@ -103,11 +100,8 @@ impl OnPolicyAlgorithmBuilder<GymEnv> {
         }
     }
 
-    pub fn ppo2(gym_env_name: String) -> Self {
-        let env_pool_builder = EnvPoolBuilder {
-            gym_env_name: Some(gym_env_name),
-            ..Default::default()
-        };
+    pub fn ppo2() -> Self {
+        let env_pool_builder = EnvPoolBuilder::default();
         let agent_type = AgentType::PPO2(PPOBuilder2::default());
         Self {
             env_pool_builder,
@@ -117,11 +111,8 @@ impl OnPolicyAlgorithmBuilder<GymEnv> {
         }
     }
 
-    pub fn a2c(gym_env_name: String) -> Self {
-        let env_pool_builder = EnvPoolBuilder {
-            gym_env_name: Some(gym_env_name),
-            ..Default::default()
-        };
+    pub fn a2c() -> Self {
+        let env_pool_builder = EnvPoolBuilder::default();
         let agent_type = AgentType::A2C(A2CBuilder::default());
         Self {
             env_pool_builder,
@@ -129,25 +120,5 @@ impl OnPolicyAlgorithmBuilder<GymEnv> {
             agent_type,
             ..Default::default()
         }
-    }
-
-    pub fn set_eval_normalize_opt(&mut self, opt: EvaluatorNormalizerOptions) {
-        self.env_pool_builder.pool_type =
-            VecPoolType::Sequential(Some(SequentialHook::EvaluatorNormalizer(opt)));
-    }
-
-    pub fn set_eval_opts(&mut self, opt: EvaluatorOptions) {
-        self.env_pool_builder.pool_type =
-            VecPoolType::Sequential(Some(SequentialHook::Evaluator(opt)));
-    }
-
-    pub fn set_eval(&mut self, eval: Evaluator<GymEnv>) {
-        self.env_pool_builder.pool_type =
-            VecPoolType::Sequential(Some(SequentialHook::WithEvaluator(eval)));
-    }
-
-    pub fn set_eval_normalize(&mut self, eval_norm: EvaluatorNormalizer<GymEnv>) {
-        self.env_pool_builder.pool_type =
-            VecPoolType::Sequential(Some(SequentialHook::WithEvaluatorNormalizer(eval_norm)))
     }
 }

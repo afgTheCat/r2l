@@ -1,4 +1,5 @@
 [package]
+resolver = "2"
 name = "r2l-api"
 version = "0.1.0"
 edition = "2024"
@@ -10,3 +11,9 @@ r2l-agents = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
 rand = "0.9.0"
+
+[features]
+test-utils = []
+
+[dev-dependencies]
+r2l-api = { path = ".", features = ["test-utils"] }

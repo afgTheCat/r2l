@@ -1,59 +1,61 @@
-use candle_core::{Device, Result};
+use candle_core::Result;
 use r2l_api::{
     builders::{
         env_pool::{EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions},
+        env_pool::{SequentialEnvHookTypes, VecPoolType},
         on_policy_algo::OnPolicyAlgorithmBuilder,
     },
-    run_gym_episodes,
+    test_utils::run_gym_episodes,
 };
 use r2l_core::agents::Agent;
 use r2l_core::{Algorithm, on_policy_algorithm::LearningSchedule};
-use r2l_gym::GymEnv;
 
+// Evaluator only test
 #[test]
 fn ppo2_cart_pole() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo2("CartPole-v1".into());
-    ppo_builder.set_learning_schedule(LearningSchedule::TotalStepBound {
-        total_steps: 500000,
-        current_step: 0,
-    });
-    let eval_env = GymEnv::new(&"CartPole-v1", None, &Device::Cpu)?;
-    let evaluator = EvaluatorOptions {
+    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo2();
+    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
+    let evaluator_opts = EvaluatorOptions {
         eval_freq: 1000,
         ..EvaluatorOptions::default()
-    }
-    .build(eval_env, ppo_builder.env_pool_builder.n_envs);
-    let eval_res = evaluator.eval_res();
-    ppo_builder.set_eval(evaluator);
-    let mut ppo = ppo_builder.build()?;
+    };
+    let eval_res = evaluator_opts.results.clone();
+    ppo_builder
+        .env_pool_builder
+        .set_env_pool_type(VecPoolType::Sequential(
+            SequentialEnvHookTypes::EvaluatorOnly {
+                options: evaluator_opts,
+            },
+        ));
+    let mut ppo = ppo_builder.build("CartPole-v1".to_owned())?;
     ppo.train()?;
     println!("eval res: {:?}", eval_res.lock().unwrap());
     run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
     Ok(())
 }
 
+// Evaluator and normalizer at the same time
 #[test]
 fn ppo2_cart_pole_normalize() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo2("CartPole-v1".into());
-    ppo_builder.set_learning_schedule(LearningSchedule::TotalStepBound {
-        total_steps: 500000,
-        current_step: 0,
-    });
-
-    let eval_env = GymEnv::new(&"CartPole-v1", None, &Device::Cpu)?;
+    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo2();
+    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
     let evaluator_options = EvaluatorOptions {
         eval_freq: 1000,
         ..EvaluatorOptions::default()
     };
-    let normalizer_options = NormalizerOptions::default();
+    let eval_res = evaluator_options.results.clone();
     let eval_normalizer = EvaluatorNormalizerOptions {
         evaluator_options,
-        normalizer_options,
-    }
-    .build(eval_env, ppo_builder.env_pool_builder.n_envs, Device::Cpu);
-    let eval_res = eval_normalizer.evaluator.eval_res();
-    ppo_builder.set_eval_normalize(eval_normalizer);
-    let mut ppo = ppo_builder.build()?;
+        normalizer_options: NormalizerOptions::default(),
+    };
+    ppo_builder
+        .env_pool_builder
+        .set_env_pool_type(VecPoolType::Sequential(
+            SequentialEnvHookTypes::EvaluatorNormalizer {
+                options: eval_normalizer,
+            },
+        ));
+    let mut ppo = ppo_builder.build("CartPole-v1".to_owned())?;
     ppo.train()?;
     println!("eval res: {:?}", eval_res.lock().unwrap());
     run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;

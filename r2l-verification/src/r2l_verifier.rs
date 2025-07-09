@@ -5,6 +5,7 @@ use r2l_api::{
     builders::{a2c::A2CBuilder, ppo::PPOBuilder},
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
 };
+use r2l_core::env::Env;
 use r2l_core::{
     Algorithm,
     env::{

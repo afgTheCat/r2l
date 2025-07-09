@@ -51,6 +51,7 @@ pub trait Env {
     fn reset(&self, seed: u64) -> Result<Tensor>;
     fn step(&self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)>;
     // TODO: do we need this?
+    fn env_description(&self) -> EnvironmentDescription;
     fn action_space(&self) -> Space;
     fn observation_space(&self) -> Space;
 }
@@ -158,6 +159,7 @@ pub fn run_rollout<D: Distribution>(
     Ok(())
 }
 
+// TODO: Restricting here is probably not neccessary
 pub enum EnvPoolType<E: Env + Sync> {
     Dummy(DummyVecEnv<E>),
     VecEnv(VecEnv<E>),

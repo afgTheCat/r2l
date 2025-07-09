@@ -2,6 +2,7 @@ use candle_core::{DType, Device, Error, Tensor};
 use once_cell::sync::Lazy;
 use r2l_agents::ppo::hooks::{PPOBatchData, PPOHooks};
 use r2l_api::builders::ppo::PPOBuilder;
+use r2l_core::env::Env;
 use r2l_core::{
     Algorithm,
     distributions::Distribution,

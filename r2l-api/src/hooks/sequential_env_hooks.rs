@@ -16,13 +16,19 @@ pub struct Evaluator<E: Env> {
 }
 
 impl<E: Env> Evaluator<E> {
-    pub fn new(env: E, eval_episodes: usize, eval_freq: usize, eval_step: usize) -> Self {
+    pub fn new(
+        env: E,
+        eval_episodes: usize,
+        eval_freq: usize,
+        eval_step: usize,
+        evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
+    ) -> Self {
         Self {
             env,
             eval_episodes,
             eval_freq,
             eval_step,
-            evaluations_results: Arc::new(Mutex::new(vec![])),
+            evaluations_results,
         }
     }
 
@@ -115,7 +121,7 @@ impl EnvNormalizer {
         let eps = Tensor::full(self.epsilon, (), self.ret_rms.var.device())?;
         let normalized_obs = (obs
             .broadcast_sub(&self.obs_rms.mean)?
-            .broadcast_div(&self.obs_rms.var.broadcast_add(&eps)?))?;
+            .broadcast_div(&self.obs_rms.var.broadcast_add(&eps)?.sqrt()?))?;
         normalized_obs.clamp(-self.clip_obs, self.clip_obs)
     }
 
@@ -158,7 +164,6 @@ impl<E: Env> SequentialVecEnvHooks for EvaluatorNormalizer<E> {
             let obs = obs.squeeze(0)?;
             states[state_idx].0 = obs;
         }
-
         let rewards: Vec<_> = states.iter().map(|(_, _, rew, ..)| *rew).collect();
         let rewards = Tensor::from_slice(&rewards, rewards.len(), &self.device)?;
         let gamma = Tensor::full(self.normalizer.gamma, (), &self.device)?;
@@ -167,7 +172,6 @@ impl<E: Env> SequentialVecEnvHooks for EvaluatorNormalizer<E> {
             .returns
             .broadcast_mul(&gamma)?
             .add(&rewards)?;
-
         self.normalizer.ret_rms.update(&self.normalizer.returns)?;
         let rewards = self.normalizer.normalize_rew(rewards)?;
         for (rew_idx, rew) in (rewards.to_vec1()? as Vec<f32>).iter().enumerate() {

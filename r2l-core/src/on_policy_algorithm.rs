@@ -17,6 +17,15 @@ pub enum LearningSchedule {
     },
 }
 
+impl LearningSchedule {
+    pub fn total_step_bound(total_steps: usize) -> Self {
+        Self::TotalStepBound {
+            total_steps: total_steps,
+            current_step: 0,
+        }
+    }
+}
+
 #[training_hook]
 pub trait BeforeTrainingHook {
     fn call_hook(&mut self) -> candle_core::Result<bool>;

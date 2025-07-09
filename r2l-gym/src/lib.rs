@@ -73,13 +73,6 @@ impl GymEnv {
     pub fn io_sizes(&self) -> (usize, usize) {
         (self.action_size(), self.observation_size())
     }
-
-    pub fn env_description(&self) -> EnvironmentDescription {
-        EnvironmentDescription {
-            observation_space: self.observation_space.clone(),
-            action_space: self.action_space.clone(),
-        }
-    }
 }
 
 impl Env for GymEnv {
@@ -130,5 +123,12 @@ impl Env for GymEnv {
 
     fn observation_space(&self) -> Space {
         todo!()
+    }
+
+    fn env_description(&self) -> EnvironmentDescription {
+        EnvironmentDescription {
+            observation_space: self.observation_space.clone(),
+            action_space: self.action_space.clone(),
+        }
     }
 }
