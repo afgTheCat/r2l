@@ -1,7 +1,11 @@
 [package]
-name = "subproc_env"
-version = "0.1.0"
-edition = "2024"
+name = "r2l_subproc_env"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+readme = "README.md"
 
 [dependencies]
 interprocess = "2.2.3"

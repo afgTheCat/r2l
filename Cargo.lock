@@ -1557,7 +1557,7 @@ checksum = "74765f6d916ee2faa39bc8e68e4f3ed8949b48cccdac59983d287a7cb71ce9c5"
 
 [[package]]
 name = "r2l-agents"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -1567,7 +1567,7 @@ dependencies = [
 
 [[package]]
 name = "r2l-api"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -1632,7 +1632,7 @@ dependencies = [
 
 [[package]]
 name = "r2l-verification"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "candle-core",
  "nom",
@@ -1640,6 +1640,18 @@ dependencies = [
  "pyo3",
  "r2l-agents",
  "r2l-api",
+ "r2l-core",
+ "r2l-gym",
+]
+
+[[package]]
+name = "r2l_subproc_env"
+version = "0.0.1"
+dependencies = [
+ "bincode",
+ "candle-core",
+ "clap",
+ "interprocess",
  "r2l-core",
  "r2l-gym",
 ]
@@ -1964,18 +1976,6 @@ dependencies = [
  "quote",
  "rustversion",
  "syn",
-]
-
-[[package]]
-name = "subproc_env"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "candle-core",
- "clap",
- "interprocess",
- "r2l-core",
- "r2l-gym",
 ]
 
 [[package]]

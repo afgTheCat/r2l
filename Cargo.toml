@@ -5,8 +5,15 @@ resolver = "2"
 [workspace.dependencies]
 candle-core = { version = "0.9.1", features = ["cuda"] }
 candle-nn = { version = "0.9.1" }
-r2l-macros = { path = "r2l-macros" }
-r2l-core = { path = "r2l-core" }
-r2l-gym = { path = "r2l-gym" }
-r2l-agents = { path = "r2l-agents" }
-r2l-api = { path = "r2l-api" }
+r2l-macros = { path = "r2l-macros", version = "0.0.1" }
+r2l-core = { path = "r2l-core", version = "0.0.1" }
+r2l-gym = { path = "r2l-gym", version = "0.0.1" }
+r2l-agents = { path = "r2l-agents", version = "0.0.1" }
+r2l-api = { path = "r2l-api", version = "0.0.1" }
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+description = "A rust reinforcement learning library"
+repository = "https://github.com/afgTheCat/r2l"
+license = "MIT OR Apache-2.0"

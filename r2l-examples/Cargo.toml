@@ -1,7 +1,11 @@
 [package]
 name = "r2l-tui"
-version = "0.0.1"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+readme = "README.md"
 
 [dependencies]
 r2l-core = { workspace = true }

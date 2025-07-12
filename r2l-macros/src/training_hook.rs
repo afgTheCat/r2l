@@ -2,7 +2,7 @@ use itertools::Itertools;
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
 use syn::{
-    Error, FnArg, Ident, ItemTrait, ReturnType, TraitItem, Type, TypePath, TypeReference,
+    Error, FnArg, Ident, ItemTrait, ReturnType, TraitItem, Type, TypeReference,
     parse::Parse, parse_quote, spanned::Spanned,
 };
 
