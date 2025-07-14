@@ -20,7 +20,7 @@ impl<E: Env> EnvPool for DummyVecEnv<E> {
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
         for (env_idx, buffer) in self.buffers.iter_mut().enumerate() {
-            run_rollout(distribution, &self.env[env_idx], rollout_mode, buffer, None)?;
+            run_rollout(distribution, &mut self.env[env_idx], rollout_mode, buffer)?;
         }
         Ok(self.buffers.clone())
     }
@@ -53,7 +53,7 @@ impl<E: Env> Evaluator<E> {
                 let mut state = self.env.reset(rand::random())?;
                 let mut rollout_buffer = RolloutBuffer::default();
                 while let (next_state, false) =
-                    single_step_env_with_buffer(dist, &state, &self.env, &mut rollout_buffer)?
+                    single_step_env_with_buffer(dist, &state, &mut self.env, &mut rollout_buffer)?
                 {
                     state = next_state;
                 }
@@ -117,7 +117,7 @@ impl<E: Env> DummyVecEnvWithEvaluator<E> {
             .buffers
             .iter_mut()
             .enumerate()
-            .map(|(env_idx, rb)| rb.reset(&self.env[env_idx], rand::random()).unwrap())
+            .map(|(env_idx, rb)| rb.reset(&mut self.env[env_idx], rand::random()).unwrap())
             .collect::<Vec<_>>();
         for _ in 0..n_steps {
             self.evaluator.evaluate(distribution)?;
@@ -126,7 +126,7 @@ impl<E: Env> DummyVecEnvWithEvaluator<E> {
             let mut rewards = vec![];
             let mut logps = vec![];
             let mut dones = vec![];
-            for (env_idx, env) in self.env.iter().enumerate() {
+            for (env_idx, env) in self.env.iter_mut().enumerate() {
                 let (next_state, action, reward, logp, done) =
                     single_step_env(distribution, &env_states[env_idx], env)?;
                 obs.push(next_state);

@@ -8,7 +8,7 @@ use candle_nn::{Activation, Linear, Module, VarBuilder, linear};
 use either::Either;
 use safetensors::serialize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LinearLayer {
     layer: Linear,
     weight_name: String,
@@ -83,7 +83,7 @@ impl Module for LinearLayer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ActivationLayer(pub Activation);
 
 impl Encode for ActivationLayer {
@@ -120,7 +120,7 @@ impl Module for ActivationLayer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ThreadSafeLayer(pub Either<LinearLayer, ActivationLayer>);
 
 impl Encode for ThreadSafeLayer {
@@ -179,7 +179,7 @@ impl Module for ThreadSafeLayer {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct ThreadSafeSequential {
     layers: Vec<ThreadSafeLayer>,
 }

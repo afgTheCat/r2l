@@ -101,10 +101,9 @@ impl<E: Env> Rollout<E> {
             } => {
                 run_rollout(
                     &distribution,
-                    &self.env,
+                    &mut self.env,
                     rollout_mode,
                     &mut self.rollout_buffer,
-                    None,
                 )?;
                 let packet: PacketToSend<D> = PacketToSend::RolloutResult {
                     rollout: self.rollout_buffer.clone(),

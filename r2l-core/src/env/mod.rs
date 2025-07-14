@@ -48,12 +48,10 @@ impl Space {
 }
 
 pub trait Env {
-    fn reset(&self, seed: u64) -> Result<Tensor>;
-    fn step(&self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)>;
+    fn reset(&mut self, seed: u64) -> Result<Tensor>;
+    fn step(&mut self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)>;
     // TODO: do we need this?
     fn env_description(&self) -> EnvironmentDescription;
-    fn action_space(&self) -> Space;
-    fn observation_space(&self) -> Space;
 }
 
 #[derive(Debug, Clone, Copy, Encode, Decode)]
@@ -93,7 +91,7 @@ pub trait EnvPool {
 pub fn single_step_env(
     dist: &dyn Distribution,
     state: &Tensor,
-    env: &impl Env,
+    env: &mut impl Env,
 ) -> Result<(Tensor, Tensor, f32, f32, bool)> {
     // TODO: unsqueezing here is kinda ugly, we probably need the dist to enforce some shape
     let (action, logp) = dist.get_action(&state.unsqueeze(0)?)?;
@@ -111,7 +109,7 @@ pub fn single_step_env(
 pub fn single_step_env_with_buffer(
     dist: &dyn Distribution,
     state: &Tensor,
-    env: &impl Env,
+    env: &mut impl Env,
     rollout_buffer: &mut RolloutBuffer,
 ) -> Result<(Tensor, bool)> {
     let (next_state, action, reward, logp, done) = single_step_env(dist, state, env)?;
@@ -119,14 +117,11 @@ pub fn single_step_env_with_buffer(
     Ok((next_state, done))
 }
 
-pub trait StepHook<D: Distribution>: Fn(&D) -> Result<()> {}
-
-pub fn run_rollout<D: Distribution>(
-    dist: &D,
-    env: &impl Env,
+pub fn run_rollout(
+    dist: &dyn Distribution,
+    env: &mut impl Env,
     rollout_mode: RolloutMode,
     rollout_buffer: &mut RolloutBuffer,
-    step_hook: Option<Box<dyn StepHook<D>>>,
 ) -> Result<()> {
     let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
     let mut state = rollout_buffer.reset(env, seed)?;
@@ -136,9 +131,9 @@ pub fn run_rollout<D: Distribution>(
         } => loop {
             let (next_state, done) =
                 single_step_env_with_buffer(dist, &state, env, rollout_buffer)?;
-            if let Some(step_hook) = &step_hook {
-                step_hook(dist)?;
-            };
+            // if let Some(step_hook) = &step_hook {
+            //     step_hook(dist)?;
+            // };
             state = next_state;
             if rollout_buffer.states.len() >= n_steps && done {
                 break;
@@ -148,9 +143,9 @@ pub fn run_rollout<D: Distribution>(
             for _ in 0..n_steps {
                 let (next_state, _done) =
                     single_step_env_with_buffer(dist, &state, env, rollout_buffer)?;
-                if let Some(step_hook) = &step_hook {
-                    step_hook(dist)?;
-                };
+                // if let Some(step_hook) = &step_hook {
+                //     step_hook(dist)?;
+                // };
                 state = next_state;
             }
         }
@@ -162,7 +157,7 @@ pub fn run_rollout<D: Distribution>(
 // TODO: Restricting here is probably not neccessary
 pub enum EnvPoolType<E: Env + Sync> {
     Dummy(DummyVecEnv<E>),
-    VecEnv(VecEnv<E>),
+    VecEnv(VecEnv),
     Subprocessing(SubprocessingEnv),
     Sequential(SequentialVecEnv<E>),
 }

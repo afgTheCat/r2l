@@ -20,3 +20,4 @@ bincode = { version = "2.0.1", features = ["serde"] }
 either = "1.15.0"
 safetensors = "0.4.1"
 smol = "2.0.2"
+crossbeam = { workspace = true }

@@ -151,7 +151,7 @@ impl RolloutBuffer {
         (&self.states[index], &self.actions[index], self.logps[index])
     }
 
-    pub fn reset(&mut self, env: &impl Env, seed: u64) -> Result<Tensor> {
+    pub fn reset(&mut self, env: &mut impl Env, seed: u64) -> Result<Tensor> {
         self.states.clear();
         self.actions.clear();
         self.rewards.clear();

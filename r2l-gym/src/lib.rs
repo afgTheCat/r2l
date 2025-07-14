@@ -76,7 +76,7 @@ impl GymEnv {
 }
 
 impl Env for GymEnv {
-    fn reset(&self, seed: u64) -> Result<Tensor> {
+    fn reset(&mut self, seed: u64) -> Result<Tensor> {
         let state: Vec<f32> = Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
             kwargs.set_item("seed", seed)?;
@@ -87,7 +87,7 @@ impl Env for GymEnv {
         Tensor::new(state, &self.device)
     }
 
-    fn step(&self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)> {
+    fn step(&mut self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)> {
         Python::with_gil(|py| {
             let step = match &self.action_space {
                 Space::Continous {
@@ -115,14 +115,6 @@ impl Env for GymEnv {
             PyResult::Ok((state, reward, terminated, truncated))
         })
         .map_err(Error::wrap)
-    }
-
-    fn action_space(&self) -> Space {
-        self.action_space.clone()
-    }
-
-    fn observation_space(&self) -> Space {
-        todo!()
     }
 
     fn env_description(&self) -> EnvironmentDescription {

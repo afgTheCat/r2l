@@ -11,8 +11,11 @@ use enum_dispatch::enum_dispatch;
 use std::f32;
 
 // TODO: Decoding will need a context to store what device we want the tensors to be decoded to
+// The phylosophy behind this should be that distributions are stateless, therfore cloenable and
+// 'static and self contained. Will see if we can stick to this, but it is the agent that has the
+// liberty to not be stateless and such
 #[enum_dispatch]
-pub trait Distribution: Sync {
+pub trait Distribution: Sync + 'static {
     fn get_action(&self, observation: &Tensor) -> Result<(Tensor, Tensor)>;
     fn log_probs(&self, states: &Tensor, actions: &Tensor) -> Result<Tensor>;
     fn std(&self) -> Result<f32>;

@@ -36,7 +36,7 @@ impl<E: Env> SequentialVecEnv<E> {
         while steps_taken < n_steps {
             let mut states = self
                 .envs
-                .iter()
+                .iter_mut()
                 .zip(env_states.iter())
                 .map(|(env, state)| single_step_env(distribution, state, env))
                 .collect::<Result<Vec<_>>>()?;
@@ -68,7 +68,7 @@ impl<E: Env> EnvPool for SequentialVecEnv<E> {
             .buffers
             .iter_mut()
             .enumerate()
-            .map(|(env_idx, rb)| rb.reset(&self.envs[env_idx], rand::random()))
+            .map(|(env_idx, rb)| rb.reset(&mut self.envs[env_idx], rand::random()))
             .collect::<Result<Vec<_>>>()?;
         match rollout_mode {
             RolloutMode::StepBound { n_steps } => {

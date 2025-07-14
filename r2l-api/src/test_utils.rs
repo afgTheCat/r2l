@@ -6,7 +6,7 @@ use r2l_gym::GymEnv;
 pub fn run_gym_episodes(env: &str, ep_count: usize, dist: &impl Distribution) -> Result<()> {
     for _ in 0..ep_count {
         let device = Device::Cpu;
-        let env = GymEnv::new(env, Some("human".into()), &device)?;
+        let mut env = GymEnv::new(env, Some("human".into()), &device)?;
         let seed = rand::random();
         let mut state = env.reset(seed)?;
         let (mut action, _) = dist.get_action(&state.unsqueeze(0)?)?;

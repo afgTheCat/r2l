@@ -2,18 +2,24 @@ use crate::hooks::sequential_env_hooks::{
     EmptySequentialVecEnv, EnvNormalizer, Evaluator, EvaluatorNormalizer,
 };
 use candle_core::{DType, Device, Result, Tensor};
+use crossbeam::sync::ShardedLock;
 use r2l_core::{
+    distributions::Distribution,
     env::{
         Env, EnvPoolType, EnvironmentDescription,
         dummy_vec_env::DummyVecEnv,
         sequential_vec_env::{SequentialVecEnv, SequentialVecEnvHooks},
+        vec_env::{VecEnv, WorkerTask, WorkerThread},
     },
     utils::{rollout_buffer::RolloutBuffer, running_mean_std::RunningMeanStd},
 };
 use r2l_gym::GymEnv;
-use std::sync::{Arc, Mutex};
+use std::{
+    hint,
+    sync::{Arc, Mutex},
+};
 
-pub trait EnvBuilderTrait {
+pub trait EnvBuilderTrait: Sync {
     type Env: Env;
 
     fn build_env(&self) -> Result<Self::Env>;
@@ -29,7 +35,7 @@ impl EnvBuilderTrait for String {
 
 impl<E: Env, F> EnvBuilderTrait for F
 where
-    F: Fn() -> Result<E>,
+    F: Fn() -> Result<E> + Sync,
 {
     type Env = E;
 
@@ -217,6 +223,49 @@ impl EnvPoolBuilder {
                     env_description,
                     hooks,
                 }))
+            }
+            VecPoolType::Vec => {
+                let (result_tx, result_rx) = crossbeam::channel::unbounded::<RolloutBuffer>();
+                let mut worker_txs = vec![];
+                let distr_lock = Arc::new(ShardedLock::new(None::<&'static dyn Distribution>));
+                let task_rxs = (0..self.n_envs)
+                    .map(|_| {
+                        let (task_tx, task_rx) = crossbeam::channel::unbounded::<WorkerTask>();
+                        worker_txs.push(task_tx);
+                        task_rx
+                    })
+                    .collect::<Vec<_>>();
+                // TODO: this is kinda stupid that we need to extract this from a thread
+                let env_description = Mutex::new(None);
+                crossbeam::thread::scope(|scope| {
+                    for task_rx in task_rxs {
+                        let distr_lock = distr_lock.clone();
+                        scope.spawn(|_| {
+                            let buff = RolloutBuffer::default();
+                            let env = env_builder
+                                .build_env()
+                                .expect("Could not build environment");
+                            let mut env_description = env_description.lock().unwrap();
+                            env_description.replace(env.env_description());
+                            let mut worker = WorkerThread {
+                                env,
+                                buff,
+                                task_rx,
+                                result_tx: result_tx.clone(),
+                            };
+                            worker.work(distr_lock);
+                        });
+                    }
+                })
+                .expect("Could not spawn worker threads");
+                let env_description = env_description.lock().unwrap();
+                let vec_env = VecEnv {
+                    worker_txs,
+                    result_rx,
+                    env_description: env_description.as_ref().unwrap().clone(),
+                    distr_lock,
+                };
+                Ok(EnvPoolType::VecEnv(vec_env))
             }
             _ => todo!(),
         }

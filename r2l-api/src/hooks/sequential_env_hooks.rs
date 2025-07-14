@@ -47,7 +47,7 @@ impl<E: Env> Evaluator<E> {
                 let mut state = self.env.reset(rand::random())?;
                 let mut rollout_buffer = RolloutBuffer::default();
                 while let (next_state, false) =
-                    single_step_env_with_buffer(dist, &state, &self.env, &mut rollout_buffer)?
+                    single_step_env_with_buffer(dist, &state, &mut self.env, &mut rollout_buffer)?
                 {
                     state = next_state;
                 }
