@@ -14,9 +14,9 @@ use r2l_core::{
     utils::{rollout_buffer::RolloutBuffer, running_mean_std::RunningMeanStd},
 };
 use r2l_gym::GymEnv;
-use std::{
-    hint,
-    sync::{Arc, Mutex},
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
 };
 
 pub trait EnvBuilderTrait: Sync {
@@ -33,9 +33,9 @@ impl EnvBuilderTrait for String {
     }
 }
 
-impl<E: Env, F> EnvBuilderTrait for F
+impl<E: Env, F: Sync> EnvBuilderTrait for F
 where
-    F: Fn() -> Result<E> + Sync,
+    F: Fn() -> Result<E>,
 {
     type Env = E;
 
@@ -169,22 +169,71 @@ impl Default for EnvPoolBuilder {
     }
 }
 
+struct BuildersWithIdx<EB: EnvBuilderTrait> {
+    builders: Vec<EB>,
+    idx: AtomicUsize,
+}
+
+enum BuilderType<EB: EnvBuilderTrait> {
+    EnvBuilder(EB),
+    EnvBuilderVec(BuildersWithIdx<EB>),
+}
+
+impl<EB: EnvBuilderTrait> BuilderType<EB> {
+    fn env_buillder_vec(env_builders: Vec<EB>) -> Self {
+        Self::EnvBuilderVec(BuildersWithIdx {
+            builders: env_builders,
+            idx: AtomicUsize::new(0),
+        })
+    }
+
+    fn build_all_envs_and_buffers(
+        &self,
+        n_envs: usize,
+    ) -> Result<(Vec<RolloutBuffer>, Vec<EB::Env>)> {
+        match self {
+            Self::EnvBuilder(eb) => {
+                let buffers = vec![RolloutBuffer::default(); n_envs];
+                let envs = (0..n_envs)
+                    .map(|_| eb.build_env())
+                    .collect::<Result<Vec<_>>>()?;
+                Ok((buffers, envs))
+            }
+            Self::EnvBuilderVec(BuildersWithIdx { builders, .. }) => {
+                let buffers = vec![RolloutBuffer::default(); builders.len()];
+                let envs = builders
+                    .iter()
+                    .map(|ebs| ebs.build_env())
+                    .collect::<Result<Vec<_>>>()?;
+                Ok((buffers, envs))
+            }
+        }
+    }
+
+    fn build_single_env(&self) -> Result<EB::Env> {
+        match self {
+            Self::EnvBuilder(eb) => eb.build_env(),
+            Self::EnvBuilderVec(BuildersWithIdx { builders, idx }) => {
+                let i = idx.fetch_add(1, Ordering::Relaxed);
+                builders[i % builders.len()].build_env()
+            }
+        }
+    }
+}
+
 impl EnvPoolBuilder {
     pub fn set_env_pool_type(&mut self, pool_type: VecPoolType) {
         self.pool_type = pool_type
     }
 
-    pub fn build<E: Env + Sync + 'static, EB: EnvBuilderTrait<Env = E>>(
+    fn build_inner<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
         self,
         device: &Device,
-        env_builder: EB,
+        env_builder: BuilderType<EB>,
     ) -> Result<EnvPoolType<E>> {
         match self.pool_type {
             VecPoolType::Dummy => {
-                let buffers = vec![RolloutBuffer::default(); self.n_envs];
-                let envs = (0..self.n_envs)
-                    .map(|_| env_builder.build_env())
-                    .collect::<Result<Vec<_>>>()?;
+                let (buffers, envs) = env_builder.build_all_envs_and_buffers(self.n_envs)?;
                 let env_description = envs[0].env_description();
                 Ok(EnvPoolType::Dummy(DummyVecEnv {
                     buffers,
@@ -193,10 +242,7 @@ impl EnvPoolBuilder {
                 }))
             }
             VecPoolType::Sequential(hook_types) => {
-                let buffers = vec![RolloutBuffer::default(); self.n_envs];
-                let envs = (0..self.n_envs)
-                    .map(|_| env_builder.build_env())
-                    .collect::<Result<Vec<_>>>()?;
+                let (buffers, envs) = env_builder.build_all_envs_and_buffers(self.n_envs)?;
                 let env_description = envs[0].env_description();
                 let hooks: Box<dyn SequentialVecEnvHooks> = match hook_types {
                     SequentialEnvHookTypes::None => Box::new(EmptySequentialVecEnv),
@@ -206,12 +252,12 @@ impl EnvPoolBuilder {
                     //     Box::new(normalizer)
                     // }
                     SequentialEnvHookTypes::EvaluatorOnly { options } => {
-                        let eval_env = env_builder.build_env()?;
+                        let eval_env = env_builder.build_single_env()?;
                         let evaluator = options.build(eval_env, self.n_envs);
                         Box::new(evaluator)
                     }
                     SequentialEnvHookTypes::EvaluatorNormalizer { options } => {
-                        let eval_env = env_builder.build_env()?;
+                        let eval_env = env_builder.build_single_env()?;
                         let eval_normalizer = options.build(eval_env, self.n_envs, device.clone());
                         Box::new(eval_normalizer)
                     }
@@ -243,7 +289,7 @@ impl EnvPoolBuilder {
                         scope.spawn(|_| {
                             let buff = RolloutBuffer::default();
                             let env = env_builder
-                                .build_env()
+                                .build_single_env()
                                 .expect("Could not build environment");
                             let mut env_description = env_description.lock().unwrap();
                             env_description.replace(env.env_description());
@@ -269,5 +315,23 @@ impl EnvPoolBuilder {
             }
             _ => todo!(),
         }
+    }
+
+    // TODO: new name
+    pub fn build2<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
+        self,
+        device: &Device,
+        env_builders: Vec<EB>,
+    ) -> Result<EnvPoolType<E>> {
+        self.build_inner(device, BuilderType::env_buillder_vec(env_builders))
+    }
+
+    // TODO: new name
+    pub fn build<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
+        self,
+        device: &Device,
+        env_builder: EB,
+    ) -> Result<EnvPoolType<E>> {
+        self.build_inner(device, BuilderType::EnvBuilder(env_builder))
     }
 }

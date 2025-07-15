@@ -1,7 +1,5 @@
 use super::Distribution;
-use crate::{
-    thread_safe_sequential::ThreadSafeSequential, utils::build_sequential::build_sequential,
-};
+use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 use bincode::{
     Decode, Encode,
     error::{DecodeError, EncodeError},
@@ -72,7 +70,7 @@ impl DiagGaussianDistribution {
         log_std: Tensor,
         prefix: &str,
     ) -> Result<Self> {
-        let (mu_net, _) = build_sequential(input_dim, layers, vb, prefix)?;
+        let mu_net = build_sequential(input_dim, layers, vb, prefix)?;
         let noise = Tensor::randn(0f32, 1., log_std.shape(), log_std.device()).unwrap();
         Ok(Self {
             log_std,

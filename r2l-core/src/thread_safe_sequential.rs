@@ -194,6 +194,33 @@ impl Module for ThreadSafeSequential {
     }
 }
 
+pub fn build_sequential(
+    input_dim: usize,
+    layers: &[usize],
+    vb: &VarBuilder,
+    prefix: &str,
+) -> Result<ThreadSafeSequential> {
+    let mut last_dim = input_dim;
+    let mut nn = ThreadSafeSequential::default();
+    let num_layers = layers.len();
+    for (layer_idx, layer_size) in layers.iter().enumerate() {
+        let layer_pp = format!("{prefix}{layer_idx}");
+        if layer_idx == num_layers - 1 {
+            let layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
+            nn = nn.add(ThreadSafeLayer::linear(layer))
+        } else {
+            let lin_layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
+            nn = nn
+                .add(ThreadSafeLayer::linear(lin_layer))
+                .add(ThreadSafeLayer::activation(ActivationLayer(
+                    Activation::Relu,
+                )));
+        }
+        last_dim = *layer_size;
+    }
+    Ok(nn)
+}
+
 impl ThreadSafeSequential {
     pub fn add(mut self, layer: ThreadSafeLayer) -> Self {
         self.layers.push(layer);
@@ -224,9 +251,7 @@ impl Decode<()> for ThreadSafeSequential {
 #[cfg(test)]
 mod test {
     use super::{LinearLayer, ThreadSafeLayer, ThreadSafeSequential};
-    use crate::{
-        thread_safe_sequential::ActivationLayer, utils::build_sequential::build_sequential,
-    };
+    use crate::thread_safe_sequential::{ActivationLayer, build_sequential};
     use candle_core::{DType, Device, Error, Result};
     use candle_nn::{Activation, VarBuilder, VarMap};
 
@@ -234,7 +259,7 @@ mod test {
     fn serialize_tss() -> Result<()> {
         let varmap = VarMap::new();
         let vb = VarBuilder::from_varmap(&varmap, DType::F32, &Device::Cpu);
-        let (tss, _) = build_sequential(10, &vec![10, 10], &vb, "value")?;
+        let tss = build_sequential(10, &vec![10, 10], &vb, "value")?;
         let config = bincode::config::standard();
         let bin_thing = bincode::encode_to_vec(tss, config).map_err(Error::wrap)?;
         let (decoded, _): (ThreadSafeSequential, usize) =

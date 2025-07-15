@@ -10,7 +10,7 @@ use r2l_core::{
         OptimizerWithMaxGrad, PolicyKind, decoupled_actor_critic::DecoupledActorCritic,
         paralell_actor_critic::ParalellActorCritic,
     },
-    utils::build_sequential::build_sequential,
+    thread_safe_sequential::build_sequential,
 };
 use r2l_gym::GymEnv;
 
@@ -129,7 +129,7 @@ impl PolicyBuilder {
                 max_grad_norm,
             } => {
                 let value_layers = &[&value_layers[..], &[1]].concat();
-                let (value_net, _) = build_sequential(input_size, value_layers, &vb, "value")?;
+                let value_net = build_sequential(input_size, value_layers, &vb, "value")?;
                 let optimizer = AdamW::new(varmap.all_vars(), optimizer_params.clone())?;
                 let optimizer_with_grad =
                     OptimizerWithMaxGrad::new(optimizer, *max_grad_norm, varmap);
@@ -144,8 +144,7 @@ impl PolicyBuilder {
                 let critic_varmap = VarMap::new();
                 let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, &device);
                 let value_layers = &[&value_layers[..], &[1]].concat();
-                let (value_net, _) =
-                    build_sequential(input_size, value_layers, &critic_vb, "value")?;
+                let value_net = build_sequential(input_size, value_layers, &critic_vb, "value")?;
                 let policy_optimizer = AdamW::new(varmap.all_vars(), optimizer_params.clone())?;
                 let value_optimizer = AdamW::new(critic_varmap.all_vars(), optimizer_params)?;
                 let policy_optimizer_with_grad =

@@ -21,3 +21,6 @@ either = "1.15.0"
 safetensors = "0.4.1"
 smol = "2.0.2"
 crossbeam = { workspace = true }
+
+[dev-dependencies]
+r2l-api = { workspace = true }

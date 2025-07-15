@@ -1,6 +1,5 @@
 use super::Distribution;
-use crate::thread_safe_sequential::ThreadSafeSequential;
-use crate::utils::build_sequential::build_sequential;
+use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 use bincode::{Decode, Encode};
 use candle_core::{Device, Error, Result, Tensor};
 use candle_nn::VarBuilder;
@@ -68,7 +67,7 @@ impl CategoricalDistribution {
         device: Device,
         prefix: &str,
     ) -> Result<Self> {
-        let (logits, _) = build_sequential(input_dim, layers, vb, prefix)?;
+        let logits = build_sequential(input_dim, layers, vb, prefix)?;
         Ok(Self {
             action_size,
             logits,

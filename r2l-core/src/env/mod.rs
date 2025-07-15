@@ -67,6 +67,13 @@ pub struct EnvironmentDescription {
 }
 
 impl EnvironmentDescription {
+    pub fn new(observation_space: Space, action_space: Space) -> Self {
+        Self {
+            observation_space,
+            action_space,
+        }
+    }
+
     pub fn action_size(&self) -> usize {
         self.action_space.size()
     }
@@ -155,7 +162,7 @@ pub fn run_rollout(
 }
 
 // TODO: Restricting here is probably not neccessary
-pub enum EnvPoolType<E: Env + Sync> {
+pub enum EnvPoolType<E: Env> {
     Dummy(DummyVecEnv<E>),
     VecEnv(VecEnv),
     Subprocessing(SubprocessingEnv),
