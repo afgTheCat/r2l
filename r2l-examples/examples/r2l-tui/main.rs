@@ -1,5 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_tui::{EventBox, PPOProgress, train_ppo};
+use r2l_examples::{EventBox, PPOProgress, train_ppo};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
