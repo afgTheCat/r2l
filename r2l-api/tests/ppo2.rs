@@ -10,6 +10,8 @@ use r2l_api::{
 use r2l_core::agents::Agent;
 use r2l_core::{Algorithm, on_policy_algorithm::LearningSchedule};
 
+const NUM_ENVIRONMENTS: usize = 10;
+
 // Evaluator only test
 #[test]
 fn ppo2_cart_pole() -> Result<()> {
@@ -20,14 +22,10 @@ fn ppo2_cart_pole() -> Result<()> {
         ..EvaluatorOptions::default()
     };
     let eval_res = evaluator_opts.results.clone();
-    ppo_builder
-        .env_pool_builder
-        .set_env_pool_type(VecPoolType::Sequential(
-            SequentialEnvHookTypes::EvaluatorOnly {
-                options: evaluator_opts,
-            },
-        ));
-    let mut ppo = ppo_builder.build("CartPole-v1".to_owned())?;
+    ppo_builder.env_pool_type = VecPoolType::Sequential(SequentialEnvHookTypes::EvaluatorOnly {
+        options: evaluator_opts,
+    });
+    let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
     println!("eval res: {:?}", eval_res.lock().unwrap());
     run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
@@ -48,14 +46,11 @@ fn ppo2_cart_pole_normalize() -> Result<()> {
         evaluator_options,
         normalizer_options: NormalizerOptions::default(),
     };
-    ppo_builder
-        .env_pool_builder
-        .set_env_pool_type(VecPoolType::Sequential(
-            SequentialEnvHookTypes::EvaluatorNormalizer {
-                options: eval_normalizer,
-            },
-        ));
-    let mut ppo = ppo_builder.build("CartPole-v1".to_owned())?;
+    ppo_builder.env_pool_type =
+        VecPoolType::Sequential(SequentialEnvHookTypes::EvaluatorNormalizer {
+            options: eval_normalizer,
+        });
+    let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
     println!("eval res: {:?}", eval_res.lock().unwrap());
     run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
