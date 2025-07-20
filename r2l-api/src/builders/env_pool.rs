@@ -168,7 +168,7 @@ impl Default for VecPoolType {
     }
 }
 
-enum BuilderType<EB: EnvBuilderTrait> {
+pub enum BuilderType<EB: EnvBuilderTrait> {
     EnvBuilder { builder: EB, n_envs: usize },
     EnvBuilderVec { builders: Vec<EB>, idx: AtomicUsize },
 }
@@ -185,7 +185,7 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
         Self::EnvBuilder { builder, n_envs }
     }
 
-    fn build_all_envs_and_buffers(&self) -> Result<(Vec<RolloutBuffer>, Vec<EB::Env>)> {
+    pub fn build_all_envs_and_buffers(&self) -> Result<(Vec<RolloutBuffer>, Vec<EB::Env>)> {
         match self {
             Self::EnvBuilder { builder, n_envs } => {
                 let buffers = vec![RolloutBuffer::default(); *n_envs];

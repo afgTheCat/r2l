@@ -56,3 +56,13 @@ fn ppo2_cart_pole_normalize() -> Result<()> {
     run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
     Ok(())
 }
+
+#[test]
+fn ppo2_cart_pole_seq_only() -> Result<()> {
+    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo2();
+    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
+    let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
+    ppo.train()?;
+    run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
+    Ok(())
+}

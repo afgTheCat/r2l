@@ -7,7 +7,6 @@ use candle_core::{Device, Result, Tensor};
 use derive_more::Deref;
 use rand::seq::SliceRandom;
 
-// TODO: do we need Tensors here? Maybe it would be easier to not use them
 #[derive(Debug, Default, Clone)]
 pub struct RolloutBuffer {
     pub states: Vec<Tensor>,
@@ -112,6 +111,23 @@ impl RolloutBuffer {
         self.rewards.push(reward);
         self.dones.push(done);
         self.logps.push(logp);
+    }
+
+    // TODO: we should get rid of the resetting probably and reset here
+    pub fn set_states(
+        &mut self,
+        states: Vec<(Tensor, Tensor, f32, f32, bool)>,
+        last_state: Tensor,
+    ) {
+        for (state, action, reward, logp, done) in states {
+            self.states.push(state);
+            self.actions.push(action);
+            self.rewards.push(reward);
+            self.dones.push(done);
+            self.logps.push(logp);
+        }
+        self.states.push(last_state.clone());
+        self.last_state = Some(last_state);
     }
 
     // TODO: this should be the last state

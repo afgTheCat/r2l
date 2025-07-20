@@ -1,4 +1,5 @@
 pub mod dummy_vec_env;
+pub mod orchestrator;
 pub mod sequential_vec_env;
 pub mod sub_processing_vec_env;
 pub mod vec_env;
@@ -96,12 +97,12 @@ pub trait EnvPool {
 }
 
 pub fn single_step_env(
-    dist: &dyn Distribution,
+    distr: &dyn Distribution,
     state: &Tensor,
     env: &mut impl Env,
 ) -> Result<(Tensor, Tensor, f32, f32, bool)> {
     // TODO: unsqueezing here is kinda ugly, we probably need the dist to enforce some shape
-    let (action, logp) = dist.get_action(&state.unsqueeze(0)?)?;
+    let (action, logp) = distr.get_action(&state.unsqueeze(0)?)?;
     let (mut next_state, reward, terminated, trancuated) = env.step(&action)?;
     let done = terminated || trancuated;
     if done {
@@ -112,7 +113,7 @@ pub fn single_step_env(
     Ok((next_state, action, reward, logp, done))
 }
 
-// TODO: do not use a trait object here
+// TODO: retire this
 pub fn single_step_env_with_buffer(
     dist: &dyn Distribution,
     state: &Tensor,
@@ -124,6 +125,7 @@ pub fn single_step_env_with_buffer(
     Ok((next_state, done))
 }
 
+// TODO: retire this
 pub fn run_rollout(
     dist: &dyn Distribution,
     env: &mut impl Env,
@@ -138,9 +140,6 @@ pub fn run_rollout(
         } => loop {
             let (next_state, done) =
                 single_step_env_with_buffer(dist, &state, env, rollout_buffer)?;
-            // if let Some(step_hook) = &step_hook {
-            //     step_hook(dist)?;
-            // };
             state = next_state;
             if rollout_buffer.states.len() >= n_steps && done {
                 break;
@@ -150,15 +149,42 @@ pub fn run_rollout(
             for _ in 0..n_steps {
                 let (next_state, _done) =
                     single_step_env_with_buffer(dist, &state, env, rollout_buffer)?;
-                // if let Some(step_hook) = &step_hook {
-                //     step_hook(dist)?;
-                // };
                 state = next_state;
             }
         }
     }
     rollout_buffer.set_last_state(state);
     Ok(())
+}
+
+pub fn run_rollout_without_buffer(
+    distr: &dyn Distribution,
+    env: &mut impl Env,
+    rollout_mode: RolloutMode,
+    state: &mut Tensor,
+) -> Result<Vec<(Tensor, Tensor, f32, f32, bool)>> {
+    let mut res = vec![];
+    match rollout_mode {
+        RolloutMode::EpisodeBound { n_episodes } => {
+            // just a loop
+            loop {
+                let (next_state, action, reward, logp, done) = single_step_env(distr, &state, env)?;
+                res.push((next_state.clone(), action, reward, logp, done));
+                *state = next_state;
+                if res.len() >= n_episodes && done {
+                    break;
+                }
+            }
+        }
+        RolloutMode::StepBound { n_steps } => {
+            for _ in 0..n_steps {
+                let (next_state, action, reward, logp, done) = single_step_env(distr, &state, env)?;
+                res.push((next_state.clone(), action, reward, logp, done));
+                *state = next_state;
+            }
+        }
+    }
+    Ok(res)
 }
 
 // TODO: Restricting here is probably not neccessary
