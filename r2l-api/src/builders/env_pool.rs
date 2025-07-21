@@ -1,4 +1,4 @@
-use crate::hooks::sequential_env_hooks::{
+use crate::hooks::env_pool::{
     EmptySequentialVecEnv, EnvNormalizer, Evaluator, EvaluatorNormalizer,
 };
 use candle_core::{DType, Device, Result, Tensor};
@@ -174,14 +174,14 @@ pub enum BuilderType<EB: EnvBuilderTrait> {
 }
 
 impl<EB: EnvBuilderTrait> BuilderType<EB> {
-    fn env_buillder_vec(env_builders: Vec<EB>) -> Self {
+    pub fn env_buillder_vec(env_builders: Vec<EB>) -> Self {
         Self::EnvBuilderVec {
             builders: env_builders,
             idx: AtomicUsize::new(0),
         }
     }
 
-    fn env_builder(builder: EB, n_envs: usize) -> Self {
+    pub fn env_builder(builder: EB, n_envs: usize) -> Self {
         Self::EnvBuilder { builder, n_envs }
     }
 
@@ -206,7 +206,7 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
         }
     }
 
-    fn build_single_env(&self) -> Result<EB::Env> {
+    pub fn build_single_env(&self) -> Result<EB::Env> {
         match self {
             Self::EnvBuilder { builder, .. } => builder.build_env(),
             Self::EnvBuilderVec { builders, idx } => {
@@ -216,7 +216,7 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
         }
     }
 
-    fn n_envs(&self) -> usize {
+    pub fn n_envs(&self) -> usize {
         match self {
             Self::EnvBuilder { n_envs, .. } => *n_envs,
             Self::EnvBuilderVec { builders, .. } => builders.len(),

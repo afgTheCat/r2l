@@ -4,7 +4,7 @@ use crossbeam::sync::ShardedLock;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
-use crate::env::{EnvironmentDescription, RolloutMode, run_rollout_without_buffer};
+use crate::env::{EnvPool, EnvironmentDescription, RolloutMode, run_rollout_without_buffer};
 use crate::{
     distributions::Distribution,
     env::{Env, sequential_vec_env::SequentialVecEnvHooks, single_step_env},
@@ -13,6 +13,8 @@ use crate::{
 
 #[enum_dispatch]
 pub trait EnvHolder {
+    fn num_envs(&self) -> usize;
+
     fn sequential_rollout<D: Distribution>(
         &mut self,
         distr: &D,
@@ -59,6 +61,10 @@ impl<E: Env> VecEnvHolder<E> {
 }
 
 impl<E: Env> EnvHolder for VecEnvHolder<E> {
+    fn num_envs(&self) -> usize {
+        self.envs.len()
+    }
+
     fn sequential_rollout<D: Distribution>(
         &mut self,
         distr: &D,
@@ -181,6 +187,10 @@ impl ThreadHolder {
 }
 
 impl EnvHolder for ThreadHolder {
+    fn num_envs(&self) -> usize {
+        self.worker_txs.len()
+    }
+
     fn sequential_rollout<D: Distribution>(
         &mut self,
         distr: &D,
@@ -234,6 +244,10 @@ impl EnvHolder for ThreadHolder {
 pub struct SubprocHolder {}
 
 impl EnvHolder for SubprocHolder {
+    fn num_envs(&self) -> usize {
+        todo!()
+    }
+
     fn sequential_rollout<D: Distribution>(
         &mut self,
         distr: &D,
@@ -272,10 +286,10 @@ pub struct R2lEnvPool<H: EnvHolder> {
     pub env_description: EnvironmentDescription,
 }
 
-impl<H: EnvHolder> R2lEnvPool<H> {
-    pub fn step(
+impl<H: EnvHolder> EnvPool for R2lEnvPool<H> {
+    fn collect_rollouts<D: Distribution>(
         &mut self,
-        distr: &impl Distribution,
+        distr: &D,
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
         match &mut self.step_mode {
@@ -285,5 +299,13 @@ impl<H: EnvHolder> R2lEnvPool<H> {
             }
             StepMode::Async => self.env_holder.async_rollout(distr, rollout_mode),
         }
+    }
+
+    fn env_description(&self) -> EnvironmentDescription {
+        self.env_description.clone()
+    }
+
+    fn num_env(&self) -> usize {
+        self.env_holder.num_envs()
     }
 }

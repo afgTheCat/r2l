@@ -1,7 +1,8 @@
 use candle_core::{DType, Device, Error, Tensor};
 use once_cell::sync::Lazy;
 use r2l_agents::ppo::hooks::{PPOBatchData, PPOHooks};
-use r2l_api::builders::ppo::PPOBuilder;
+use r2l_api::builders::agents::ppo::PPOBuilder;
+use r2l_api::builders::env_pool::{self, VecPoolType};
 use r2l_core::env::Env;
 use r2l_core::{
     Algorithm,
@@ -181,24 +182,26 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
             AfterLearningHookResult::ShouldContinue => Ok(false),
         };
     let device = Device::Cpu;
-    let env = (0..10)
-        .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
-        .collect::<Vec<_>>();
+    // let env = (0..10)
+    //     .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
+    //     .collect::<Vec<_>>();
     let mut builder = PPOBuilder::default();
     builder.sample_size = 64;
     let hooks = PPOHooks::empty()
         .add_before_learning_hook(before_learning_hook)
         .add_batching_hook(batch_hook)
         .add_rollout_hook(after_learning_hook);
-    let env_description = env[0].env_description();
+    // let env_description = env[0].env_description();
+    let env_pool = VecPoolType::Dummy.to_r2l_pool(&Device::Cpu, ENV_NAME.to_owned(), 10)?;
+    let env_description = env_pool.env_description.clone();
     let mut agent = builder.build(&device, &env_description)?;
     agent.hooks = hooks;
-    let buffers = vec![RolloutBuffer::default(); 10];
-    let env_pool = DummyVecEnv {
-        buffers,
-        env,
-        env_description,
-    };
+    // let buffers = vec![RolloutBuffer::default(); 10];
+    // let env_pool = DummyVecEnv {
+    //     buffers,
+    //     env,
+    //     env_description,
+    // };
     let mut algo = OnPolicyAlgorithm {
         env_pool,
         agent,

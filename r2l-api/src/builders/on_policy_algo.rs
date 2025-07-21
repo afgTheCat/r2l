@@ -1,15 +1,18 @@
 use crate::{
     builders::{
-        a2c::A2CBuilder,
+        agents::a2c::A2CBuilder,
+        agents::ppo::{PPOBuilder, PPOBuilder2},
         env_pool::{EnvBuilderTrait, VecPoolType},
-        ppo::{PPOBuilder, PPOBuilder2},
     },
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
 };
 use candle_core::{Device, Result};
 use r2l_agents::AgentKind;
 use r2l_core::{
-    env::{EnvPool, EnvPoolType, RolloutMode},
+    env::{
+        EnvPool, RolloutMode,
+        orchestrator::{R2lEnvHolder, R2lEnvPool},
+    },
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
 };
 
@@ -53,13 +56,13 @@ impl OnPolicyAlgorithmBuilder {
         mut self,
         env_builder: EB,
         n_envs: usize,
-    ) -> Result<OnPolicyAlgorithm<EnvPoolType<EB::Env>, AgentKind>>
+    ) -> Result<OnPolicyAlgorithm<R2lEnvPool<R2lEnvHolder<EB::Env>>, AgentKind>>
     where
         EB::Env: Sync + 'static,
     {
         let env_pool = self
             .env_pool_type
-            .build(&self.device, env_builder, n_envs)?;
+            .to_r2l_pool(&self.device, env_builder, n_envs)?;
         let env_description = env_pool.env_description();
         let agent = match &mut self.agent_type {
             AgentType::PPO(builder) => {

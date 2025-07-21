@@ -2,7 +2,7 @@ use crate::{parse_config::EnvConfig, python_verifier::PythonResult};
 use candle_core::{DType, Device, Tensor};
 use r2l_agents::AgentKind;
 use r2l_api::{
-    builders::{a2c::A2CBuilder, ppo::PPOBuilder},
+    builders::agents::{a2c::A2CBuilder, ppo::PPOBuilder},
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
 };
 use r2l_core::env::Env;
