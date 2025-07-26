@@ -1,4 +1,4 @@
-use crate::{env::Env, policies::PolicyWithValueFunction};
+use crate::{env::Env, policies::PolicyWithValueFunction, rng::RNG};
 use bincode::{
     BorrowDecode, Decode, Encode,
     error::{DecodeError, EncodeError},
@@ -189,7 +189,7 @@ pub struct RolloutBatch {
     pub logp_old: Tensor,
 }
 
-#[derive(Deref)]
+#[derive(Deref, Debug)]
 pub struct Advantages(Vec<Vec<f32>>);
 
 impl Advantages {
@@ -206,7 +206,7 @@ impl Advantages {
     }
 }
 
-#[derive(Deref)]
+#[derive(Deref, Debug)]
 pub struct Returns(Vec<Vec<f32>>);
 
 pub fn calculate_advantages_and_returns(
@@ -250,7 +250,7 @@ impl<'a> RolloutBatchIterator<'a> {
                 (0..rb.rewards.len()).map(|j| (i, j)).collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        indicies.shuffle(&mut rand::rng());
+        RNG.with_borrow_mut(|rng| indicies.shuffle(rng));
         Self {
             rollouts,
             advantages,

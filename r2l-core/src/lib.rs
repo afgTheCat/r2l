@@ -29,6 +29,7 @@ pub mod distributions;
 pub mod env;
 pub mod on_policy_algorithm;
 pub mod policies;
+pub mod rng;
 pub mod tensors;
 pub mod thread_safe_sequential;
 pub mod utils;

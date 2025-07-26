@@ -1,10 +1,11 @@
 use super::Env;
 use crate::{
     distributions::Distribution,
-    env::{EnvPool, EnvironmentDescription, RolloutMode, single_step_env},
+    env::{EnvPool, EnvironmentDescription, RNG, RolloutMode, single_step_env},
     utils::rollout_buffer::RolloutBuffer,
 };
 use candle_core::{Result, Tensor};
+use rand::Rng;
 
 pub trait SequentialVecEnvHooks {
     fn step_hook(
@@ -68,7 +69,10 @@ impl<E: Env> EnvPool for SequentialVecEnv<E> {
             .buffers
             .iter_mut()
             .enumerate()
-            .map(|(env_idx, rb)| rb.reset(&mut self.envs[env_idx], rand::random()))
+            .map(|(env_idx, rb)| {
+                let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+                rb.reset(&mut self.envs[env_idx], seed)
+            })
             .collect::<Result<Vec<_>>>()?;
         match rollout_mode {
             RolloutMode::StepBound { n_steps } => {

@@ -6,6 +6,7 @@ use crate::{
 use candle_core::{Result, Tensor};
 use candle_nn::{Module, Optimizer};
 
+#[derive(Debug)]
 pub struct DecoupledActorCritic {
     pub distribution: DistributionKind,
     pub value_net: ThreadSafeSequential,

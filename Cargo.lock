@@ -3188,6 +3188,7 @@ dependencies = [
  "candle-core",
  "candle-nn",
  "crossbeam",
+ "once_cell",
  "r2l-agents",
  "r2l-api",
  "r2l-core",
@@ -3230,6 +3231,7 @@ dependencies = [
  "r2l-api",
  "r2l-core",
  "r2l-gym",
+ "rand",
  "ratatui",
 ]
 

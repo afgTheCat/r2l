@@ -4,6 +4,7 @@ use crate::{distributions::DistributionKind, thread_safe_sequential::ThreadSafeS
 use candle_core::{Result, Tensor};
 use candle_nn::{Module, Optimizer};
 
+#[derive(Debug)]
 pub struct ParalellActorCritic {
     distribution: DistributionKind,
     value_net: ThreadSafeSequential,

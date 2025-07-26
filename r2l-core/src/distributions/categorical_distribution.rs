@@ -8,7 +8,7 @@ use candle_nn::{Module, ops::softmax};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CategoricalDistribution {
     action_size: usize,
     logits: ThreadSafeSequential,

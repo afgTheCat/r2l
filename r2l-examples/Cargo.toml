@@ -14,6 +14,7 @@ r2l-agents = { workspace = true }
 r2l-api = { workspace = true }
 candle-core = { workspace = true }
 once_cell = "1.21.3"
+rand = "0.9.0"
 
 [dev-dependencies]
 ratatui = "0.29.0"

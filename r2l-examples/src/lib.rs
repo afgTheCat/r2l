@@ -2,7 +2,7 @@ use candle_core::{DType, Device, Error, Tensor};
 use once_cell::sync::Lazy;
 use r2l_agents::ppo::hooks::{PPOBatchData, PPOHooks};
 use r2l_api::builders::agents::ppo::PPOBuilder;
-use r2l_api::builders::env_pool::{self, VecPoolType};
+use r2l_api::builders::env_pool::VecPoolType;
 use r2l_core::env::Env;
 use r2l_core::{
     Algorithm,
@@ -89,9 +89,9 @@ fn batch_hook(
     batch_data: &PPOBatchData,
 ) -> candle_core::Result<bool> {
     let entropy = policy.distribution().entropy()?;
+    let device = entropy.device();
     let mut app_data = SHARED_APP_DATA.lock().unwrap();
-    let entropy_loss =
-        (Tensor::full(app_data.ent_coeff, (), &candle_core::Device::Cpu)? * entropy.neg()?)?;
+    let entropy_loss = (Tensor::full(app_data.ent_coeff, (), &device)? * entropy.neg()?)?;
     app_data.current_progress_report.collect_batch_data(
         &batch_data.ratio,
         &entropy_loss,
@@ -162,7 +162,7 @@ fn after_learning_hook_inner(
 }
 
 pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
-    let total_rollouts = 300;
+    let total_rollouts = 30;
     // Set up things in the app data that we will need
     {
         let mut app_data = SHARED_APP_DATA.lock().unwrap();
@@ -182,26 +182,17 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
             AfterLearningHookResult::ShouldContinue => Ok(false),
         };
     let device = Device::Cpu;
-    // let env = (0..10)
-    //     .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
-    //     .collect::<Vec<_>>();
     let mut builder = PPOBuilder::default();
     builder.sample_size = 64;
-    let hooks = PPOHooks::empty()
+
+    let env_pool = VecPoolType::Dummy.to_r2l_pool(&Device::Cpu, ENV_NAME.to_owned(), 10)?;
+    let env_description = env_pool.env_description.clone();
+
+    let mut agent = builder.build(&device, &env_description)?;
+    agent.hooks = PPOHooks::empty()
         .add_before_learning_hook(before_learning_hook)
         .add_batching_hook(batch_hook)
         .add_rollout_hook(after_learning_hook);
-    // let env_description = env[0].env_description();
-    let env_pool = VecPoolType::Dummy.to_r2l_pool(&Device::Cpu, ENV_NAME.to_owned(), 10)?;
-    let env_description = env_pool.env_description.clone();
-    let mut agent = builder.build(&device, &env_description)?;
-    agent.hooks = hooks;
-    // let buffers = vec![RolloutBuffer::default(); 10];
-    // let env_pool = DummyVecEnv {
-    //     buffers,
-    //     env,
-    //     env_description,
-    // };
     let mut algo = OnPolicyAlgorithm {
         env_pool,
         agent,
@@ -213,4 +204,192 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
         hooks: OnPolicyHooks::default(),
     };
     algo.train()
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        AfterLearningHookResult, ENV_NAME, SHARED_APP_DATA, after_learning_hook_inner, batch_hook,
+        before_learning_hook,
+    };
+    use candle_core::{Device, DeviceLocation, Result};
+    use r2l_agents::ppo::PPO;
+    use r2l_agents::ppo::hooks::PPOHooks;
+    use r2l_api::builders::agents::ppo::PPOBuilder;
+    use r2l_api::builders::env_pool::{self, VecPoolType};
+    use r2l_core::Algorithm;
+    use r2l_core::agents::Agent;
+    use r2l_core::distributions::Distribution;
+    use r2l_core::env::dummy_vec_env::DummyVecEnv;
+    use r2l_core::env::orchestrator::{R2lEnvHolder, R2lEnvPool, VecEnvHolder};
+    use r2l_core::env::{Env, EnvPool, EnvPoolType, RolloutMode};
+    use r2l_core::on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks};
+    use r2l_core::policies::PolicyKind;
+    use r2l_core::rng::RNG;
+    use r2l_core::utils::rollout_buffer::RolloutBuffer;
+    use r2l_gym::GymEnv;
+    use rand::Rng;
+
+    fn env_pool_1(device: &Device) -> DummyVecEnv<GymEnv> {
+        let envs = (0..10)
+            .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
+            .collect::<Vec<_>>();
+        let env_description = envs[0].env_description();
+        let buffers = vec![RolloutBuffer::default(); 10];
+        DummyVecEnv {
+            buffers,
+            env: envs,
+            env_description: env_description.clone(),
+        }
+    }
+
+    fn env_pool_2(device: &Device) -> R2lEnvPool<VecEnvHolder<GymEnv>> {
+        let envs = (0..10)
+            .map(|_| GymEnv::new(ENV_NAME, None, &device).unwrap())
+            .collect::<Vec<_>>();
+        let buffers = vec![RolloutBuffer::default(); 10];
+        let env_description = envs[0].env_description();
+        let env_holder = VecEnvHolder { envs, buffers };
+
+        R2lEnvPool {
+            env_holder,
+            step_mode: r2l_core::env::orchestrator::StepMode::Async,
+            env_description: env_description.clone(),
+        }
+    }
+
+    fn env_pool_3(device: &Device) -> EnvPoolType<GymEnv> {
+        VecPoolType::Dummy
+            .build(device, ENV_NAME.to_owned(), 10)
+            .unwrap()
+    }
+
+    fn env_pool_4(device: &Device) -> R2lEnvPool<R2lEnvHolder<GymEnv>> {
+        VecPoolType::Dummy
+            .to_r2l_pool(device, ENV_NAME.to_owned(), 10)
+            .unwrap()
+    }
+
+    fn train_algo(device: &Device, env_pool: impl EnvPool) -> Result<PPO<PolicyKind>> {
+        let total_rollouts = 300;
+        {
+            let mut app_data = SHARED_APP_DATA.lock().unwrap();
+            app_data.total_epochs = 10;
+            app_data.target_kl = 0.01;
+            app_data.total_rollouts = total_rollouts;
+            app_data.current_rollout = 0;
+        }
+        let after_learning_hook =
+            move |policy: &mut PolicyKind| match after_learning_hook_inner(policy)? {
+                AfterLearningHookResult::ShouldStop => Ok(true),
+                AfterLearningHookResult::ShouldContinue => Ok(false),
+            };
+        let mut builder = PPOBuilder::default();
+        builder.sample_size = 64;
+        let mut agent = builder.build(&device, &env_pool.env_description())?;
+        agent.hooks = PPOHooks::empty()
+            .add_before_learning_hook(before_learning_hook)
+            .add_batching_hook(batch_hook)
+            .add_rollout_hook(after_learning_hook);
+        let mut algo = OnPolicyAlgorithm {
+            env_pool,
+            agent,
+            learning_schedule: LearningSchedule::RolloutBound {
+                total_rollouts,
+                current_rollout: 0,
+            },
+            rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
+            hooks: OnPolicyHooks::default(),
+        };
+        algo.train()?;
+        Ok(algo.agent)
+    }
+
+    fn train_algo1(device: &Device) -> Result<PPO<PolicyKind>> {
+        let env_pool = env_pool_1(device);
+        train_algo(device, env_pool)
+    }
+
+    fn train_algo2(device: &Device) -> Result<PPO<PolicyKind>> {
+        let env_pool = env_pool_2(device);
+        train_algo(device, env_pool)
+    }
+
+    fn train_algo3(device: &Device) -> Result<PPO<PolicyKind>> {
+        let env_pool = env_pool_3(device);
+        train_algo(device, env_pool)
+    }
+
+    fn train_algo4(device: &Device) -> Result<PPO<PolicyKind>> {
+        let env_pool = env_pool_4(device);
+        train_algo(device, env_pool)
+    }
+
+    fn evaluate_agent(device: &Device, agent: PPO<PolicyKind>) -> Result<f32> {
+        let mut total_rewards = 0.;
+        let ep_count = 10;
+        for _ in 0..ep_count {
+            let mut env = GymEnv::new(ENV_NAME, None, &device)?;
+            let seed = RNG.with_borrow_mut(|rng| rng.random());
+            let mut state = env.reset(seed)?;
+            let (mut action, _) = agent.distribution().get_action(&state.unsqueeze(0)?)?;
+            while let (next_state, reward, false, false) = env.step(&action)? {
+                total_rewards += reward;
+                state = next_state;
+                // TODO: unsqueeze seems too much here
+                let (next_action, _) = agent.distribution().get_action(&state.unsqueeze(0)?)?;
+                action = next_action;
+            }
+        }
+        Ok(total_rewards / ep_count as f32)
+    }
+
+    #[test]
+    fn test_env_pool_thing() -> Result<()> {
+        let num_evals = 5;
+        let mut x2_sum = 0.;
+        let device = Device::Cpu;
+        for _ in 0..num_evals {
+            let agent = train_algo2(&device)?;
+            let eval = evaluate_agent(&device, agent)?;
+            println!("avg score {eval}");
+            x2_sum += eval;
+        }
+        println!("z2 mean: {}", x2_sum / num_evals as f32);
+        println!("===================================");
+        let mut x1_sum = 0.;
+        for _ in 0..num_evals {
+            let agent = train_algo1(&device)?;
+            let eval = evaluate_agent(&device, agent)?;
+            println!("avg score {eval}");
+            x1_sum += eval;
+        }
+        println!("z1 mean: {}", x1_sum / num_evals as f32);
+        Ok(())
+    }
+
+    #[test]
+    fn test_env_pool_constructors() -> Result<()> {
+        let num_evals = 5;
+        let mut x1_sum = 0.;
+        let device = Device::Cpu;
+        device.set_seed(0)?;
+        for _ in 0..num_evals {
+            let agent = train_algo3(&device)?;
+            let eval = evaluate_agent(&device, agent)?;
+            println!("avg score {eval}");
+            x1_sum += eval;
+        }
+        println!("z1 mean: {}", x1_sum / num_evals as f32);
+        println!("===================================");
+        let mut x2_sum = 0.;
+        for _ in 0..num_evals {
+            let agent = train_algo4(&device)?;
+            let eval = evaluate_agent(&device, agent)?;
+            println!("avg score {eval}");
+            x2_sum += eval;
+        }
+        println!("z2 mean: {}", x2_sum / num_evals as f32);
+        Ok(())
+    }
 }

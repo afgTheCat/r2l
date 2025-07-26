@@ -68,13 +68,14 @@ impl<P: PolicyWithValueFunction> PPOHooksTrait<P> for DefaultPPOHooks<P> {
         data: &PPOBatchData,
     ) -> Result<HookResult> {
         if self.ent_coeff != 0. {
+            let device = policy_loss.device();
             let entropy = policy.distribution().entropy()?;
-            let entropy_loss =
-                (Tensor::full(self.ent_coeff, (), &candle_core::Device::Cpu)? * entropy.neg()?)?;
+            let entropy_loss = (Tensor::full(self.ent_coeff, (), device)? * entropy.neg()?)?;
             *policy_loss = PolicyLoss(policy_loss.add(&entropy_loss)?);
         }
         if self.vf_coeff != 0. {
-            let vf_coeff = Tensor::full(self.vf_coeff, (), &candle_core::Device::Cpu)?;
+            let device = value_loss.device();
+            let vf_coeff = Tensor::full(self.vf_coeff, (), device)?;
             *value_loss = ValueLoss(value_loss.broadcast_mul(&vf_coeff)?);
         }
         if self.vf_coeff != 0. {}

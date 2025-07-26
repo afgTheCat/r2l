@@ -1,6 +1,8 @@
 pub mod decoupled_actor_critic;
 pub mod paralell_actor_critic;
 
+use std::fmt::Debug;
+
 use crate::distributions::{Distribution, DistributionKind};
 use candle_core::{Result, Tensor, backprop::GradStore};
 use candle_nn::{AdamW, Optimizer, VarMap};
@@ -34,7 +36,7 @@ fn clip_grad(t: &Tensor, varmap: &VarMap, max_norm: f32) -> Result<GradStore> {
     Ok(grad_store)
 }
 
-pub trait Policy {
+pub trait Policy: Debug {
     type Dist: Distribution;
 
     // retrieves the underlying distribution
@@ -53,6 +55,15 @@ pub struct OptimizerWithMaxGrad {
     pub optimizer: AdamW,
     pub max_grad_norm: Option<f32>,
     pub varmap: VarMap,
+}
+
+impl Debug for OptimizerWithMaxGrad {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OptimizerWithMaxGrad")
+            .field("optimizer", &self.optimizer)
+            .field("max_grad_norm", &self.max_grad_norm)
+            .finish()
+    }
 }
 
 impl OptimizerWithMaxGrad {
@@ -75,6 +86,7 @@ impl OptimizerWithMaxGrad {
     }
 }
 
+#[derive(Debug)]
 pub enum PolicyKind {
     Decoupled(DecoupledActorCritic),
     Paralell(ParalellActorCritic),

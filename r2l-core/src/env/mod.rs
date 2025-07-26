@@ -10,16 +10,12 @@ use crate::{
         dummy_vec_env::DummyVecEnv, sequential_vec_env::SequentialVecEnv,
         sub_processing_vec_env::SubprocessingEnv, vec_env::VecEnv,
     },
+    rng::RNG,
     utils::rollout_buffer::RolloutBuffer,
 };
 use bincode::{Decode, Encode};
 use candle_core::{Result, Tensor};
-use rand::{Rng, SeedableRng, rngs::StdRng};
-use std::cell::RefCell;
-
-thread_local! {
-    static RNG: RefCell<StdRng> = RefCell::new(StdRng::seed_from_u64(0));
-}
+use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub enum Space {

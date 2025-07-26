@@ -4,7 +4,9 @@ use crossbeam::sync::ShardedLock;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
-use crate::env::{EnvPool, EnvironmentDescription, RolloutMode, run_rollout_without_buffer};
+use crate::env::{
+    EnvPool, EnvironmentDescription, RolloutMode, run_rollout, run_rollout_without_buffer,
+};
 use crate::{
     distributions::Distribution,
     env::{Env, sequential_vec_env::SequentialVecEnvHooks, single_step_env},
@@ -53,7 +55,7 @@ impl<E: Env> VecEnvHolder<E> {
         for (idx, rb) in self.buffers.iter_mut().enumerate() {
             let state = &current_states[idx];
             let (next_state, action, reward, logp, done) = &states[idx];
-            rb.push_step(state.clone(), action.clone(), *reward, *done, *logp);
+            rb.push_step(state.clone(), action.detach(), *reward, *done, *logp);
             current_states[idx] = next_state.clone();
         }
         Ok(states)
@@ -105,11 +107,14 @@ impl<E: Env> EnvHolder for VecEnvHolder<E> {
         rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
         for (env_idx, buffer) in self.buffers.iter_mut().enumerate() {
-            let env = &mut self.envs[env_idx];
-            let mut current_state = buffer.reset(env, rand::random())?;
-            let states = run_rollout_without_buffer(distr, env, rollout_mode, &mut current_state)?;
-            buffer.set_states(states, current_state);
+            run_rollout(distr, &mut self.envs[env_idx], rollout_mode, buffer)?;
         }
+        // for (env_idx, buffer) in self.buffers.iter_mut().enumerate() {
+        //     let env = &mut self.envs[env_idx];
+        //     let mut current_state = buffer.reset(env, rand::random())?;
+        //     let states = run_rollout_without_buffer(distr, env, rollout_mode, &mut current_state)?;
+        //     buffer.set_states(states, current_state);
+        // }
         Ok(self.buffers.clone())
     }
 }

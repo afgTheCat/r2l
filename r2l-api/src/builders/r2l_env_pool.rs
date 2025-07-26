@@ -17,7 +17,7 @@ impl VecPoolType {
     ) -> Result<R2lEnvPool<R2lEnvHolder<E>>> {
         match self {
             Self::Dummy => {
-                let (buffers, envs) = env_builder.build_all_envs_and_buffers()?;
+                let (buffers, envs) = env_builder.build_all_envs_and_buffers(device)?;
                 let env_description = envs[0].env_description();
                 Ok(R2lEnvPool {
                     env_holder: R2lEnvHolder::Vec(VecEnvHolder { envs, buffers }),
@@ -26,7 +26,7 @@ impl VecPoolType {
                 })
             }
             Self::Sequential(hook_types) => {
-                let (buffers, envs) = env_builder.build_all_envs_and_buffers()?;
+                let (buffers, envs) = env_builder.build_all_envs_and_buffers(device)?;
                 let env_description = envs[0].env_description();
                 let hooks: Box<dyn SequentialVecEnvHooks> = match hook_types {
                     SequentialEnvHookTypes::None => Box::new(EmptySequentialVecEnv),
@@ -36,13 +36,13 @@ impl VecPoolType {
                     //     Box::new(normalizer)
                     // }
                     SequentialEnvHookTypes::EvaluatorOnly { options } => {
-                        let eval_env = env_builder.build_single_env()?;
+                        let eval_env = env_builder.build_single_env(device)?;
                         let n_envs = env_builder.n_envs();
                         let evaluator = options.build(eval_env, n_envs);
                         Box::new(evaluator)
                     }
                     SequentialEnvHookTypes::EvaluatorNormalizer { options } => {
-                        let eval_env = env_builder.build_single_env()?;
+                        let eval_env = env_builder.build_single_env(device)?;
                         let n_envs = env_builder.n_envs();
                         let eval_normalizer = options.build(eval_env, n_envs, device.clone());
                         Box::new(eval_normalizer)
@@ -54,7 +54,6 @@ impl VecPoolType {
                     step_mode: StepMode::Sequential(hooks),
                     env_description,
                 })
-                // todo!()
             }
             _ => todo!(),
         }
