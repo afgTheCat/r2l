@@ -1,21 +1,21 @@
 use crate::{parse_config::EnvConfig, python_verifier::PythonResult};
-use candle_core::{DType, Device, Tensor};
+use candle_core::Device;
 use r2l_agents::AgentKind;
 use r2l_api::{
-    builders::agents::{a2c::A2CBuilder, ppo::PPOBuilder},
+    builders::{
+        agents::{a2c::A2CBuilder, ppo::PPOBuilder},
+        env_pool::{
+            EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions,
+            SequentialEnvHookTypes, VecPoolType,
+        },
+    },
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
 };
-use r2l_core::env::Env;
 use r2l_core::{
     Algorithm,
-    env::{
-        EnvPool, RolloutMode,
-        dummy_vec_env::{DummyVecEnvWithEvaluator, Evaluator},
-    },
+    env::{EnvPool, RolloutMode},
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
-    utils::{rollout_buffer::RolloutBuffer, running_mean_std::RunningMeanStd},
 };
-use r2l_gym::GymEnv;
 
 fn r2l_verify(env_config: &EnvConfig) {
     let device = Device::Cpu;
@@ -25,32 +25,17 @@ fn r2l_verify(env_config: &EnvConfig) {
     let eval_episodes = args.get("eval_episodes").unwrap().parse().unwrap();
     let env_name = args.get("env").unwrap();
     let n_timesteps: f64 = config.get("n_timesteps").unwrap().parse().unwrap();
-    println!("{}", eval_freq);
-    let evaluator = Evaluator {
-        env: GymEnv::new(env_name, None, &device).unwrap(),
-        eval_episodes,
-        eval_freq,
-        eval_step: 0,
-    };
     let n_envs = config.get("n_envs").unwrap().parse().unwrap();
-    let env = (0..n_envs)
-        .map(|_| GymEnv::new(env_name, None, &device).unwrap())
-        .collect::<Vec<_>>();
-    let input_dim = env[0].observation_size();
-    let env_description = env[0].env_description();
-    let env_pool = DummyVecEnvWithEvaluator {
-        buffers: vec![RolloutBuffer::default(); n_envs],
-        env,
-        evaluator,
-        obs_rms: RunningMeanStd::new(input_dim, device.clone()), // we will need the obs shape
-        ret_rms: RunningMeanStd::new((), device.clone()),
-        clip_obs: 10.,
-        clip_rew: 10.,
-        epsilon: 1e-8,
-        returns: Tensor::zeros(n_envs, DType::F32, &device).unwrap(),
-        gamma: 0.99,
-        env_description,
-    };
+    println!("{}", eval_freq);
+    let (evaluator_options, results) = EvaluatorOptions::new(eval_episodes, eval_freq, 0);
+    let normalizer_options = NormalizerOptions::new(1e-8, 0.99, 10., 10.);
+    let eval_normalizer_options =
+        EvaluatorNormalizerOptions::new(evaluator_options, normalizer_options);
+    let env_pool = VecPoolType::Sequential(SequentialEnvHookTypes::EvaluatorNormalizer {
+        options: eval_normalizer_options,
+    })
+    .build(&device, env_name.clone(), n_envs)
+    .unwrap();
     let learning_schedule = LearningSchedule::TotalStepBound {
         total_steps: n_timesteps as usize,
         current_step: 0,

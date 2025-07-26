@@ -1,5 +1,6 @@
-use crate::hooks::env_pool::{
-    EmptySequentialVecEnv, EnvNormalizer, Evaluator, EvaluatorNormalizer,
+use crate::{
+    hooks::env_pool::{EmptySequentialVecEnv, EnvNormalizer, EvaluatorNormalizer},
+    utils::{evaluator::Evaluator, running_mean::RunningMeanStd},
 };
 use candle_core::{DType, Device, Result, Tensor};
 use crossbeam::sync::ShardedLock;
@@ -11,7 +12,7 @@ use r2l_core::{
         sequential_vec_env::{SequentialVecEnv, SequentialVecEnvHooks},
         vec_env::{VecEnv, WorkerTask, WorkerThread},
     },
-    utils::{rollout_buffer::RolloutBuffer, running_mean_std::RunningMeanStd},
+    utils::rollout_buffer::RolloutBuffer,
 };
 use r2l_gym::GymEnv;
 use std::sync::{
@@ -63,6 +64,15 @@ impl Default for NormalizerOptions {
 }
 
 impl NormalizerOptions {
+    pub fn new(epsilon: f32, gamma: f32, clip_obs: f32, clip_rew: f32) -> Self {
+        Self {
+            epsilon,
+            gamma,
+            clip_obs,
+            clip_rew,
+        }
+    }
+
     pub fn build(
         &self,
         env_description: EnvironmentDescription,
@@ -92,6 +102,23 @@ pub struct EvaluatorOptions {
 }
 
 impl EvaluatorOptions {
+    pub fn new(
+        eval_episodes: usize,
+        eval_freq: usize,
+        eval_steps: usize,
+    ) -> (Self, Arc<Mutex<Vec<Vec<f32>>>>) {
+        let results = Arc::new(Mutex::new(vec![vec![]]));
+        (
+            Self {
+                eval_episodes: eval_episodes,
+                eval_freq: eval_freq,
+                eval_step: eval_steps,
+                results: results.clone(),
+            },
+            results,
+        )
+    }
+
     pub fn build<E: Env>(&self, eval_env: E, n_envs: usize) -> Evaluator<E> {
         Evaluator::new(
             eval_env,
@@ -121,6 +148,13 @@ pub struct EvaluatorNormalizerOptions {
 }
 
 impl EvaluatorNormalizerOptions {
+    pub fn new(evaluator_options: EvaluatorOptions, normalizer_options: NormalizerOptions) -> Self {
+        Self {
+            evaluator_options,
+            normalizer_options,
+        }
+    }
+
     pub fn build<E: Env>(
         &self,
         eval_env: E,

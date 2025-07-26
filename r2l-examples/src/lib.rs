@@ -162,7 +162,7 @@ fn after_learning_hook_inner(
 }
 
 pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
-    let total_rollouts = 30;
+    let total_rollouts = 300;
     // Set up things in the app data that we will need
     {
         let mut app_data = SHARED_APP_DATA.lock().unwrap();
