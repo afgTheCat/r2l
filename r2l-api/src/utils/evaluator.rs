@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 use candle_core::{Result, Tensor};
 use r2l_core::{
     distributions::Distribution,
-    env::{Env, sequential_vec_env::SequentialVecEnvHooks, single_step_env_with_buffer},
+    env::Env,
+    env_pools::{SequentialVecEnvHooks, single_step_env_with_buffer},
     utils::rollout_buffer::RolloutBuffer,
 };
 

@@ -27,6 +27,8 @@
 pub mod agents;
 pub mod distributions;
 pub mod env;
+pub mod env_pools;
+pub mod ipc;
 pub mod on_policy_algorithm;
 pub mod policies;
 pub mod rng;

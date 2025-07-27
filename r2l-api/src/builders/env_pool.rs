@@ -6,11 +6,11 @@ use candle_core::{DType, Device, Result, Tensor};
 use crossbeam::sync::ShardedLock;
 use r2l_core::{
     distributions::Distribution,
-    env::{
-        Env, EnvPoolType, EnvironmentDescription,
-        dummy_vec_env::DummyVecEnv,
-        sequential_vec_env::{SequentialVecEnv, SequentialVecEnvHooks},
-        vec_env::{VecEnv, WorkerTask, WorkerThread},
+    env::{Env, EnvironmentDescription},
+    env_pools::{
+        R2lEnvHolder, R2lEnvPool, SequentialVecEnvHooks, StepMode,
+        thread_env_holder::{ThreadResult, WorkerTask, WorkerThread},
+        vector_env_holder::VecEnvHolder,
     },
     utils::rollout_buffer::RolloutBuffer,
 };
@@ -259,25 +259,32 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
             Self::EnvBuilderVec { builders, .. } => builders.len(),
         }
     }
+
+    pub fn build_all_envs(&self) -> Vec<RolloutBuffer> {
+        match self {
+            Self::EnvBuilder { n_envs, .. } => vec![RolloutBuffer::default(); *n_envs],
+            Self::EnvBuilderVec { builders, .. } => vec![RolloutBuffer::default(); builders.len()],
+        }
+    }
 }
 
 impl VecPoolType {
-    fn build_inner<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
-        self,
+    pub fn to_r2l_pool_inner<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
+        &self,
         device: &Device,
         env_builder: BuilderType<EB>,
-    ) -> Result<EnvPoolType<E>> {
+    ) -> Result<R2lEnvPool<R2lEnvHolder<E>>> {
         match self {
-            VecPoolType::Dummy => {
+            Self::Dummy => {
                 let (buffers, envs) = env_builder.build_all_envs_and_buffers(device)?;
                 let env_description = envs[0].env_description();
-                Ok(EnvPoolType::Dummy(DummyVecEnv {
-                    buffers,
-                    env: envs,
+                Ok(R2lEnvPool {
+                    env_holder: R2lEnvHolder::Vec(VecEnvHolder { envs, buffers }),
+                    step_mode: StepMode::Async,
                     env_description,
-                }))
+                })
             }
-            VecPoolType::Sequential(hook_types) => {
+            Self::Sequential(hook_types) => {
                 let (buffers, envs) = env_builder.build_all_envs_and_buffers(device)?;
                 let env_description = envs[0].env_description();
                 let hooks: Box<dyn SequentialVecEnvHooks> = match hook_types {
@@ -301,15 +308,14 @@ impl VecPoolType {
                     }
                     _ => todo!(),
                 };
-                Ok(EnvPoolType::Sequential(SequentialVecEnv {
-                    buffers,
-                    envs,
+                Ok(R2lEnvPool {
+                    env_holder: R2lEnvHolder::Vec(VecEnvHolder { envs, buffers }),
+                    step_mode: StepMode::Sequential(hooks),
                     env_description,
-                    hooks,
-                }))
+                })
             }
-            VecPoolType::Vec => {
-                let (result_tx, result_rx) = crossbeam::channel::unbounded::<RolloutBuffer>();
+            Self::Vec => {
+                let (result_tx, result_rx) = crossbeam::channel::unbounded::<ThreadResult>();
                 let mut worker_txs = vec![];
                 let distr_lock = Arc::new(ShardedLock::new(None::<&'static dyn Distribution>));
                 let n_envs = env_builder.n_envs();
@@ -330,7 +336,6 @@ impl VecPoolType {
                     for task_rx in task_rxs {
                         let distr_lock = distr_lock.clone();
                         scope.spawn(|_| {
-                            let buff = RolloutBuffer::default();
                             let env = env_builder
                                 .build_single_env(device)
                                 .expect("Could not build environment");
@@ -338,7 +343,6 @@ impl VecPoolType {
                             env_description.replace(env.env_description());
                             let mut worker = WorkerThread {
                                 env,
-                                buff,
                                 task_rx,
                                 result_tx: result_tx.clone(),
                             };
@@ -348,13 +352,20 @@ impl VecPoolType {
                 })
                 .expect("Could not spawn worker threads");
                 let env_description = env_description.lock().unwrap();
-                let vec_env = VecEnv {
-                    worker_txs,
-                    result_rx,
-                    env_description: env_description.as_ref().unwrap().clone(),
-                    distr_lock,
-                };
-                Ok(EnvPoolType::VecEnv(vec_env))
+                let env_description = env_description.as_ref().unwrap();
+                let buffs = env_builder.build_all_envs();
+                // let env_pool = R2lEnvPool {
+                //     env_holder: R2lEnvHolder::Thread(ThreadHolder {
+                //         current_states: None,
+                //         worker_txs,
+                //         result_rx,
+                //         distr_lock,
+                //         buffs,
+                //     }),
+                //     step_mode: StepMode::Async,
+                //     env_description,
+                // };
+                todo!()
             }
             _ => todo!(),
         }
@@ -364,8 +375,8 @@ impl VecPoolType {
         self,
         device: &Device,
         env_builders: Vec<EB>,
-    ) -> Result<EnvPoolType<E>> {
-        self.build_inner(device, BuilderType::env_buillder_vec(env_builders))
+    ) -> Result<R2lEnvPool<R2lEnvHolder<E>>> {
+        self.to_r2l_pool_inner(device, BuilderType::env_buillder_vec(env_builders))
     }
 
     pub fn build<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
@@ -373,7 +384,7 @@ impl VecPoolType {
         device: &Device,
         env_builder: EB,
         n_envs: usize,
-    ) -> Result<EnvPoolType<E>> {
-        self.build_inner(device, BuilderType::env_builder(env_builder, n_envs))
+    ) -> Result<R2lEnvPool<R2lEnvHolder<E>>> {
+        self.to_r2l_pool_inner(device, BuilderType::env_builder(env_builder, n_envs))
     }
 }

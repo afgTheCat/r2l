@@ -1,8 +1,5 @@
 use candle_core::{Device, Result, Tensor};
-use r2l_core::{
-    distributions::Distribution,
-    env::{Env, sequential_vec_env::SequentialVecEnvHooks},
-};
+use r2l_core::{distributions::Distribution, env::Env, env_pools::SequentialVecEnvHooks};
 
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 

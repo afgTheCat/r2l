@@ -9,10 +9,8 @@ use crate::{
 use candle_core::{Device, Result};
 use r2l_agents::AgentKind;
 use r2l_core::{
-    env::{
-        EnvPool, RolloutMode,
-        orchestrator::{R2lEnvHolder, R2lEnvPool},
-    },
+    env::{EnvPool, RolloutMode},
+    env_pools::{R2lEnvHolder, R2lEnvPool},
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
 };
 
@@ -62,7 +60,7 @@ impl OnPolicyAlgorithmBuilder {
     {
         let env_pool = self
             .env_pool_type
-            .to_r2l_pool(&self.device, env_builder, n_envs)?;
+            .build(&self.device, env_builder, n_envs)?;
         let env_description = env_pool.env_description();
         let agent = match &mut self.agent_type {
             AgentType::PPO(builder) => {

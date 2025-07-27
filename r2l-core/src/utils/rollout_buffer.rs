@@ -5,7 +5,7 @@ use bincode::{
 };
 use candle_core::{Device, Result, Tensor};
 use derive_more::Deref;
-use rand::seq::SliceRandom;
+use rand::{Rng, seq::SliceRandom};
 
 #[derive(Debug, Default, Clone)]
 pub struct RolloutBuffer {
@@ -116,18 +116,13 @@ impl RolloutBuffer {
     // TODO: we should get rid of the resetting probably and reset here
     pub fn set_states(
         &mut self,
-        states: Vec<(Tensor, Tensor, f32, f32, bool)>,
+        states: Vec<(Tensor, Tensor, f32, bool, f32)>,
         last_state: Tensor,
     ) {
-        for (state, action, reward, logp, done) in states {
-            self.states.push(state);
-            self.actions.push(action);
-            self.rewards.push(reward);
-            self.dones.push(done);
-            self.logps.push(logp);
+        for (state, action, reward, done, logp) in states {
+            self.push_step(state, action, reward, done, logp);
         }
-        self.states.push(last_state.clone());
-        self.last_state = Some(last_state);
+        self.set_last_state(last_state);
     }
 
     // TODO: this should be the last state
@@ -167,7 +162,8 @@ impl RolloutBuffer {
         (&self.states[index], &self.actions[index], self.logps[index])
     }
 
-    pub fn reset(&mut self, env: &mut impl Env, seed: u64) -> Result<Tensor> {
+    pub fn reset(&mut self, env: &mut impl Env) -> Result<Tensor> {
+        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         self.states.clear();
         self.actions.clear();
         self.rewards.clear();

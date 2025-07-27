@@ -9,10 +9,9 @@ use interprocess::local_socket::{
 };
 use r2l_core::{
     distributions::{Distribution, DistributionKind},
-    env::{
-        Env, run_rollout,
-        sub_processing_vec_env::{PacketToReceive, PacketToSend, receive_packet, send_packet},
-    },
+    env::Env,
+    env_pools::run_rollout,
+    ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     utils::rollout_buffer::RolloutBuffer,
 };
 use r2l_gym::GymEnv;
@@ -99,12 +98,10 @@ impl<E: Env> Rollout<E> {
                 distribution,
                 rollout_mode,
             } => {
-                run_rollout(
-                    &distribution,
-                    &mut self.env,
-                    rollout_mode,
-                    &mut self.rollout_buffer,
-                )?;
+                let state = self.rollout_buffer.reset(&mut self.env)?;
+                let (states, last_state) =
+                    run_rollout(&distribution, &mut self.env, rollout_mode, state)?;
+                self.rollout_buffer.set_states(states, last_state);
                 let packet: PacketToSend<D> = PacketToSend::RolloutResult {
                     rollout: self.rollout_buffer.clone(),
                 };
@@ -147,7 +144,7 @@ mod test {
     };
     use r2l_core::{
         distributions::diagonal_distribution::DiagGaussianDistribution,
-        env::sub_processing_vec_env::{PacketToReceive, PacketToSend, receive_packet, send_packet},
+        ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     };
     use r2l_gym::GymEnv;
     use std::io::BufReader;

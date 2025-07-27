@@ -3279,6 +3279,7 @@ dependencies = [
  "interprocess",
  "r2l-core",
  "r2l-gym",
+ "rand",
 ]
 
 [[package]]
