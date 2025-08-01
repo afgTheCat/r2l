@@ -24,24 +24,7 @@
 //! R2L has a number of crates. This one contains the neccessary infrastructure for the training
 //! loop by introducing common traits and structures.
 
-pub mod agents;
 pub mod distributions;
-pub mod env;
-pub mod env_pools;
-pub mod ipc;
-pub mod numeric;
-pub mod on_policy_algorithm;
 pub mod policies;
-pub mod rng;
-pub mod tensors;
 pub mod thread_safe_sequential;
 pub mod utils;
-
-use candle_core::Result;
-
-/// A learning algorithm. Currently only `OnPolicyAlgorithm` implements this trait, but in the
-/// future an off policy alternative is also going to implement it.
-/// TODO: would a replay/verify method be useful here?
-pub trait Algorithm {
-    fn train(&mut self) -> Result<()>;
-}

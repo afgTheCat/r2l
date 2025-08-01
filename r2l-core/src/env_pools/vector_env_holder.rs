@@ -5,11 +5,12 @@ use crate::{
     env_pools::{Env, single_step_env},
     utils::rollout_buffer::RolloutBuffer,
 };
-use candle_core::{Result, Tensor};
+use candle_core::{Device, Result, Tensor};
 
 pub struct VecEnvHolder<E: Env> {
     pub envs: Vec<E>,
     pub buffers: Vec<RolloutBuffer>,
+    pub device: Device,
 }
 
 impl<E: Env> VecEnvHolder<E> {
@@ -23,7 +24,7 @@ impl<E: Env> VecEnvHolder<E> {
             .envs
             .iter_mut()
             .zip(current_states.iter())
-            .map(|(env, state)| single_step_env(distr, state, env))
+            .map(|(env, state)| single_step_env(distr, state, env, &self.device))
             .collect::<Result<Vec<_>>>()?;
         // TODO: this is kinda jank like this. Maybe we need the previous state here?
         hooks.step_hook(distr, &mut states)?;
@@ -54,7 +55,7 @@ impl<E: Env> EnvHolder for VecEnvHolder<E> {
             .buffers
             .iter_mut()
             .enumerate()
-            .map(|(env_idx, rb)| rb.reset(&mut self.envs[env_idx]))
+            .map(|(env_idx, rb)| rb.reset(&mut self.envs[env_idx], &self.device))
             .collect::<Result<Vec<_>>>()?;
         let mut steps_taken = 0;
         let num_envs = self.envs.len();
@@ -85,8 +86,8 @@ impl<E: Env> EnvHolder for VecEnvHolder<E> {
     ) -> Result<Vec<RolloutBuffer>> {
         for (env_idx, buffer) in self.buffers.iter_mut().enumerate() {
             let env = &mut self.envs[env_idx];
-            let state = buffer.reset(env)?;
-            let (states, last_state) = run_rollout(distr, env, rollout_mode, state)?;
+            let state = buffer.reset(env, &self.device)?;
+            let (states, last_state) = run_rollout(distr, env, rollout_mode, state, &self.device)?;
             buffer.set_states(states, last_state);
         }
         Ok(self.buffers.clone())

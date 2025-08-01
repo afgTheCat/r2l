@@ -30,7 +30,7 @@ impl EnvBuilderTrait for String {
     type Env = GymEnv;
 
     fn build_env(&self, device: &Device) -> Result<Self::Env> {
-        GymEnv::new(&self, None, device)
+        Ok(GymEnv::new(&self, None))
     }
 }
 
@@ -279,7 +279,11 @@ impl VecPoolType {
                 let (buffers, envs) = env_builder.build_all_envs_and_buffers(device)?;
                 let env_description = envs[0].env_description();
                 Ok(R2lEnvPool {
-                    env_holder: R2lEnvHolder::Vec(VecEnvHolder { envs, buffers }),
+                    env_holder: R2lEnvHolder::Vec(VecEnvHolder {
+                        envs,
+                        buffers,
+                        device: device.clone(),
+                    }),
                     step_mode: StepMode::Async,
                     env_description,
                 })
@@ -309,7 +313,11 @@ impl VecPoolType {
                     _ => todo!(),
                 };
                 Ok(R2lEnvPool {
-                    env_holder: R2lEnvHolder::Vec(VecEnvHolder { envs, buffers }),
+                    env_holder: R2lEnvHolder::Vec(VecEnvHolder {
+                        envs,
+                        buffers,
+                        device: device.clone(),
+                    }),
                     step_mode: StepMode::Sequential(hooks),
                     env_description,
                 })
@@ -345,6 +353,7 @@ impl VecPoolType {
                                 env,
                                 task_rx,
                                 result_tx: result_tx.clone(),
+                                device: device.clone(),
                             };
                             worker.work(distr_lock);
                         });

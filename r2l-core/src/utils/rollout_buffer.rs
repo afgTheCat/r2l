@@ -162,7 +162,7 @@ impl RolloutBuffer {
         (&self.states[index], &self.actions[index], self.logps[index])
     }
 
-    pub fn reset(&mut self, env: &mut impl Env) -> Result<Tensor> {
+    pub fn reset(&mut self, env: &mut impl Env, device: &Device) -> Result<Tensor> {
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         self.states.clear();
         self.actions.clear();
@@ -172,7 +172,7 @@ impl RolloutBuffer {
         if let Some(last_state) = self.last_state.take() {
             Ok(last_state)
         } else {
-            env.reset(seed)
+            Ok(env.reset(seed).to_candle_tensor(device))
         }
     }
 }

@@ -9,10 +9,11 @@ use crate::{
         subproc_env_holder::SubprocHolder, thread_env_holder::ThreadHolder,
         vector_env_holder::VecEnvHolder,
     },
+    numeric::Buffer,
     rng::RNG,
     utils::rollout_buffer::RolloutBuffer,
 };
-use candle_core::{Result, Tensor};
+use candle_core::{Device, Result, Tensor};
 use enum_dispatch::enum_dispatch;
 use rand::Rng;
 
@@ -48,14 +49,17 @@ pub fn single_step_env(
     distr: &dyn Distribution,
     state: &Tensor,
     env: &mut impl Env,
+    device: &Device,
 ) -> Result<(Tensor, Tensor, f32, f32, bool)> {
     // TODO: unsqueezing here is kinda ugly, we probably need the dist to enforce some shape
     let (action, logp) = distr.get_action(&state.unsqueeze(0)?)?;
-    let (mut next_state, reward, terminated, trancuated) = env.step(&action)?;
+    let (next_state, reward, terminated, trancuated) =
+        env.step(&Buffer::from_candle_tensor(&action));
+    let mut next_state = next_state.to_candle_tensor(device);
     let done = terminated || trancuated;
     if done {
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-        next_state = env.reset(seed)?;
+        next_state = env.reset(seed).to_candle_tensor(device);
     }
     let logp: f32 = logp.squeeze(0)?.to_scalar()?;
     Ok((next_state, action, reward, logp, done))
@@ -67,8 +71,9 @@ pub fn single_step_env_with_buffer(
     state: &Tensor,
     env: &mut impl Env,
     rollout_buffer: &mut RolloutBuffer,
+    device: &Device,
 ) -> Result<(Tensor, bool)> {
-    let (next_state, action, reward, logp, done) = single_step_env(dist, state, env)?;
+    let (next_state, action, reward, logp, done) = single_step_env(dist, state, env, device)?;
     rollout_buffer.push_step(state.clone(), action, reward, done, logp);
     Ok((next_state, done))
 }
@@ -78,13 +83,15 @@ pub fn run_rollout(
     env: &mut impl Env,
     rollout_mode: RolloutMode,
     mut state: Tensor,
+    device: &Device,
 ) -> Result<(Vec<(Tensor, Tensor, f32, bool, f32)>, Tensor)> {
     let mut res = vec![];
     match rollout_mode {
         RolloutMode::EpisodeBound { n_episodes } => {
             // just a loop
             loop {
-                let (next_state, action, reward, logp, done) = single_step_env(distr, &state, env)?;
+                let (next_state, action, reward, logp, done) =
+                    single_step_env(distr, &state, env, device)?;
                 res.push((state.clone(), action, reward, done, logp));
                 state = next_state;
                 if res.len() >= n_episodes && done {
@@ -94,7 +101,8 @@ pub fn run_rollout(
         }
         RolloutMode::StepBound { n_steps } => {
             for _ in 0..n_steps {
-                let (next_state, action, reward, logp, done) = single_step_env(distr, &state, env)?;
+                let (next_state, action, reward, logp, done) =
+                    single_step_env(distr, &state, env, device)?;
                 res.push((state.clone(), action, reward, done, logp));
                 // buffer.push_step(state.clone(), action, reward, done, logp);
                 state = next_state;

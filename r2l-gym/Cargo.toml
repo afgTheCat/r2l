@@ -8,8 +8,7 @@ license.workspace = true
 readme = "README.md"
 
 [dependencies]
-r2l-core= { workspace = true }
-candle-core = { workspace = true }
+r2l-core = { workspace = true }
 pyo3 = { version = "0.24.1", features = ["auto-initialize", "abi3-py311"] } 
 
 [dev-dependencies]
