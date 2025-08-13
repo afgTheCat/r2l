@@ -4,7 +4,7 @@ pub mod vector_env_holder;
 
 use crate::{
     distributions::Distribution,
-    env::{Env, EnvPool, EnvironmentDescription, RolloutMode},
+    env::{Env, EnvPool, EnvironmentDescription, RolloutMode, SnapShot},
     env_pools::{
         subproc_env_holder::SubprocHolder, thread_env_holder::ThreadHolder,
         vector_env_holder::VecEnvHolder,
@@ -53,8 +53,12 @@ pub fn single_step_env(
 ) -> Result<(Tensor, Tensor, f32, f32, bool)> {
     // TODO: unsqueezing here is kinda ugly, we probably need the dist to enforce some shape
     let (action, logp) = distr.get_action(&state.unsqueeze(0)?)?;
-    let (next_state, reward, terminated, trancuated) =
-        env.step(&Buffer::from_candle_tensor(&action));
+    let SnapShot {
+        state: next_state,
+        reward,
+        terminated,
+        trancuated,
+    } = env.step(&Buffer::from_candle_tensor(&action));
     let mut next_state = next_state.to_candle_tensor(device);
     let done = terminated || trancuated;
     if done {
@@ -104,7 +108,6 @@ pub fn run_rollout(
                 let (next_state, action, reward, logp, done) =
                     single_step_env(distr, &state, env, device)?;
                 res.push((state.clone(), action, reward, done, logp));
-                // buffer.push_step(state.clone(), action, reward, done, logp);
                 state = next_state;
             }
         }

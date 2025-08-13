@@ -1,17 +1,29 @@
 pub mod diagonal_distribution;
 
-use burn::{prelude::Backend, tensor::Tensor};
+use burn::prelude::Backend;
 use enum_dispatch::enum_dispatch;
 use std::{f32, fmt::Debug};
 
-use crate::distributions::diagonal_distribution::DiagGaussianDistribution;
+use crate::{
+    distributions::diagonal_distribution::DiagGaussianDistribution,
+    env::{Action, Observation},
+};
 
+// TODO: I guess we should use Buffer here as well. Should this be a trait? I guess so
 #[enum_dispatch]
-pub trait Distribution<B: Backend>: Sync + Debug + 'static {
-    fn get_action(&self, observation: Tensor<B, 2>) -> (Tensor<B, 2>, Tensor<B, 1>);
-    fn log_probs(&self, states: Tensor<B, 2>, actions: Tensor<B, 2>) -> Tensor<B, 1>;
+// get action for a single observation
+pub trait Distribution<O: Observation, A: Action>: Sync + Debug + 'static {
+    fn get_action(&self, observation: O) -> (A, f32);
+
+    // get logps for more than one states/action pairs
+    fn log_probs(&self, states: &[O], actions: &[A]) -> Vec<f32>;
+
+    // TODO: re evaluate this
     fn std(&self) -> f32;
-    fn entropy(&self) -> Tensor<B, 1>;
+
+    // TODO: entropy is also probably something
+    fn entropy(&self) -> f32;
+
     fn resample_noise(&mut self) {}
 }
 
@@ -21,12 +33,12 @@ pub enum DistribnutionKind<B: Backend> {
     Diagonal(DiagGaussianDistribution<B>),
 }
 
-impl<B: Backend> Distribution<B> for DistribnutionKind<B> {
-    fn get_action(&self, observation: Tensor<B, 2>) -> (Tensor<B, 2>, Tensor<B, 1>) {
+impl<B: Backend, O: Observation, A: Action> Distribution<O, A> for DistribnutionKind<B> {
+    fn get_action(&self, observation: O) -> (A, f32) {
         todo!()
     }
 
-    fn log_probs(&self, states: Tensor<B, 2>, actions: Tensor<B, 2>) -> Tensor<B, 1> {
+    fn log_probs(&self, states: &[O], actions: &[A]) -> Vec<f32> {
         todo!()
     }
 
@@ -34,7 +46,7 @@ impl<B: Backend> Distribution<B> for DistribnutionKind<B> {
         todo!()
     }
 
-    fn entropy(&self) -> Tensor<B, 1> {
+    fn entropy(&self) -> f32 {
         todo!()
     }
 

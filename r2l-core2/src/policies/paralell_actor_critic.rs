@@ -1,11 +1,9 @@
-use burn::{
-    optim::{AdamW, SimpleOptimizer, adaptor::OptimizerAdaptor},
-    prelude::Backend,
-    tensor::backend::AutodiffBackend,
-};
+use burn::tensor::backend::AutodiffBackend;
 
 use crate::{
-    distributions::DistribnutionKind, policies::Policy,
+    distributions::DistribnutionKind,
+    env::{Action, Observation},
+    policies::Policy,
     thread_safe_sequential::ThreadSafeSequential,
 };
 
@@ -17,7 +15,7 @@ pub struct ParalellActorCritic<B: AutodiffBackend> {
     // optimizer: OptimizerAdaptor<AdamW>,
 }
 
-impl<B: AutodiffBackend> Policy<B> for ParalellActorCritic<B> {
+impl<B: AutodiffBackend, O: Observation, A: Action> Policy<B, O, A> for ParalellActorCritic<B> {
     type Dist = DistribnutionKind<B>;
 
     fn distribution(&self) -> &Self::Dist {

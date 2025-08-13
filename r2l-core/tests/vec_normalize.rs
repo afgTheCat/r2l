@@ -1,7 +1,7 @@
 use candle_core::{Device, Result, Tensor};
 use r2l_api::builders::env_pool::{NormalizerOptions, SequentialEnvHookTypes, VecPoolType};
 use r2l_core::{
-    env::{Env, EnvironmentDescription, Space},
+    env::{Env, EnvironmentDescription, SnapShot, Space},
     numeric::Buffer,
 };
 
@@ -22,18 +22,18 @@ impl DummyRewardEnv {
 }
 
 impl Env for DummyRewardEnv {
-    fn step(&mut self, action: &Buffer) -> (Buffer, f32, bool, bool) {
+    fn step(&mut self, action: &Buffer) -> SnapShot {
         self.t += 1;
         let index = (self.t as usize + self.returned_reward_idx) % 4;
         let returned_value = self.returned_rewards[index];
         let truncated = self.t == 4;
         let state = Tensor::full(returned_value, (), &Device::Cpu).unwrap();
-        (
-            Buffer::from_candle_tensor(&state),
-            returned_value,
-            false,
-            truncated,
-        )
+        SnapShot {
+            state: Buffer::from_candle_tensor(&state),
+            reward: returned_value,
+            terminated: false,
+            trancuated: truncated,
+        }
     }
 
     fn reset(&mut self, seed: u64) -> Buffer {

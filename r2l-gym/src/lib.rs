@@ -3,7 +3,7 @@ use pyo3::{
     types::{PyAnyMethods, PyDict},
 };
 use r2l_core::{
-    env::{Env, EnvironmentDescription, Space},
+    env::{Env, EnvironmentDescription, SnapShot, Space},
     numeric::{Buffer, DType},
 };
 
@@ -77,17 +77,18 @@ impl GymEnv {
 
 impl Env for GymEnv {
     fn reset(&mut self, seed: u64) -> Buffer {
-        let state: Vec<f32> = Python::with_gil(|py| {
+        Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
             kwargs.set_item("seed", seed)?;
             let state = self.env.call_method(py, "reset", (), Some(&kwargs))?;
-            state.bind(py).get_item(0)?.extract()
+            let step = state.bind(py);
+            let state = step.get_item(0)?.extract()?;
+            PyResult::Ok(Buffer::from_vec(state, DType::F32))
         })
-        .unwrap();
-        Buffer::from_vec(state, DType::F32)
+        .unwrap()
     }
 
-    fn step(&mut self, action: &Buffer) -> (Buffer, f32, bool, bool) {
+    fn step(&mut self, action: &Buffer) -> SnapShot {
         Python::with_gil(|py| {
             let step = match &self.action_space {
                 Space::Continous {
@@ -111,8 +112,13 @@ impl Env for GymEnv {
             let state = Buffer::from_vec(state, DType::F32);
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
-            let truncated: bool = step.get_item(3)?.extract()?;
-            PyResult::Ok((state, reward, terminated, truncated))
+            let trancuated: bool = step.get_item(3)?.extract()?;
+            PyResult::Ok(SnapShot {
+                state,
+                reward,
+                terminated,
+                trancuated,
+            })
         })
         .unwrap()
     }

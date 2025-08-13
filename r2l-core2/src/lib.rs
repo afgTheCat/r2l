@@ -25,6 +25,8 @@
 //! loop by introducing common traits and structures.
 
 pub mod distributions;
+pub mod env;
+pub mod numeric;
 pub mod policies;
 pub mod thread_safe_sequential;
 pub mod utils;

@@ -1,6 +1,6 @@
-use crate::{distributions::Distribution, numeric::Buffer, utils::rollout_buffer::RolloutBuffer};
+use crate::{distributions::Distribution, numeric::Buffer};
 use bincode::{Decode, Encode};
-use candle_core::{Result, WithDType};
+use burn::{prelude::Backend, tensor::Tensor};
 
 #[derive(Debug, Clone)]
 pub enum Space {
@@ -53,16 +53,33 @@ impl EnvironmentDescription {
 }
 
 // TODO: This is a useful thing buffer needs to be go
-pub struct SnapShot<T: WithDType = f32> {
-    pub state: Buffer<T>,
+pub struct SnapShot<Obs: Observation> {
+    pub state: Obs,
     pub reward: f32,
     pub terminated: bool,
     pub trancuated: bool,
 }
 
+// we probably also want some base types here since to to_tensor is and clamp is
+pub trait Observation {
+    fn to_tensor<B: Backend>(&self) -> Tensor<B, 1>;
+
+    fn from_tensor<B: Backend>(t: Tensor<B, 1>) -> Self;
+}
+
+pub trait Action {
+    fn to_tensor<B: Backend>(&self) -> Tensor<B, 1>;
+
+    fn from_tensor<B: Backend>(t: Tensor<B, 1>) -> Self;
+}
+
 pub trait Env {
-    fn reset(&mut self, seed: u64) -> Buffer;
-    fn step(&mut self, action: &Buffer) -> SnapShot;
+    type Obs: Observation;
+    type Act: Action;
+
+    // reset returns an observation, which should be an associated type, not the buffer itself
+    fn reset(&mut self, seed: u64) -> Self::Obs;
+    fn step(&mut self, action: &Self::Act) -> SnapShot<Self::Obs>;
     fn env_description(&self) -> EnvironmentDescription;
 }
 
@@ -72,13 +89,13 @@ pub enum RolloutMode {
     StepBound { n_steps: usize },
 }
 
-// TODO: we may want to get rid of the env pool trait and submerge it into the env trait
+// This is mostly internal to r2l
 pub trait EnvPool {
-    fn collect_rollouts<D: Distribution>(
+    fn collect_rollouts<O: Observation, A: Action, D: Distribution<O, A>>(
         &mut self,
-        distribution: &D,
+        distribution: D,
         rollout_mode: RolloutMode,
-    ) -> Result<Vec<RolloutBuffer>>;
+    ) -> Vec<SnapShot<O>>;
 
     fn env_description(&self) -> EnvironmentDescription;
 

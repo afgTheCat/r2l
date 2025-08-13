@@ -2,10 +2,13 @@ pub mod paralell_actor_critic;
 
 use burn::{prelude::Backend, tensor::Tensor};
 
-use crate::distributions::Distribution;
+use crate::{
+    distributions::Distribution,
+    env::{Action, Observation},
+};
 
-pub trait Policy<B: Backend> {
-    type Dist: Distribution<B>;
+pub trait Policy<B: Backend, O: Observation, A: Action> {
+    type Dist: Distribution<O, A>;
 
     // retrieves the underlying distribution
     fn distribution(&self) -> &Self::Dist;
