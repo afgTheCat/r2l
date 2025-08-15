@@ -24,9 +24,12 @@
 //! R2L has a number of crates. This one contains the neccessary infrastructure for the training
 //! loop by introducing common traits and structures.
 
+pub mod agent;
 pub mod distributions;
 pub mod env;
+pub mod env_pools;
 pub mod numeric;
+pub mod on_policy_algorithm;
 pub mod policies;
 pub mod thread_safe_sequential;
 pub mod utils;

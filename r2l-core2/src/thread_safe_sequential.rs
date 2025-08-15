@@ -24,7 +24,7 @@ impl<B: Backend> ThreadSafeLinear<B> {
 #[derive(Debug, Clone, Module)]
 pub struct ReluAct;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum ThreadSafeLayer<B: Backend> {
     Activation(ReluAct),
     Layer(ThreadSafeLinear<B>),
@@ -39,7 +39,7 @@ impl<B: Backend> ThreadSafeLayer<B> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ThreadSafeSequential<B: Backend> {
     layers: Vec<ThreadSafeLayer<B>>,
 }

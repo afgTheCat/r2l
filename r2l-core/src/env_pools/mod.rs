@@ -27,6 +27,7 @@ pub trait SequentialVecEnvHooks {
     fn post_step_hook(&mut self, last_states: &mut Vec<Tensor>) -> candle_core::Result<bool>;
 }
 
+// TODO: do we even need this?
 #[enum_dispatch]
 pub trait EnvHolder {
     fn num_envs(&self) -> usize;

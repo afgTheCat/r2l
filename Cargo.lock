@@ -5252,6 +5252,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "r2l-agents2"
+version = "0.0.1"
+dependencies = [
+ "burn",
+ "r2l-core2",
+ "r2l-distributions",
+ "r2l-policies",
+]
+
+[[package]]
 name = "r2l-api"
 version = "0.0.1"
 dependencies = [
@@ -5305,6 +5315,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "r2l-distributions"
+version = "0.0.1"
+dependencies = [
+ "burn",
+ "r2l-core2",
+]
+
+[[package]]
+name = "r2l-env-pools"
+version = "0.0.1"
+dependencies = [
+ "r2l-core2",
+]
+
+[[package]]
 name = "r2l-examples"
 version = "0.0.1"
 dependencies = [
@@ -5340,6 +5365,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "r2l-policies"
+version = "0.0.1"
+dependencies = [
+ "burn",
+ "r2l-core2",
+ "r2l-distributions",
 ]
 
 [[package]]

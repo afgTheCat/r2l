@@ -1,0 +1,13 @@
+[package]
+name = "r2l-agents2"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+r2l-core2 = { workspace = true }
+r2l-distributions = { workspace = true }
+r2l-policies = { workspace = true }
+burn = { workspace = true }

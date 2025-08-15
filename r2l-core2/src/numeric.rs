@@ -13,14 +13,14 @@ pub enum DType {
 }
 
 #[derive(Debug, Clone)]
-pub struct Buffer<T = f32> {
+pub struct Buffer<T: Clone = f32> {
     pub data: Vec<T>,
     pub shape: Vec<usize>,
     // maybe redundant
     pub dtype: DType,
 }
 
-impl<T> Observation for Buffer<T> {
+impl<T: Clone> Observation for Buffer<T> {
     fn to_tensor<B: burn::prelude::Backend>(&self) -> Tensor<B, 1> {
         todo!()
     }

@@ -1,16 +1,16 @@
-use crate::{
-    distributions::Distribution,
-    env::{Action, Observation},
-    thread_safe_sequential::ThreadSafeSequential,
-    utils::tensor_sqr,
-};
 use burn::{
     prelude::Backend,
     tensor::{Distribution as TDistribution, Tensor, cast::ToElement},
 };
 use core::f32;
+use r2l_core2::{
+    distributions::Distribution,
+    env::{Action, Observation},
+    thread_safe_sequential::ThreadSafeSequential,
+    utils::tensor_sqr,
+};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiagGaussianDistribution<B: Backend> {
     noise: Tensor<B, 2>, // TODO:
     log_std: Tensor<B, 2>,

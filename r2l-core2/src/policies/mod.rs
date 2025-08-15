@@ -1,18 +1,23 @@
-pub mod paralell_actor_critic;
-
-use burn::{prelude::Backend, tensor::Tensor};
-
 use crate::{
     distributions::Distribution,
     env::{Action, Observation},
 };
 
-pub trait Policy<B: Backend, O: Observation, A: Action> {
-    type Dist: Distribution<O, A>;
+pub trait Policy {
+    type Obs: Observation;
+    type Act: Action;
+    type Dist: Distribution<Self::Obs, Self::Act>;
+
+    // The losses. We will need a trait for that, maybe
+    type Losses;
 
     // retrieves the underlying distribution
-    fn distribution(&self) -> &Self::Dist;
+    fn distribution(&self) -> Self::Dist;
 
-    // updates the policy according to the underlying thing
-    fn update(&mut self, policy_loss: Tensor<B, 2>, value_loss: Tensor<B, 2>);
+    // updates the policy according to the losses! there are a couple of issues with thi
+    fn update(&mut self, losses: Self::Losses);
+}
+
+pub trait PolicyWithValueFunction: Policy {
+    fn calculate_value(&self, observation: <Self as Policy>::Obs) -> f32;
 }

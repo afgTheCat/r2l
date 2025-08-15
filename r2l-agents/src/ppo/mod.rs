@@ -37,7 +37,10 @@ pub struct PPO<P: PolicyWithValueFunction> {
 }
 
 impl<P: PolicyWithValueFunction> PPO<P> {
-    // batch loop
+    // batch loop. It is kinda retarded that we crete a new RolloutBatchIterator for this tbh
+    // we could do batches on the buffer and we would not need to crete this iteratir. Since we
+    // already gonna reset the rollout batches that seems the me the best api that we can do.
+    // Another thing that we achieve that way is that we dont have to normalize shit probably.
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         loop {
             let Some(batch) = batch_iter.next() else {
