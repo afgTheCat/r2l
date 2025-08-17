@@ -19,6 +19,7 @@ pub struct ParalellActorCriticLosses<B: AutodiffBackend> {
 impl<B: AutodiffBackend> Policy for ParalellActorCritic<B> {
     type Obs = Tensor<B, 2>;
     type Act = Tensor<B, 2>;
+    type Logp = Tensor<B, 2>;
     type Losses = ();
     type Dist = DistribnutionKind<B>;
 

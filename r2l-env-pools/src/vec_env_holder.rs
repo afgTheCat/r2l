@@ -1,6 +1,6 @@
 use r2l_core2::{
     distributions::Distribution,
-    env::{Action, Env, Observation},
+    env::{Action, Env, Logp, Observation},
     utils::rollout_buffers::RolloutBufferV2,
 };
 
@@ -18,7 +18,7 @@ impl<E: Env> VecEnvHolder<E> {
     }
 
     // TODO: will probably simplify in the future
-    fn sequential_rollout<O: Observation, A: Action, D: Distribution<O, A>>(
+    fn sequential_rollout<O: Observation, A: Action, L: Logp, D: Distribution<O, A, L>>(
         &mut self,
         distr: D,
         rollout_mode: RolloutMode,

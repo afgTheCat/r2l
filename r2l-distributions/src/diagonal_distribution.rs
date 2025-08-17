@@ -5,7 +5,7 @@ use burn::{
 use core::f32;
 use r2l_core2::{
     distributions::Distribution,
-    env::{Action, Observation},
+    env::{Action, Logp, Observation},
     thread_safe_sequential::ThreadSafeSequential,
     utils::tensor_sqr,
 };
@@ -31,7 +31,9 @@ impl<B: Backend> DiagGaussianDistribution<B> {
     }
 }
 
-impl<B: Backend, O: Observation, A: Action> Distribution<O, A> for DiagGaussianDistribution<B> {
+impl<B: Backend, O: Observation, A: Action, L: Logp> Distribution<O, A, L>
+    for DiagGaussianDistribution<B>
+{
     fn get_action(&self, observation: O) -> (A, f32) {
         let observation = observation.to_tensor::<B>().unsqueeze();
         let mu = self.mu_net.forward(observation.clone());
@@ -50,7 +52,7 @@ impl<B: Backend, O: Observation, A: Action> Distribution<O, A> for DiagGaussianD
     }
 
     // TODO: it is a bit wasetful to send the state twice through the nn
-    fn log_probs(&self, states: &[O], actions: &[A]) -> Vec<f32> {
+    fn log_probs(&self, states: &[O], actions: &[A]) -> Vec<L> {
         let observations = states
             .iter()
             .map(|obs| obs.to_tensor::<B>())
@@ -62,7 +64,8 @@ impl<B: Backend, O: Observation, A: Action> Distribution<O, A> for DiagGaussianD
             .collect::<Vec<_>>();
         let actions: Tensor<B, 2> = Tensor::stack(actions, 0);
         let logps = self.logp_from_t(observations, actions);
-        logps.to_data().to_vec().unwrap()
+        // logps.to_data().to_vec().unwrap()
+        todo!()
     }
 
     fn entropy(&self) -> f32 {

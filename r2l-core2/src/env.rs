@@ -78,11 +78,11 @@ pub trait Observation: Clone {
 }
 
 impl<B: Backend> Observation for Tensor<B, 2> {
-    fn to_tensor<C: Backend>(&self) -> Tensor<C, 1> {
+    fn to_tensor<B2: Backend>(&self) -> Tensor<B2, 1> {
         todo!()
     }
 
-    fn from_tensor<C: Backend>(t: Tensor<C, 1>) -> Self {
+    fn from_tensor<B2: Backend>(t: Tensor<B2, 1>) -> Self {
         todo!()
     }
 }
@@ -94,11 +94,27 @@ pub trait Action: Clone {
 }
 
 impl<B: Backend> Action for Tensor<B, 2> {
-    fn to_tensor<C: Backend>(&self) -> Tensor<C, 1> {
+    fn to_tensor<B2: Backend>(&self) -> Tensor<B2, 1> {
         todo!()
     }
 
-    fn from_tensor<C: Backend>(t: Tensor<C, 1>) -> Self {
+    fn from_tensor<B2: Backend>(t: Tensor<B2, 1>) -> Self {
+        todo!()
+    }
+}
+
+pub trait Logp: Clone {
+    fn to_tensor<B: Backend>(&self) -> Tensor<B, 1>;
+
+    fn from_tensor<B: Backend>(t: Tensor<B, 1>) -> Self;
+}
+
+impl<B: Backend> Logp for Tensor<B, 2> {
+    fn to_tensor<B2: Backend>(&self) -> Tensor<B2, 1> {
+        todo!()
+    }
+
+    fn from_tensor<B2: Backend>(t: Tensor<B2, 1>) -> Self {
         todo!()
     }
 }
@@ -118,7 +134,7 @@ pub trait EnvPool {
     type Obs: Observation;
     type Act: Action;
 
-    fn collect_rollouts<O: Observation, A: Action, D: Distribution<O, A>>(
+    fn collect_rollouts<L: Logp, O: Observation, A: Action, D: Distribution<O, A, L>>(
         &mut self,
         distribution: D,
     ) -> Vec<SnapShot<Self::Obs, Self::Act>>

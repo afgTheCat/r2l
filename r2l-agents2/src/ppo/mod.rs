@@ -1,25 +1,27 @@
 use burn::{
     prelude::Backend,
-    tensor::{Tensor, backend::AutodiffBackend},
+    tensor::{Tensor, TensorData, backend::AutodiffBackend},
 };
 use r2l_core2::{
     agent::Agent,
+    distributions::Distribution,
     env::SnapShot,
     policies::{Policy, PolicyWithValueFunction},
+    utils::rollout_buffers::RolloutBufferV2,
 };
 use r2l_policies::ParalellActorCritic;
 
 trait PPOBurnPolicy:
     PolicyWithValueFunction<
-        Obs: From<Tensor<Self::B, 2>> + Into<Tensor<Self::B, 2>>,
-        Act: From<Tensor<Self::B, 2>> + Into<Tensor<Self::B, 2>>,
+        Obs: From<Tensor<Self::Back, 2>> + Into<Tensor<Self::Back, 2>>,
+        Act: From<Tensor<Self::Back, 2>> + Into<Tensor<Self::Back, 2>>,
     >
 {
-    type B: Backend;
+    type Back: Backend;
 }
 
 impl<B: AutodiffBackend> PPOBurnPolicy for ParalellActorCritic<B> {
-    type B = B;
+    type Back = B;
 }
 
 pub struct PPO<P: Policy> {
@@ -29,7 +31,14 @@ pub struct PPO<P: Policy> {
     pub lambda: f32,
 }
 
-impl<P: PPOBurnPolicy> PPO<P> {}
+impl<P: PPOBurnPolicy> PPO<P> {
+    fn batch_loop(&mut self, rb: &mut RolloutBufferV2<P::Obs, P::Act>) {
+        while let Some(batch) = rb.get_batch() {
+            let distribution = self.distribution();
+            let logp = distribution.log_probs(&batch.observations, &batch.actions);
+        }
+    }
+}
 
 impl<P: PPOBurnPolicy> Agent for PPO<P> {
     type Obs = P::Obs;

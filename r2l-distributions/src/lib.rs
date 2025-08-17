@@ -2,7 +2,7 @@ use crate::diagonal_distribution::DiagGaussianDistribution;
 use burn::prelude::Backend;
 use r2l_core2::{
     distributions::Distribution,
-    env::{Action, Observation},
+    env::{Action, Logp, Observation},
 };
 mod diagonal_distribution;
 
@@ -12,12 +12,14 @@ pub enum DistribnutionKind<B: Backend> {
     Diagonal(DiagGaussianDistribution<B>),
 }
 
-impl<B: Backend, O: Observation, A: Action> Distribution<O, A> for DistribnutionKind<B> {
+impl<B: Backend, O: Observation, A: Action, L: Logp> Distribution<O, A, L>
+    for DistribnutionKind<B>
+{
     fn get_action(&self, observation: O) -> (A, f32) {
         todo!()
     }
 
-    fn log_probs(&self, states: &[O], actions: &[A]) -> Vec<f32> {
+    fn log_probs(&self, states: &[O], actions: &[A]) -> Vec<L> {
         todo!()
     }
 

@@ -4,9 +4,19 @@ use crate::{
 };
 
 // This rollout buffer thing needs a bit of rethinking
+// Another question is whether we want to deal with Observation and Action having different types
 pub struct RolloutBufferV2<O: Observation, A: Action> {
     pub snapshots: Vec<SnapShot<O, A>>, // snapshots
     pub last_state: Option<O>,          // last state that we ended up in
+}
+
+// This is actually fine like this, the implementor can decide what the datatype should be
+pub struct Batch<O: Observation, A: Action> {
+    pub observations: Vec<O>,
+    pub actions: Vec<A>,
+    pub returns: Vec<f32>,
+    pub advantages: Vec<f32>,
+    pub logp_old: Vec<f32>,
 }
 
 impl<O: Observation, A: Action> RolloutBufferV2<O, A> {
@@ -51,5 +61,9 @@ impl<O: Observation, A: Action> RolloutBufferV2<O, A> {
             returns[i] = last_gae_lam + values[i];
         }
         (advantages, returns)
+    }
+
+    pub fn get_batch(&mut self) -> Option<Batch<O, A>> {
+        todo!()
     }
 }

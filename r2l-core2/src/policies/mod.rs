@@ -1,12 +1,13 @@
 use crate::{
     distributions::Distribution,
-    env::{Action, Observation},
+    env::{Action, Logp, Observation},
 };
 
 pub trait Policy {
     type Obs: Observation;
     type Act: Action;
-    type Dist: Distribution<Self::Obs, Self::Act>;
+    type Logp: Logp;
+    type Dist: Distribution<Self::Obs, Self::Act, Self::Logp>;
 
     // The losses. We will need a trait for that, maybe
     type Losses;
