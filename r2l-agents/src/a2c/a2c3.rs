@@ -1,19 +1,17 @@
-use crate::ppo::hooks::{HookResult, PPOBatchData};
-use candle_core::{Device, Result, Tensor};
+use crate::ppo::hooks::HookResult;
+use candle_core::{Device, Result};
 use r2l_core::{
     agents::Agent2,
     distributions::Distribution,
     policies::{
         ValueFunction,
-        learning_modules::{LearningModule, PolicyValuesLosses},
+        learning_modules::{LearningModule, LearningModuleKind, PolicyValuesLosses},
     },
-    tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
+    tensors::{PolicyLoss, ValueLoss},
     utils::rollout_buffer::{
-        Advantages, Returns, RolloutBatch, RolloutBatchIterator, RolloutBuffer,
-        calculate_advantages_and_returns2,
+        Advantages, Returns, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns2,
     },
 };
-use std::ops::Deref;
 
 macro_rules! process_hook_result {
     ($hook_res:expr) => {
@@ -25,6 +23,8 @@ macro_rules! process_hook_result {
 }
 
 pub trait A2C3LearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
+
+impl A2C3LearningModule for LearningModuleKind {}
 
 pub trait A2C3Hooks<LM: A2C3LearningModule> {
     fn before_learning_hook(

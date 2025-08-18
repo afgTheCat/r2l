@@ -11,7 +11,7 @@ use r2l_agents::AgentKind;
 use r2l_core::{
     env::{EnvPool, RolloutMode},
     env_pools::{R2lEnvHolder, R2lEnvPool},
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
+    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm2, OnPolicyHooks},
 };
 
 pub enum AgentType {
@@ -54,7 +54,7 @@ impl OnPolicyAlgorithmBuilder {
         mut self,
         env_builder: EB,
         n_envs: usize,
-    ) -> Result<OnPolicyAlgorithm<R2lEnvPool<R2lEnvHolder<EB::Env>>, AgentKind>>
+    ) -> Result<OnPolicyAlgorithm2<R2lEnvPool<R2lEnvHolder<EB::Env>>, AgentKind>>
     where
         EB::Env: Sync + 'static,
     {
@@ -76,7 +76,7 @@ impl OnPolicyAlgorithmBuilder {
                 AgentKind::PPO2(ppo)
             }
         };
-        Ok(OnPolicyAlgorithm {
+        Ok(OnPolicyAlgorithm2 {
             env_pool,
             agent,
             learning_schedule: self.learning_schedule,

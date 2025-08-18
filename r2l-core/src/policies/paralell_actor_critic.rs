@@ -1,4 +1,4 @@
-use super::{Policy, PolicyWithValueFunction};
+// use super::{Policy, PolicyWithValueFunction};
 use crate::policies::OptimizerWithMaxGrad;
 use crate::{distributions::DistributionKind, thread_safe_sequential::ThreadSafeSequential};
 use candle_core::{Result, Tensor};
@@ -31,23 +31,23 @@ impl ParalellActorCritic {
     }
 }
 
-// TODO: just for debugging
-impl Policy for ParalellActorCritic {
-    type Dist = DistributionKind;
-
-    fn distribution(&self) -> &Self::Dist {
-        &self.distribution
-    }
-
-    fn update(&mut self, policy_loss: &Tensor, value_loss: &Tensor) -> Result<()> {
-        let loss = policy_loss.add(value_loss)?;
-        self.optimizer_with_grad.backward_step(&loss)?;
-        Ok(())
-    }
-}
-
-impl PolicyWithValueFunction for ParalellActorCritic {
-    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
-        self.value_net.forward(observation)?.squeeze(1)
-    }
-}
+// // TODO: just for debugging
+// impl Policy for ParalellActorCritic {
+//     type Dist = DistributionKind;
+//
+//     fn distribution(&self) -> &Self::Dist {
+//         &self.distribution
+//     }
+//
+//     fn update(&mut self, policy_loss: &Tensor, value_loss: &Tensor) -> Result<()> {
+//         let loss = policy_loss.add(value_loss)?;
+//         self.optimizer_with_grad.backward_step(&loss)?;
+//         Ok(())
+//     }
+// }
+//
+// impl PolicyWithValueFunction for ParalellActorCritic {
+//     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
+//         self.value_net.forward(observation)?.squeeze(1)
+//     }
+// }

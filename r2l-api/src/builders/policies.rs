@@ -40,8 +40,8 @@ impl PPODistributionKind {
     ) -> Result<DistributionKind> {
         let action_size = env_description.action_size();
         let observation_size = env_description.observation_size();
-        let log_std = vb.get(action_size, "log_std")?;
         let layers = &[&hidden_layers[..], &[action_size]].concat();
+        let log_std = vb.get(action_size, "log_std")?;
         let distr =
             DiagGaussianDistribution::build(observation_size, layers, &vb, log_std, "policy")?;
         Ok(DistributionKind::DiagGaussian(distr))

@@ -1,4 +1,4 @@
-use super::{Policy, PolicyWithValueFunction};
+// use super::{Policy, PolicyWithValueFunction};
 use crate::{
     distributions::DistributionKind, policies::OptimizerWithMaxGrad,
     thread_safe_sequential::ThreadSafeSequential,
@@ -20,22 +20,22 @@ impl DecoupledActorCritic {
     }
 }
 
-impl Policy for DecoupledActorCritic {
-    type Dist = DistributionKind;
-
-    fn distribution(&self) -> &Self::Dist {
-        &self.distribution
-    }
-
-    fn update(&mut self, policy_loss: &Tensor, value_loss: &Tensor) -> Result<()> {
-        self.policy_optimizer_with_grad.backward_step(policy_loss)?;
-        self.value_optimizer_with_grad.backward_step(value_loss)?;
-        Ok(())
-    }
-}
-
-impl PolicyWithValueFunction for DecoupledActorCritic {
-    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
-        self.value_net.forward(observation)?.squeeze(1)
-    }
-}
+// impl Policy for DecoupledActorCritic {
+//     type Dist = DistributionKind;
+//
+//     fn distribution(&self) -> &Self::Dist {
+//         &self.distribution
+//     }
+//
+//     fn update(&mut self, policy_loss: &Tensor, value_loss: &Tensor) -> Result<()> {
+//         self.policy_optimizer_with_grad.backward_step(policy_loss)?;
+//         self.value_optimizer_with_grad.backward_step(value_loss)?;
+//         Ok(())
+//     }
+// }
+//
+// impl PolicyWithValueFunction for DecoupledActorCritic {
+//     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
+//         self.value_net.forward(observation)?.squeeze(1)
+//     }
+// }

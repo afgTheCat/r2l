@@ -1,10 +1,11 @@
+use candle_core::{Result, Tensor};
+use candle_nn::Module;
+
 use crate::{
     policies::{OptimizerWithMaxGrad, ValueFunction},
     tensors::{PolicyLoss, ValueLoss},
     thread_safe_sequential::ThreadSafeSequential,
 };
-use candle_core::{Result, Tensor};
-use candle_nn::Module;
 
 // convinience trait
 pub trait LearningModule {
@@ -13,7 +14,7 @@ pub trait LearningModule {
     fn update(&mut self, losses: Self::Losses) -> Result<()>;
 }
 
-// I guess cloning is fine here
+// I guess cloning is fine here, hope it does
 pub struct PolicyValuesLosses {
     pub policy_loss: PolicyLoss,
     pub value_loss: ValueLoss,
@@ -37,6 +38,7 @@ impl LearningModule for DecoupledActorCriticLM {
     }
 }
 
+// TODO: maybe value function could be a subtrait on LearningModule?
 impl ValueFunction for DecoupledActorCriticLM {
     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
         self.value_net.forward(observation)?.squeeze(1)
@@ -44,8 +46,8 @@ impl ValueFunction for DecoupledActorCriticLM {
 }
 
 pub struct ParalellActorCriticLM {
-    value_net: ThreadSafeSequential,
-    optimizer_with_grad: OptimizerWithMaxGrad,
+    pub value_net: ThreadSafeSequential,
+    pub optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
 impl LearningModule for ParalellActorCriticLM {
@@ -61,5 +63,30 @@ impl LearningModule for ParalellActorCriticLM {
 impl ValueFunction for ParalellActorCriticLM {
     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
         self.value_net.forward(observation)?.squeeze(1)
+    }
+}
+
+pub enum LearningModuleKind {
+    Decoupled(DecoupledActorCriticLM),
+    Paralell(ParalellActorCriticLM),
+}
+
+impl LearningModule for LearningModuleKind {
+    type Losses = PolicyValuesLosses;
+
+    fn update(&mut self, losses: Self::Losses) -> Result<()> {
+        match self {
+            Self::Decoupled(decoupled) => decoupled.update(losses),
+            Self::Paralell(paralell) => paralell.update(losses),
+        }
+    }
+}
+
+impl ValueFunction for LearningModuleKind {
+    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
+        match self {
+            Self::Decoupled(decoupled) => decoupled.calculate_values(observation),
+            Self::Paralell(paralell) => paralell.calculate_values(observation),
+        }
     }
 }

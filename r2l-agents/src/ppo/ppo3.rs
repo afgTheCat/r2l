@@ -5,7 +5,7 @@ use r2l_core::{
     distributions::Distribution,
     policies::{
         ValueFunction,
-        learning_modules::{LearningModule, PolicyValuesLosses},
+        learning_modules::{LearningModule, LearningModuleKind, PolicyValuesLosses},
     },
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
     utils::rollout_buffer::{
@@ -25,6 +25,8 @@ macro_rules! process_hook_result {
 }
 
 pub trait PPO3LearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
+
+impl PPO3LearningModule for LearningModuleKind {}
 
 pub trait PPP3HooksTrait<LM: PPO3LearningModule> {
     fn before_learning_hook(

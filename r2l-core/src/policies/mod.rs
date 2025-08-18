@@ -37,24 +37,24 @@ fn clip_grad(t: &Tensor, varmap: &VarMap, max_norm: f32) -> Result<GradStore> {
     Ok(grad_store)
 }
 
-pub trait Policy: Debug {
-    type Dist: Distribution;
-
-    // retrieves the underlying distribution
-    fn distribution(&self) -> &Self::Dist;
-
-    // updates the policy according to the underlying thing
-    fn update(&mut self, policy_loss: &Tensor, value_loss: &Tensor) -> Result<()>;
-}
+// pub trait Policy: Debug {
+//     type Dist: Distribution;
+//
+//     // retrieves the underlying distribution
+//     fn distribution(&self) -> &Self::Dist;
+//
+//     // updates the policy according to the underlying thing
+//     fn update(&mut self, policy_loss: &Tensor, value_loss: &Tensor) -> Result<()>;
+// }
 
 pub trait ValueFunction {
     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor>;
 }
 
-pub trait PolicyWithValueFunction: Policy {
-    // some just needs value function
-    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor>;
-}
+// pub trait PolicyWithValueFunction: Policy {
+//     // some just needs value function
+//     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor>;
+// }
 
 pub struct OptimizerWithMaxGrad {
     pub optimizer: AdamW,
@@ -106,30 +106,30 @@ impl PolicyKind {
     }
 }
 
-// NOTE: it would be better to use enum dispatch here, but it's too much for the enum_dispatch
-impl Policy for PolicyKind {
-    type Dist = DistributionKind;
-
-    fn distribution(&self) -> &Self::Dist {
-        match self {
-            Self::Decoupled(policy) => policy.distribution(),
-            Self::Paralell(policy) => policy.distribution(),
-        }
-    }
-
-    fn update(&mut self, policy_loss: &Tensor, value_loss: &Tensor) -> Result<()> {
-        match self {
-            Self::Decoupled(policy) => policy.update(policy_loss, value_loss),
-            Self::Paralell(policy) => policy.update(policy_loss, value_loss),
-        }
-    }
-}
-
-impl PolicyWithValueFunction for PolicyKind {
-    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
-        match self {
-            Self::Decoupled(policy) => policy.calculate_values(observation),
-            Self::Paralell(policy) => policy.calculate_values(observation),
-        }
-    }
-}
+// // NOTE: it would be better to use enum dispatch here, but it's too much for the enum_dispatch
+// impl Policy for PolicyKind {
+//     type Dist = DistributionKind;
+//
+//     fn distribution(&self) -> &Self::Dist {
+//         match self {
+//             Self::Decoupled(policy) => policy.distribution(),
+//             Self::Paralell(policy) => policy.distribution(),
+//         }
+//     }
+//
+//     fn update(&mut self, policy_loss: &Tensor, value_loss: &Tensor) -> Result<()> {
+//         match self {
+//             Self::Decoupled(policy) => policy.update(policy_loss, value_loss),
+//             Self::Paralell(policy) => policy.update(policy_loss, value_loss),
+//         }
+//     }
+// }
+//
+// impl PolicyWithValueFunction for PolicyKind {
+//     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
+//         match self {
+//             Self::Decoupled(policy) => policy.calculate_values(observation),
+//             Self::Paralell(policy) => policy.calculate_values(observation),
+//         }
+//     }
+// }
