@@ -1,7 +1,9 @@
+pub mod vpg3;
+
 use candle_core::{Device, Result};
 use r2l_core::{
     agents::Agent,
-    policies::{Policy, PolicyWithValueFunction},
+    policies::PolicyWithValueFunction,
     utils::rollout_buffer::{
         RolloutBatch, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns,
     },

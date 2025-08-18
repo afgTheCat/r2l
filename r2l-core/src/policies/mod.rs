@@ -1,4 +1,5 @@
 pub mod decoupled_actor_critic;
+pub mod learning_modules;
 pub mod paralell_actor_critic;
 
 use std::fmt::Debug;
@@ -44,6 +45,10 @@ pub trait Policy: Debug {
 
     // updates the policy according to the underlying thing
     fn update(&mut self, policy_loss: &Tensor, value_loss: &Tensor) -> Result<()>;
+}
+
+pub trait ValueFunction {
+    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor>;
 }
 
 pub trait PolicyWithValueFunction: Policy {

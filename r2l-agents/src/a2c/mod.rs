@@ -1,3 +1,4 @@
+pub mod a2c3;
 pub mod hooks;
 
 use crate::a2c::hooks::A2CHooks;

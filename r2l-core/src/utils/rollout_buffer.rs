@@ -1,4 +1,8 @@
-use crate::{env::Env, policies::PolicyWithValueFunction, rng::RNG};
+use crate::{
+    env::Env,
+    policies::{PolicyWithValueFunction, ValueFunction, learning_modules::LearningModule},
+    rng::RNG,
+};
 use bincode::{
     BorrowDecode, Decode, Encode,
     error::{DecodeError, EncodeError},
@@ -158,6 +162,33 @@ impl RolloutBuffer {
         Ok((advantages, returns))
     }
 
+    pub fn calculate_advantages_and_returns2(
+        &self,
+        value_func: &impl ValueFunction,
+        gamma: f32,
+        lambda: f32,
+    ) -> Result<(Vec<f32>, Vec<f32>)> {
+        let states = Tensor::stack(&self.states, 0)?;
+        let values: Vec<f32> = value_func.calculate_values(&states)?.to_vec1()?;
+        let total_steps = self.rewards.len();
+        let mut advantages: Vec<f32> = vec![0.; total_steps];
+        let mut returns: Vec<f32> = vec![0.; total_steps];
+        let mut last_gae_lam: f32 = 0.;
+        for i in (0..total_steps).rev() {
+            let next_non_terminal = if self.dones[i] {
+                last_gae_lam = 0.;
+                0f32
+            } else {
+                1.
+            };
+            let delta = self.rewards[i] + next_non_terminal * gamma * values[i + 1] - values[i];
+            last_gae_lam = delta + next_non_terminal * gamma * lambda * last_gae_lam;
+            advantages[i] = last_gae_lam;
+            returns[i] = last_gae_lam + values[i];
+        }
+        Ok((advantages, returns))
+    }
+
     pub fn sample_point(&self, index: usize) -> (&Tensor, &Tensor, f32) {
         (&self.states[index], &self.actions[index], self.logps[index])
     }
@@ -216,6 +247,23 @@ pub fn calculate_advantages_and_returns(
         .map(|rollout| {
             rollout
                 .calculate_advantages_and_returns(policy, gamma, lambda)
+                .unwrap() // TODO: get rid of this unwrap
+        })
+        .unzip();
+    (Advantages(advantages), Returns(returns))
+}
+
+pub fn calculate_advantages_and_returns2(
+    rollouts: &[RolloutBuffer],
+    value_func: &impl ValueFunction,
+    gamma: f32,
+    lambda: f32,
+) -> (Advantages, Returns) {
+    let (advantages, returns): (Vec<Vec<f32>>, Vec<Vec<f32>>) = rollouts
+        .iter()
+        .map(|rollout| {
+            rollout
+                .calculate_advantages_and_returns2(value_func, gamma, lambda)
                 .unwrap() // TODO: get rid of this unwrap
         })
         .unzip();
