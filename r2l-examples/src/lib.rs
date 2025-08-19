@@ -1,9 +1,8 @@
 use candle_core::{DType, Device, Error, Tensor};
-use once_cell::sync::Lazy;
 use r2l_agents::ppo::hooks::{HookResult, PPOBatchData};
 use r2l_agents::ppo::ppo3::PPP3HooksTrait;
+use r2l_api::builders::agents::ppo::PPO3Builder;
 use r2l_api::builders::env_pool::VecPoolType;
-use r2l_api::builders::{agents::ppo::PPO3Builder, env_pool::SequentialEnvHookTypes};
 use r2l_core::distributions::DistributionKind;
 use r2l_core::policies::learning_modules::LearningModuleKind;
 use r2l_core::{
@@ -11,7 +10,6 @@ use r2l_core::{
     distributions::Distribution,
     env::RolloutMode,
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm2, OnPolicyHooks},
-    // policies::{Policy, PolicyKind},
     tensors::{PolicyLoss, ValueLoss},
     utils::rollout_buffer::{Advantages, RolloutBuffer},
 };
@@ -140,13 +138,17 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
 
         // TODO: this seems to slow down the learning process quite a bit. Maybe there is an issue with
         // the learning rate?
-        // let approx_kl = (batch_data
+        // let approx_kl = (data
         //     .ratio
+        //     .detach()
         //     .exp()?
-        //     .sub(&Tensor::ones_like(&batch_data.ratio)?))?
-        // .sub(&batch_data.ratio)?
+        //     .sub(&Tensor::ones_like(&data.ratio.detach())?))?
+        // .sub(&data.ratio.detach())?
         // .mean_all()?
         // .to_scalar::<f32>()?;
+        // if approx_kl > 1.5 * self.target_kl {
+        // } else {
+        // }
         // Ok(approx_kl > 1.5 * app_data.target_kl)
         Ok(HookResult::Continue)
     }
@@ -191,122 +193,15 @@ struct AppData {
     current_progress_report: PPOProgress, // collect the learning stuff
 }
 
-// maybe I will try channels at one point, for now a mutex is fine
-// TODO: replace this with the hook data
-static SHARED_APP_DATA: Lazy<Mutex<AppData>> = Lazy::new(|| {
-    let app_data = AppData::default();
-    Mutex::new(app_data)
-});
-
-// fn batch_hook(
-//     policy: &mut PolicyKind,
-//     policy_loss: &mut PolicyLoss,
-//     value_loss: &mut ValueLoss,
-//     batch_data: &PPOBatchData,
-// ) -> candle_core::Result<bool> {
-//     let entropy = policy.distribution().entropy()?;
-//     let device = entropy.device();
-//     let mut app_data = SHARED_APP_DATA.lock().unwrap();
-//     let entropy_loss = (Tensor::full(app_data.ent_coeff, (), &device)? * entropy.neg()?)?;
-//     app_data.current_progress_report.collect_batch_data(
-//         &batch_data.ratio,
-//         &entropy_loss,
-//         value_loss,
-//         policy_loss,
-//     )?;
-//
-//     // TODO: this breaks the computation graph. We need to explore our options here. The most
-//     // reasonable choice seems to be that we switch up our hook interface by not only allowing
-//     // booleans to be returned, but that seems a lot of work right now
-//     // *policy_loss = PolicyLoss(policy_loss.add(&entropy_loss)?);
-//
-//     // TODO: this seems to slow down the learning process quite a bit. Maybe there is an issue with
-//     // the learning rate?
-//     // let approx_kl = (batch_data
-//     //     .ratio
-//     //     .exp()?
-//     //     .sub(&Tensor::ones_like(&batch_data.ratio)?))?
-//     // .sub(&batch_data.ratio)?
-//     // .mean_all()?
-//     // .to_scalar::<f32>()?;
-//     // Ok(approx_kl > 1.5 * app_data.target_kl)
-//     Ok(false)
-// }
-
-// fn before_learning_hook(
-//     rollout_buffers: &mut Vec<RolloutBuffer>,
-//     advantages: &mut Advantages,
-// ) -> candle_core::Result<bool> {
-//     let mut app_data = SHARED_APP_DATA.lock().unwrap();
-//     app_data.current_epoch = 0;
-//     let mut total_rewards: f32 = 0.;
-//     let mut total_episodes: usize = 0;
-//     for rb in rollout_buffers {
-//         total_rewards += rb.rewards.iter().sum::<f32>();
-//         total_episodes += rb.dones.iter().filter(|x| **x).count();
-//     }
-//     advantages.normalize();
-//     let avarage_reward = total_rewards / total_episodes as f32;
-//     let progress = app_data.current_rollout as f64 / app_data.total_rollouts as f64;
-//     app_data.current_progress_report.avarage_reward = avarage_reward;
-//     app_data.current_progress_report.progress = progress;
-//     Ok(false)
-// }
-
-// enum AfterLearningHookResult {
-//     ShouldStop,
-//     ShouldContinue,
-// }
-//
-// #[allow(clippy::ptr_arg)]
-// fn after_learning_hook_inner(
-//     policy: &mut PolicyKind,
-// ) -> candle_core::Result<AfterLearningHookResult> {
-//     let mut app_data = SHARED_APP_DATA.lock().unwrap();
-//     app_data.current_epoch += 1;
-//     let should_stop = app_data.current_epoch == app_data.total_epochs;
-//     if should_stop {
-//         // snapshot the learned things, API can be much better
-//         app_data.current_rollout += 1;
-//         // the std after learning
-//         app_data.current_progress_report.std = policy.distribution().std()?;
-//         app_data.current_progress_report.learning_rate = policy.policy_learning_rate();
-//         Ok(AfterLearningHookResult::ShouldStop)
-//     } else {
-//         Ok(AfterLearningHookResult::ShouldContinue)
-//     }
-// }
-
 pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
-    // let after_learning_hook =
-    //     move |policy: &mut PolicyKind| match after_learning_hook_inner(policy)? {
-    //         AfterLearningHookResult::ShouldStop => {
-    //             let mut app_data = SHARED_APP_DATA.lock().unwrap();
-    //             let progress = app_data.current_progress_report.clear();
-    //             tx.send(Box::new(progress)).map_err(Error::wrap)?;
-    //             Ok(true)
-    //         }
-    //         AfterLearningHookResult::ShouldContinue => Ok(false),
-    //     };
     let device = Device::Cpu;
-    let mut builder = PPO3Builder::default();
-    builder.sample_size = 64;
-
-    let env_pool = VecPoolType::Sequential(SequentialEnvHookTypes::None).build(
-        &Device::Cpu,
-        ENV_NAME.to_owned(),
-        10,
-    )?;
+    let env_pool = VecPoolType::Dummy.build(&device, ENV_NAME.to_owned(), 1)?;
     let env_description = env_pool.env_description.clone();
 
-    let mut agent = builder.build(&device, &env_description)?;
+    let mut agent = PPO3Builder::default().build(&device, &env_description)?;
     agent.hooks = Box::new(ppo_hook);
-    // agent.hooks = PPOHooks::empty()
-    //     .add_before_learning_hook(before_learning_hook)
-    //     .add_batching_hook(batch_hook)
-    //     .add_rollout_hook(after_learning_hook);
 
     let mut algo = OnPolicyAlgorithm2 {
         env_pool,

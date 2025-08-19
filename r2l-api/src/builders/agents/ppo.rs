@@ -4,7 +4,7 @@ use crate::builders::{
 };
 use candle_core::{DType, Device, Result};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_agents::ppo::ppo3::{DefaultPPO3Hooks, PPO3};
+use r2l_agents::ppo::ppo3::{EmptyPPO3Hooks, PPO3};
 use r2l_core::{
     distributions::DistributionKind, env::EnvironmentDescription,
     policies::learning_modules::LearningModuleKind,
@@ -61,7 +61,7 @@ impl PPO3Builder {
         Ok(PPO3 {
             distribution,
             learning_module,
-            hooks: Box::new(DefaultPPO3Hooks),
+            hooks: Box::new(EmptyPPO3Hooks),
             clip_range: self.clip_range,
             device: device.clone(),
             gamma: self.gamma,

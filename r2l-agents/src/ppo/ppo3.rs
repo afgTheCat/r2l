@@ -59,9 +59,9 @@ pub trait PPP3HooksTrait<D: Distribution, LM: PPO3LearningModule> {
     ) -> Result<HookResult>;
 }
 
-pub struct DefaultPPO3Hooks;
+pub struct EmptyPPO3Hooks;
 
-impl<D: Distribution, LM: PPO3LearningModule> PPP3HooksTrait<D, LM> for DefaultPPO3Hooks {
+impl<D: Distribution, LM: PPO3LearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3Hooks {
     fn before_learning_hook(
         &mut self,
         learning_module: &mut LM,
@@ -70,7 +70,7 @@ impl<D: Distribution, LM: PPO3LearningModule> PPP3HooksTrait<D, LM> for DefaultP
         advantages: &mut Advantages,
         returns: &mut Returns,
     ) -> Result<HookResult> {
-        todo!()
+        Ok(HookResult::Continue)
     }
 
     fn rollout_hook(
@@ -79,7 +79,7 @@ impl<D: Distribution, LM: PPO3LearningModule> PPP3HooksTrait<D, LM> for DefaultP
         distribution: &D,
         rollout_buffers: &Vec<RolloutBuffer>,
     ) -> Result<HookResult> {
-        todo!()
+        Ok(HookResult::Break)
     }
 
     fn batch_hook(
@@ -91,7 +91,7 @@ impl<D: Distribution, LM: PPO3LearningModule> PPP3HooksTrait<D, LM> for DefaultP
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
     ) -> Result<HookResult> {
-        todo!()
+        Ok(HookResult::Continue)
     }
 }
 

@@ -96,17 +96,6 @@ impl OnPolicyAlgorithmBuilder {
         }
     }
 
-    // pub fn ppo2() -> Self {
-    //     let env_pool_builder = VecPoolType::default();
-    //     let agent_type = AgentType::PPO2(PPOBuilder2::default());
-    //     Self {
-    //         env_pool_type: env_pool_builder,
-    //         rollout_mode: RolloutMode::StepBound { n_steps: 2048 },
-    //         agent_type,
-    //         ..Default::default()
-    //     }
-    // }
-
     pub fn a2c() -> Self {
         let env_pool_builder = VecPoolType::default();
         let agent_type = AgentType::A2C(A2C3Builder::default());

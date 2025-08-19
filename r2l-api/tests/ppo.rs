@@ -1,4 +1,4 @@
-use candle_core::Result;
+use candle_core::{Device, Result};
 use r2l_api::builders::on_policy_algo::OnPolicyAlgorithmBuilder;
 use r2l_api::test_utils::run_gym_episodes;
 use r2l_core::agents::Agent2;
