@@ -32,40 +32,48 @@ impl DistributionBuilder {
         match self.distribution_type {
             DistributionType::DiagGaussianDistribution => {
                 let log_std = distribution_varbuilder.get(action_size, "log_std")?;
-                DiagGaussianDistribution::build(
-                    observation_size,
-                    layers,
-                    &distribution_varbuilder,
-                    log_std,
-                    "policy",
-                )
-            }
-            DistributionType::CategoricalDistribution => CategoricalDistribution::build(
-                observation_size,
-                action_size,
-                layers,
-                &distribution_varbuilder,
-                device,
-                "policy",
-            ),
-            DistributionType::Dynamic => match env_description.action_space {
-                Space::Discrete(..) => CategoricalDistribution::build(
-                    observation_size,
-                    action_size,
-                    layers,
-                    &distribution_varbuilder,
-                    device,
-                    "policy",
-                ),
-                Space::Continous { .. } => {
-                    let log_std = distribution_varbuilder.get(action_size, "log_std")?;
+                Ok(DistributionKind::DiagGaussian(
                     DiagGaussianDistribution::build(
                         observation_size,
                         layers,
                         &distribution_varbuilder,
                         log_std,
                         "policy",
-                    )
+                    )?,
+                ))
+            }
+            DistributionType::CategoricalDistribution => Ok(DistributionKind::Categorical(
+                CategoricalDistribution::build(
+                    observation_size,
+                    action_size,
+                    layers,
+                    &distribution_varbuilder,
+                    device.clone(),
+                    "policy",
+                )?,
+            )),
+            DistributionType::Dynamic => match env_description.action_space {
+                Space::Discrete(..) => Ok(DistributionKind::Categorical(
+                    CategoricalDistribution::build(
+                        observation_size,
+                        action_size,
+                        layers,
+                        &distribution_varbuilder,
+                        device.clone(),
+                        "policy",
+                    )?,
+                )),
+                Space::Continous { .. } => {
+                    let log_std = distribution_varbuilder.get(action_size, "log_std")?;
+                    Ok(DistributionKind::DiagGaussian(
+                        DiagGaussianDistribution::build(
+                            observation_size,
+                            layers,
+                            &distribution_varbuilder,
+                            log_std,
+                            "policy",
+                        )?,
+                    ))
                 }
             },
         }

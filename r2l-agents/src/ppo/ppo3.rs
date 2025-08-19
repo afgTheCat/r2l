@@ -28,10 +28,14 @@ pub trait PPO3LearningModule: LearningModule<Losses = PolicyValuesLosses> + Valu
 
 impl PPO3LearningModule for LearningModuleKind {}
 
-pub trait PPP3HooksTrait<LM: PPO3LearningModule> {
+// TODO: we could just pass the agent inside. Also we should probably set the rollout buffer inside
+// the agent to some buffer, so that we also don't really need that as a parameter. Much cleaner
+// design to be honest
+pub trait PPP3HooksTrait<D: Distribution, LM: PPO3LearningModule> {
     fn before_learning_hook(
         &mut self,
         learning_module: &mut LM,
+        distribution: &D,
         rollout_buffers: &mut Vec<RolloutBuffer>,
         advantages: &mut Advantages,
         returns: &mut Returns,
@@ -40,12 +44,14 @@ pub trait PPP3HooksTrait<LM: PPO3LearningModule> {
     fn rollout_hook(
         &mut self,
         learning_module: &mut LM,
+        distribution: &D,
         rollout_buffers: &Vec<RolloutBuffer>,
     ) -> Result<HookResult>;
 
     fn batch_hook(
         &mut self,
         learning_module: &mut LM,
+        distribution: &D,
         rollout_batch: &RolloutBatch,
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
@@ -53,10 +59,46 @@ pub trait PPP3HooksTrait<LM: PPO3LearningModule> {
     ) -> Result<HookResult>;
 }
 
+pub struct DefaultPPO3Hooks;
+
+impl<D: Distribution, LM: PPO3LearningModule> PPP3HooksTrait<D, LM> for DefaultPPO3Hooks {
+    fn before_learning_hook(
+        &mut self,
+        learning_module: &mut LM,
+        distribution: &D,
+        rollout_buffers: &mut Vec<RolloutBuffer>,
+        advantages: &mut Advantages,
+        returns: &mut Returns,
+    ) -> Result<HookResult> {
+        todo!()
+    }
+
+    fn rollout_hook(
+        &mut self,
+        learning_module: &mut LM,
+        distribution: &D,
+        rollout_buffers: &Vec<RolloutBuffer>,
+    ) -> Result<HookResult> {
+        todo!()
+    }
+
+    fn batch_hook(
+        &mut self,
+        learning_module: &mut LM,
+        distribution: &D,
+        rollout_batch: &RolloutBatch,
+        policy_loss: &mut PolicyLoss,
+        value_loss: &mut ValueLoss,
+        data: &PPOBatchData,
+    ) -> Result<HookResult> {
+        todo!()
+    }
+}
+
 pub struct PPO3<D: Distribution, LM: PPO3LearningModule> {
     pub distribution: D,
     pub learning_module: LM,
-    pub hooks: Box<dyn PPP3HooksTrait<LM>>,
+    pub hooks: Box<dyn PPP3HooksTrait<D, LM>>,
     pub clip_range: f32,
     pub gamma: f32,
     pub lambda: f32,
@@ -94,6 +136,7 @@ impl<D: Distribution, LM: PPO3LearningModule> PPO3<D, LM> {
             };
             let hook_result = self.hooks.batch_hook(
                 &mut self.learning_module,
+                &self.distribution,
                 &batch,
                 &mut policy_loss,
                 &mut value_loss,
@@ -110,6 +153,7 @@ impl<D: Distribution, LM: PPO3LearningModule> PPO3<D, LM> {
         }
     }
 
+    // TODO: rename this to learning loop
     fn rollout_loop(
         &mut self,
         rollouts: &Vec<RolloutBuffer>,
@@ -125,9 +169,9 @@ impl<D: Distribution, LM: PPO3LearningModule> PPO3<D, LM> {
                 self.device.clone(),
             );
             self.batching_loop(&mut batch_iter)?;
-            let rollout_hook_res = self
-                .hooks
-                .rollout_hook(&mut self.learning_module, &rollouts);
+            let rollout_hook_res =
+                self.hooks
+                    .rollout_hook(&mut self.learning_module, &self.distribution, &rollouts);
             process_hook_result!(rollout_hook_res);
         }
     }
@@ -149,6 +193,7 @@ impl<D: Distribution, LM: PPO3LearningModule> Agent2 for PPO3<D, LM> {
         );
         let before_learning_hook_res = self.hooks.before_learning_hook(
             &mut self.learning_module,
+            &self.distribution,
             &mut rollouts,
             &mut advantages,
             &mut returns,

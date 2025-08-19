@@ -1,7 +1,7 @@
 use crate::{
     builders::{
-        agents::a2c::A2CBuilder,
-        agents::ppo::{PPOBuilder, PPOBuilder2},
+        agents::a2c::A2C3Builder,
+        agents::ppo::PPO3Builder,
         env_pool::{EnvBuilderTrait, VecPoolType},
     },
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
@@ -15,9 +15,8 @@ use r2l_core::{
 };
 
 pub enum AgentType {
-    PPO(PPOBuilder),
-    PPO2(PPOBuilder2),
-    A2C(A2CBuilder),
+    PPO(PPO3Builder),
+    A2C(A2C3Builder),
 }
 
 pub struct OnPolicyAlgorithmBuilder {
@@ -44,7 +43,7 @@ impl Default for OnPolicyAlgorithmBuilder {
                 total_steps: 0,
                 current_step: 0,
             },
-            agent_type: AgentType::PPO(PPOBuilder::default()),
+            agent_type: AgentType::PPO(PPO3Builder::default()),
         }
     }
 }
@@ -71,10 +70,6 @@ impl OnPolicyAlgorithmBuilder {
                 let a2c = builder.build(&self.device, &env_description)?;
                 AgentKind::A2C(a2c)
             }
-            AgentType::PPO2(builder) => {
-                let ppo = builder.build(&self.device, &env_description)?;
-                AgentKind::PPO2(ppo)
-            }
         };
         Ok(OnPolicyAlgorithm2 {
             env_pool,
@@ -92,7 +87,7 @@ impl OnPolicyAlgorithmBuilder {
     // TODO: once we have some better policies, we should add it here. That would correspond to the stable baselines API
     pub fn ppo() -> Self {
         let env_pool_builder = VecPoolType::default();
-        let agent_type = AgentType::PPO(PPOBuilder::default());
+        let agent_type = AgentType::PPO(PPO3Builder::default());
         Self {
             env_pool_type: env_pool_builder,
             rollout_mode: RolloutMode::StepBound { n_steps: 2048 },
@@ -101,20 +96,20 @@ impl OnPolicyAlgorithmBuilder {
         }
     }
 
-    pub fn ppo2() -> Self {
-        let env_pool_builder = VecPoolType::default();
-        let agent_type = AgentType::PPO2(PPOBuilder2::default());
-        Self {
-            env_pool_type: env_pool_builder,
-            rollout_mode: RolloutMode::StepBound { n_steps: 2048 },
-            agent_type,
-            ..Default::default()
-        }
-    }
+    // pub fn ppo2() -> Self {
+    //     let env_pool_builder = VecPoolType::default();
+    //     let agent_type = AgentType::PPO2(PPOBuilder2::default());
+    //     Self {
+    //         env_pool_type: env_pool_builder,
+    //         rollout_mode: RolloutMode::StepBound { n_steps: 2048 },
+    //         agent_type,
+    //         ..Default::default()
+    //     }
+    // }
 
     pub fn a2c() -> Self {
         let env_pool_builder = VecPoolType::default();
-        let agent_type = AgentType::A2C(A2CBuilder::default());
+        let agent_type = AgentType::A2C(A2C3Builder::default());
         Self {
             env_pool_type: env_pool_builder,
             rollout_mode: RolloutMode::StepBound { n_steps: 5 },

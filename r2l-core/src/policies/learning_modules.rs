@@ -1,5 +1,7 @@
+use std::f64;
+
 use candle_core::{Result, Tensor};
-use candle_nn::Module;
+use candle_nn::{Module, Optimizer};
 
 use crate::{
     policies::{OptimizerWithMaxGrad, ValueFunction},
@@ -26,6 +28,12 @@ pub struct DecoupledActorCriticLM {
     pub value_optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
+impl DecoupledActorCriticLM {
+    pub fn policy_learning_rate(&self) -> f64 {
+        self.policy_optimizer_with_grad.optimizer.learning_rate()
+    }
+}
+
 impl LearningModule for DecoupledActorCriticLM {
     type Losses = PolicyValuesLosses;
 
@@ -50,6 +58,12 @@ pub struct ParalellActorCriticLM {
     pub optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
+impl ParalellActorCriticLM {
+    pub fn policy_learning_rate(&self) -> f64 {
+        self.optimizer_with_grad.optimizer.learning_rate()
+    }
+}
+
 impl LearningModule for ParalellActorCriticLM {
     type Losses = PolicyValuesLosses;
 
@@ -69,6 +83,15 @@ impl ValueFunction for ParalellActorCriticLM {
 pub enum LearningModuleKind {
     Decoupled(DecoupledActorCriticLM),
     Paralell(ParalellActorCriticLM),
+}
+
+impl LearningModuleKind {
+    pub fn policy_learning_rate(&self) -> f64 {
+        match self {
+            Self::Decoupled(decoupled) => decoupled.policy_learning_rate(),
+            Self::Paralell(paralell) => paralell.policy_learning_rate(),
+        }
+    }
 }
 
 impl LearningModule for LearningModuleKind {

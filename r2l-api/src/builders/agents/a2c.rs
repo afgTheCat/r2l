@@ -4,13 +4,13 @@ use crate::builders::{
 };
 use candle_core::{DType, Device, Result};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_agents::a2c::{a2c3::A2C3, hooks::A2CHooks};
+use r2l_agents::a2c::a2c3::{A2C3, DefaultA2C3Hooks};
 use r2l_core::{
     distributions::DistributionKind, env::EnvironmentDescription,
     policies::learning_modules::LearningModuleKind,
 };
 
-pub struct A2CBuilder {
+pub struct A2C3Builder {
     pub distribution_builder: DistributionBuilder,
     pub learning_module_builder: LearningModuleBuilder,
     pub clip_range: f32,
@@ -19,16 +19,18 @@ pub struct A2CBuilder {
     pub sample_size: usize,
 }
 
-impl Default for A2CBuilder {
+impl Default for A2C3Builder {
     fn default() -> Self {
-        A2CBuilder {
+        A2C3Builder {
             distribution_builder: DistributionBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,
             },
-            learning_module_builder: LearningModuleType::Paralell {
-                value_layers: vec![64, 64],
-                max_grad_norm: None,
+            learning_module_builder: LearningModuleBuilder {
+                learning_module_type: LearningModuleType::Paralell {
+                    value_layers: vec![64, 64],
+                    max_grad_norm: None,
+                },
             },
             clip_range: 0.2,
             lambda: 0.8,
@@ -38,7 +40,7 @@ impl Default for A2CBuilder {
     }
 }
 
-impl A2CBuilder {
+impl A2C3Builder {
     pub fn build(
         &self,
         device: &Device,
@@ -59,7 +61,7 @@ impl A2CBuilder {
         Ok(A2C3 {
             distribution,
             learning_module,
-            hooks: A2CHooks::empty(),
+            hooks: Box::new(DefaultA2C3Hooks),
             device: device.clone(),
             gamma: self.gamma,
             lambda: self.lambda,

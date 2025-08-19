@@ -3,7 +3,7 @@ use candle_core::Device;
 use r2l_agents::AgentKind;
 use r2l_api::{
     builders::{
-        agents::{a2c::A2CBuilder, ppo::PPOBuilder},
+        agents::{a2c::A2C3Builder, ppo::PPO3Builder},
         env_pool::{
             EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions,
             SequentialEnvHookTypes, VecPoolType,
@@ -14,7 +14,7 @@ use r2l_api::{
 use r2l_core::{
     Algorithm,
     env::{EnvPool, RolloutMode},
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
+    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm2, OnPolicyHooks},
 };
 
 fn r2l_verify(env_config: &EnvConfig) {
@@ -43,7 +43,7 @@ fn r2l_verify(env_config: &EnvConfig) {
     let algo = args.get("algo").unwrap();
     let (agent, rollout_mode) = match algo.as_str() {
         "ppo" => {
-            let ppo = PPOBuilder::default()
+            let ppo = PPO3Builder::default()
                 .build(&device, &env_pool.env_description())
                 .unwrap();
             let agent = AgentKind::PPO(ppo);
@@ -52,7 +52,7 @@ fn r2l_verify(env_config: &EnvConfig) {
             (agent, rollout_mode)
         }
         "a2c" => {
-            let a2c = A2CBuilder::default()
+            let a2c = A2C3Builder::default()
                 .build(&device, &env_pool.env_description())
                 .unwrap();
             let agent = AgentKind::A2C(a2c);
@@ -64,7 +64,7 @@ fn r2l_verify(env_config: &EnvConfig) {
     };
     let mut on_policy_hooks = OnPolicyHooks::default();
     on_policy_hooks.add_training_hook(LoggerTrainingHook::default());
-    let mut algo = OnPolicyAlgorithm {
+    let mut algo = OnPolicyAlgorithm2 {
         env_pool,
         agent,
         learning_schedule,

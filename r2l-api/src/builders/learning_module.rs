@@ -1,7 +1,5 @@
-use std::io::Result;
-
-use candle_core::{DType, Device};
-use candle_nn::{AdamW, ParamsAdamW, VarBuilder, VarMap};
+use candle_core::{DType, Device, Result};
+use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
     env::EnvironmentDescription,
     policies::{
@@ -10,7 +8,6 @@ use r2l_core::{
     },
     thread_safe_sequential::build_sequential,
 };
-use rand::distr;
 
 pub enum LearningModuleType {
     Paralell {
@@ -24,8 +21,9 @@ pub enum LearningModuleType {
     },
 }
 
+// TODO: we probably need to rethink this
 pub struct LearningModuleBuilder {
-    learning_module_type: LearningModuleType,
+    pub learning_module_type: LearningModuleType,
 }
 
 impl LearningModuleBuilder {
@@ -42,7 +40,7 @@ impl LearningModuleBuilder {
             weight_decay: 0.01,
             ..Default::default()
         };
-        match self.learning_module_type {
+        match &self.learning_module_type {
             LearningModuleType::Paralell {
                 value_layers,
                 max_grad_norm,

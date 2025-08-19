@@ -36,6 +36,21 @@ pub trait A2C3Hooks<LM: A2C3LearningModule> {
     ) -> Result<HookResult>;
 }
 
+pub struct DefaultA2C3Hooks;
+
+// TODO: we have to rething this anyways
+impl<LM: A2C3LearningModule> A2C3Hooks<LM> for DefaultA2C3Hooks {
+    fn before_learning_hook(
+        &mut self,
+        _learning_module: &mut LM,
+        _rollout_buffers: &mut Vec<RolloutBuffer>,
+        _advantages: &mut Advantages,
+        _returns: &mut Returns,
+    ) -> Result<HookResult> {
+        todo!()
+    }
+}
+
 pub struct A2C3<D: Distribution, LM: A2C3LearningModule> {
     pub distribution: D,
     pub learning_module: LM,
