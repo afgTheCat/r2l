@@ -1,13 +1,13 @@
-use crate::{distributions::Distribution, rng::RNG, utils::rollout_buffer::RolloutBuffer};
+use crate::{distributions::Distribution, numeric::Buffer, utils::rollout_buffer::RolloutBuffer};
 use bincode::{Decode, Encode};
-use candle_core::{Result, Tensor};
+use candle_core::{Result, WithDType};
 
 #[derive(Debug, Clone)]
 pub enum Space {
     Discrete(usize),
     Continous {
-        min: Option<Tensor>,
-        max: Option<Tensor>,
+        min: Option<Buffer>,
+        max: Option<Buffer>,
         size: usize,
     },
 }
@@ -52,9 +52,17 @@ impl EnvironmentDescription {
     }
 }
 
+// TODO: This is a useful thing buffer needs to be go
+pub struct SnapShot<T: WithDType = f32> {
+    pub state: Buffer<T>,
+    pub reward: f32,
+    pub terminated: bool,
+    pub trancuated: bool,
+}
+
 pub trait Env {
-    fn reset(&mut self, seed: u64) -> Result<Tensor>;
-    fn step(&mut self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)>;
+    fn reset(&mut self, seed: u64) -> Buffer;
+    fn step(&mut self, action: &Buffer) -> SnapShot;
     fn env_description(&self) -> EnvironmentDescription;
 }
 

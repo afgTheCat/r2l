@@ -87,7 +87,7 @@ impl OnPolicyHooks {
     }
 }
 
-pub struct OnPolicyAlgorithm<E: EnvPool, A: Agent> {
+pub struct OnPolicyAlgorithm2<E: EnvPool, A: Agent> {
     pub env_pool: E,
     pub agent: A,
     pub learning_schedule: LearningSchedule,
@@ -95,19 +95,20 @@ pub struct OnPolicyAlgorithm<E: EnvPool, A: Agent> {
     pub hooks: OnPolicyHooks,
 }
 
-impl<E: EnvPool, A: Agent> OnPolicyAlgorithm<E, A> {
+impl<E: EnvPool, A: Agent> OnPolicyAlgorithm2<E, A> {
     pub fn new(
         env_pool: E,
         agent: A,
-        rollout_mode: RolloutMode,
         learning_schedule: LearningSchedule,
+        rollout_mode: RolloutMode,
+        hooks: OnPolicyHooks,
     ) -> Self {
         Self {
             env_pool,
             agent,
-            rollout_mode,
             learning_schedule,
-            hooks: OnPolicyHooks::default(),
+            rollout_mode,
+            hooks,
         }
     }
 
@@ -148,7 +149,7 @@ impl<E: EnvPool, A: Agent> OnPolicyAlgorithm<E, A> {
     }
 }
 
-impl<E: EnvPool, A: Agent> Algorithm for OnPolicyAlgorithm<E, A> {
+impl<E: EnvPool, A: Agent> Algorithm for OnPolicyAlgorithm2<E, A> {
     fn train(&mut self) -> Result<()> {
         if self.hooks.call_before_training_hook()? {
             return Ok(());

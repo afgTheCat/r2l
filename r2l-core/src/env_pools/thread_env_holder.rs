@@ -2,7 +2,7 @@ use crate::env_pools::RolloutMode;
 use crate::env_pools::{EnvHolder, SequentialVecEnvHooks};
 use crate::rng::RNG;
 use crate::{distributions::Distribution, env::Env, utils::rollout_buffer::RolloutBuffer};
-use candle_core::{Error, Result, Tensor};
+use candle_core::{Device, Error, Result, Tensor};
 use crossbeam::channel::{Receiver, Sender};
 use crossbeam::sync::ShardedLock;
 use rand::Rng;
@@ -26,6 +26,7 @@ pub struct WorkerThread<E: Env> {
     pub env: E,
     pub task_rx: Receiver<WorkerTask>,
     pub result_tx: Sender<ThreadResult>,
+    pub device: Device,
 }
 
 impl<E: Env> WorkerThread<E> {
@@ -44,7 +45,7 @@ impl<E: Env> WorkerThread<E> {
                     };
                     let mut state = initial_state.take().unwrap_or_else(|| {
                         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-                        self.env.reset(seed).unwrap()
+                        self.env.reset(seed).to_candle_tensor(&self.device)
                     });
                     // run_rollout_without_buffer(distr, &mut self.env, rollout_mode, &mut state)
                     //     .unwrap();

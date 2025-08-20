@@ -1,4 +1,4 @@
-use crate::{env::Env, policies::PolicyWithValueFunction, rng::RNG};
+use crate::{env::Env, policies::ValueFunction, rng::RNG};
 use bincode::{
     BorrowDecode, Decode, Encode,
     error::{DecodeError, EncodeError},
@@ -131,14 +131,14 @@ impl RolloutBuffer {
         self.last_state = Some(state);
     }
 
-    pub fn calculate_advantages_and_returns(
+    pub fn calculate_advantages_and_returns2(
         &self,
-        policy: &impl PolicyWithValueFunction,
+        value_func: &impl ValueFunction,
         gamma: f32,
         lambda: f32,
     ) -> Result<(Vec<f32>, Vec<f32>)> {
         let states = Tensor::stack(&self.states, 0)?;
-        let values: Vec<f32> = policy.calculate_values(&states)?.to_vec1()?;
+        let values: Vec<f32> = value_func.calculate_values(&states)?.to_vec1()?;
         let total_steps = self.rewards.len();
         let mut advantages: Vec<f32> = vec![0.; total_steps];
         let mut returns: Vec<f32> = vec![0.; total_steps];
@@ -162,7 +162,7 @@ impl RolloutBuffer {
         (&self.states[index], &self.actions[index], self.logps[index])
     }
 
-    pub fn reset(&mut self, env: &mut impl Env) -> Result<Tensor> {
+    pub fn reset(&mut self, env: &mut impl Env, device: &Device) -> Result<Tensor> {
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         self.states.clear();
         self.actions.clear();
@@ -172,7 +172,7 @@ impl RolloutBuffer {
         if let Some(last_state) = self.last_state.take() {
             Ok(last_state)
         } else {
-            env.reset(seed)
+            Ok(env.reset(seed).to_candle_tensor(device))
         }
     }
 }
@@ -205,9 +205,26 @@ impl Advantages {
 #[derive(Deref, Debug)]
 pub struct Returns(Vec<Vec<f32>>);
 
-pub fn calculate_advantages_and_returns(
+// pub fn calculate_advantages_and_returns(
+//     rollouts: &[RolloutBuffer],
+//     policy: &impl PolicyWithValueFunction,
+//     gamma: f32,
+//     lambda: f32,
+// ) -> (Advantages, Returns) {
+//     let (advantages, returns): (Vec<Vec<f32>>, Vec<Vec<f32>>) = rollouts
+//         .iter()
+//         .map(|rollout| {
+//             rollout
+//                 .calculate_advantages_and_returns(policy, gamma, lambda)
+//                 .unwrap() // TODO: get rid of this unwrap
+//         })
+//         .unzip();
+//     (Advantages(advantages), Returns(returns))
+// }
+
+pub fn calculate_advantages_and_returns2(
     rollouts: &[RolloutBuffer],
-    policy: &impl PolicyWithValueFunction,
+    value_func: &impl ValueFunction,
     gamma: f32,
     lambda: f32,
 ) -> (Advantages, Returns) {
@@ -215,7 +232,7 @@ pub fn calculate_advantages_and_returns(
         .iter()
         .map(|rollout| {
             rollout
-                .calculate_advantages_and_returns(policy, gamma, lambda)
+                .calculate_advantages_and_returns2(value_func, gamma, lambda)
                 .unwrap() // TODO: get rid of this unwrap
         })
         .unzip();

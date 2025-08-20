@@ -1,0 +1,23 @@
+[package]
+name = "r2l-core2"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+readme = "README.md"
+
+
+[dependencies]
+r2l-macros = { workspace = true }
+rand = "0.9.0"
+interprocess = "2.2.3"
+rayon = "1.10.0"
+derive_more = { version = "2.0.1", features = ["full"] }
+enum_dispatch = "0.3.13"
+bincode = { version = "2.0.1", features = ["serde"] }
+either = "1.15.0"
+safetensors = "0.4.1"
+smol = "2.0.2"
+crossbeam = { workspace = true }
+burn = { workspace = true }

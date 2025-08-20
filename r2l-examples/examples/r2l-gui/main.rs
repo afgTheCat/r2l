@@ -39,8 +39,8 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_secs_f64(0.25));
         loop {
-            let maybe_event = self.rx.try_recv();
-            let Ok(event) = maybe_event else {
+            let event = self.rx.try_recv();
+            let Ok(event) = event else {
                 break;
             };
             let Ok(progress) = event.downcast::<PPOProgress>() else {

@@ -84,6 +84,7 @@ pub struct Rollout<E: Env> {
     env: E,
     conn: BufReader<Stream>,
     rollout_buffer: RolloutBuffer,
+    device: Device,
 }
 
 impl<E: Env> Rollout<E> {
@@ -98,9 +99,14 @@ impl<E: Env> Rollout<E> {
                 distribution,
                 rollout_mode,
             } => {
-                let state = self.rollout_buffer.reset(&mut self.env)?;
-                let (states, last_state) =
-                    run_rollout(&distribution, &mut self.env, rollout_mode, state)?;
+                let state = self.rollout_buffer.reset(&mut self.env, &self.device)?;
+                let (states, last_state) = run_rollout(
+                    &distribution,
+                    &mut self.env,
+                    rollout_mode,
+                    state,
+                    &self.device,
+                )?;
                 self.rollout_buffer.set_states(states, last_state);
                 let packet: PacketToSend<D> = PacketToSend::RolloutResult {
                     rollout: self.rollout_buffer.clone(),
@@ -117,7 +123,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
     match &args.env_construction_method {
         EnvConstructionMethod::GymEnv => {
-            let env = GymEnv::new(&args.env_name, None, &Device::Cpu)?;
+            let env = GymEnv::new(&args.env_name, None);
             let socket_name = args
                 .socket_name
                 .to_ns_name::<GenericNamespaced>()
@@ -128,6 +134,7 @@ fn main() -> Result<()> {
                 conn,
                 env,
                 rollout_buffer: RolloutBuffer::default(),
+                device: Device::Cpu,
             };
             // TODO: other distributions/custom distributions need to be encoded
             while rollout.handle_packet::<DistributionKind>()? {}
@@ -178,7 +185,7 @@ mod test {
             .unwrap();
         let conn = listener.incoming().next().unwrap().unwrap();
         let mut conn = BufReader::new(conn);
-        let env = GymEnv::new(ENV_NAME, None, &candle_core::Device::Cpu).unwrap();
+        let env = GymEnv::new(ENV_NAME, None);
 
         send_packet(&mut conn, PacketToSend::<DiagGaussianDistribution>::Halt);
         let packet: PacketToReceive<DiagGaussianDistribution> = receive_packet(&mut conn);

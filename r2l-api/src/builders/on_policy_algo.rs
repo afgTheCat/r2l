@@ -1,7 +1,7 @@
 use crate::{
     builders::{
         agents::a2c::A2CBuilder,
-        agents::ppo::{PPOBuilder, PPOBuilder2},
+        agents::ppo::PPOBuilder,
         env_pool::{EnvBuilderTrait, VecPoolType},
     },
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
@@ -11,12 +11,11 @@ use r2l_agents::AgentKind;
 use r2l_core::{
     env::{EnvPool, RolloutMode},
     env_pools::{R2lEnvHolder, R2lEnvPool},
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
+    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm2, OnPolicyHooks},
 };
 
 pub enum AgentType {
     PPO(PPOBuilder),
-    PPO2(PPOBuilder2),
     A2C(A2CBuilder),
 }
 
@@ -54,7 +53,7 @@ impl OnPolicyAlgorithmBuilder {
         mut self,
         env_builder: EB,
         n_envs: usize,
-    ) -> Result<OnPolicyAlgorithm<R2lEnvPool<R2lEnvHolder<EB::Env>>, AgentKind>>
+    ) -> Result<OnPolicyAlgorithm2<R2lEnvPool<R2lEnvHolder<EB::Env>>, AgentKind>>
     where
         EB::Env: Sync + 'static,
     {
@@ -71,12 +70,8 @@ impl OnPolicyAlgorithmBuilder {
                 let a2c = builder.build(&self.device, &env_description)?;
                 AgentKind::A2C(a2c)
             }
-            AgentType::PPO2(builder) => {
-                let ppo = builder.build(&self.device, &env_description)?;
-                AgentKind::PPO2(ppo)
-            }
         };
-        Ok(OnPolicyAlgorithm {
+        Ok(OnPolicyAlgorithm2 {
             env_pool,
             agent,
             learning_schedule: self.learning_schedule,
@@ -93,17 +88,6 @@ impl OnPolicyAlgorithmBuilder {
     pub fn ppo() -> Self {
         let env_pool_builder = VecPoolType::default();
         let agent_type = AgentType::PPO(PPOBuilder::default());
-        Self {
-            env_pool_type: env_pool_builder,
-            rollout_mode: RolloutMode::StepBound { n_steps: 2048 },
-            agent_type,
-            ..Default::default()
-        }
-    }
-
-    pub fn ppo2() -> Self {
-        let env_pool_builder = VecPoolType::default();
-        let agent_type = AgentType::PPO2(PPOBuilder2::default());
         Self {
             env_pool_type: env_pool_builder,
             rollout_mode: RolloutMode::StepBound { n_steps: 2048 },

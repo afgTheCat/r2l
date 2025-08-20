@@ -1,12 +1,11 @@
-use std::sync::{Arc, Mutex};
-
-use candle_core::{Result, Tensor};
+use candle_core::{Device, Result, Tensor};
 use r2l_core::{
     distributions::Distribution,
     env::Env,
     env_pools::{SequentialVecEnvHooks, single_step_env_with_buffer},
     utils::rollout_buffer::RolloutBuffer,
 };
+use std::sync::{Arc, Mutex};
 
 pub struct Evaluator<E: Env> {
     pub env: E,
@@ -14,6 +13,7 @@ pub struct Evaluator<E: Env> {
     pub eval_freq: usize,
     pub eval_step: usize,
     pub evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
+    pub device: Device,
 }
 
 impl<E: Env> Evaluator<E> {
@@ -30,6 +30,7 @@ impl<E: Env> Evaluator<E> {
             eval_freq,
             eval_step,
             evaluations_results,
+            device: Device::Cpu,
         }
     }
 
@@ -45,11 +46,18 @@ impl<E: Env> Evaluator<E> {
             let mut all_rewards = vec![];
             let mut dones = vec![];
             for _ in 0..self.eval_episodes {
-                let mut state = self.env.reset(rand::random())?;
+                let mut state = self
+                    .env
+                    .reset(rand::random())
+                    .to_candle_tensor(&Device::Cpu);
                 let mut rollout_buffer = RolloutBuffer::default();
-                while let (next_state, false) =
-                    single_step_env_with_buffer(dist, &state, &mut self.env, &mut rollout_buffer)?
-                {
+                while let (next_state, false) = single_step_env_with_buffer(
+                    dist,
+                    &state,
+                    &mut self.env,
+                    &mut rollout_buffer,
+                    &self.device,
+                )? {
                     state = next_state;
                 }
                 all_rewards.push(rollout_buffer.rewards.clone());
