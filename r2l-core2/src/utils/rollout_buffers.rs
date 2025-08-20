@@ -1,6 +1,6 @@
 use crate::{
+    agent::ValueFunction,
     env::{Action, Observation, SnapShot},
-    policies::PolicyWithValueFunction,
 };
 
 // This rollout buffer thing needs a bit of rethinking
@@ -30,7 +30,7 @@ impl<O: Observation, A: Action> RolloutBufferV2<O, A> {
 
     pub fn calculate_advantages_and_returns(
         &self,
-        policy: &impl PolicyWithValueFunction<Obs = O>,
+        vf: &impl ValueFunction<Observation = O>,
         gamma: f32,
         lambda: f32,
     ) -> (Vec<f32>, Vec<f32>) {
@@ -41,8 +41,8 @@ impl<O: Observation, A: Action> RolloutBufferV2<O, A> {
         let values = self
             .snapshots
             .iter()
-            .map(|s| policy.calculate_value(s.state.clone()))
-            .chain(std::iter::once(policy.calculate_value(last_state)))
+            .map(|s| vf.calculate_value(&s.state))
+            .chain(std::iter::once(vf.calculate_value(&last_state)))
             .collect::<Vec<_>>();
         let mut advantages: Vec<f32> = vec![0.; total_steps];
         let mut returns: Vec<f32> = vec![0.; total_steps];

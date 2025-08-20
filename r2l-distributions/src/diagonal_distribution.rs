@@ -31,11 +31,12 @@ impl<B: Backend> DiagGaussianDistribution<B> {
     }
 }
 
-impl<B: Backend, O: Observation, A: Action, L: Logp> Distribution<O, A, L>
-    for DiagGaussianDistribution<B>
-{
-    fn get_action(&self, observation: O) -> (A, f32) {
-        let observation = observation.to_tensor::<B>().unsqueeze();
+impl<B: Backend> Distribution for DiagGaussianDistribution<B> {
+    type Observation = Tensor<B, 2>;
+    type Action = Tensor<B, 2>;
+    type Logp = Tensor<B, 2>;
+
+    fn get_action(&self, observation: Self::Observation) -> (Self::Action, f32) {
         let mu = self.mu_net.forward(observation.clone());
         let std = self.log_std.clone().exp();
         let noise = Tensor::<B, 2>::random(
@@ -45,26 +46,20 @@ impl<B: Backend, O: Observation, A: Action, L: Logp> Distribution<O, A, L>
         );
         let action = mu + std * noise;
         let logp = self.logp_from_t(observation, action.clone());
-        (
-            A::from_tensor(action.squeeze(0)),
-            logp.into_scalar().to_f32(),
-        )
+        (action.squeeze(0), logp.into_scalar().to_f32())
     }
 
     // TODO: it is a bit wasetful to send the state twice through the nn
-    fn log_probs(&self, states: &[O], actions: &[A]) -> Vec<L> {
-        let observations = states
-            .iter()
-            .map(|obs| obs.to_tensor::<B>())
-            .collect::<Vec<_>>();
+    fn log_probs(
+        &self,
+        observations: &[Self::Observation],
+        actions: &[Self::Action],
+    ) -> Vec<Self::Logp> {
+        let observations = observations.iter().map(|o| o.clone()).collect();
         let observations: Tensor<B, 2> = Tensor::stack(observations, 0);
-        let actions = actions
-            .iter()
-            .map(|act| act.to_tensor::<B>())
-            .collect::<Vec<_>>();
+        let actions = actions.iter().map(|act| act.clone()).collect::<Vec<_>>();
         let actions: Tensor<B, 2> = Tensor::stack(actions, 0);
         let logps = self.logp_from_t(observations, actions);
-        // logps.to_data().to_vec().unwrap()
         todo!()
     }
 

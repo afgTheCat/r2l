@@ -134,7 +134,7 @@ pub trait EnvPool {
     type Obs: Observation;
     type Act: Action;
 
-    fn collect_rollouts<L: Logp, O: Observation, A: Action, D: Distribution<O, A, L>>(
+    fn collect_rollouts<O: Observation, A: Action, D: Distribution>(
         &mut self,
         distribution: D,
     ) -> Vec<SnapShot<Self::Obs, Self::Act>>

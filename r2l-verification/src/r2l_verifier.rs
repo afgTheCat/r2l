@@ -3,7 +3,7 @@ use candle_core::Device;
 use r2l_agents::AgentKind;
 use r2l_api::{
     builders::{
-        agents::{a2c::A2C3Builder, ppo::PPO3Builder},
+        agents::{a2c::A2CBuilder, ppo::PPOBuilder},
         env_pool::{
             EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions,
             SequentialEnvHookTypes, VecPoolType,
@@ -43,7 +43,7 @@ fn r2l_verify(env_config: &EnvConfig) {
     let algo = args.get("algo").unwrap();
     let (agent, rollout_mode) = match algo.as_str() {
         "ppo" => {
-            let ppo = PPO3Builder::default()
+            let ppo = PPOBuilder::default()
                 .build(&device, &env_pool.env_description())
                 .unwrap();
             let agent = AgentKind::PPO(ppo);
@@ -52,7 +52,7 @@ fn r2l_verify(env_config: &EnvConfig) {
             (agent, rollout_mode)
         }
         "a2c" => {
-            let a2c = A2C3Builder::default()
+            let a2c = A2CBuilder::default()
                 .build(&device, &env_pool.env_description())
                 .unwrap();
             let agent = AgentKind::A2C(a2c);

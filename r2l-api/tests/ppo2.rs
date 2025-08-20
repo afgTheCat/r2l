@@ -7,7 +7,7 @@ use r2l_api::{
     },
     test_utils::run_gym_episodes,
 };
-use r2l_core::agents::Agent2;
+use r2l_core::agents::Agent;
 use r2l_core::{Algorithm, on_policy_algorithm::LearningSchedule};
 
 const NUM_ENVIRONMENTS: usize = 10;

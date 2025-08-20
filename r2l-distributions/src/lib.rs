@@ -1,9 +1,6 @@
 use crate::diagonal_distribution::DiagGaussianDistribution;
-use burn::prelude::Backend;
-use r2l_core2::{
-    distributions::Distribution,
-    env::{Action, Logp, Observation},
-};
+use burn::{prelude::Backend, tensor::Tensor};
+use r2l_core2::distributions::Distribution;
 mod diagonal_distribution;
 
 // TODO: it looks like generics kill the enum dispatch
@@ -12,22 +9,24 @@ pub enum DistribnutionKind<B: Backend> {
     Diagonal(DiagGaussianDistribution<B>),
 }
 
-impl<B: Backend, O: Observation, A: Action, L: Logp> Distribution<O, A, L>
-    for DistribnutionKind<B>
-{
-    fn get_action(&self, observation: O) -> (A, f32) {
+impl<B: Backend> Distribution for DistribnutionKind<B> {
+    type Observation = Tensor<B, 2>;
+    type Action = Tensor<B, 2>;
+    type Logp = Tensor<B, 2>;
+
+    fn get_action(&self, observation: Self::Observation) -> (Self::Action, f32) {
         todo!()
     }
 
-    fn log_probs(&self, states: &[O], actions: &[A]) -> Vec<L> {
-        todo!()
-    }
-
-    fn std(&self) -> f32 {
+    fn log_probs(&self, states: &[Self::Observation], actions: &[Self::Action]) -> Vec<Self::Logp> {
         todo!()
     }
 
     fn entropy(&self) -> f32 {
+        todo!()
+    }
+
+    fn std(&self) -> f32 {
         todo!()
     }
 

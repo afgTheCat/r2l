@@ -1,7 +1,7 @@
 use candle_core::{DType, Device, Error, Tensor};
-use r2l_agents::ppo::hooks::{HookResult, PPOBatchData};
-use r2l_agents::ppo::ppo3::PPP3HooksTrait;
-use r2l_api::builders::agents::ppo::PPO3Builder;
+use r2l_agents::ppo::PPP3HooksTrait;
+use r2l_agents::ppo::{HookResult, PPOBatchData};
+use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::builders::env_pool::VecPoolType;
 use r2l_core::distributions::DistributionKind;
 use r2l_core::policies::learning_modules::LearningModuleKind;
@@ -13,7 +13,7 @@ use r2l_core::{
     tensors::{PolicyLoss, ValueLoss},
     utils::rollout_buffer::{Advantages, RolloutBuffer},
 };
-use std::sync::{Mutex, mpsc::Sender};
+use std::sync::mpsc::Sender;
 use std::{any::Any, f64};
 
 const ENV_NAME: &str = "Pendulum-v1";
@@ -80,7 +80,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         rollout_buffers: &mut Vec<RolloutBuffer>,
         advantages: &mut Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
-    ) -> candle_core::Result<r2l_agents::ppo::hooks::HookResult> {
+    ) -> candle_core::Result<HookResult> {
         self.current_epoch = 0;
         let mut total_rewards: f32 = 0.;
         let mut total_episodes: usize = 0;
@@ -101,7 +101,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         learning_module: &mut LearningModuleKind,
         distribution: &DistributionKind,
         _rollout_buffers: &Vec<RolloutBuffer>,
-    ) -> candle_core::Result<r2l_agents::ppo::hooks::HookResult> {
+    ) -> candle_core::Result<HookResult> {
         self.current_epoch += 1;
         let should_stop = self.current_epoch == self.total_epochs;
         if should_stop {
@@ -125,7 +125,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
-    ) -> candle_core::Result<r2l_agents::ppo::hooks::HookResult> {
+    ) -> candle_core::Result<HookResult> {
         let entropy = distribution.entropy()?;
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.ent_coeff, (), &device)? * entropy.neg()?)?;
@@ -180,19 +180,6 @@ impl PPOProgress {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Default)]
-struct AppData {
-    current_epoch: usize,                 // to control the learning
-    total_epochs: usize,                  // to control the learning
-    current_rollout: usize,               // does not need it any more
-    total_rollouts: usize,                // does not need it any more
-    ent_coeff: f32,                       // to control the learning
-    clip_range: f32,                      // for logging
-    target_kl: f32,                       // to control the learning
-    current_progress_report: PPOProgress, // collect the learning stuff
-}
-
 pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
@@ -200,7 +187,7 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
     let env_pool = VecPoolType::Dummy.build(&device, ENV_NAME.to_owned(), 1)?;
     let env_description = env_pool.env_description.clone();
 
-    let mut agent = PPO3Builder::default().build(&device, &env_description)?;
+    let mut agent = PPOBuilder::default().build(&device, &env_description)?;
     agent.hooks = Box::new(ppo_hook);
 
     let mut algo = OnPolicyAlgorithm2 {

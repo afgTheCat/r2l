@@ -2,7 +2,7 @@
 use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
 use candle_core::Result;
 
-pub trait Agent2 {
+pub trait Agent {
     // The distribution
     type Dist: Distribution;
 

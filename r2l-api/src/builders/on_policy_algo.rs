@@ -1,7 +1,7 @@
 use crate::{
     builders::{
-        agents::a2c::A2C3Builder,
-        agents::ppo::PPO3Builder,
+        agents::a2c::A2CBuilder,
+        agents::ppo::PPOBuilder,
         env_pool::{EnvBuilderTrait, VecPoolType},
     },
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
@@ -15,8 +15,8 @@ use r2l_core::{
 };
 
 pub enum AgentType {
-    PPO(PPO3Builder),
-    A2C(A2C3Builder),
+    PPO(PPOBuilder),
+    A2C(A2CBuilder),
 }
 
 pub struct OnPolicyAlgorithmBuilder {
@@ -43,7 +43,7 @@ impl Default for OnPolicyAlgorithmBuilder {
                 total_steps: 0,
                 current_step: 0,
             },
-            agent_type: AgentType::PPO(PPO3Builder::default()),
+            agent_type: AgentType::PPO(PPOBuilder::default()),
         }
     }
 }
@@ -87,7 +87,7 @@ impl OnPolicyAlgorithmBuilder {
     // TODO: once we have some better policies, we should add it here. That would correspond to the stable baselines API
     pub fn ppo() -> Self {
         let env_pool_builder = VecPoolType::default();
-        let agent_type = AgentType::PPO(PPO3Builder::default());
+        let agent_type = AgentType::PPO(PPOBuilder::default());
         Self {
             env_pool_type: env_pool_builder,
             rollout_mode: RolloutMode::StepBound { n_steps: 2048 },
@@ -98,7 +98,7 @@ impl OnPolicyAlgorithmBuilder {
 
     pub fn a2c() -> Self {
         let env_pool_builder = VecPoolType::default();
-        let agent_type = AgentType::A2C(A2C3Builder::default());
+        let agent_type = AgentType::A2C(A2CBuilder::default());
         Self {
             env_pool_type: env_pool_builder,
             rollout_mode: RolloutMode::StepBound { n_steps: 5 },

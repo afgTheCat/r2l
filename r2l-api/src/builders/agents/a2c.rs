@@ -4,13 +4,13 @@ use crate::builders::{
 };
 use candle_core::{DType, Device, Result};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_agents::a2c::a2c3::{A2C3, DefaultA2C3Hooks};
+use r2l_agents::a2c::{A2C, DefaultA2CHooks};
 use r2l_core::{
     distributions::DistributionKind, env::EnvironmentDescription,
     policies::learning_modules::LearningModuleKind,
 };
 
-pub struct A2C3Builder {
+pub struct A2CBuilder {
     pub distribution_builder: DistributionBuilder,
     pub learning_module_builder: LearningModuleBuilder,
     pub clip_range: f32,
@@ -19,9 +19,9 @@ pub struct A2C3Builder {
     pub sample_size: usize,
 }
 
-impl Default for A2C3Builder {
+impl Default for A2CBuilder {
     fn default() -> Self {
-        A2C3Builder {
+        A2CBuilder {
             distribution_builder: DistributionBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,
@@ -40,12 +40,12 @@ impl Default for A2C3Builder {
     }
 }
 
-impl A2C3Builder {
+impl A2CBuilder {
     pub fn build(
         &self,
         device: &Device,
         env_description: &EnvironmentDescription,
-    ) -> Result<A2C3<DistributionKind, LearningModuleKind>> {
+    ) -> Result<A2C<DistributionKind, LearningModuleKind>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
             VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
@@ -58,10 +58,10 @@ impl A2C3Builder {
             env_description,
             device,
         )?;
-        Ok(A2C3 {
+        Ok(A2C {
             distribution,
             learning_module,
-            hooks: Box::new(DefaultA2C3Hooks),
+            hooks: Box::new(DefaultA2CHooks),
             device: device.clone(),
             gamma: self.gamma,
             lambda: self.lambda,

@@ -1,5 +1,5 @@
 use crate::{
-    agent::Agent,
+    agent::{Agent, AgentAct, AgentObs},
     env::{Action, EnvPool, Observation, SnapShot},
 };
 
@@ -112,10 +112,10 @@ impl<E: EnvPool, AG: Agent, H: LearningHooks> OnPolicyAlgorithm<E, AG, H> {
     // TODO: conversion between Observation and Action types should be expressed more easily
     pub fn train(&mut self)
     where
-        E::Obs: From<<AG as Agent>::Obs>,
-        E::Act: From<<AG as Agent>::Act>,
-        <AG as Agent>::Obs: From<E::Obs>,
-        <AG as Agent>::Act: From<E::Act>,
+        E::Obs: From<AgentObs<AG>>,
+        E::Act: From<AgentAct<AG>>,
+        AgentObs<AG>: From<E::Obs>,
+        AgentAct<AG>: From<E::Act>,
     {
         loop {
             // rollout phase

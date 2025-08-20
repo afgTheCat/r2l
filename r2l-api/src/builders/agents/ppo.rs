@@ -4,13 +4,13 @@ use crate::builders::{
 };
 use candle_core::{DType, Device, Result};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_agents::ppo::ppo3::{EmptyPPO3Hooks, PPO3};
+use r2l_agents::ppo::{EmptyPPO3Hooks, PPO};
 use r2l_core::{
     distributions::DistributionKind, env::EnvironmentDescription,
     policies::learning_modules::LearningModuleKind,
 };
 
-pub struct PPO3Builder {
+pub struct PPOBuilder {
     pub distribution_builder: DistributionBuilder,
     pub learning_module_builder: LearningModuleBuilder,
     pub clip_range: f32,
@@ -19,9 +19,9 @@ pub struct PPO3Builder {
     pub sample_size: usize,
 }
 
-impl Default for PPO3Builder {
+impl Default for PPOBuilder {
     fn default() -> Self {
-        PPO3Builder {
+        PPOBuilder {
             distribution_builder: DistributionBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,
@@ -40,12 +40,12 @@ impl Default for PPO3Builder {
     }
 }
 
-impl PPO3Builder {
+impl PPOBuilder {
     pub fn build(
         &self,
         device: &Device,
         env_description: &EnvironmentDescription,
-    ) -> Result<PPO3<DistributionKind, LearningModuleKind>> {
+    ) -> Result<PPO<DistributionKind, LearningModuleKind>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
             VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
@@ -58,7 +58,7 @@ impl PPO3Builder {
             env_description,
             device,
         )?;
-        Ok(PPO3 {
+        Ok(PPO {
             distribution,
             learning_module,
             hooks: Box::new(EmptyPPO3Hooks),
