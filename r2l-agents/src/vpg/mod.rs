@@ -1,5 +1,5 @@
 use crate::ppo::PPO3LearningModule;
-use candle_core::{Device, Result};
+use candle_core::{Device, Result, Tensor};
 use r2l_core::{
     agents::Agent,
     distributions::Distribution,
@@ -9,7 +9,7 @@ use r2l_core::{
     },
     tensors::{PolicyLoss, ValueLoss},
     utils::rollout_buffer::{
-        RolloutBatch, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns2,
+        Logps, RolloutBatch, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns,
     },
 };
 
@@ -24,7 +24,11 @@ pub struct VPG<D: Distribution, LM: PPO3LearningModule> {
     sample_size: usize,
 }
 
-impl<D: Distribution, LM: PPO3LearningModule> VPG<D, LM> {
+impl<
+    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+    LM: PPO3LearningModule,
+> VPG<D, LM>
+{
     fn train_single_batch(&mut self, batch: RolloutBatch) -> Result<bool> {
         let policy_loss = PolicyLoss(batch.advantages.mul(&batch.logp_old)?.neg()?.mean_all()?);
         let values_pred = self.learning_module.calculate_values(&batch.observations)?;
@@ -37,7 +41,11 @@ impl<D: Distribution, LM: PPO3LearningModule> VPG<D, LM> {
     }
 }
 
-impl<D: Distribution, LM: PPO3LearningModule> Agent for VPG<D, LM> {
+impl<
+    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+    LM: PPO3LearningModule,
+> Agent for VPG<D, LM>
+{
     type Dist = D;
 
     fn distribution(&self) -> &Self::Dist {
@@ -45,16 +53,29 @@ impl<D: Distribution, LM: PPO3LearningModule> Agent for VPG<D, LM> {
     }
 
     fn learn(&mut self, rollouts: Vec<RolloutBuffer>) -> Result<()> {
-        let (advantages, returns) = calculate_advantages_and_returns2(
+        let (advantages, returns) = calculate_advantages_and_returns(
             &rollouts,
             &self.learning_module,
             self.gamma,
             self.lambda,
         );
+        let logps = Logps(
+            rollouts
+                .iter()
+                .map(|roll| {
+                    let states = Tensor::stack(&roll.states[0..roll.states.len() - 1], 0).unwrap();
+                    let actions = Tensor::stack(&roll.actions, 0).unwrap();
+                    self.distribution()
+                        .log_probs(states, actions)
+                        .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
+                })
+                .collect::<Result<Vec<Vec<f32>>>>()?,
+        );
         let rollout_batch_iter = RolloutBatchIterator::new(
             &rollouts,
             &advantages,
             &returns,
+            &logps,
             self.sample_size,
             self.device.clone(),
         );

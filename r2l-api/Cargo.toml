@@ -1,5 +1,4 @@
 [package]
-resolver = "2"
 name = "r2l-api"
 version.workspace = true
 edition.workspace = true

@@ -8,8 +8,8 @@ use r2l_core::{
     },
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
     utils::rollout_buffer::{
-        Advantages, Returns, RolloutBatch, RolloutBatchIterator, RolloutBuffer,
-        calculate_advantages_and_returns2,
+        Advantages, Logps, Returns, RolloutBatch, RolloutBatchIterator, RolloutBuffer,
+        calculate_advantages_and_returns,
     },
 };
 use std::ops::Deref;
@@ -117,7 +117,11 @@ pub struct PPO<D: Distribution, LM: PPO3LearningModule> {
     pub device: Device,
 }
 
-impl<D: Distribution, LM: PPO3LearningModule> PPO<D, LM> {
+impl<
+    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+    LM: PPO3LearningModule,
+> PPO<D, LM>
+{
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         loop {
             let Some(batch) = batch_iter.next() else {
@@ -125,7 +129,7 @@ impl<D: Distribution, LM: PPO3LearningModule> PPO<D, LM> {
             };
             let logp = Logp(
                 self.distribution
-                    .log_probs(&batch.observations, &batch.actions)?,
+                    .log_probs(batch.observations.clone(), batch.actions.clone())?,
             );
             let values_pred =
                 ValuesPred(self.learning_module.calculate_values(&batch.observations)?);
@@ -168,14 +172,16 @@ impl<D: Distribution, LM: PPO3LearningModule> PPO<D, LM> {
     fn rollout_loop(
         &mut self,
         rollouts: &Vec<RolloutBuffer>,
-        advantages: &mut Advantages,
-        returns: &mut Returns,
+        advantages: &Advantages,
+        returns: &Returns,
+        logps: &Logps,
     ) -> Result<()> {
         loop {
             let mut batch_iter = RolloutBatchIterator::new(
                 &rollouts,
                 advantages,
                 returns,
+                logps,
                 self.sample_size,
                 self.device.clone(),
             );
@@ -188,7 +194,11 @@ impl<D: Distribution, LM: PPO3LearningModule> PPO<D, LM> {
     }
 }
 
-impl<D: Distribution, LM: PPO3LearningModule> Agent for PPO<D, LM> {
+impl<
+    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+    LM: PPO3LearningModule,
+> Agent for PPO<D, LM>
+{
     type Dist = D;
 
     fn distribution(&self) -> &Self::Dist {
@@ -196,7 +206,7 @@ impl<D: Distribution, LM: PPO3LearningModule> Agent for PPO<D, LM> {
     }
 
     fn learn(&mut self, mut rollouts: Vec<RolloutBuffer>) -> Result<()> {
-        let (mut advantages, mut returns) = calculate_advantages_and_returns2(
+        let (mut advantages, mut returns) = calculate_advantages_and_returns(
             &rollouts,
             &self.learning_module,
             self.gamma,
@@ -209,8 +219,20 @@ impl<D: Distribution, LM: PPO3LearningModule> Agent for PPO<D, LM> {
             &mut advantages,
             &mut returns,
         );
+        let logps = Logps(
+            rollouts
+                .iter()
+                .map(|roll| {
+                    let states = Tensor::stack(&roll.states[0..roll.states.len() - 1], 0).unwrap();
+                    let actions = Tensor::stack(&roll.actions, 0).unwrap();
+                    self.distribution()
+                        .log_probs(states, actions)
+                        .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
+                })
+                .collect::<Result<Vec<Vec<f32>>>>()?,
+        );
         process_hook_result!(before_learning_hook_res);
-        self.rollout_loop(&rollouts, &mut advantages, &mut returns)?;
+        self.rollout_loop(&rollouts, &advantages, &returns, &logps)?;
         Ok(())
     }
 }

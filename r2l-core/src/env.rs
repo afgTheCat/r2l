@@ -1,6 +1,6 @@
 use crate::{distributions::Distribution, numeric::Buffer, utils::rollout_buffer::RolloutBuffer};
 use bincode::{Decode, Encode};
-use candle_core::{Result, WithDType};
+use candle_core::{Result, Tensor, WithDType};
 
 #[derive(Debug, Clone)]
 pub enum Space {
@@ -74,7 +74,7 @@ pub enum RolloutMode {
 
 // TODO: we may want to get rid of the env pool trait and submerge it into the env trait
 pub trait EnvPool {
-    fn collect_rollouts<D: Distribution>(
+    fn collect_rollouts<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>(
         &mut self,
         distribution: &D,
         rollout_mode: RolloutMode,

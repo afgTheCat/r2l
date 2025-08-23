@@ -325,7 +325,15 @@ impl VecPoolType {
             Self::Vec => {
                 let (result_tx, result_rx) = crossbeam::channel::unbounded::<ThreadResult>();
                 let mut worker_txs = vec![];
-                let distr_lock = Arc::new(ShardedLock::new(None::<&'static dyn Distribution>));
+                let distr_lock = Arc::new(ShardedLock::new(
+                    None::<
+                        &'static dyn Distribution<
+                            Observation = Tensor,
+                            Action = Tensor,
+                            Entropy = Tensor,
+                        >,
+                    >,
+                ));
                 let n_envs = env_builder.n_envs();
                 let task_rxs = (0..n_envs)
                     .map(|_| {

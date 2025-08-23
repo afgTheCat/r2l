@@ -3,7 +3,7 @@ use crate::env_pools::{EnvHolder, SequentialVecEnvHooks};
 use crate::ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet};
 use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
 use bincode::{Decode, Encode};
-use candle_core::{Error, Result};
+use candle_core::{Error, Result, Tensor};
 use interprocess::local_socket::{
     GenericNamespaced, ListenerOptions, Stream, ToNsName, traits::ListenerExt,
 };
@@ -19,7 +19,11 @@ pub struct SubprocHolder {
 }
 
 impl SubprocHolder {
-    fn shutdown_subprocesses<D: Distribution + Decode<()> + Encode>(&mut self) {
+    fn shutdown_subprocesses<
+        D: Distribution<Action = Tensor, Observation = Tensor, Entropy = Tensor> + Decode<()> + Encode,
+    >(
+        &mut self,
+    ) {
         for SubprocessEnvHandle { conn, .. } in self.handles.iter_mut() {
             let packet_sent: PacketToSend<D> = PacketToSend::Halt;
             send_packet(conn, packet_sent);

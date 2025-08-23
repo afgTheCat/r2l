@@ -1,5 +1,5 @@
 [package]
-name = "r2l-env-pools"
+name = "r2l-actors"
 version.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -8,3 +8,6 @@ license.workspace = true
 
 [dependencies]
 r2l-core2 = { workspace = true }
+burn = { workspace = true }
+rand = "0.9.0"
+ringbuffer = "0.16.0"

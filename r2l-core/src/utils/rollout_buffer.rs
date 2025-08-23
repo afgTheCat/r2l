@@ -13,7 +13,7 @@ pub struct RolloutBuffer {
     pub actions: Vec<Tensor>,
     pub rewards: Vec<f32>,
     pub dones: Vec<bool>,
-    pub logps: Vec<f32>,
+    // pub logps: Vec<f32>,
     pub last_state: Option<Tensor>,
 }
 
@@ -39,7 +39,7 @@ impl Encode for RolloutBuffer {
         bincode::encode_into_writer(&actions, &mut encoder.writer(), writer_config)?;
         bincode::encode_into_writer(&self.rewards, &mut encoder.writer(), writer_config)?;
         bincode::encode_into_writer(&self.dones, &mut encoder.writer(), writer_config)?;
-        bincode::encode_into_writer(&self.logps, &mut encoder.writer(), writer_config)?;
+        // bincode::encode_into_writer(&self.logps, &mut encoder.writer(), writer_config)?;
         match &self.last_state {
             None => 0u32.encode(encoder)?,
             Some(last_state) => {
@@ -73,7 +73,7 @@ impl<C> Decode<C> for RolloutBuffer {
             .map_err(|err| DecodeError::OtherString(err.to_string()))?;
         let rewards: Vec<f32> = Vec::decode(decoder)?;
         let dones: Vec<bool> = Vec::decode(decoder)?;
-        let logps: Vec<f32> = Vec::decode(decoder)?;
+        // let logps: Vec<f32> = Vec::decode(decoder)?;
         let last_state_type = u32::decode(decoder)?;
         let last_state: Option<Tensor> = match last_state_type {
             0 => None,
@@ -90,7 +90,6 @@ impl<C> Decode<C> for RolloutBuffer {
             actions,
             rewards,
             dones,
-            logps,
             last_state,
         })
     }
@@ -105,22 +104,18 @@ impl<'de, C> BorrowDecode<'de, C> for RolloutBuffer {
 }
 
 impl RolloutBuffer {
-    pub fn push_step(&mut self, state: Tensor, action: Tensor, reward: f32, done: bool, logp: f32) {
+    pub fn push_step(&mut self, state: Tensor, action: Tensor, reward: f32, done: bool) {
         self.states.push(state);
         self.actions.push(action);
         self.rewards.push(reward);
         self.dones.push(done);
-        self.logps.push(logp);
+        // self.logps.push(logp);
     }
 
     // TODO: we should get rid of the resetting probably and reset here
-    pub fn set_states(
-        &mut self,
-        states: Vec<(Tensor, Tensor, f32, bool, f32)>,
-        last_state: Tensor,
-    ) {
-        for (state, action, reward, done, logp) in states {
-            self.push_step(state, action, reward, done, logp);
+    pub fn set_states(&mut self, states: Vec<(Tensor, Tensor, f32, bool)>, last_state: Tensor) {
+        for (state, action, reward, done) in states {
+            self.push_step(state, action, reward, done);
         }
         self.set_last_state(last_state);
     }
@@ -158,8 +153,8 @@ impl RolloutBuffer {
         Ok((advantages, returns))
     }
 
-    pub fn sample_point(&self, index: usize) -> (&Tensor, &Tensor, f32) {
-        (&self.states[index], &self.actions[index], self.logps[index])
+    pub fn sample_point(&self, index: usize) -> (&Tensor, &Tensor) {
+        (&self.states[index], &self.actions[index])
     }
 
     pub fn reset(&mut self, env: &mut impl Env, device: &Device) -> Result<Tensor> {
@@ -168,7 +163,6 @@ impl RolloutBuffer {
         self.actions.clear();
         self.rewards.clear();
         self.dones.clear();
-        self.logps.clear();
         if let Some(last_state) = self.last_state.take() {
             Ok(last_state)
         } else {
@@ -205,24 +199,7 @@ impl Advantages {
 #[derive(Deref, Debug)]
 pub struct Returns(Vec<Vec<f32>>);
 
-// pub fn calculate_advantages_and_returns(
-//     rollouts: &[RolloutBuffer],
-//     policy: &impl PolicyWithValueFunction,
-//     gamma: f32,
-//     lambda: f32,
-// ) -> (Advantages, Returns) {
-//     let (advantages, returns): (Vec<Vec<f32>>, Vec<Vec<f32>>) = rollouts
-//         .iter()
-//         .map(|rollout| {
-//             rollout
-//                 .calculate_advantages_and_returns(policy, gamma, lambda)
-//                 .unwrap() // TODO: get rid of this unwrap
-//         })
-//         .unzip();
-//     (Advantages(advantages), Returns(returns))
-// }
-
-pub fn calculate_advantages_and_returns2(
+pub fn calculate_advantages_and_returns(
     rollouts: &[RolloutBuffer],
     value_func: &impl ValueFunction,
     gamma: f32,
@@ -239,10 +216,14 @@ pub fn calculate_advantages_and_returns2(
     (Advantages(advantages), Returns(returns))
 }
 
+#[derive(Deref, Debug)]
+pub struct Logps(pub Vec<Vec<f32>>);
+
 pub struct RolloutBatchIterator<'a> {
     rollouts: &'a [RolloutBuffer],
     advantages: &'a Advantages,
     returns: &'a Returns,
+    logps: &'a Logps,
     indicies: Vec<(usize, usize)>,
     current: usize,
     sample_size: usize,
@@ -254,6 +235,7 @@ impl<'a> RolloutBatchIterator<'a> {
         rollouts: &'a [RolloutBuffer],
         advantages: &'a Advantages,
         returns: &'a Returns,
+        logps: &'a Logps,
         sample_size: usize,
         device: Device,
     ) -> Self {
@@ -268,6 +250,7 @@ impl<'a> RolloutBatchIterator<'a> {
             rollouts,
             advantages,
             returns,
+            logps,
             indicies,
             current: 0,
             sample_size,
@@ -290,9 +273,10 @@ impl<'a> Iterator for RolloutBatchIterator<'a> {
             (vec![], vec![], vec![], vec![], vec![]),
             |(mut states, mut actions, mut advantages, mut returns, mut logps),
              (rollout_idx, idx)| {
-                let (state, action, logp) = self.rollouts[*rollout_idx].sample_point(*idx);
+                let (state, action) = self.rollouts[*rollout_idx].sample_point(*idx);
                 let adv = self.advantages[*rollout_idx][*idx];
                 let ret = self.returns[*rollout_idx][*idx];
+                let logp = self.logps[*rollout_idx][*idx];
                 states.push(state);
                 actions.push(action);
                 advantages.push(adv);

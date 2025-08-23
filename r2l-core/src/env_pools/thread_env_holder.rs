@@ -32,7 +32,14 @@ pub struct WorkerThread<E: Env> {
 impl<E: Env> WorkerThread<E> {
     // signals whether a new job was found or not
     // thing is, we want a ReadWriteLock here, otherwise
-    pub fn work(&mut self, distr: Arc<ShardedLock<Option<&dyn Distribution>>>) {
+    pub fn work(
+        &mut self,
+        distr: Arc<
+            ShardedLock<
+                Option<&dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>,
+            >,
+        >,
+    ) {
         while let Ok(task) = self.task_rx.recv() {
             match task {
                 WorkerTask::Rollout {
@@ -66,7 +73,7 @@ impl<E: Env> WorkerThread<E> {
 }
 
 pub struct ThreadResult {
-    states: Vec<(Tensor, Tensor, f32, bool, f32)>,
+    states: Vec<(Tensor, Tensor, f32, bool)>,
     last_state: Option<Tensor>,
     env_idx: usize, // TODO: this we probably don't need
 }
@@ -74,13 +81,22 @@ pub struct ThreadResult {
 pub struct ThreadHolder {
     pub worker_txs: Vec<Sender<WorkerTask>>,
     pub result_rx: Receiver<ThreadResult>,
-    pub distr_lock: Arc<ShardedLock<Option<&'static dyn Distribution>>>,
+    pub distr_lock: Arc<
+        ShardedLock<
+            Option<
+                &'static dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+            >,
+        >,
+    >,
     pub buffs: Vec<RolloutBuffer>,
     pub current_states: Vec<Tensor>,
 }
 
 impl ThreadHolder {
-    fn lock_distr<D: Distribution>(&mut self, distr: &D) {
+    fn lock_distr<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>(
+        &mut self,
+        distr: &D,
+    ) {
         // SAFETY:
         // We cast `&D` to a `'static` lifetime in order to temporarily store it in a sharded lock.
         // This is sound because access to the distribution is strictly synchronized through a
@@ -128,7 +144,9 @@ impl EnvHolder for ThreadHolder {
     }
 
     // TODO: Finish this!
-    fn sequential_rollout<D: Distribution>(
+    fn sequential_rollout<
+        D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+    >(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,
@@ -147,7 +165,7 @@ impl EnvHolder for ThreadHolder {
         Ok(self.buffs.clone())
     }
 
-    fn async_rollout<D: Distribution>(
+    fn async_rollout<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,

@@ -54,6 +54,7 @@ impl EnvironmentDescription {
 // TODO: This is a useful thing buffer needs to be go
 pub struct SnapShot<Obs: Observation, Act: Action> {
     pub state: Obs,
+    pub next_state: Obs,
     pub action: Act,
     pub reward: f32,
     pub terminated: bool,
@@ -123,14 +124,13 @@ pub trait Env {
     type Obs: Observation;
     type Act: Action;
 
-    // reset returns an observation, which should be an associated type, not the buffer itself
     fn reset(&mut self, seed: u64) -> Self::Obs;
     fn step(&mut self, action: &Self::Act) -> SnapShot<Self::Obs, Self::Act>;
     fn env_description(&self) -> EnvironmentDescription;
 }
 
 // This is mostly internal to r2l
-pub trait EnvPool {
+pub trait Actor {
     type Obs: Observation;
     type Act: Action;
 
@@ -143,8 +143,4 @@ pub trait EnvPool {
         A: From<Self::Act>,
         Self::Obs: From<O>,
         Self::Act: From<A>;
-
-    fn env_description(&self) -> EnvironmentDescription;
-
-    fn num_env(&self) -> usize;
 }

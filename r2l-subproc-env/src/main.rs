@@ -2,7 +2,7 @@
 // and supported gym env as well. Also we can experiment with fork/clone whatever on linux
 
 use bincode::{Decode, Encode};
-use candle_core::{Device, Error, Result};
+use candle_core::{Device, Error, Result, Tensor};
 use clap::Parser;
 use interprocess::local_socket::{
     GenericNamespaced, Stream, ToNsName, traits::Stream as StreamTrait,
@@ -88,7 +88,11 @@ pub struct Rollout<E: Env> {
 }
 
 impl<E: Env> Rollout<E> {
-    fn handle_packet<D: Distribution + Decode<()> + Encode>(&mut self) -> Result<bool> {
+    fn handle_packet<
+        D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor> + Decode<()> + Encode,
+    >(
+        &mut self,
+    ) -> Result<bool> {
         let packet: PacketToReceive<D> = receive_packet(&mut self.conn);
         match packet {
             PacketToReceive::Halt => {

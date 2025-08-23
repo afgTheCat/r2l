@@ -68,8 +68,8 @@ impl<E: Env> EvaluatorNormalizer<E> {
 impl<E: Env> SequentialVecEnvHooks for EvaluatorNormalizer<E> {
     fn step_hook(
         &mut self,
-        dist: &dyn Distribution,
-        states: &mut Vec<(Tensor, Tensor, f32, f32, bool)>,
+        dist: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        states: &mut Vec<(Tensor, Tensor, f32, bool)>,
     ) -> candle_core::Result<bool> {
         let n_envs = states.len();
         self.evaluator.evaluate(dist, n_envs)?;
@@ -115,8 +115,8 @@ pub struct EmptySequentialVecEnv;
 impl SequentialVecEnvHooks for EmptySequentialVecEnv {
     fn step_hook(
         &mut self,
-        _: &dyn Distribution,
-        _: &mut Vec<(Tensor, Tensor, f32, f32, bool)>,
+        _: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        _: &mut Vec<(Tensor, Tensor, f32, bool)>,
     ) -> candle_core::Result<bool> {
         Ok(false)
     }

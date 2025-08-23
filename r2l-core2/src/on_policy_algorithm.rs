@@ -1,6 +1,6 @@
 use crate::{
     agent::{Agent, AgentAct, AgentObs},
-    env::{Action, EnvPool, Observation, SnapShot},
+    env::{Action, Actor, Observation, SnapShot},
 };
 
 macro_rules! break_on_hook_res {
@@ -74,7 +74,7 @@ pub trait LearningHooks {
     fn post_training_hook(&mut self) -> bool;
 }
 
-pub struct OnPolicyAlgorithm<E: EnvPool, AG: Agent, H: LearningHooks> {
+pub struct OnPolicyAlgorithm<E: Actor, AG: Agent, H: LearningHooks> {
     pub env_pool: E,
     pub agent: AG,
     pub hooks: H,
@@ -100,7 +100,7 @@ impl LearningHooks for DefaultLearningHook {
     }
 }
 
-impl<E: EnvPool, AG: Agent, H: LearningHooks> OnPolicyAlgorithm<E, AG, H> {
+impl<E: Actor, AG: Agent, H: LearningHooks> OnPolicyAlgorithm<E, AG, H> {
     pub fn new(env_pool: E, agent: AG, hooks: H) -> Self {
         Self {
             env_pool,

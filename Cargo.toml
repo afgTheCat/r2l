@@ -10,11 +10,11 @@ members = [
   "r2l-agents",
   "r2l-api",
   "r2l-policies",
-  "r2l-env-pools",
+  "r2l-actors",
   "r2l-distributions"
 , "r2l-agents2"
 ]
-resolver = "2"
+resolver = "3"
 
 [workspace.dependencies]
 candle-core = { version = "0.9.1", features = ["cuda"] }

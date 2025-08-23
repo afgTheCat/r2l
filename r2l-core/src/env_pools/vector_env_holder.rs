@@ -16,10 +16,10 @@ pub struct VecEnvHolder<E: Env> {
 impl<E: Env> VecEnvHolder<E> {
     fn single_step_env(
         &mut self,
-        distr: &impl Distribution,
+        distr: &impl Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
         current_states: &mut Vec<Tensor>,
         hooks: &mut dyn SequentialVecEnvHooks,
-    ) -> Result<Vec<(Tensor, Tensor, f32, f32, bool)>> {
+    ) -> Result<Vec<(Tensor, Tensor, f32, bool)>> {
         let mut states = self
             .envs
             .iter_mut()
@@ -31,8 +31,8 @@ impl<E: Env> VecEnvHolder<E> {
         // save the states. This is super not obvious what is going on here
         for (idx, rb) in self.buffers.iter_mut().enumerate() {
             let state = &current_states[idx];
-            let (next_state, action, reward, logp, done) = &states[idx];
-            rb.push_step(state.clone(), action.detach(), *reward, *done, *logp);
+            let (next_state, action, reward, done) = &states[idx];
+            rb.push_step(state.clone(), action.detach(), *reward, *done);
             current_states[idx] = next_state.clone();
         }
         Ok(states)
@@ -44,8 +44,9 @@ impl<E: Env> EnvHolder for VecEnvHolder<E> {
         self.envs.len()
     }
 
-    // TODO: make this work
-    fn sequential_rollout<D: Distribution>(
+    fn sequential_rollout<
+        D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+    >(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,
@@ -79,7 +80,7 @@ impl<E: Env> EnvHolder for VecEnvHolder<E> {
     }
 
     // not really async in this case, only each environment does the thing after one another
-    fn async_rollout<D: Distribution>(
+    fn async_rollout<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,

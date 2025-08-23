@@ -38,7 +38,11 @@ impl<E: Env> Evaluator<E> {
         self.evaluations_results.clone()
     }
 
-    pub fn evaluate(&mut self, dist: &dyn Distribution, n_envs: usize) -> Result<()> {
+    pub fn evaluate(
+        &mut self,
+        dist: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        n_envs: usize,
+    ) -> Result<()> {
         if self.eval_step < self.eval_freq {
             self.eval_step += n_envs;
             Ok(())
@@ -82,8 +86,8 @@ impl<E: Env> Evaluator<E> {
 impl<E: Env> SequentialVecEnvHooks for Evaluator<E> {
     fn step_hook(
         &mut self,
-        distribution: &dyn Distribution,
-        states: &mut Vec<(Tensor, Tensor, f32, f32, bool)>,
+        distribution: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        states: &mut Vec<(Tensor, Tensor, f32, bool)>,
     ) -> candle_core::Result<bool> {
         let n_envs = states.len();
         self.evaluate(distribution, n_envs)?;

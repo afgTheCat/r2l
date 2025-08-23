@@ -1,10 +1,10 @@
 // use super::policies::Policy;
 use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
-use candle_core::Result;
+use candle_core::{Result, Tensor};
 
 pub trait Agent {
     // The distribution
-    type Dist: Distribution;
+    type Dist: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>;
 
     /// Retriesve the underlying distribution
     fn distribution(&self) -> &Self::Dist;
