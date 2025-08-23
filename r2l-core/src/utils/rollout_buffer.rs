@@ -1,4 +1,4 @@
-use crate::{env::Env, policies::ValueFunction, rng::RNG};
+use crate::{env::Env, numeric::Buffer, policies::ValueFunction, rng::RNG};
 use bincode::{
     BorrowDecode, Decode, Encode,
     error::{DecodeError, EncodeError},
@@ -157,7 +157,11 @@ impl RolloutBuffer {
         (&self.states[index], &self.actions[index])
     }
 
-    pub fn reset(&mut self, env: &mut impl Env, device: &Device) -> Result<Tensor> {
+    pub fn reset(
+        &mut self,
+        env: &mut impl Env<Tensor = Buffer>,
+        device: &Device,
+    ) -> Result<Tensor> {
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         self.states.clear();
         self.actions.clear();

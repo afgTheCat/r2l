@@ -7,7 +7,7 @@ use r2l_gym::GymEnv;
 pub fn run_gym_episodes(
     env: &str,
     ep_count: usize,
-    dist: &impl Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+    dist: &impl Distribution<Tensor = Tensor>,
 ) -> Result<()> {
     for _ in 0..ep_count {
         let device = Device::Cpu;
@@ -20,7 +20,7 @@ pub fn run_gym_episodes(
             terminated: false,
             trancuated: false,
             ..
-        } = env.step(&Buffer::from_candle_tensor(&action))
+        } = env.step(Buffer::from_candle_tensor(&action))
         {
             state = next_state.to_candle_tensor(&device);
             // TODO: unsqueeze seems too much here

@@ -77,9 +77,7 @@ impl CategoricalDistribution {
 }
 
 impl Distribution for CategoricalDistribution {
-    type Observation = Tensor;
-    type Action = Tensor;
-    type Entropy = Tensor;
+    type Tensor = Tensor;
 
     fn get_action(&self, observation: Tensor) -> Result<Tensor> {
         let logits = self.logits.forward(&observation)?;

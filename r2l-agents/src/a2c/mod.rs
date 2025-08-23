@@ -62,11 +62,7 @@ pub struct A2C<D: Distribution, LM: A2CLearningModule> {
     pub sample_size: usize,
 }
 
-impl<
-    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    LM: A2CLearningModule,
-> A2C<D, LM>
-{
+impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> A2C<D, LM> {
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         loop {
             let Some(batch) = batch_iter.next() else {
@@ -86,11 +82,7 @@ impl<
     }
 }
 
-impl<
-    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    LM: A2CLearningModule,
-> Agent for A2C<D, LM>
-{
+impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> Agent for A2C<D, LM> {
     type Dist = D;
 
     fn distribution(&self) -> &Self::Dist {

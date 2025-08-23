@@ -1,5 +1,6 @@
 use crate::env_pools::RolloutMode;
 use crate::env_pools::{EnvHolder, SequentialVecEnvHooks, run_rollout};
+use crate::numeric::Buffer;
 use crate::{
     distributions::Distribution,
     env_pools::{Env, single_step_env},
@@ -13,10 +14,10 @@ pub struct VecEnvHolder<E: Env> {
     pub device: Device,
 }
 
-impl<E: Env> VecEnvHolder<E> {
+impl<E: Env<Tensor = Buffer>> VecEnvHolder<E> {
     fn single_step_env(
         &mut self,
-        distr: &impl Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        distr: &impl Distribution<Tensor = Tensor>,
         current_states: &mut Vec<Tensor>,
         hooks: &mut dyn SequentialVecEnvHooks,
     ) -> Result<Vec<(Tensor, Tensor, f32, bool)>> {
@@ -39,14 +40,12 @@ impl<E: Env> VecEnvHolder<E> {
     }
 }
 
-impl<E: Env> EnvHolder for VecEnvHolder<E> {
+impl<E: Env<Tensor = Buffer>> EnvHolder for VecEnvHolder<E> {
     fn num_envs(&self) -> usize {
         self.envs.len()
     }
 
-    fn sequential_rollout<
-        D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    >(
+    fn sequential_rollout<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,
@@ -80,7 +79,7 @@ impl<E: Env> EnvHolder for VecEnvHolder<E> {
     }
 
     // not really async in this case, only each environment does the thing after one another
-    fn async_rollout<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>(
+    fn async_rollout<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,

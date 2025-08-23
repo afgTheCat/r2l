@@ -12,6 +12,7 @@ use r2l_core::{
     env::Env,
     env_pools::run_rollout,
     ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
+    numeric::Buffer,
     utils::rollout_buffer::RolloutBuffer,
 };
 use r2l_gym::GymEnv;
@@ -87,10 +88,8 @@ pub struct Rollout<E: Env> {
     device: Device,
 }
 
-impl<E: Env> Rollout<E> {
-    fn handle_packet<
-        D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor> + Decode<()> + Encode,
-    >(
+impl<E: Env<Tensor = Buffer>> Rollout<E> {
+    fn handle_packet<D: Distribution<Tensor = Tensor> + Decode<()> + Encode>(
         &mut self,
     ) -> Result<bool> {
         let packet: PacketToReceive<D> = receive_packet(&mut self.conn);

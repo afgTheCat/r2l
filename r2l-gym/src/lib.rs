@@ -76,6 +76,8 @@ impl GymEnv {
 }
 
 impl Env for GymEnv {
+    type Tensor = Buffer;
+
     fn reset(&mut self, seed: u64) -> Buffer {
         Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
@@ -88,7 +90,7 @@ impl Env for GymEnv {
         .unwrap()
     }
 
-    fn step(&mut self, action: &Buffer) -> SnapShot {
+    fn step(&mut self, action: Buffer) -> SnapShot<Buffer> {
         Python::with_gil(|py| {
             let step = match &self.action_space {
                 Space::Continous {

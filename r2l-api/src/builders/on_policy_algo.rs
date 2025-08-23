@@ -6,11 +6,12 @@ use crate::{
     },
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
 };
-use candle_core::{Device, Result};
+use candle_core::{Device, Result, Tensor};
 use r2l_agents::AgentKind;
 use r2l_core::{
     env::{EnvPool, RolloutMode},
     env_pools::{R2lEnvHolder, R2lEnvPool},
+    numeric::Buffer,
     on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm2, OnPolicyHooks},
 };
 
@@ -49,6 +50,7 @@ impl Default for OnPolicyAlgorithmBuilder {
 }
 
 impl OnPolicyAlgorithmBuilder {
+    // TODO: THIS RETURN TYPE IS INSANITY
     pub fn build<EB: EnvBuilderTrait>(
         mut self,
         env_builder: EB,

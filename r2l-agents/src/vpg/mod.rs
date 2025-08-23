@@ -24,11 +24,7 @@ pub struct VPG<D: Distribution, LM: PPO3LearningModule> {
     sample_size: usize,
 }
 
-impl<
-    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    LM: PPO3LearningModule,
-> VPG<D, LM>
-{
+impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> VPG<D, LM> {
     fn train_single_batch(&mut self, batch: RolloutBatch) -> Result<bool> {
         let policy_loss = PolicyLoss(batch.advantages.mul(&batch.logp_old)?.neg()?.mean_all()?);
         let values_pred = self.learning_module.calculate_values(&batch.observations)?;
@@ -41,11 +37,7 @@ impl<
     }
 }
 
-impl<
-    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    LM: PPO3LearningModule,
-> Agent for VPG<D, LM>
-{
+impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> Agent for VPG<D, LM> {
     type Dist = D;
 
     fn distribution(&self) -> &Self::Dist {

@@ -5297,6 +5297,7 @@ dependencies = [
  "r2l-macros",
  "rand 0.9.2",
  "rayon",
+ "ringbuffer",
  "safetensors 0.4.5",
  "smol",
 ]

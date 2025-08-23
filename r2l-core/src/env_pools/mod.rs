@@ -20,7 +20,7 @@ use rand::Rng;
 pub trait SequentialVecEnvHooks {
     fn step_hook(
         &mut self,
-        distribution: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        distribution: &dyn Distribution<Tensor = Tensor>,
         states: &mut Vec<(Tensor, Tensor, f32, bool)>,
     ) -> candle_core::Result<bool>;
 
@@ -32,16 +32,14 @@ pub trait SequentialVecEnvHooks {
 pub trait EnvHolder {
     fn num_envs(&self) -> usize;
 
-    fn sequential_rollout<
-        D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    >(
+    fn sequential_rollout<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,
         hooks: &mut dyn SequentialVecEnvHooks,
     ) -> Result<Vec<RolloutBuffer>>;
 
-    fn async_rollout<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>(
+    fn async_rollout<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,
@@ -49,9 +47,9 @@ pub trait EnvHolder {
 }
 
 pub fn single_step_env(
-    distr: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+    distr: &dyn Distribution<Tensor = Tensor>,
     state: &Tensor,
-    env: &mut impl Env,
+    env: &mut impl Env<Tensor = Buffer>,
     device: &Device,
 ) -> Result<(Tensor, Tensor, f32, bool)> {
     // TODO: unsqueezing here is kinda ugly, we probably need the dist to enforce some shape
@@ -61,7 +59,7 @@ pub fn single_step_env(
         reward,
         terminated,
         trancuated,
-    } = env.step(&Buffer::from_candle_tensor(&action));
+    } = env.step(Buffer::from_candle_tensor(&action));
     let mut next_state = next_state.to_candle_tensor(device);
     let done = terminated || trancuated;
     if done {
@@ -74,9 +72,9 @@ pub fn single_step_env(
 
 // TODO: retire this
 pub fn single_step_env_with_buffer(
-    dist: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+    dist: &dyn Distribution<Tensor = Tensor>,
     state: &Tensor,
-    env: &mut impl Env,
+    env: &mut impl Env<Tensor = Buffer>,
     rollout_buffer: &mut RolloutBuffer,
     device: &Device,
 ) -> Result<(Tensor, bool)> {
@@ -86,8 +84,8 @@ pub fn single_step_env_with_buffer(
 }
 
 pub fn run_rollout(
-    distr: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    env: &mut impl Env,
+    distr: &dyn Distribution<Tensor = Tensor>,
+    env: &mut impl Env<Tensor = Buffer>,
     rollout_mode: RolloutMode,
     mut state: Tensor,
     device: &Device,
@@ -119,7 +117,7 @@ pub fn run_rollout(
 }
 
 #[enum_dispatch(EnvHolder)]
-pub enum R2lEnvHolder<E: Env> {
+pub enum R2lEnvHolder<E: Env<Tensor = Buffer>> {
     Vec(VecEnvHolder<E>),
     Thread(ThreadHolder),
     SubProc(SubprocHolder),
@@ -139,9 +137,7 @@ pub struct R2lEnvPool<H: EnvHolder> {
 }
 
 impl<H: EnvHolder> EnvPool for R2lEnvPool<H> {
-    fn collect_rollouts<
-        D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    >(
+    fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,

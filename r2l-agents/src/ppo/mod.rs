@@ -117,11 +117,7 @@ pub struct PPO<D: Distribution, LM: PPO3LearningModule> {
     pub device: Device,
 }
 
-impl<
-    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    LM: PPO3LearningModule,
-> PPO<D, LM>
-{
+impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> PPO<D, LM> {
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         loop {
             let Some(batch) = batch_iter.next() else {
@@ -194,11 +190,7 @@ impl<
     }
 }
 
-impl<
-    D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    LM: PPO3LearningModule,
-> Agent for PPO<D, LM>
-{
+impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> Agent for PPO<D, LM> {
     type Dist = D;
 
     fn distribution(&self) -> &Self::Dist {

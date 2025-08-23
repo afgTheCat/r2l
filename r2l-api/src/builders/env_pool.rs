@@ -12,6 +12,7 @@ use r2l_core::{
         thread_env_holder::{ThreadResult, WorkerTask, WorkerThread},
         vector_env_holder::VecEnvHolder,
     },
+    numeric::Buffer,
     utils::rollout_buffer::RolloutBuffer,
 };
 use r2l_gym::GymEnv;
@@ -21,7 +22,7 @@ use std::sync::{
 };
 
 pub trait EnvBuilderTrait: Sync {
-    type Env: Env;
+    type Env: Env<Tensor = Buffer>;
 
     fn build_env(&self, device: &Device) -> Result<Self::Env>;
 }
@@ -34,7 +35,7 @@ impl EnvBuilderTrait for String {
     }
 }
 
-impl<E: Env, F: Sync> EnvBuilderTrait for F
+impl<E: Env<Tensor = Buffer>, F: Sync> EnvBuilderTrait for F
 where
     F: Fn(&Device) -> Result<E>,
 {
@@ -119,7 +120,7 @@ impl EvaluatorOptions {
         )
     }
 
-    pub fn build<E: Env>(&self, eval_env: E, n_envs: usize) -> Evaluator<E> {
+    pub fn build<E: Env<Tensor = Buffer>>(&self, eval_env: E, n_envs: usize) -> Evaluator<E> {
         Evaluator::new(
             eval_env,
             self.eval_episodes,
@@ -155,7 +156,7 @@ impl EvaluatorNormalizerOptions {
         }
     }
 
-    pub fn build<E: Env>(
+    pub fn build<E: Env<Tensor = Buffer>>(
         &self,
         eval_env: E,
         n_envs: usize,
@@ -269,7 +270,7 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
 }
 
 impl VecPoolType {
-    pub fn to_r2l_pool_inner<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
+    pub fn to_r2l_pool_inner<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
         &self,
         device: &Device,
         env_builder: BuilderType<EB>,
@@ -326,13 +327,7 @@ impl VecPoolType {
                 let (result_tx, result_rx) = crossbeam::channel::unbounded::<ThreadResult>();
                 let mut worker_txs = vec![];
                 let distr_lock = Arc::new(ShardedLock::new(
-                    None::<
-                        &'static dyn Distribution<
-                            Observation = Tensor,
-                            Action = Tensor,
-                            Entropy = Tensor,
-                        >,
-                    >,
+                    None::<&'static dyn Distribution<Tensor = Tensor>>,
                 ));
                 let n_envs = env_builder.n_envs();
                 let task_rxs = (0..n_envs)
@@ -388,7 +383,7 @@ impl VecPoolType {
         }
     }
 
-    pub fn build_with_builders<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
+    pub fn build_with_builders<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
         self,
         device: &Device,
         env_builders: Vec<EB>,
@@ -396,7 +391,7 @@ impl VecPoolType {
         self.to_r2l_pool_inner(device, BuilderType::env_buillder_vec(env_builders))
     }
 
-    pub fn build<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
+    pub fn build<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
         self,
         device: &Device,
         env_builder: EB,

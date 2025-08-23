@@ -53,16 +53,18 @@ impl EnvironmentDescription {
 }
 
 // TODO: This is a useful thing buffer needs to be go
-pub struct SnapShot<T: WithDType = f32> {
-    pub state: Buffer<T>,
+pub struct SnapShot<T> {
+    pub state: T,
     pub reward: f32,
     pub terminated: bool,
     pub trancuated: bool,
 }
 
 pub trait Env {
-    fn reset(&mut self, seed: u64) -> Buffer;
-    fn step(&mut self, action: &Buffer) -> SnapShot;
+    type Tensor;
+
+    fn reset(&mut self, seed: u64) -> Self::Tensor;
+    fn step(&mut self, action: Self::Tensor) -> SnapShot<Self::Tensor>;
     fn env_description(&self) -> EnvironmentDescription;
 }
 
@@ -74,7 +76,7 @@ pub enum RolloutMode {
 
 // TODO: we may want to get rid of the env pool trait and submerge it into the env trait
 pub trait EnvPool {
-    fn collect_rollouts<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>(
+    fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distribution: &D,
         rollout_mode: RolloutMode,

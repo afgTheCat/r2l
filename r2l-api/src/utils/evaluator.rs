@@ -3,6 +3,7 @@ use r2l_core::{
     distributions::Distribution,
     env::Env,
     env_pools::{SequentialVecEnvHooks, single_step_env_with_buffer},
+    numeric::Buffer,
     utils::rollout_buffer::RolloutBuffer,
 };
 use std::sync::{Arc, Mutex};
@@ -16,7 +17,7 @@ pub struct Evaluator<E: Env> {
     pub device: Device,
 }
 
-impl<E: Env> Evaluator<E> {
+impl<E: Env<Tensor = Buffer>> Evaluator<E> {
     pub fn new(
         env: E,
         eval_episodes: usize,
@@ -40,7 +41,7 @@ impl<E: Env> Evaluator<E> {
 
     pub fn evaluate(
         &mut self,
-        dist: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        dist: &dyn Distribution<Tensor = Tensor>,
         n_envs: usize,
     ) -> Result<()> {
         if self.eval_step < self.eval_freq {
@@ -83,10 +84,10 @@ impl<E: Env> Evaluator<E> {
     }
 }
 
-impl<E: Env> SequentialVecEnvHooks for Evaluator<E> {
+impl<E: Env<Tensor = Buffer>> SequentialVecEnvHooks for Evaluator<E> {
     fn step_hook(
         &mut self,
-        distribution: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        distribution: &dyn Distribution<Tensor = Tensor>,
         states: &mut Vec<(Tensor, Tensor, f32, bool)>,
     ) -> candle_core::Result<bool> {
         let n_envs = states.len();

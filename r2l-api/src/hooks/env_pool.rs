@@ -1,5 +1,7 @@
 use candle_core::{Device, Result, Tensor};
-use r2l_core::{distributions::Distribution, env::Env, env_pools::SequentialVecEnvHooks};
+use r2l_core::{
+    distributions::Distribution, env::Env, env_pools::SequentialVecEnvHooks, numeric::Buffer,
+};
 
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 
@@ -65,10 +67,10 @@ impl<E: Env> EvaluatorNormalizer<E> {
     }
 }
 
-impl<E: Env> SequentialVecEnvHooks for EvaluatorNormalizer<E> {
+impl<E: Env<Tensor = Buffer>> SequentialVecEnvHooks for EvaluatorNormalizer<E> {
     fn step_hook(
         &mut self,
-        dist: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        dist: &dyn Distribution<Tensor = Tensor>,
         states: &mut Vec<(Tensor, Tensor, f32, bool)>,
     ) -> candle_core::Result<bool> {
         let n_envs = states.len();
@@ -115,7 +117,7 @@ pub struct EmptySequentialVecEnv;
 impl SequentialVecEnvHooks for EmptySequentialVecEnv {
     fn step_hook(
         &mut self,
-        _: &dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
+        _: &dyn Distribution<Tensor = Tensor>,
         _: &mut Vec<(Tensor, Tensor, f32, bool)>,
     ) -> candle_core::Result<bool> {
         Ok(false)

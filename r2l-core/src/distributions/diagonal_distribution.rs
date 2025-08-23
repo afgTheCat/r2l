@@ -82,9 +82,7 @@ impl DiagGaussianDistribution {
 }
 
 impl Distribution for DiagGaussianDistribution {
-    type Observation = Tensor;
-    type Action = Tensor;
-    type Entropy = Tensor;
+    type Tensor = Tensor;
 
     fn get_action(&self, observation: Tensor) -> Result<Tensor> {
         let mu = self

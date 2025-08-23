@@ -5,8 +5,7 @@ use interprocess::local_socket::Stream;
 use std::io::{BufReader, Read, Write};
 
 #[derive(Debug, Encode)]
-pub enum PacketToSend<'a, D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>
-{
+pub enum PacketToSend<'a, D: Distribution<Tensor = Tensor>> {
     // Send command to halt training
     Halt,
     // Ack halting command
@@ -23,7 +22,7 @@ pub enum PacketToSend<'a, D: Distribution<Observation = Tensor, Action = Tensor,
 }
 
 #[derive(Debug, Decode)]
-pub enum PacketToReceive<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>> {
+pub enum PacketToReceive<D: Distribution<Tensor = Tensor>> {
     // Send command to halt training
     Halt,
     // Ack halting command

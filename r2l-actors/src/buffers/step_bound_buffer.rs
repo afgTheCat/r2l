@@ -1,11 +1,10 @@
-use std::cell::RefCell;
-
 use r2l_core2::{
     distributions::Distribution,
     env::{Env, SnapShot},
 };
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
+use std::cell::RefCell;
 
 thread_local! {
     pub static RNG: RefCell<StdRng> = RefCell::new(StdRng::seed_from_u64(0));

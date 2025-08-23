@@ -19,11 +19,7 @@ pub struct SubprocHolder {
 }
 
 impl SubprocHolder {
-    fn shutdown_subprocesses<
-        D: Distribution<Action = Tensor, Observation = Tensor, Entropy = Tensor> + Decode<()> + Encode,
-    >(
-        &mut self,
-    ) {
+    fn shutdown_subprocesses<D: Distribution<Tensor = Tensor> + Decode<()> + Encode>(&mut self) {
         for SubprocessEnvHandle { conn, .. } in self.handles.iter_mut() {
             let packet_sent: PacketToSend<D> = PacketToSend::Halt;
             send_packet(conn, packet_sent);

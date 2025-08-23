@@ -4,7 +4,7 @@ use candle_core::{Result, Tensor};
 
 pub trait Agent {
     // The distribution
-    type Dist: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>;
+    type Dist: Distribution<Tensor = Tensor>;
 
     /// Retriesve the underlying distribution
     fn distribution(&self) -> &Self::Dist;

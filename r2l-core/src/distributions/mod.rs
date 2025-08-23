@@ -1,5 +1,3 @@
-// TODO: should distributions be their own crate?
-
 pub mod categorical_distribution;
 pub mod diagonal_distribution;
 
@@ -14,14 +12,12 @@ use std::{f32, fmt::Debug};
 // 'static and self contained. Will see if we can stick to this, but it is the agent that has the
 // liberty to not be stateless and such
 pub trait Distribution: Sync + Debug + 'static {
-    type Observation;
-    type Action;
-    type Entropy;
+    type Tensor;
 
-    fn get_action(&self, observation: Self::Observation) -> Result<Self::Action>;
-    fn log_probs(&self, states: Self::Observation, actions: Self::Action) -> Result<Tensor>;
+    fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
+    fn log_probs(&self, states: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor>;
     fn std(&self) -> Result<f32>;
-    fn entropy(&self) -> Result<Self::Entropy>;
+    fn entropy(&self) -> Result<Self::Tensor>;
     fn resample_noise(&mut self) -> Result<()> {
         Ok(())
     }
@@ -34,25 +30,23 @@ pub enum DistributionKind {
 }
 
 impl Distribution for DistributionKind {
-    type Observation = Tensor;
-    type Action = Tensor;
-    type Entropy = Tensor;
+    type Tensor = Tensor;
 
-    fn get_action(&self, observation: Self::Observation) -> Result<Self::Action> {
+    fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.get_action(observation),
             Self::DiagGaussian(diag) => diag.get_action(observation),
         }
     }
 
-    fn log_probs(&self, states: Self::Observation, actions: Self::Action) -> Result<Tensor> {
+    fn log_probs(&self, states: Self::Tensor, actions: Self::Tensor) -> Result<Tensor> {
         match self {
             Self::Categorical(cat) => cat.log_probs(states, actions),
             Self::DiagGaussian(diag) => diag.log_probs(states, actions),
         }
     }
 
-    fn entropy(&self) -> Result<Self::Entropy> {
+    fn entropy(&self) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.entropy(),
             Self::DiagGaussian(diag) => diag.entropy(),

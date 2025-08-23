@@ -1,5 +1,6 @@
 use crate::env_pools::RolloutMode;
 use crate::env_pools::{EnvHolder, SequentialVecEnvHooks};
+use crate::numeric::Buffer;
 use crate::rng::RNG;
 use crate::{distributions::Distribution, env::Env, utils::rollout_buffer::RolloutBuffer};
 use candle_core::{Device, Error, Result, Tensor};
@@ -29,17 +30,10 @@ pub struct WorkerThread<E: Env> {
     pub device: Device,
 }
 
-impl<E: Env> WorkerThread<E> {
+impl<E: Env<Tensor = Buffer>> WorkerThread<E> {
     // signals whether a new job was found or not
     // thing is, we want a ReadWriteLock here, otherwise
-    pub fn work(
-        &mut self,
-        distr: Arc<
-            ShardedLock<
-                Option<&dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>,
-            >,
-        >,
-    ) {
+    pub fn work(&mut self, distr: Arc<ShardedLock<Option<&dyn Distribution<Tensor = Tensor>>>>) {
         while let Ok(task) = self.task_rx.recv() {
             match task {
                 WorkerTask::Rollout {
@@ -81,22 +75,13 @@ pub struct ThreadResult {
 pub struct ThreadHolder {
     pub worker_txs: Vec<Sender<WorkerTask>>,
     pub result_rx: Receiver<ThreadResult>,
-    pub distr_lock: Arc<
-        ShardedLock<
-            Option<
-                &'static dyn Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-            >,
-        >,
-    >,
+    pub distr_lock: Arc<ShardedLock<Option<&'static dyn Distribution<Tensor = Tensor>>>>,
     pub buffs: Vec<RolloutBuffer>,
     pub current_states: Vec<Tensor>,
 }
 
 impl ThreadHolder {
-    fn lock_distr<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>(
-        &mut self,
-        distr: &D,
-    ) {
+    fn lock_distr<D: Distribution<Tensor = Tensor>>(&mut self, distr: &D) {
         // SAFETY:
         // We cast `&D` to a `'static` lifetime in order to temporarily store it in a sharded lock.
         // This is sound because access to the distribution is strictly synchronized through a
@@ -144,9 +129,7 @@ impl EnvHolder for ThreadHolder {
     }
 
     // TODO: Finish this!
-    fn sequential_rollout<
-        D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>,
-    >(
+    fn sequential_rollout<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,
@@ -165,7 +148,7 @@ impl EnvHolder for ThreadHolder {
         Ok(self.buffs.clone())
     }
 
-    fn async_rollout<D: Distribution<Observation = Tensor, Action = Tensor, Entropy = Tensor>>(
+    fn async_rollout<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
         rollout_mode: RolloutMode,
