@@ -16,16 +16,27 @@ struct StepBoundDummyVecEnv<E: Env, H: SequntialStepBoundHooks<E::Obs, E::Act>> 
 }
 
 impl<E: Env, H: SequntialStepBoundHooks<E::Obs, E::Act>> StepBoundDummyVecEnv<E, H> {
+    fn single_step_rollout(
+        &mut self,
+        distr: &impl Distribution<Observation = E::Obs, Action = E::Act>,
+    ) {
+        let snapshots: Vec<_> = self.buffers.iter_mut().map(|buf| buf.step(distr)).collect();
+    }
+
     fn sequential_rollout(
         &mut self,
         distr: &impl Distribution<Observation = E::Obs, Action = E::Act>,
     ) {
         let mut steps_taken = 0;
         while steps_taken < self.step_bound {
-            let snapshots: Vec<_> = self.buffers.iter_mut().map(|buf| buf.step(distr)).collect();
-            let snapshots = self.hooks.process_snapshots(snapshots);
-            for (i, snapshot) in snapshots.into_iter().enumerate() {
-                self.buffers[i].push_snapshot(snapshot);
+            let mut state_buffers = vec![];
+            for buf in self.buffers.iter_mut() {
+                buf.step(distr);
+                state_buffers.push(buf.move_buffer());
+            }
+            self.hooks.process_last_step(&mut state_buffers);
+            for (buf, state_buffer) in self.buffers.iter_mut().zip(state_buffers) {
+                buf.set_buffer(state_buffer);
             }
             steps_taken += self.buffers.len();
         }

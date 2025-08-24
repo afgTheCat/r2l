@@ -1,13 +1,16 @@
 pub mod subproc_env_holder;
 pub mod thread_env_holder;
 pub mod vector_env_holder;
+pub mod vector_env_holder2;
 
 use crate::{
     distributions::Distribution,
     env::{Env, EnvPool, EnvironmentDescription, RolloutMode, SnapShot},
     env_pools::{
-        subproc_env_holder::SubprocHolder, thread_env_holder::ThreadHolder,
+        subproc_env_holder::SubprocHolder,
+        thread_env_holder::ThreadHolder,
         vector_env_holder::VecEnvHolder,
+        vector_env_holder2::{DefaultStepBoundHook, SequntialStepBoundHooks, VecEnvHolder2},
     },
     numeric::Buffer,
     rng::RNG,
@@ -119,9 +122,39 @@ pub fn run_rollout(
 #[enum_dispatch(EnvHolder)]
 pub enum R2lEnvHolder<E: Env<Tensor = Buffer>> {
     Vec(VecEnvHolder<E>),
+    Vec2(VecEnvHolder2<E, DefaultStepBoundHook<E>>),
     Thread(ThreadHolder),
     SubProc(SubprocHolder),
 }
+
+// impl<E: Env<Tensor = Buffer>> EnvHolder for R2lEnvHolder<E> {
+//     fn num_envs(&self) -> usize {
+//         match self {
+//             Self::Vec(v) => v.num_envs(),
+//             Self::Vec2(v) => v.num_envs(),
+//             Self::Thread(t) => t.num_envs(),
+//             Self::SubProc(s) => s.num_envs(),
+//         }
+//         todo!()
+//     }
+//
+//     fn sequential_rollout<D: Distribution<Tensor = Tensor>>(
+//         &mut self,
+//         distr: &D,
+//         rollout_mode: RolloutMode,
+//         hooks: &mut dyn SequentialVecEnvHooks,
+//     ) -> Result<Vec<RolloutBuffer>> {
+//         todo!()
+//     }
+//
+//     fn async_rollout<D: Distribution<Tensor = Tensor>>(
+//         &mut self,
+//         distr: &D,
+//         rollout_mode: RolloutMode,
+//     ) -> Result<Vec<RolloutBuffer>> {
+//         todo!()
+//     }
+// }
 
 pub enum StepMode {
     Sequential(Box<dyn SequentialVecEnvHooks>),

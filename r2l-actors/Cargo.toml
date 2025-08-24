@@ -11,3 +11,4 @@ r2l-core2 = { workspace = true }
 burn = { workspace = true }
 rand = "0.9.0"
 ringbuffer = "0.16.0"
+crossbeam = { workspace = true }

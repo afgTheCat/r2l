@@ -109,14 +109,14 @@ impl Env for GymEnv {
                 }
             };
             let step = step.bind(py);
-            let state: Vec<f32> = step.get_item(0)?.extract()?;
+            let next_state: Vec<f32> = step.get_item(0)?.extract()?;
             // TODO: remove unwrap
-            let state = Buffer::from_vec(state, DType::F32);
+            let next_state = Buffer::from_vec(next_state, DType::F32);
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
             let trancuated: bool = step.get_item(3)?.extract()?;
             PyResult::Ok(SnapShot {
-                state,
+                state: next_state,
                 reward,
                 terminated,
                 trancuated,

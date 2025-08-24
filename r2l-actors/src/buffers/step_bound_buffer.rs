@@ -1,3 +1,4 @@
+use crossbeam::channel::{Receiver, RecvError, SendError, Sender};
 use r2l_core2::{
     distributions::Distribution,
     env::{Env, SnapShot},
@@ -10,8 +11,7 @@ thread_local! {
     pub static RNG: RefCell<StdRng> = RefCell::new(StdRng::seed_from_u64(0));
 }
 
-pub struct StepBoundBuffer<E: Env> {
-    env: E,
+pub struct StateBuffer<E: Env> {
     states: AllocRingBuffer<E::Obs>,
     next_states: AllocRingBuffer<E::Obs>,
     rewards: AllocRingBuffer<f32>,
@@ -20,7 +20,7 @@ pub struct StepBoundBuffer<E: Env> {
     trancuated: AllocRingBuffer<bool>,
 }
 
-impl<E: Env> StepBoundBuffer<E> {
+impl<E: Env> StateBuffer<E> {
     pub fn push_snapshot(&mut self, snapshot: SnapShot<E::Obs, E::Act>) {
         let SnapShot {
             state,
@@ -37,12 +37,20 @@ impl<E: Env> StepBoundBuffer<E> {
         self.terminated.enqueue(terminated);
         self.trancuated.enqueue(trancuated);
     }
+}
 
-    pub fn step(
-        &mut self,
-        distr: &impl Distribution<Observation = E::Obs, Action = E::Act>,
-    ) -> SnapShot<E::Obs, E::Act> {
-        let state = if let Some(obs) = self.next_states.back() {
+// ok this is kinda stupid,
+pub struct StepBoundBuffer<E: Env> {
+    env: E,
+    buffer: Option<StateBuffer<E>>,
+}
+
+impl<E: Env> StepBoundBuffer<E> {
+    pub fn step(&mut self, distr: &impl Distribution<Observation = E::Obs, Action = E::Act>) {
+        let Some(buffer) = &mut self.buffer else {
+            todo!()
+        };
+        let state = if let Some(obs) = buffer.next_states.back() {
             obs.clone()
         } else {
             // TODO: get the seed from core
@@ -63,13 +71,41 @@ impl<E: Env> StepBoundBuffer<E> {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             next_state = self.env.reset(seed);
         }
-        SnapShot {
+        buffer.push_snapshot(SnapShot {
             state,
             next_state,
             action,
             reward,
             terminated,
             trancuated,
+        });
+    }
+
+    pub fn move_buffer(&mut self) -> StateBuffer<E> {
+        if let Some(buffer) = self.buffer.take() {
+            buffer
+        } else {
+            todo!()
         }
+    }
+
+    pub fn set_buffer(&mut self, buffer: StateBuffer<E>) {
+        self.buffer = Some(buffer)
+    }
+
+    pub fn send_buffer(
+        &mut self,
+        tx: Sender<StateBuffer<E>>,
+    ) -> Result<(), SendError<StateBuffer<E>>> {
+        let Some(buffer) = self.buffer.take() else {
+            todo!()
+        };
+        tx.send(buffer)
+    }
+
+    pub fn receive_buffer(&mut self, rx: Receiver<StateBuffer<E>>) -> Result<(), RecvError> {
+        let buffer = rx.recv()?;
+        self.buffer = Some(buffer);
+        Ok(())
     }
 }

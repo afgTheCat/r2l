@@ -35,14 +35,14 @@ macro_rules! process_hook_result {
     };
 }
 
-pub trait PPO3LearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
+pub trait PPOLearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
 
-impl PPO3LearningModule for LearningModuleKind {}
+impl PPOLearningModule for LearningModuleKind {}
 
 // TODO: we could just pass the agent inside. Also we should probably set the rollout buffer inside
 // the agent to some buffer, so that we also don't really need that as a parameter. Much cleaner
 // design to be honest
-pub trait PPP3HooksTrait<D: Distribution, LM: PPO3LearningModule> {
+pub trait PPP3HooksTrait<D: Distribution, LM: PPOLearningModule> {
     fn before_learning_hook(
         &mut self,
         learning_module: &mut LM,
@@ -72,7 +72,7 @@ pub trait PPP3HooksTrait<D: Distribution, LM: PPO3LearningModule> {
 
 pub struct EmptyPPO3Hooks;
 
-impl<D: Distribution, LM: PPO3LearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3Hooks {
+impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3Hooks {
     fn before_learning_hook(
         &mut self,
         learning_module: &mut LM,
@@ -106,7 +106,7 @@ impl<D: Distribution, LM: PPO3LearningModule> PPP3HooksTrait<D, LM> for EmptyPPO
     }
 }
 
-pub struct PPO<D: Distribution, LM: PPO3LearningModule> {
+pub struct PPO<D: Distribution, LM: PPOLearningModule> {
     pub distribution: D,
     pub learning_module: LM,
     pub hooks: Box<dyn PPP3HooksTrait<D, LM>>,
@@ -117,7 +117,7 @@ pub struct PPO<D: Distribution, LM: PPO3LearningModule> {
     pub device: Device,
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> PPO<D, LM> {
+impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         loop {
             let Some(batch) = batch_iter.next() else {
@@ -190,7 +190,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> PPO<D, LM> {
     }
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> Agent for PPO<D, LM> {
+impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for PPO<D, LM> {
     type Dist = D;
 
     fn distribution(&self) -> &Self::Dist {

@@ -5241,6 +5241,7 @@ name = "r2l-actors"
 version = "0.0.1"
 dependencies = [
  "burn",
+ "crossbeam",
  "r2l-core2",
  "rand 0.9.2",
  "ringbuffer",

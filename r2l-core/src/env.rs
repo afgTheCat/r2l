@@ -60,8 +60,18 @@ pub struct SnapShot<T> {
     pub trancuated: bool,
 }
 
+pub struct SnapShot2<T> {
+    pub state: T,
+    pub next_state: T,
+    pub action: T,
+    pub reward: f32,
+    pub terminated: bool,
+    pub trancuated: bool,
+}
+
 pub trait Env {
-    type Tensor;
+    // TODO: we need to figure the right tensor kind here!
+    type Tensor: Clone;
 
     fn reset(&mut self, seed: u64) -> Self::Tensor;
     fn step(&mut self, action: Self::Tensor) -> SnapShot<Self::Tensor>;

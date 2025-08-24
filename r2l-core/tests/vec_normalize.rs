@@ -22,7 +22,9 @@ impl DummyRewardEnv {
 }
 
 impl Env for DummyRewardEnv {
-    fn step(&mut self, action: &Buffer) -> SnapShot {
+    type Tensor = Buffer;
+
+    fn step(&mut self, action: Buffer) -> SnapShot<Buffer> {
         self.t += 1;
         let index = (self.t as usize + self.returned_reward_idx) % 4;
         let returned_value = self.returned_rewards[index];

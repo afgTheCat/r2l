@@ -1,4 +1,4 @@
-use crate::ppo::PPO3LearningModule;
+use crate::ppo::PPOLearningModule;
 use candle_core::{Device, Result, Tensor};
 use r2l_core::{
     agents::Agent,
@@ -15,7 +15,7 @@ use r2l_core::{
 
 pub trait VPG3LearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
 
-pub struct VPG<D: Distribution, LM: PPO3LearningModule> {
+pub struct VPG<D: Distribution, LM: PPOLearningModule> {
     pub distribution: D,
     pub learning_module: LM,
     device: Device,
@@ -24,7 +24,7 @@ pub struct VPG<D: Distribution, LM: PPO3LearningModule> {
     sample_size: usize,
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> VPG<D, LM> {
+impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> VPG<D, LM> {
     fn train_single_batch(&mut self, batch: RolloutBatch) -> Result<bool> {
         let policy_loss = PolicyLoss(batch.advantages.mul(&batch.logp_old)?.neg()?.mean_all()?);
         let values_pred = self.learning_module.calculate_values(&batch.observations)?;
@@ -37,7 +37,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> VPG<D, LM> {
     }
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: PPO3LearningModule> Agent for VPG<D, LM> {
+impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for VPG<D, LM> {
     type Dist = D;
 
     fn distribution(&self) -> &Self::Dist {

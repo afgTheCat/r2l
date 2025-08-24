@@ -13,7 +13,6 @@ pub struct RolloutBuffer {
     pub actions: Vec<Tensor>,
     pub rewards: Vec<f32>,
     pub dones: Vec<bool>,
-    // pub logps: Vec<f32>,
     pub last_state: Option<Tensor>,
 }
 
@@ -109,7 +108,6 @@ impl RolloutBuffer {
         self.actions.push(action);
         self.rewards.push(reward);
         self.dones.push(done);
-        // self.logps.push(logp);
     }
 
     // TODO: we should get rid of the resetting probably and reset here
