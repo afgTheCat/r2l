@@ -38,6 +38,20 @@ pub struct VecEnvHolder2<E: Env, H: SequntialStepBoundHooks<E = E>> {
     pub hooks: H,
 }
 
+impl<E: Env<Tensor = Buffer>> VecEnvHolder2<E, DefaultStepBoundHook<E>> {
+    pub fn new(step_bound: usize, envs: Vec<E>) -> Self {
+        let buffers = envs
+            .into_iter()
+            .map(|env| StepBoundBuffer::new(env, step_bound))
+            .collect();
+        Self {
+            step_bound,
+            buffers,
+            hooks: DefaultStepBoundHook { env: PhantomData },
+        }
+    }
+}
+
 impl<E: Env<Tensor = Buffer>, H: SequntialStepBoundHooks<E = E>> EnvHolder for VecEnvHolder2<E, H> {
     fn num_envs(&self) -> usize {
         self.buffers.len()

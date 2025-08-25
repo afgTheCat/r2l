@@ -10,7 +10,7 @@ use crate::{
         subproc_env_holder::SubprocHolder,
         thread_env_holder::ThreadHolder,
         vector_env_holder::VecEnvHolder,
-        vector_env_holder2::{DefaultStepBoundHook, SequntialStepBoundHooks, VecEnvHolder2},
+        vector_env_holder2::{DefaultStepBoundHook, VecEnvHolder2},
     },
     numeric::Buffer,
     rng::RNG,
@@ -127,35 +127,6 @@ pub enum R2lEnvHolder<E: Env<Tensor = Buffer>> {
     SubProc(SubprocHolder),
 }
 
-// impl<E: Env<Tensor = Buffer>> EnvHolder for R2lEnvHolder<E> {
-//     fn num_envs(&self) -> usize {
-//         match self {
-//             Self::Vec(v) => v.num_envs(),
-//             Self::Vec2(v) => v.num_envs(),
-//             Self::Thread(t) => t.num_envs(),
-//             Self::SubProc(s) => s.num_envs(),
-//         }
-//         todo!()
-//     }
-//
-//     fn sequential_rollout<D: Distribution<Tensor = Tensor>>(
-//         &mut self,
-//         distr: &D,
-//         rollout_mode: RolloutMode,
-//         hooks: &mut dyn SequentialVecEnvHooks,
-//     ) -> Result<Vec<RolloutBuffer>> {
-//         todo!()
-//     }
-//
-//     fn async_rollout<D: Distribution<Tensor = Tensor>>(
-//         &mut self,
-//         distr: &D,
-//         rollout_mode: RolloutMode,
-//     ) -> Result<Vec<RolloutBuffer>> {
-//         todo!()
-//     }
-// }
-
 pub enum StepMode {
     Sequential(Box<dyn SequentialVecEnvHooks>),
     Async,
@@ -164,6 +135,7 @@ pub enum StepMode {
 // No generics should be here, but also I should be using a triat. We also want this to be part of
 // the core thing.
 pub struct R2lEnvPool<H: EnvHolder> {
+    pub rollout_mode: RolloutMode,
     pub env_holder: H,
     pub step_mode: StepMode,
     pub env_description: EnvironmentDescription,
@@ -173,14 +145,14 @@ impl<H: EnvHolder> EnvPool for R2lEnvPool<H> {
     fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
-        rollout_mode: RolloutMode,
+        // rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
         match &mut self.step_mode {
             StepMode::Sequential(hooks) => {
                 self.env_holder
-                    .sequential_rollout(distr, rollout_mode, hooks.as_mut())
+                    .sequential_rollout(distr, self.rollout_mode, hooks.as_mut())
             }
-            StepMode::Async => self.env_holder.async_rollout(distr, rollout_mode),
+            StepMode::Async => self.env_holder.async_rollout(distr, self.rollout_mode),
         }
     }
 

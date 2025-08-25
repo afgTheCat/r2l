@@ -59,9 +59,9 @@ impl OnPolicyAlgorithmBuilder {
     where
         EB::Env: Sync + 'static,
     {
-        let env_pool = self
-            .env_pool_type
-            .build(&self.device, env_builder, n_envs)?;
+        let env_pool =
+            self.env_pool_type
+                .build(&self.device, env_builder, n_envs, self.rollout_mode)?;
         let env_description = env_pool.env_description();
         let agent = match &mut self.agent_type {
             AgentType::PPO(builder) => {
@@ -77,7 +77,6 @@ impl OnPolicyAlgorithmBuilder {
             env_pool,
             agent,
             learning_schedule: self.learning_schedule,
-            rollout_mode: self.rollout_mode,
             hooks: self.hooks,
         })
     }

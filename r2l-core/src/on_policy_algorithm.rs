@@ -91,7 +91,6 @@ pub struct OnPolicyAlgorithm2<E: EnvPool, A: Agent> {
     pub env_pool: E,
     pub agent: A,
     pub learning_schedule: LearningSchedule,
-    pub rollout_mode: RolloutMode,
     pub hooks: OnPolicyHooks,
 }
 
@@ -100,14 +99,12 @@ impl<E: EnvPool, A: Agent> OnPolicyAlgorithm2<E, A> {
         env_pool: E,
         agent: A,
         learning_schedule: LearningSchedule,
-        rollout_mode: RolloutMode,
         hooks: OnPolicyHooks,
     ) -> Self {
         Self {
             env_pool,
             agent,
             learning_schedule,
-            rollout_mode,
             hooks,
         }
     }
@@ -123,7 +120,7 @@ impl<E: EnvPool, A: Agent> OnPolicyAlgorithm2<E, A> {
                 if remaining_steps <= 0 {
                     Ok(None)
                 } else {
-                    let rollouts = self.env_pool.collect_rollouts(distr, self.rollout_mode)?;
+                    let rollouts = self.env_pool.collect_rollouts(distr)?;
                     let rollout_steps: usize = rollouts.iter().map(|e| e.actions.len()).sum();
                     *total_steps -= rollout_steps;
                     Ok(Some(rollouts))
@@ -136,7 +133,7 @@ impl<E: EnvPool, A: Agent> OnPolicyAlgorithm2<E, A> {
                 if current_rollout == total_rollouts {
                     Ok(None)
                 } else {
-                    let rollouts = self.env_pool.collect_rollouts(distr, self.rollout_mode)?;
+                    let rollouts = self.env_pool.collect_rollouts(distr)?;
                     *current_rollout += 1;
                     Ok(Some(rollouts))
                 }

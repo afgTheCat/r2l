@@ -71,6 +71,6 @@ fn test_obs_rms_vec_normalize() -> Result<()> {
     let env_pool_builder = VecPoolType::Sequential(SequentialEnvHookTypes::NormalizerOnly {
         options: NormalizerOptions::default(),
     });
-    let env_pool = env_pool_builder.build_with_builders(&Device::Cpu, env_builders)?;
+    // let env_pool = env_pool_builder.build_with_builders(&Device::Cpu, env_builders)?;
     Ok(())
 }

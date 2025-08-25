@@ -184,7 +184,12 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
     let device = Device::Cpu;
-    let env_pool = VecPoolType::Dummy.build(&device, ENV_NAME.to_owned(), 1)?;
+    let env_pool = VecPoolType::Dummy.build(
+        &device,
+        ENV_NAME.to_owned(),
+        1,
+        RolloutMode::StepBound { n_steps: 1024 },
+    )?;
     let env_description = env_pool.env_description.clone();
 
     let mut agent = PPOBuilder::default().build(&device, &env_description)?;
@@ -197,7 +202,6 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
             total_rollouts,
             current_rollout: 0,
         },
-        rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
         hooks: OnPolicyHooks::default(),
     };
     algo.train()

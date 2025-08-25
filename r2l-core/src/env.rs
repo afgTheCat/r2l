@@ -89,7 +89,7 @@ pub trait EnvPool {
     fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distribution: &D,
-        rollout_mode: RolloutMode,
+        // rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>>;
 
     fn env_description(&self) -> EnvironmentDescription;

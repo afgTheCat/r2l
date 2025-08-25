@@ -6,11 +6,12 @@ use candle_core::{DType, Device, Result, Tensor};
 use crossbeam::sync::ShardedLock;
 use r2l_core::{
     distributions::Distribution,
-    env::{Env, EnvironmentDescription},
+    env::{Env, EnvironmentDescription, RolloutMode},
     env_pools::{
         R2lEnvHolder, R2lEnvPool, SequentialVecEnvHooks, StepMode,
         thread_env_holder::{ThreadResult, WorkerTask, WorkerThread},
         vector_env_holder::VecEnvHolder,
+        vector_env_holder2::VecEnvHolder2,
     },
     numeric::Buffer,
     utils::rollout_buffer::RolloutBuffer,
@@ -192,6 +193,7 @@ pub enum SequentialEnvHookTypes {
 
 pub enum VecPoolType {
     Dummy,
+    Dummy2,
     Vec,
     Subprocessing,
     Sequential(SequentialEnvHookTypes),
@@ -220,6 +222,7 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
         Self::EnvBuilder { builder, n_envs }
     }
 
+    // TODO: maybe build the combined buffer here?
     pub fn build_all_envs_and_buffers(
         &self,
         device: &Device,
@@ -274,6 +277,7 @@ impl VecPoolType {
         &self,
         device: &Device,
         env_builder: BuilderType<EB>,
+        rollout_mode: RolloutMode,
     ) -> Result<R2lEnvPool<R2lEnvHolder<E>>> {
         match self {
             Self::Dummy => {
@@ -287,6 +291,21 @@ impl VecPoolType {
                     }),
                     step_mode: StepMode::Async,
                     env_description,
+                    rollout_mode,
+                })
+            }
+            Self::Dummy2 => {
+                let (buffers, envs) = env_builder.build_all_envs_and_buffers(device)?;
+                let env_description = envs[0].env_description();
+                let vec_env_holder = match rollout_mode {
+                    RolloutMode::StepBound { n_steps } => VecEnvHolder2::new(n_steps, envs),
+                    RolloutMode::EpisodeBound { n_episodes } => todo!(),
+                };
+                Ok(R2lEnvPool {
+                    env_holder: R2lEnvHolder::Vec2(vec_env_holder),
+                    step_mode: StepMode::Async,
+                    env_description,
+                    rollout_mode,
                 })
             }
             Self::Sequential(hook_types) => {
@@ -321,6 +340,7 @@ impl VecPoolType {
                     }),
                     step_mode: StepMode::Sequential(hooks),
                     env_description,
+                    rollout_mode,
                 })
             }
             Self::Vec => {
@@ -379,7 +399,7 @@ impl VecPoolType {
                 // };
                 todo!()
             }
-            _ => todo!(),
+            Self::Subprocessing => todo!(),
         }
     }
 
@@ -387,8 +407,13 @@ impl VecPoolType {
         self,
         device: &Device,
         env_builders: Vec<EB>,
+        rollout_mode: RolloutMode,
     ) -> Result<R2lEnvPool<R2lEnvHolder<E>>> {
-        self.to_r2l_pool_inner(device, BuilderType::env_buillder_vec(env_builders))
+        self.to_r2l_pool_inner(
+            device,
+            BuilderType::env_buillder_vec(env_builders),
+            rollout_mode,
+        )
     }
 
     pub fn build<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
@@ -396,7 +421,12 @@ impl VecPoolType {
         device: &Device,
         env_builder: EB,
         n_envs: usize,
+        rollout_mode: RolloutMode,
     ) -> Result<R2lEnvPool<R2lEnvHolder<E>>> {
-        self.to_r2l_pool_inner(device, BuilderType::env_builder(env_builder, n_envs))
+        self.to_r2l_pool_inner(
+            device,
+            BuilderType::env_builder(env_builder, n_envs),
+            rollout_mode,
+        )
     }
 }

@@ -1,4 +1,5 @@
 use candle_core::Result;
+use r2l_api::builders::env_pool::VecPoolType;
 use r2l_api::builders::on_policy_algo::OnPolicyAlgorithmBuilder;
 use r2l_api::test_utils::run_gym_episodes;
 use r2l_core::agents::Agent;
@@ -26,9 +27,20 @@ fn ppo_pendulum() -> Result<()> {
 }
 
 #[test]
-fn ppo_cart_pole() -> Result<()> {
+fn ppo_cart_pole1() -> Result<()> {
     let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
+    let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
+    ppo.train()?;
+    run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
+    Ok(())
+}
+
+#[test]
+fn ppo_cart_pole2() -> Result<()> {
+    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
+    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
+    ppo_builder.env_pool_type = VecPoolType::Dummy2;
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
     run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;

@@ -31,25 +31,30 @@ fn r2l_verify(env_config: &EnvConfig) {
     let normalizer_options = NormalizerOptions::new(1e-8, 0.99, 10., 10.);
     let eval_normalizer_options =
         EvaluatorNormalizerOptions::new(evaluator_options, normalizer_options);
+    let algo = args.get("algo").unwrap();
+    let rollout_mode = match algo.as_str() {
+        "ppo" => RolloutMode::StepBound { n_steps: 2048 },
+        "a2c" => RolloutMode::StepBound { n_steps: 5 },
+        _ => unreachable!(),
+    };
     let env_pool = VecPoolType::Sequential(SequentialEnvHookTypes::EvaluatorNormalizer {
         options: eval_normalizer_options,
     })
-    .build(&device, env_name.clone(), n_envs)
+    .build(&device, env_name.clone(), n_envs, rollout_mode)
     .unwrap();
     let learning_schedule = LearningSchedule::TotalStepBound {
         total_steps: n_timesteps as usize,
         current_step: 0,
     };
-    let algo = args.get("algo").unwrap();
-    let (agent, rollout_mode) = match algo.as_str() {
+    let agent = match algo.as_str() {
         "ppo" => {
             let ppo = PPOBuilder::default()
                 .build(&device, &env_pool.env_description())
                 .unwrap();
             let agent = AgentKind::PPO(ppo);
             // sb3 defaults to 2048 as n_steps
-            let rollout_mode = RolloutMode::StepBound { n_steps: 2048 };
-            (agent, rollout_mode)
+            // let rollout_mode = RolloutMode::StepBound { n_steps: 2048 };
+            agent
         }
         "a2c" => {
             let a2c = A2CBuilder::default()
@@ -57,8 +62,8 @@ fn r2l_verify(env_config: &EnvConfig) {
                 .unwrap();
             let agent = AgentKind::A2C(a2c);
             // sb3 defaults to 5 as n_steps
-            let rollout_mode = RolloutMode::StepBound { n_steps: 5 };
-            (agent, rollout_mode)
+            // let rollout_mode = RolloutMode::StepBound { n_steps: 5 };
+            agent
         }
         _ => unreachable!(),
     };
@@ -68,7 +73,6 @@ fn r2l_verify(env_config: &EnvConfig) {
         env_pool,
         agent,
         learning_schedule,
-        rollout_mode,
         hooks: on_policy_hooks,
     };
     algo.train().unwrap();

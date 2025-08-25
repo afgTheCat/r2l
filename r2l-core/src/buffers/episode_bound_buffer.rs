@@ -1,13 +1,12 @@
 use crate::{
     distributions::Distribution,
-    env::{Env, SnapShot, SnapShot2},
+    env::{Env, SnapShot},
     numeric::Buffer,
     rng::RNG,
     utils::rollout_buffer::RolloutBuffer,
 };
 use candle_core::{Device, Tensor};
 use crossbeam::channel::{Receiver, RecvError, SendError, Sender};
-use interprocess::TryClone;
 use rand::Rng;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 
@@ -21,7 +20,24 @@ pub struct StateBuffer<E: Env> {
 }
 
 impl<E: Env> StateBuffer<E> {
-    pub fn push_snapshot(
+    pub fn new(capacity: usize) -> Self {
+        let states = AllocRingBuffer::new(capacity);
+        let next_states = AllocRingBuffer::new(capacity);
+        let rewards = AllocRingBuffer::new(capacity);
+        let action = AllocRingBuffer::new(capacity);
+        let terminated = AllocRingBuffer::new(capacity);
+        let trancuated = AllocRingBuffer::new(capacity);
+        Self {
+            states,
+            next_states,
+            rewards,
+            action,
+            terminated,
+            trancuated,
+        }
+    }
+
+    pub fn push(
         &mut self,
         state: E::Tensor,
         next_state: E::Tensor,
@@ -39,34 +55,6 @@ impl<E: Env> StateBuffer<E> {
     }
 }
 
-// impl<E: Env<Tensor = Tensor>> StateBuffer<E> {
-//     // TODO: this should be removed once we are done
-//     pub fn to_rollout_buffer(&mut self, size: usize) -> RolloutBuffer {
-//         let mut rb = RolloutBuffer::default();
-//         for idx in 0..size {
-//             let next_state = self.next_states.dequeue().unwrap();
-//             let state = self.states.dequeue().unwrap();
-//             let action = self.action.dequeue().unwrap();
-//             let reward = self.rewards.dequeue().unwrap();
-//             let terminated = self.terminated.dequeue().unwrap();
-//             let truncuated = self.trancuated.dequeue().unwrap();
-//             if idx == 0 {
-//                 rb.last_state = Some(next_state.clone());
-//                 rb.states.push(next_state);
-//             }
-//             rb.states.push(state);
-//             rb.actions.push(action);
-//             rb.rewards.push(reward);
-//             rb.dones.push(terminated || truncuated);
-//         }
-//         rb.states.reverse();
-//         rb.actions.reverse();
-//         rb.rewards.reverse();
-//         rb.dones.reverse();
-//         rb
-//     }
-// }
-
 impl<E: Env<Tensor = Buffer>> StateBuffer<E> {
     // TODO: this should be removed once we are done
     pub fn to_rollout_buffer(&mut self, size: usize) -> RolloutBuffer {
@@ -78,19 +66,15 @@ impl<E: Env<Tensor = Buffer>> StateBuffer<E> {
             let reward = self.rewards.dequeue().unwrap();
             let terminated = self.terminated.dequeue().unwrap();
             let truncuated = self.trancuated.dequeue().unwrap();
-            if idx == 0 {
-                rb.last_state = Some(next_state.to_candle_tensor(&Device::Cpu));
-                rb.states.push(next_state.to_candle_tensor(&Device::Cpu));
-            }
             rb.states.push(state.to_candle_tensor(&Device::Cpu));
             rb.actions.push(action.to_candle_tensor(&Device::Cpu));
             rb.rewards.push(reward);
             rb.dones.push(terminated || truncuated);
+            if idx == size - 1 {
+                rb.states.push(next_state.to_candle_tensor(&Device::Cpu));
+                rb.last_state = Some(next_state.to_candle_tensor(&Device::Cpu));
+            }
         }
-        rb.states.reverse();
-        rb.actions.reverse();
-        rb.rewards.reverse();
-        rb.dones.reverse();
         rb
     }
 }
@@ -101,6 +85,13 @@ pub struct StepBoundBuffer<E: Env> {
 }
 
 impl<E: Env<Tensor = Buffer>> StepBoundBuffer<E> {
+    pub fn new(env: E, capacity: usize) -> Self {
+        Self {
+            env,
+            buffer: Some(StateBuffer::new(capacity)),
+        }
+    }
+
     // TODO: I guess it would make sense to inject some data in here, right?
     // What we could do is have the hook inserted here and just send that but that's blocking +
     // slow + nighmeighrish
@@ -116,7 +107,7 @@ impl<E: Env<Tensor = Buffer>> StepBoundBuffer<E> {
             self.env.reset(seed)
         };
         let action = distr
-            .get_action(state.to_candle_tensor(&Device::Cpu).clone())
+            .get_action(state.to_candle_tensor(&Device::Cpu).unsqueeze(0).unwrap())
             .unwrap();
         let SnapShot {
             state: mut next_state,
@@ -129,7 +120,7 @@ impl<E: Env<Tensor = Buffer>> StepBoundBuffer<E> {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             next_state = self.env.reset(seed);
         }
-        buffer.push_snapshot(
+        buffer.push(
             state,
             next_state,
             Buffer::from_candle_tensor(&action),
