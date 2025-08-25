@@ -84,15 +84,9 @@ pub enum RolloutMode {
     StepBound { n_steps: usize },
 }
 
-// TODO: we may want to get rid of the env pool trait and submerge it into the env trait
-pub trait EnvPool {
+pub trait Sampler {
     fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distribution: &D,
-        // rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>>;
-
-    fn env_description(&self) -> EnvironmentDescription;
-
-    fn num_env(&self) -> usize;
 }

@@ -9,7 +9,7 @@ use r2l_core::{
     Algorithm,
     distributions::Distribution,
     env::RolloutMode,
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm2, OnPolicyHooks},
+    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
     tensors::{PolicyLoss, ValueLoss},
     utils::rollout_buffer::{Advantages, RolloutBuffer},
 };
@@ -195,7 +195,7 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
     let mut agent = PPOBuilder::default().build(&device, &env_description)?;
     agent.hooks = Box::new(ppo_hook);
 
-    let mut algo = OnPolicyAlgorithm2 {
+    let mut algo = OnPolicyAlgorithm {
         env_pool,
         agent,
         learning_schedule: LearningSchedule::RolloutBound {

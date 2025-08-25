@@ -1,6 +1,6 @@
 use crate::Algorithm;
 use crate::agents::Agent;
-use crate::env::{EnvPool, RolloutMode};
+use crate::env::Sampler;
 use crate::utils::rollout_buffer::RolloutBuffer;
 use candle_core::Result;
 use r2l_macros::training_hook;
@@ -87,14 +87,14 @@ impl OnPolicyHooks {
     }
 }
 
-pub struct OnPolicyAlgorithm2<E: EnvPool, A: Agent> {
+pub struct OnPolicyAlgorithm<E: Sampler, A: Agent> {
     pub env_pool: E,
     pub agent: A,
     pub learning_schedule: LearningSchedule,
     pub hooks: OnPolicyHooks,
 }
 
-impl<E: EnvPool, A: Agent> OnPolicyAlgorithm2<E, A> {
+impl<E: Sampler, A: Agent> OnPolicyAlgorithm<E, A> {
     pub fn new(
         env_pool: E,
         agent: A,
@@ -140,13 +140,9 @@ impl<E: EnvPool, A: Agent> OnPolicyAlgorithm2<E, A> {
             }
         }
     }
-
-    pub fn num_env(&self) -> usize {
-        self.env_pool.num_env()
-    }
 }
 
-impl<E: EnvPool, A: Agent> Algorithm for OnPolicyAlgorithm2<E, A> {
+impl<E: Sampler, A: Agent> Algorithm for OnPolicyAlgorithm<E, A> {
     fn train(&mut self) -> Result<()> {
         if self.hooks.call_before_training_hook()? {
             return Ok(());

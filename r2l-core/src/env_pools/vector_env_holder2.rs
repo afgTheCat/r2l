@@ -32,6 +32,8 @@ impl<E: Env> SequntialStepBoundHooks for DefaultStepBoundHook<E> {
 }
 
 // TODO: we should make this generic
+// This needs to be called fixed size sequential rollout holder
+// fixed size -> no episode bound
 pub struct VecEnvHolder2<E: Env, H: SequntialStepBoundHooks<E = E>> {
     pub step_bound: usize,
     pub buffers: Vec<StepBoundBuffer<E>>,

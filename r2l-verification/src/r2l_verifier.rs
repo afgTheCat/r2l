@@ -13,8 +13,8 @@ use r2l_api::{
 };
 use r2l_core::{
     Algorithm,
-    env::{EnvPool, RolloutMode},
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm2, OnPolicyHooks},
+    env::{RolloutMode, Sampler},
+    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
 };
 
 fn r2l_verify(env_config: &EnvConfig) {
@@ -69,7 +69,7 @@ fn r2l_verify(env_config: &EnvConfig) {
     };
     let mut on_policy_hooks = OnPolicyHooks::default();
     on_policy_hooks.add_training_hook(LoggerTrainingHook::default());
-    let mut algo = OnPolicyAlgorithm2 {
+    let mut algo = OnPolicyAlgorithm {
         env_pool,
         agent,
         learning_schedule,

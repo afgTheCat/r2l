@@ -1,18 +1,17 @@
 use crate::{
     builders::{
-        agents::a2c::A2CBuilder,
-        agents::ppo::PPOBuilder,
-        env_pool::{EnvBuilderTrait, VecPoolType},
+        agents::{a2c::A2CBuilder, ppo::PPOBuilder},
+        env_pool::{self, EnvBuilderTrait, VecPoolType},
     },
     hooks::on_policy_algo_hooks::LoggerTrainingHook,
 };
 use candle_core::{Device, Result, Tensor};
 use r2l_agents::AgentKind;
 use r2l_core::{
-    env::{EnvPool, RolloutMode},
+    env::{self, RolloutMode, Sampler},
     env_pools::{R2lEnvHolder, R2lEnvPool},
     numeric::Buffer,
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm2, OnPolicyHooks},
+    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
 };
 
 pub enum AgentType {
@@ -55,7 +54,7 @@ impl OnPolicyAlgorithmBuilder {
         mut self,
         env_builder: EB,
         n_envs: usize,
-    ) -> Result<OnPolicyAlgorithm2<R2lEnvPool<R2lEnvHolder<EB::Env>>, AgentKind>>
+    ) -> Result<OnPolicyAlgorithm<R2lEnvPool<R2lEnvHolder<EB::Env>>, AgentKind>>
     where
         EB::Env: Sync + 'static,
     {
@@ -73,7 +72,7 @@ impl OnPolicyAlgorithmBuilder {
                 AgentKind::A2C(a2c)
             }
         };
-        Ok(OnPolicyAlgorithm2 {
+        Ok(OnPolicyAlgorithm {
             env_pool,
             agent,
             learning_schedule: self.learning_schedule,

@@ -1,3 +1,6 @@
+pub mod episode_bound_sampler;
+pub mod fixed_size_env_pools;
+pub mod step_bound_sampler;
 pub mod subproc_env_holder;
 pub mod thread_env_holder;
 pub mod vector_env_holder;
@@ -5,7 +8,7 @@ pub mod vector_env_holder2;
 
 use crate::{
     distributions::Distribution,
-    env::{Env, EnvPool, EnvironmentDescription, RolloutMode, SnapShot},
+    env::{Env, EnvironmentDescription, RolloutMode, Sampler, SnapShot},
     env_pools::{
         subproc_env_holder::SubprocHolder,
         thread_env_holder::ThreadHolder,
@@ -69,7 +72,6 @@ pub fn single_step_env(
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         next_state = env.reset(seed).to_candle_tensor(device);
     }
-    // let logp: f32 = logp.squeeze(0)?.to_scalar()?;
     Ok((next_state, action, reward, done))
 }
 
@@ -141,11 +143,20 @@ pub struct R2lEnvPool<H: EnvHolder> {
     pub env_description: EnvironmentDescription,
 }
 
-impl<H: EnvHolder> EnvPool for R2lEnvPool<H> {
+impl<H: EnvHolder> R2lEnvPool<H> {
+    pub fn env_description(&self) -> EnvironmentDescription {
+        self.env_description.clone()
+    }
+
+    pub fn num_env(&self) -> usize {
+        self.env_holder.num_envs()
+    }
+}
+
+impl<H: EnvHolder> Sampler for R2lEnvPool<H> {
     fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
-        // rollout_mode: RolloutMode,
     ) -> Result<Vec<RolloutBuffer>> {
         match &mut self.step_mode {
             StepMode::Sequential(hooks) => {
@@ -154,13 +165,5 @@ impl<H: EnvHolder> EnvPool for R2lEnvPool<H> {
             }
             StepMode::Async => self.env_holder.async_rollout(distr, self.rollout_mode),
         }
-    }
-
-    fn env_description(&self) -> EnvironmentDescription {
-        self.env_description.clone()
-    }
-
-    fn num_env(&self) -> usize {
-        self.env_holder.num_envs()
     }
 }

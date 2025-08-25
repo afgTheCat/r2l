@@ -18,8 +18,18 @@ fn ppo_acrobat() -> Result<()> {
 }
 
 #[test]
-fn ppo_pendulum() -> Result<()> {
+fn ppo_pendulum1() -> Result<()> {
     let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
+    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
+    let mut ppo = ppo_builder.build("Pendulum-v1".to_owned(), NUM_ENVIRONMENTS)?;
+    ppo.train()?;
+    Ok(())
+}
+
+#[test]
+fn ppo_pendulum2() -> Result<()> {
+    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
+    ppo_builder.env_pool_type = VecPoolType::Dummy2;
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
     let mut ppo = ppo_builder.build("Pendulum-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
