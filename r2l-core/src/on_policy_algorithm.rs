@@ -1,9 +1,13 @@
-use crate::Algorithm;
-use crate::agents::Agent;
-use crate::env::Sampler;
-use crate::utils::rollout_buffer::RolloutBuffer;
+use crate::{Algorithm, agents::Agent, env::Sampler, utils::rollout_buffer::RolloutBuffer};
 use candle_core::Result;
-use r2l_macros::training_hook;
+
+macro_rules! break_on_hook_res {
+    ($hook_res:expr) => {
+        if $hook_res {
+            break;
+        }
+    };
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum LearningSchedule {
@@ -26,137 +30,103 @@ impl LearningSchedule {
     }
 }
 
-#[training_hook]
-pub trait BeforeTrainingHook {
-    fn call_hook(&mut self) -> candle_core::Result<bool>;
+pub trait OnPolicyAlgorithmHooks {
+    fn init_hook(&mut self) -> bool;
+
+    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer]) -> bool;
+
+    fn post_training_hook(&mut self) -> bool;
+
+    fn shutdown_hook(&mut self) -> Result<()>;
 }
 
-#[training_hook]
-#[allow(clippy::ptr_arg)]
-pub trait TrainingHook {
-    fn call_hook(
-        &mut self,
-        learning_schedule: &LearningSchedule,
-        rollouts: &Vec<RolloutBuffer>,
-    ) -> candle_core::Result<bool>;
+pub struct DefaultOnPolicyAlgorightmsHooks {
+    rollout_idx: usize,
+    learning_schedule: LearningSchedule,
 }
 
-#[training_hook]
-pub trait AfterTrainingHook {
-    fn call_hook(&mut self) -> candle_core::Result<bool>;
-}
-
-#[derive(Default)]
-pub struct OnPolicyHooks {
-    before_training_hook: Option<Box<dyn BeforeTrainingHook>>,
-    training_hook: Option<Box<dyn TrainingHook>>,
-    after_training_hook: Option<Box<dyn AfterTrainingHook>>,
-}
-
-impl OnPolicyHooks {
-    pub fn add_training_hook<H>(&mut self, training_hook: impl IntoTrainingHook<H>) {
-        self.training_hook = Some(training_hook.into_boxed())
-    }
-
-    fn call_before_training_hook(&mut self) -> Result<bool> {
-        if let Some(hook) = &mut self.before_training_hook {
-            hook.call_hook()
-        } else {
-            Ok(false)
-        }
-    }
-
-    fn call_training_hook(
-        &mut self,
-        learning_schedule: &LearningSchedule,
-        rollouts: &Vec<RolloutBuffer>,
-    ) -> Result<bool> {
-        if let Some(hook) = &mut self.training_hook {
-            hook.call_hook(learning_schedule, rollouts)
-        } else {
-            Ok(false)
-        }
-    }
-
-    fn call_after_training_hook(&mut self) -> Result<bool> {
-        if let Some(hook) = &mut self.after_training_hook {
-            hook.call_hook()
-        } else {
-            Ok(false)
-        }
-    }
-}
-
-pub struct OnPolicyAlgorithm<E: Sampler, A: Agent> {
-    pub env_pool: E,
-    pub agent: A,
-    pub learning_schedule: LearningSchedule,
-    pub hooks: OnPolicyHooks,
-}
-
-impl<E: Sampler, A: Agent> OnPolicyAlgorithm<E, A> {
-    pub fn new(
-        env_pool: E,
-        agent: A,
-        learning_schedule: LearningSchedule,
-        hooks: OnPolicyHooks,
-    ) -> Self {
+impl DefaultOnPolicyAlgorightmsHooks {
+    pub fn new(learning_schedule: LearningSchedule) -> Self {
         Self {
-            env_pool,
-            agent,
+            rollout_idx: 0,
             learning_schedule,
-            hooks,
         }
     }
+}
 
-    fn collect_rollout(&mut self) -> Result<Option<Vec<RolloutBuffer>>> {
-        let distr = self.agent.distribution();
+impl OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorightmsHooks {
+    fn init_hook(&mut self) -> bool {
+        false
+    }
+
+    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer]) -> bool {
+        let total_reward = rollouts
+            .iter()
+            .map(|s| s.rewards.iter().sum::<f32>())
+            .sum::<f32>();
+        let episodes: usize = rollouts
+            .iter()
+            .flat_map(|s| &s.dones)
+            .filter(|d| **d)
+            .count();
+        println!(
+            "rollout: {:<3} episodes: {:<5} total reward: {:<5.2} avg reward per episode: {:.2}",
+            self.rollout_idx,
+            episodes,
+            total_reward,
+            total_reward / episodes as f32
+        );
+        self.rollout_idx += 1;
         match &mut self.learning_schedule {
-            LearningSchedule::TotalStepBound {
-                total_steps,
-                current_step,
-            } => {
-                let remaining_steps = *total_steps as isize - *current_step as isize;
-                if remaining_steps <= 0 {
-                    Ok(None)
-                } else {
-                    let rollouts = self.env_pool.collect_rollouts(distr)?;
-                    let rollout_steps: usize = rollouts.iter().map(|e| e.actions.len()).sum();
-                    *total_steps -= rollout_steps;
-                    Ok(Some(rollouts))
-                }
-            }
             LearningSchedule::RolloutBound {
                 total_rollouts,
                 current_rollout,
             } => {
-                if current_rollout == total_rollouts {
-                    Ok(None)
-                } else {
-                    let rollouts = self.env_pool.collect_rollouts(distr)?;
-                    *current_rollout += 1;
-                    Ok(Some(rollouts))
-                }
+                *current_rollout += 1;
+                current_rollout >= total_rollouts
+            }
+            LearningSchedule::TotalStepBound {
+                total_steps,
+                current_step,
+            } => {
+                let rollout_steps: usize = rollouts.iter().map(|e| e.actions.len()).sum();
+                *current_step += rollout_steps;
+                current_step >= total_steps
             }
         }
     }
+
+    fn post_training_hook(&mut self) -> bool {
+        false
+    }
+
+    fn shutdown_hook(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
-impl<E: Sampler, A: Agent> Algorithm for OnPolicyAlgorithm<E, A> {
+pub struct OnPolicyAlgorithm<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks> {
+    pub sampler: S,
+    pub agent: A,
+    pub hooks: H,
+}
+
+impl<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks> Algorithm for OnPolicyAlgorithm<S, A, H> {
     fn train(&mut self) -> Result<()> {
-        if self.hooks.call_before_training_hook()? {
+        if self.hooks.init_hook() {
             return Ok(());
         }
-        while let Some(rollouts) = self.collect_rollout()? {
-            if self
-                .hooks
-                .call_training_hook(&self.learning_schedule, &rollouts)?
-            {
-                break;
-            }
+        loop {
+            // rollout phase
+            let distribution = self.agent.distribution();
+            let mut rollouts = self.sampler.collect_rollouts(distribution)?;
+            break_on_hook_res!(self.hooks.post_rollout_hook(&mut rollouts));
+
+            // learning phase
             self.agent.learn(rollouts)?;
+            break_on_hook_res!(self.hooks.post_training_hook());
         }
-        self.hooks.call_after_training_hook()?;
-        Ok(())
+
+        self.hooks.shutdown_hook()
     }
 }

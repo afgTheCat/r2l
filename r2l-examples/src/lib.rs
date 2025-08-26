@@ -4,12 +4,14 @@ use r2l_agents::ppo::{HookResult, PPOBatchData};
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::builders::env_pool::VecPoolType;
 use r2l_core::distributions::DistributionKind;
+use r2l_core::on_policy_algorithm::{
+    DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
+};
 use r2l_core::policies::learning_modules::LearningModuleKind;
 use r2l_core::{
     Algorithm,
     distributions::Distribution,
     env::RolloutMode,
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
     tensors::{PolicyLoss, ValueLoss},
     utils::rollout_buffer::{Advantages, RolloutBuffer},
 };
@@ -184,25 +186,22 @@ pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
     let device = Device::Cpu;
-    let env_pool = VecPoolType::Dummy.build(
+    let sampler = VecPoolType::Dummy.build(
         &device,
         ENV_NAME.to_owned(),
         1,
         RolloutMode::StepBound { n_steps: 1024 },
     )?;
-    let env_description = env_pool.env_description.clone();
-
+    let env_description = sampler.env_description.clone();
     let mut agent = PPOBuilder::default().build(&device, &env_description)?;
     agent.hooks = Box::new(ppo_hook);
-
     let mut algo = OnPolicyAlgorithm {
-        env_pool,
+        sampler,
         agent,
-        learning_schedule: LearningSchedule::RolloutBound {
+        hooks: DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::RolloutBound {
             total_rollouts,
             current_rollout: 0,
-        },
-        hooks: OnPolicyHooks::default(),
+        }),
     };
     algo.train()
 }

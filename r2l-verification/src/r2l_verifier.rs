@@ -1,20 +1,17 @@
 use crate::{parse_config::EnvConfig, python_verifier::PythonResult};
 use candle_core::Device;
 use r2l_agents::AgentKind;
-use r2l_api::{
-    builders::{
-        agents::{a2c::A2CBuilder, ppo::PPOBuilder},
-        env_pool::{
-            EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions,
-            SequentialEnvHookTypes, VecPoolType,
-        },
+use r2l_api::builders::{
+    agents::{a2c::A2CBuilder, ppo::PPOBuilder},
+    env_pool::{
+        EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions, SequentialEnvHookTypes,
+        VecPoolType,
     },
-    hooks::on_policy_algo_hooks::LoggerTrainingHook,
 };
 use r2l_core::{
     Algorithm,
-    env::{RolloutMode, Sampler},
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
+    env::RolloutMode,
+    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
 };
 
 fn r2l_verify(env_config: &EnvConfig) {
@@ -33,11 +30,15 @@ fn r2l_verify(env_config: &EnvConfig) {
         EvaluatorNormalizerOptions::new(evaluator_options, normalizer_options);
     let algo = args.get("algo").unwrap();
     let rollout_mode = match algo.as_str() {
+        // sb3 defaults to 2048 as n_steps
+        // let rollout_mode = RolloutMode::StepBound { n_steps: 2048 };
         "ppo" => RolloutMode::StepBound { n_steps: 2048 },
+        // sb3 defaults to 5 as n_steps
+        // let rollout_mode = RolloutMode::StepBound { n_steps: 5 };
         "a2c" => RolloutMode::StepBound { n_steps: 5 },
         _ => unreachable!(),
     };
-    let env_pool = VecPoolType::Sequential(SequentialEnvHookTypes::EvaluatorNormalizer {
+    let sampler = VecPoolType::Sequential(SequentialEnvHookTypes::EvaluatorNormalizer {
         options: eval_normalizer_options,
     })
     .build(&device, env_name.clone(), n_envs, rollout_mode)
@@ -49,31 +50,24 @@ fn r2l_verify(env_config: &EnvConfig) {
     let agent = match algo.as_str() {
         "ppo" => {
             let ppo = PPOBuilder::default()
-                .build(&device, &env_pool.env_description())
+                .build(&device, &sampler.env_description())
                 .unwrap();
             let agent = AgentKind::PPO(ppo);
-            // sb3 defaults to 2048 as n_steps
-            // let rollout_mode = RolloutMode::StepBound { n_steps: 2048 };
             agent
         }
         "a2c" => {
             let a2c = A2CBuilder::default()
-                .build(&device, &env_pool.env_description())
+                .build(&device, &sampler.env_description())
                 .unwrap();
             let agent = AgentKind::A2C(a2c);
-            // sb3 defaults to 5 as n_steps
-            // let rollout_mode = RolloutMode::StepBound { n_steps: 5 };
             agent
         }
         _ => unreachable!(),
     };
-    let mut on_policy_hooks = OnPolicyHooks::default();
-    on_policy_hooks.add_training_hook(LoggerTrainingHook::default());
     let mut algo = OnPolicyAlgorithm {
-        env_pool,
+        sampler,
         agent,
-        learning_schedule,
-        hooks: on_policy_hooks,
+        hooks: DefaultOnPolicyAlgorightmsHooks::new(learning_schedule),
     };
     algo.train().unwrap();
 }

@@ -1,17 +1,13 @@
-use crate::{
-    builders::{
-        agents::{a2c::A2CBuilder, ppo::PPOBuilder},
-        env_pool::{self, EnvBuilderTrait, VecPoolType},
-    },
-    hooks::on_policy_algo_hooks::LoggerTrainingHook,
+use crate::builders::{
+    agents::{a2c::A2CBuilder, ppo::PPOBuilder},
+    env_pool::{EnvBuilderTrait, VecPoolType},
 };
-use candle_core::{Device, Result, Tensor};
+use candle_core::{Device, Result};
 use r2l_agents::AgentKind;
 use r2l_core::{
-    env::{self, RolloutMode, Sampler},
+    env::RolloutMode,
     env_pools::{R2lEnvHolder, R2lEnvPool},
-    numeric::Buffer,
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm, OnPolicyHooks},
+    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
 };
 
 pub enum AgentType {
@@ -23,7 +19,7 @@ pub struct OnPolicyAlgorithmBuilder {
     pub device: Device,
     pub env_pool_type: VecPoolType,
     pub normalize_env: bool,
-    pub hooks: OnPolicyHooks,
+    // pub hooks: OnPolicyHooks,
     pub rollout_mode: RolloutMode,
     pub learning_schedule: LearningSchedule,
     pub agent_type: AgentType,
@@ -31,13 +27,10 @@ pub struct OnPolicyAlgorithmBuilder {
 
 impl Default for OnPolicyAlgorithmBuilder {
     fn default() -> Self {
-        let mut hooks = OnPolicyHooks::default();
-        hooks.add_training_hook(LoggerTrainingHook::default());
         Self {
             device: Device::Cpu,
             env_pool_type: VecPoolType::default(),
             normalize_env: false,
-            hooks,
             rollout_mode: RolloutMode::StepBound { n_steps: 0 },
             learning_schedule: LearningSchedule::TotalStepBound {
                 total_steps: 0,
@@ -54,14 +47,20 @@ impl OnPolicyAlgorithmBuilder {
         mut self,
         env_builder: EB,
         n_envs: usize,
-    ) -> Result<OnPolicyAlgorithm<R2lEnvPool<R2lEnvHolder<EB::Env>>, AgentKind>>
+    ) -> Result<
+        OnPolicyAlgorithm<
+            R2lEnvPool<R2lEnvHolder<EB::Env>>,
+            AgentKind,
+            DefaultOnPolicyAlgorightmsHooks,
+        >,
+    >
     where
         EB::Env: Sync + 'static,
     {
-        let env_pool =
+        let sampler =
             self.env_pool_type
                 .build(&self.device, env_builder, n_envs, self.rollout_mode)?;
-        let env_description = env_pool.env_description();
+        let env_description = sampler.env_description();
         let agent = match &mut self.agent_type {
             AgentType::PPO(builder) => {
                 let ppo = builder.build(&self.device, &env_description)?;
@@ -72,11 +71,11 @@ impl OnPolicyAlgorithmBuilder {
                 AgentKind::A2C(a2c)
             }
         };
+        let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.learning_schedule);
         Ok(OnPolicyAlgorithm {
-            env_pool,
+            sampler,
             agent,
-            learning_schedule: self.learning_schedule,
-            hooks: self.hooks,
+            hooks,
         })
     }
 

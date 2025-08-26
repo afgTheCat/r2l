@@ -35,7 +35,6 @@ pub struct VariableSizedSampler<E: Env, P: VariableSizedEnvPool<Env = E>> {
     env_pool: P,
 }
 
-// TODO: this needs to be finished!
 impl<E: Env, P: VariableSizedEnvPool<Env = E>> Sampler for VariableSizedSampler<E, P> {
     fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
         &mut self,
