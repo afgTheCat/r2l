@@ -1,6 +1,6 @@
 use crate::{distributions::Distribution, numeric::Buffer, utils::rollout_buffer::RolloutBuffer};
 use bincode::{Decode, Encode};
-use candle_core::{Result, Tensor, WithDType};
+use candle_core::{Result, Tensor};
 
 #[derive(Debug, Clone)]
 pub enum Space {

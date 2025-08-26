@@ -11,9 +11,9 @@ use r2l_core::{
         R2lEnvHolder, R2lEnvPool, SequentialVecEnvHooks, StepMode,
         thread_env_holder::{ThreadResult, WorkerTask, WorkerThread},
         vector_env_holder::VecEnvHolder,
-        vector_env_holder2::VecEnvHolder2,
     },
     numeric::Buffer,
+    sampler::samplers::step_bound_sampler::VecEnvHolder2,
     utils::rollout_buffer::RolloutBuffer,
 };
 use r2l_gym::GymEnv;
@@ -271,6 +271,9 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
         }
     }
 }
+
+// TODO: remove this once we are there
+pub enum EnvHolder {}
 
 impl VecPoolType {
     pub fn to_r2l_pool_inner<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(

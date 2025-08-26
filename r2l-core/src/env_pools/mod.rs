@@ -1,23 +1,17 @@
-pub mod episode_bound_sampler;
-pub mod fixed_size_env_pools;
-pub mod step_bound_sampler;
 pub mod subproc_env_holder;
 pub mod thread_env_holder;
-pub mod variable_sized_env_pool;
 pub mod vector_env_holder;
-pub mod vector_env_holder2;
 
 use crate::{
     distributions::Distribution,
     env::{Env, EnvironmentDescription, RolloutMode, Sampler, SnapShot},
     env_pools::{
-        subproc_env_holder::SubprocHolder,
-        thread_env_holder::ThreadHolder,
+        subproc_env_holder::SubprocHolder, thread_env_holder::ThreadHolder,
         vector_env_holder::VecEnvHolder,
-        vector_env_holder2::{DefaultStepBoundHook, VecEnvHolder2},
     },
     numeric::Buffer,
     rng::RNG,
+    sampler::samplers::step_bound_sampler::{DefaultStepBoundHook, VecEnvHolder2},
     utils::rollout_buffer::RolloutBuffer,
 };
 use candle_core::{Device, Result, Tensor};

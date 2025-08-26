@@ -19,7 +19,6 @@ pub struct OnPolicyAlgorithmBuilder {
     pub device: Device,
     pub env_pool_type: VecPoolType,
     pub normalize_env: bool,
-    // pub hooks: OnPolicyHooks,
     pub rollout_mode: RolloutMode,
     pub learning_schedule: LearningSchedule,
     pub agent_type: AgentType,

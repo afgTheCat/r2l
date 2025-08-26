@@ -21,19 +21,13 @@ pub struct FixedSizeStateBuffer<E: Env> {
 
 impl<E: Env> FixedSizeStateBuffer<E> {
     pub fn new(capacity: usize) -> Self {
-        let states = AllocRingBuffer::new(capacity);
-        let next_states = AllocRingBuffer::new(capacity);
-        let rewards = AllocRingBuffer::new(capacity);
-        let action = AllocRingBuffer::new(capacity);
-        let terminated = AllocRingBuffer::new(capacity);
-        let trancuated = AllocRingBuffer::new(capacity);
         Self {
-            states,
-            next_states,
-            rewards,
-            action,
-            terminated,
-            trancuated,
+            states: AllocRingBuffer::new(capacity),
+            next_states: AllocRingBuffer::new(capacity),
+            rewards: AllocRingBuffer::new(capacity),
+            action: AllocRingBuffer::new(capacity),
+            terminated: AllocRingBuffer::new(capacity),
+            trancuated: AllocRingBuffer::new(capacity),
         }
     }
 
@@ -79,12 +73,12 @@ impl<E: Env<Tensor = Buffer>> FixedSizeStateBuffer<E> {
     }
 }
 
-pub struct StepBoundBuffer<E: Env> {
+pub struct FixedSizeTrajectoryBuffer<E: Env> {
     pub env: E,
     pub buffer: Option<FixedSizeStateBuffer<E>>,
 }
 
-impl<E: Env<Tensor = Buffer>> StepBoundBuffer<E> {
+impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
     pub fn new(env: E, capacity: usize) -> Self {
         Self {
             env,
@@ -102,7 +96,6 @@ impl<E: Env<Tensor = Buffer>> StepBoundBuffer<E> {
         let state = if let Some(obs) = buffer.next_states.back() {
             obs.clone()
         } else {
-            // TODO: get the seed from core
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             self.env.reset(seed)
         };
