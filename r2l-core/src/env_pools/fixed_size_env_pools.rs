@@ -1,5 +1,5 @@
 use crate::{
-    buffers::episode_bound_buffer::{StateBuffer, StepBoundBuffer},
+    buffers::episode_bound_buffer::{FixedSizeStateBuffer, StepBoundBuffer},
     distributions::Distribution,
     env::Env,
     numeric::Buffer,
@@ -20,9 +20,9 @@ pub trait FixedSizeEnvPool {
     fn single_step_and_collect<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
-    ) -> Vec<StateBuffer<Self::Env>>;
+    ) -> Vec<FixedSizeStateBuffer<Self::Env>>;
 
-    fn set_buffers(&mut self, buffers: Vec<StateBuffer<Self::Env>>);
+    fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<Self::Env>>);
 
     // TODO: should be removed once we have a trait for the trajectory buffers
     fn to_rollout_buffers(&mut self, steps_per_environment: usize) -> Vec<RolloutBuffer>;
@@ -45,7 +45,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
     fn single_step_and_collect<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
-    ) -> Vec<StateBuffer<E>> {
+    ) -> Vec<FixedSizeStateBuffer<E>> {
         let mut state_buffers = vec![];
         for buf in self.buffers.iter_mut() {
             buf.step(distr);
@@ -54,7 +54,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
         state_buffers
     }
 
-    fn set_buffers(&mut self, buffers: Vec<StateBuffer<E>>) {
+    fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<E>>) {
         for (buf, state_buffer) in self.buffers.iter_mut().zip(buffers) {
             buf.set_buffer(state_buffer);
         }
@@ -83,13 +83,13 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
 
 enum WorkerTask<E: Env> {
     SingleStep { thread_id: usize },
-    SetBuffer { buffer: StateBuffer<E> },
+    SetBuffer { buffer: FixedSizeStateBuffer<E> },
 }
 
 enum WorkerResult<E: Env> {
     Step {
         thread_id: usize,
-        buffer: StateBuffer<E>,
+        buffer: FixedSizeStateBuffer<E>,
     },
 }
 
@@ -116,11 +116,11 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
     fn single_step_and_collect<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
-    ) -> Vec<StateBuffer<Self::Env>> {
+    ) -> Vec<FixedSizeStateBuffer<Self::Env>> {
         todo!()
     }
 
-    fn set_buffers(&mut self, buffers: Vec<StateBuffer<Self::Env>>) {
+    fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<Self::Env>>) {
         todo!()
     }
 

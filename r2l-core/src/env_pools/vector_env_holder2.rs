@@ -2,7 +2,7 @@ use candle_core::Tensor;
 use std::marker::PhantomData;
 
 use crate::{
-    buffers::episode_bound_buffer::{StateBuffer, StepBoundBuffer},
+    buffers::episode_bound_buffer::{FixedSizeStateBuffer, StepBoundBuffer},
     distributions::Distribution,
     env::{Env, RolloutMode},
     env_pools::EnvHolder,
@@ -13,7 +13,7 @@ use crate::{
 pub trait SequntialStepBoundHooks {
     type E: Env;
 
-    fn process_last_step(&self, buffers: &mut Vec<StateBuffer<Self::E>>);
+    fn process_last_step(&self, buffers: &mut Vec<FixedSizeStateBuffer<Self::E>>);
 
     // TODO: this should change
     fn post_process_hook(&self) {}
@@ -26,7 +26,7 @@ pub struct DefaultStepBoundHook<E: Env> {
 impl<E: Env> SequntialStepBoundHooks for DefaultStepBoundHook<E> {
     type E = E;
 
-    fn process_last_step(&self, buffers: &mut Vec<StateBuffer<Self::E>>) {}
+    fn process_last_step(&self, buffers: &mut Vec<FixedSizeStateBuffer<Self::E>>) {}
 
     fn post_process_hook(&self) {}
 }

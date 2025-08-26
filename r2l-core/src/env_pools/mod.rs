@@ -3,6 +3,7 @@ pub mod fixed_size_env_pools;
 pub mod step_bound_sampler;
 pub mod subproc_env_holder;
 pub mod thread_env_holder;
+pub mod variable_sized_env_pool;
 pub mod vector_env_holder;
 pub mod vector_env_holder2;
 

@@ -10,7 +10,7 @@ use crossbeam::channel::{Receiver, RecvError, SendError, Sender};
 use rand::Rng;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 
-pub struct StateBuffer<E: Env> {
+pub struct FixedSizeStateBuffer<E: Env> {
     states: AllocRingBuffer<E::Tensor>,
     next_states: AllocRingBuffer<E::Tensor>,
     rewards: AllocRingBuffer<f32>,
@@ -19,7 +19,7 @@ pub struct StateBuffer<E: Env> {
     trancuated: AllocRingBuffer<bool>,
 }
 
-impl<E: Env> StateBuffer<E> {
+impl<E: Env> FixedSizeStateBuffer<E> {
     pub fn new(capacity: usize) -> Self {
         let states = AllocRingBuffer::new(capacity);
         let next_states = AllocRingBuffer::new(capacity);
@@ -55,7 +55,7 @@ impl<E: Env> StateBuffer<E> {
     }
 }
 
-impl<E: Env<Tensor = Buffer>> StateBuffer<E> {
+impl<E: Env<Tensor = Buffer>> FixedSizeStateBuffer<E> {
     // TODO: this should be removed once we are done
     pub fn to_rollout_buffer(&mut self, size: usize) -> RolloutBuffer {
         let mut rb = RolloutBuffer::default();
@@ -81,14 +81,14 @@ impl<E: Env<Tensor = Buffer>> StateBuffer<E> {
 
 pub struct StepBoundBuffer<E: Env> {
     pub env: E,
-    pub buffer: Option<StateBuffer<E>>,
+    pub buffer: Option<FixedSizeStateBuffer<E>>,
 }
 
 impl<E: Env<Tensor = Buffer>> StepBoundBuffer<E> {
     pub fn new(env: E, capacity: usize) -> Self {
         Self {
             env,
-            buffer: Some(StateBuffer::new(capacity)),
+            buffer: Some(FixedSizeStateBuffer::new(capacity)),
         }
     }
 
@@ -130,7 +130,7 @@ impl<E: Env<Tensor = Buffer>> StepBoundBuffer<E> {
         );
     }
 
-    pub fn move_buffer(&mut self) -> StateBuffer<E> {
+    pub fn move_buffer(&mut self) -> FixedSizeStateBuffer<E> {
         if let Some(buffer) = self.buffer.take() {
             buffer
         } else {
@@ -138,21 +138,24 @@ impl<E: Env<Tensor = Buffer>> StepBoundBuffer<E> {
         }
     }
 
-    pub fn set_buffer(&mut self, buffer: StateBuffer<E>) {
+    pub fn set_buffer(&mut self, buffer: FixedSizeStateBuffer<E>) {
         self.buffer = Some(buffer)
     }
 
     pub fn send_buffer(
         &mut self,
-        tx: Sender<StateBuffer<E>>,
-    ) -> Result<(), SendError<StateBuffer<E>>> {
+        tx: Sender<FixedSizeStateBuffer<E>>,
+    ) -> Result<(), SendError<FixedSizeStateBuffer<E>>> {
         let Some(buffer) = self.buffer.take() else {
             todo!()
         };
         tx.send(buffer)
     }
 
-    pub fn receive_buffer(&mut self, rx: Receiver<StateBuffer<E>>) -> Result<(), RecvError> {
+    pub fn receive_buffer(
+        &mut self,
+        rx: Receiver<FixedSizeStateBuffer<E>>,
+    ) -> Result<(), RecvError> {
         let buffer = rx.recv()?;
         self.buffer = Some(buffer);
         Ok(())

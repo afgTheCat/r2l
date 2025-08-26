@@ -11,7 +11,7 @@ use candle_core::Tensor;
 
 pub struct StepBoundAsyncSampler<E: Env<Tensor = Buffer>, P: FixedSizeEnvPool<Env = E>> {
     pub step_bound: usize,
-    pub buffers: P,
+    pub env_pool: P,
 }
 
 impl<E: Env<Tensor = Buffer>, P: FixedSizeEnvPool<Env = E>> Sampler
@@ -21,10 +21,10 @@ impl<E: Env<Tensor = Buffer>, P: FixedSizeEnvPool<Env = E>> Sampler
         &mut self,
         distribution: &D,
     ) -> candle_core::Result<Vec<RolloutBuffer>> {
-        let num_envs = self.buffers.num_envs();
+        let num_envs = self.env_pool.num_envs();
         let steps = self.step_bound / num_envs;
-        self.buffers.run_rollouts(distribution, steps);
-        Ok(self.buffers.to_rollout_buffers(steps))
+        self.env_pool.run_rollouts(distribution, steps);
+        Ok(self.env_pool.to_rollout_buffers(steps))
     }
 }
 
@@ -34,7 +34,7 @@ pub struct StepBoundSequentialSampler<
     H: SequntialStepBoundHooks<E = E>,
 > {
     pub step_bound: usize,
-    pub buffers: P,
+    pub env_pool: P,
     pub hooks: H,
 }
 
@@ -46,14 +46,14 @@ impl<E: Env<Tensor = Buffer>, P: FixedSizeEnvPool<Env = E>, H: SequntialStepBoun
         distribution: &D,
     ) -> candle_core::Result<Vec<RolloutBuffer>> {
         let mut steps_taken = 0;
-        let num_envs = self.buffers.num_envs();
+        let num_envs = self.env_pool.num_envs();
         while steps_taken < self.step_bound {
-            let mut state_buffers = self.buffers.single_step_and_collect(distribution);
+            let mut state_buffers = self.env_pool.single_step_and_collect(distribution);
             self.hooks.process_last_step(&mut state_buffers);
-            self.buffers.set_buffers(state_buffers);
+            self.env_pool.set_buffers(state_buffers);
             steps_taken += num_envs;
         }
         let steps_per_environment = self.step_bound / num_envs;
-        Ok(self.buffers.to_rollout_buffers(steps_per_environment))
+        Ok(self.env_pool.to_rollout_buffers(steps_per_environment))
     }
 }
