@@ -5280,6 +5280,7 @@ dependencies = [
  "r2l-core",
  "r2l-gym",
  "rand 0.9.2",
+ "ringbuffer",
 ]
 
 [[package]]

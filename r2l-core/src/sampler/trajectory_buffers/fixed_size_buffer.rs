@@ -11,17 +11,19 @@ use rand::Rng;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 
 pub struct FixedSizeStateBuffer<E: Env> {
-    states: AllocRingBuffer<E::Tensor>,
-    next_states: AllocRingBuffer<E::Tensor>,
-    rewards: AllocRingBuffer<f32>,
-    action: AllocRingBuffer<E::Tensor>,
-    terminated: AllocRingBuffer<bool>,
-    trancuated: AllocRingBuffer<bool>,
+    capacity: usize,
+    pub states: AllocRingBuffer<E::Tensor>,
+    pub next_states: AllocRingBuffer<E::Tensor>,
+    pub rewards: AllocRingBuffer<f32>,
+    pub action: AllocRingBuffer<E::Tensor>,
+    pub terminated: AllocRingBuffer<bool>,
+    pub trancuated: AllocRingBuffer<bool>,
 }
 
 impl<E: Env> FixedSizeStateBuffer<E> {
     pub fn new(capacity: usize) -> Self {
         Self {
+            capacity,
             states: AllocRingBuffer::new(capacity),
             next_states: AllocRingBuffer::new(capacity),
             rewards: AllocRingBuffer::new(capacity),
@@ -47,6 +49,22 @@ impl<E: Env> FixedSizeStateBuffer<E> {
         self.terminated.enqueue(terminated);
         self.trancuated.enqueue(trancuated);
     }
+
+    pub fn pop_last_state(&mut self) -> E::Tensor {
+        todo!()
+    }
+
+    pub fn set_last_state(&mut self, new_state: E::Tensor) {
+        self.next_states.enqueue(new_state);
+    }
+
+    pub fn pop_last_reward(&mut self) -> f32 {
+        todo!()
+    }
+
+    pub fn set_last_reward(&mut self, reward: f32) {
+        self.rewards.enqueue(reward);
+    }
 }
 
 impl<E: Env<Tensor = Buffer>> FixedSizeStateBuffer<E> {
@@ -69,6 +87,27 @@ impl<E: Env<Tensor = Buffer>> FixedSizeStateBuffer<E> {
                 rb.last_state = Some(next_state.to_candle_tensor(&Device::Cpu));
             }
         }
+        rb
+    }
+
+    pub fn to_rollout_buffers2(&self) -> RolloutBuffer {
+        let mut rb = RolloutBuffer::default();
+        for idx in 0..self.capacity {
+            rb.states
+                .push(self.states[idx].to_candle_tensor(&Device::Cpu));
+            rb.actions
+                .push(self.action[idx].to_candle_tensor(&Device::Cpu));
+            rb.rewards.push(self.rewards[idx]);
+            rb.dones.push(self.terminated[idx] || self.trancuated[idx]);
+        }
+        let last_state = self
+            .next_states
+            .back()
+            .map(|b| b.to_candle_tensor(&Device::Cpu))
+            .unwrap()
+            .clone();
+        rb.states.push(last_state.clone());
+        rb.last_state = Some(last_state);
         rb
     }
 }
@@ -121,6 +160,12 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
             terminated,
             trancuated,
         );
+    }
+
+    pub fn step_n(&mut self, distr: &impl Distribution<Tensor = Tensor>, steps: usize) {
+        for _ in 0..steps {
+            self.step(distr);
+        }
     }
 
     pub fn move_buffer(&mut self) -> FixedSizeStateBuffer<E> {

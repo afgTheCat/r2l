@@ -3,6 +3,7 @@ use crate::{
     env::{Env, SnapShot},
     numeric::Buffer,
     rng::RNG,
+    utils::rollout_buffer::RolloutBuffer,
 };
 use candle_core::{Device, Tensor};
 use rand::Rng;
@@ -57,6 +58,10 @@ impl<E: Env> VariableSizedStateBuffer<E> {
         self.terminated.clear();
         self.trancuated.clear();
     }
+
+    pub fn last_state_terminates(&self) -> bool {
+        *self.terminated.last().unwrap() || *self.trancuated.last().unwrap()
+    }
 }
 
 pub struct VariableSizedTrajectoryBuffer<E: Env> {
@@ -100,5 +105,24 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
             terminated,
             trancuated,
         );
+    }
+
+    pub fn step_with_epiosde_bound(
+        &mut self,
+        distr: &impl Distribution<Tensor = Tensor>,
+        n_steps: usize,
+    ) {
+        let mut steps_taken = 0;
+        loop {
+            self.step(distr);
+            steps_taken += 1;
+            if steps_taken >= n_steps || self.buffer.last_state_terminates() {
+                break;
+            }
+        }
+    }
+
+    pub fn to_rollout_buffer(&self) -> RolloutBuffer {
+        todo!()
     }
 }

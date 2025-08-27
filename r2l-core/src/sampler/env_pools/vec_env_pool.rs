@@ -24,42 +24,32 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
         self.buffers.len()
     }
 
-    // TODO: a more flexible environment would be one that can take a function
-    fn single_step<D: Distribution<Tensor = Tensor>>(
-        &mut self,
-        distr: &D,
-    ) -> Vec<FixedSizeStateBuffer<E>> {
-        let mut state_buffers = vec![];
+    fn step<D: Distribution<Tensor = Tensor>>(&mut self, distr: &D, steps: usize) {
         for buf in self.buffers.iter_mut() {
-            buf.step(distr);
-            state_buffers.push(buf.move_buffer());
-        }
-        state_buffers
-    }
-
-    fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<E>>) {
-        for (buf, state_buffer) in self.buffers.iter_mut().zip(buffers) {
-            buf.set_buffer(state_buffer);
+            buf.step_n(distr, steps);
         }
     }
 
-    fn to_rollout_buffers(&mut self, steps_per_environment: usize) -> Vec<RolloutBuffer> {
+    fn take_buffers(&mut self) -> Vec<FixedSizeStateBuffer<Self::Env>> {
         self.buffers
             .iter_mut()
+            .map(|buf| buf.move_buffer())
+            .collect()
+    }
+
+    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer> {
+        self.buffers
+            .iter()
             .map(|buff| {
-                buff.buffer
-                    .as_mut()
-                    .unwrap()
-                    .to_rollout_buffer(steps_per_environment)
+                let buff = buff.buffer.as_ref().unwrap();
+                buff.to_rollout_buffers2()
             })
             .collect()
     }
 
-    fn run_rollouts<D: Distribution<Tensor = Tensor>>(&mut self, distr: &D, steps: usize) {
-        for buf in self.buffers.iter_mut() {
-            for _ in 0..steps {
-                buf.step(distr);
-            }
+    fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<Self::Env>>) {
+        for (trajectory_buf, buf) in self.buffers.iter_mut().zip(buffers) {
+            trajectory_buf.set_buffer(buf);
         }
     }
 }
@@ -75,15 +65,20 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedVecEnvPool<E
         self.buffers.len()
     }
 
-    fn single_step<D: Distribution<Tensor = Tensor>>(
-        &mut self,
-        env_idx: &[usize],
-        distr: &D,
-    ) -> Vec<VariableSizedStateBuffer<Self::Env>> {
-        todo!()
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer> {
+        self.buffers
+            .iter()
+            .map(|buff| buff.to_rollout_buffer())
+            .collect()
     }
 
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer> {
-        todo!()
+    fn step_with_episode_bound<D: Distribution<Tensor = Tensor>>(
+        &mut self,
+        distr: &D,
+        steps: usize,
+    ) {
+        for buffer in self.buffers.iter_mut() {
+            buffer.step_with_epiosde_bound(distr, steps);
+        }
     }
 }
