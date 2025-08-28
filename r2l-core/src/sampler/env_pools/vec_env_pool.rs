@@ -1,6 +1,6 @@
 use crate::{
     distributions::Distribution,
-    env::Env,
+    env::{Env, EnvironmentDescription},
     numeric::Buffer,
     sampler::{
         env_pools::{FixedSizeEnvPool, VariableSizedEnvPool},
@@ -15,6 +15,12 @@ use candle_core::Tensor;
 
 pub struct FixedSizeVecEnvPool<E: Env> {
     pub buffers: Vec<FixedSizeTrajectoryBuffer<E>>,
+}
+
+impl<E: Env> FixedSizeVecEnvPool<E> {
+    pub fn env_description(&self) -> EnvironmentDescription {
+        self.buffers[0].env.env_description()
+    }
 }
 
 impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
@@ -71,7 +77,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedVecEnvPool<E
 
     fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer> {
         self.buffers
-            .iter()
+            .iter_mut()
             .map(|buff| buff.to_rollout_buffer())
             .collect()
     }
@@ -82,7 +88,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedVecEnvPool<E
         steps: usize,
     ) {
         for buffer in self.buffers.iter_mut() {
-            buffer.step_with_epiosde_bound(distr, steps);
+            buffer.clear_and_step_with_epiosde_bound(distr, steps);
         }
     }
 }

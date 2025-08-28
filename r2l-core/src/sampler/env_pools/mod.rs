@@ -1,6 +1,6 @@
 use crate::{
     distributions::Distribution,
-    env::Env,
+    env::{Env, EnvironmentDescription},
     numeric::Buffer,
     sampler::{
         env_pools::{
@@ -41,6 +41,15 @@ pub trait FixedSizeEnvPool {
 pub enum FixedSizeEnvPoolKind<E: Env> {
     FixedSizeVecEnvPool(FixedSizeVecEnvPool<E>),
     FixedSizeThreadEnvPool(FixedSizeThreadEnvPool<E>),
+}
+
+impl<E: Env> FixedSizeEnvPoolKind<E> {
+    pub fn env_description(&self) -> EnvironmentDescription {
+        match self {
+            Self::FixedSizeVecEnvPool(env_pool) => env_pool.env_description(),
+            Self::FixedSizeThreadEnvPool(env_pool) => env_pool.env_description(),
+        }
+    }
 }
 
 impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
@@ -103,6 +112,15 @@ pub trait VariableSizedEnvPool {
 pub enum VariableSizedEnvPoolKind<E: Env> {
     VariableSizedVecEnvPool(VariableSizedVecEnvPool<E>),
     VariableSizedThreadEnvPool(VariableSizedThreadEnvPool<E>),
+}
+
+impl<E: Env> VariableSizedEnvPoolKind<E> {
+    pub fn env_description(&self) -> EnvironmentDescription {
+        match self {
+            Self::VariableSizedVecEnvPool(env_pool) => env_pool.buffers[0].env.env_description(),
+            Self::VariableSizedThreadEnvPool(env_pool) => env_pool.env_description(),
+        }
+    }
 }
 
 impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedEnvPoolKind<E> {

@@ -1,33 +1,43 @@
-use crate::builders::{env::EnvBuilderTrait, sampler_hooks::SequentialEnvHookTypes};
+use crate::builders::{env::EnvBuilderTrait, sampler_hooks2::EvaluatorNormalizerOptions2};
 use candle_core::Device;
-use r2l_core::{
-    env::Env,
-    numeric::Buffer,
-    sampler::{
-        env_pools::{
-            FixedSizeEnvPoolKind, VariableSizedEnvPoolKind,
-            thread_env_pool::{
-                FixedSizeThreadEnvPool, FixedSizeWorkerCommand, FixedSizeWorkerResult,
-                FixedSizeWorkerThread, VariableSizedThreadEnvPool, VariableSizedWorkerCommand,
-                VariableSizedWorkerResult, VariableSizedWorkerThread,
-            },
-            vec_env_pool::{FixedSizeVecEnvPool, VariableSizedVecEnvPool},
+use r2l_core::sampler::{
+    env_pools::{
+        FixedSizeEnvPoolKind, VariableSizedEnvPoolKind,
+        thread_env_pool::{
+            FixedSizeThreadEnvPool, FixedSizeWorkerCommand, FixedSizeWorkerResult,
+            FixedSizeWorkerThread, VariableSizedThreadEnvPool, VariableSizedWorkerCommand,
+            VariableSizedWorkerResult, VariableSizedWorkerThread,
         },
-        samplers::{CollectionType, NewSampler},
-        trajectory_buffers::{
-            fixed_size_buffer::FixedSizeTrajectoryBuffer,
-            variable_size_buffer::VariableSizedTrajectoryBuffer,
-        },
+        vec_env_pool::{FixedSizeVecEnvPool, VariableSizedVecEnvPool},
+    },
+    samplers::{CollectionType, NewSampler},
+    trajectory_buffers::{
+        fixed_size_buffer::FixedSizeTrajectoryBuffer,
+        variable_size_buffer::VariableSizedTrajectoryBuffer,
     },
 };
 use std::{collections::HashMap, sync::Arc};
 
-pub enum BuilderType<EB: EnvBuilderTrait> {
+pub enum EnvBuilderType<EB: EnvBuilderTrait> {
     EnvBuilder { builder: Arc<EB>, n_envs: usize },
     EnvBuilderVec { builders: Vec<Arc<EB>> },
 }
 
-impl<EB: EnvBuilderTrait> BuilderType<EB> {
+impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
+    fn num_envs(&self) -> usize {
+        match self {
+            Self::EnvBuilder { n_envs, .. } => *n_envs,
+            Self::EnvBuilderVec { builders } => builders.len(),
+        }
+    }
+
+    fn env_builder(&self) -> Arc<EB> {
+        match &self {
+            Self::EnvBuilder { builder, .. } => builder.clone(),
+            Self::EnvBuilderVec { builders } => builders[0].clone(),
+        }
+    }
+
     fn build_fixed_sized_vec(
         &self,
         capacity: usize,
@@ -91,7 +101,7 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
                         let env = eb_cloned.build_env(&device_cloned).unwrap();
                         let mut worker =
                             FixedSizeWorkerThread::new(result_tx, command_rx, env, capacity);
-                        worker.handle_commmands();
+                        worker.handle_commands();
                     });
                 }
             }
@@ -108,7 +118,7 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
                         let env = eb_cloned.build_env(&device_cloned).unwrap();
                         let mut worker =
                             FixedSizeWorkerThread::new(result_tx, command_rx, env, capacity);
-                        worker.handle_commmands();
+                        worker.handle_commands();
                     });
                 }
             }
@@ -156,25 +166,29 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
     }
 }
 
+#[derive(Default)]
 pub enum EnvPoolType {
-    VecVariable,
+    #[default]
     VecStep,
-    ThreadVariable,
+    VecVariable,
     ThreadStep,
+    ThreadVariable,
 }
 
+// eigher this has to be build or it cannot have an assoc type
 pub struct SamplerType {
-    capacity: usize,
-    hook: SequentialEnvHookTypes,
-    env_pool_type: EnvPoolType,
+    pub capacity: usize,
+    pub hook_options: EvaluatorNormalizerOptions2,
+    pub env_pool_type: EnvPoolType,
 }
 
 impl SamplerType {
-    pub fn build<E: Env<Tensor = Buffer>, EB: EnvBuilderTrait<Env = E>>(
+    pub fn build_with_builder_type<EB: EnvBuilderTrait>(
         &self,
-        builder_type: BuilderType<EB>,
+        builder_type: EnvBuilderType<EB>,
         device: &Device,
-    ) -> NewSampler<E> {
+    ) -> NewSampler<EB::Env> {
+        let n_envs = builder_type.num_envs();
         let collection_type = match self.env_pool_type {
             EnvPoolType::VecVariable => {
                 let env_pool = builder_type.build_variable_sized_vec(device);
@@ -182,8 +196,12 @@ impl SamplerType {
                 CollectionType::EpisodeBound { env_pool }
             }
             EnvPoolType::VecStep => {
-                let hooks = self.hook.build();
                 let env_pool = builder_type.build_fixed_sized_vec(self.capacity, device);
+                let env_desctiption = env_pool.env_description();
+                let env_builder = builder_type.env_builder();
+                let hooks =
+                    self.hook_options
+                        .build(env_desctiption, env_builder.as_ref(), n_envs, device);
                 let env_pool = FixedSizeEnvPoolKind::FixedSizeVecEnvPool(env_pool);
                 CollectionType::StepBound { env_pool, hooks }
             }
@@ -193,8 +211,12 @@ impl SamplerType {
                 CollectionType::EpisodeBound { env_pool }
             }
             EnvPoolType::ThreadStep => {
-                let hooks = self.hook.build();
                 let env_pool = builder_type.build_fixed_sized_thread(self.capacity, device);
+                let env_desctiption = env_pool.env_description();
+                let env_builder = builder_type.env_builder();
+                let hooks =
+                    self.hook_options
+                        .build(env_desctiption, env_builder.as_ref(), n_envs, device);
                 let env_pool = FixedSizeEnvPoolKind::FixedSizeThreadEnvPool(env_pool);
                 CollectionType::StepBound { env_pool, hooks }
             }

@@ -153,21 +153,3 @@ pub enum SequentialEnvHookTypes {
         options: EvaluatorNormalizerOptions,
     },
 }
-
-impl SequentialEnvHookTypes {
-    pub fn build<E: Env>(&self) -> Option<Box<dyn SequntialStepBoundHooks<E>>> {
-        match &self {
-            Self::None => None,
-            Self::EvaluatorOnly { options } => {
-                // let evaluator = options.build(eval_env, n_envs)
-                todo!()
-            }
-            Self::NormalizerOnly { options } => {
-                todo!()
-            }
-            Self::EvaluatorNormalizer { options } => {
-                todo!()
-            }
-        }
-    }
-}

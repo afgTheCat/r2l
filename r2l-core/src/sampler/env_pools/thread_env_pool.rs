@@ -1,6 +1,6 @@
 use crate::{
     distributions::Distribution,
-    env::Env,
+    env::{Env, EnvironmentDescription},
     numeric::Buffer,
     sampler::{
         env_pools::{FixedSizeEnvPool, VariableSizedEnvPool},
@@ -32,13 +32,22 @@ pub enum FixedSizeWorkerCommand<E: Env> {
     ReturnRolloutBuffer,
     // Set buffers
     SetBuffer { buffer: FixedSizeStateBuffer<E> },
+    // Get env description
+    GetEnvDescription,
 }
 
 pub enum FixedSizeWorkerResult<E: Env> {
-    Step { buffer: FixedSizeStateBuffer<E> },
-    MultiStepOk {},
-    RolloutBuffer { buffer: RolloutBuffer },
-    SetBufferOk {},
+    Step {
+        buffer: FixedSizeStateBuffer<E>,
+    },
+    MultiStepOk,
+    RolloutBuffer {
+        buffer: RolloutBuffer,
+    },
+    SetBufferOk,
+    EnvDescription {
+        env_description: EnvironmentDescription,
+    },
 }
 
 pub struct FixedSizeWorkerThread<E: Env<Tensor = Buffer>> {
@@ -61,7 +70,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeWorkerThread<E> {
         }
     }
 
-    pub fn handle_commmands(&mut self) {
+    pub fn handle_commands(&mut self) {
         loop {
             let command = self.rx.recv().unwrap();
             match command {
@@ -92,6 +101,12 @@ impl<E: Env<Tensor = Buffer>> FixedSizeWorkerThread<E> {
                     self.buffer.set_buffer(buffer);
                     self.tx.send(FixedSizeWorkerResult::SetBufferOk {}).unwrap();
                 }
+                FixedSizeWorkerCommand::GetEnvDescription => {
+                    let env_description = self.buffer.env.env_description();
+                    self.tx
+                        .send(FixedSizeWorkerResult::EnvDescription { env_description })
+                        .unwrap();
+                }
             }
         }
     }
@@ -118,6 +133,18 @@ impl<E: Env> FixedSizeThreadEnvPool<E> {
         >,
     ) -> Self {
         Self { channels }
+    }
+
+    pub fn env_description(&self) -> EnvironmentDescription {
+        let (sender, receiver) = self.channels.get(&0).unwrap();
+        sender
+            .send(FixedSizeWorkerCommand::GetEnvDescription)
+            .unwrap();
+        let FixedSizeWorkerResult::EnvDescription { env_description } = receiver.recv().unwrap()
+        else {
+            panic!()
+        };
+        env_description
     }
 }
 
@@ -206,11 +233,18 @@ pub enum VariableSizedWorkerCommand {
     StepMultipleWithStepBound { num_steps: usize, distr: DistrPtr },
     // Return the trajectory buffer. This will probably not be needed
     ReturnRolloutBuffer,
+    // Return the environment description
+    GetEnvDescription,
 }
 
 pub enum VariableSizedWorkerResult {
     StepMultipleWithStepBoundOk,
-    RolloutBuffer { buffer: RolloutBuffer },
+    RolloutBuffer {
+        buffer: RolloutBuffer,
+    },
+    EnvDescription {
+        env_description: EnvironmentDescription,
+    },
 }
 
 pub struct VariableSizedWorkerThread<E: Env<Tensor = Buffer>> {
@@ -240,7 +274,8 @@ impl<E: Env<Tensor = Buffer>> VariableSizedWorkerThread<E> {
                     // SAFETY: the caller guarnatees that the reference will be valid for the duration
                     // of the work. The raw pointer will not be used beyond the unsafe block
                     let distr = unsafe { &*distr.0 };
-                    self.buffer.step_with_epiosde_bound(distr, num_steps);
+                    self.buffer
+                        .clear_and_step_with_epiosde_bound(distr, num_steps);
                     self.tx
                         .send(VariableSizedWorkerResult::StepMultipleWithStepBoundOk)
                         .unwrap();
@@ -249,6 +284,12 @@ impl<E: Env<Tensor = Buffer>> VariableSizedWorkerThread<E> {
                     let buffer = self.buffer.to_rollout_buffer();
                     self.tx
                         .send(VariableSizedWorkerResult::RolloutBuffer { buffer })
+                        .unwrap();
+                }
+                VariableSizedWorkerCommand::GetEnvDescription => {
+                    let env_description = self.buffer.env.env_description();
+                    self.tx
+                        .send(VariableSizedWorkerResult::EnvDescription { env_description })
                         .unwrap();
                 }
             }
@@ -281,6 +322,17 @@ impl<E: Env> VariableSizedThreadEnvPool<E> {
             channels,
             _env: PhantomData,
         }
+    }
+
+    pub fn env_description(&self) -> EnvironmentDescription {
+        let (tx, rx) = self.channels.get(&0).unwrap();
+        tx.send(VariableSizedWorkerCommand::GetEnvDescription)
+            .unwrap();
+        let VariableSizedWorkerResult::EnvDescription { env_description } = rx.recv().unwrap()
+        else {
+            panic!()
+        };
+        env_description
     }
 }
 

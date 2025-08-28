@@ -2,7 +2,7 @@ pub mod step_bound_sampler;
 
 use crate::{
     distributions::Distribution,
-    env::{Env, Sampler},
+    env::{Env, EnvironmentDescription, Sampler},
     numeric::Buffer,
     sampler::{
         env_pools::{
@@ -39,6 +39,15 @@ pub enum CollectionType<E: Env> {
 pub struct NewSampler<E: Env> {
     pub env_steps: usize,
     pub collection_type: CollectionType<E>,
+}
+
+impl<E: Env> NewSampler<E> {
+    pub fn env_description(&self) -> EnvironmentDescription {
+        match &self.collection_type {
+            CollectionType::StepBound { env_pool, .. } => env_pool.env_description(),
+            CollectionType::EpisodeBound { env_pool } => env_pool.env_description(),
+        }
+    }
 }
 
 impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {

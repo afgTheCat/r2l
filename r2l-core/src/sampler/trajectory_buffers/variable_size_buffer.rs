@@ -50,15 +50,6 @@ impl<E: Env> VariableSizedStateBuffer<E> {
         self.trancuated.push(trancuated);
     }
 
-    pub fn clear(&mut self) {
-        self.states.clear();
-        self.next_states.clear();
-        self.action.clear();
-        self.rewards.clear();
-        self.terminated.clear();
-        self.trancuated.clear();
-    }
-
     pub fn last_state_terminates(&self) -> bool {
         *self.terminated.last().unwrap() || *self.trancuated.last().unwrap()
     }
@@ -107,7 +98,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
         );
     }
 
-    pub fn step_with_epiosde_bound<D: Distribution<Tensor = Tensor> + ?Sized>(
+    pub fn clear_and_step_with_epiosde_bound<D: Distribution<Tensor = Tensor> + ?Sized>(
         &mut self,
         distr: &D,
         n_steps: usize,
@@ -116,13 +107,35 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
         loop {
             self.step(distr);
             steps_taken += 1;
-            if steps_taken >= n_steps || self.buffer.last_state_terminates() {
+            if steps_taken >= n_steps && self.buffer.last_state_terminates() {
                 break;
             }
         }
     }
 
-    pub fn to_rollout_buffer(&self) -> RolloutBuffer {
-        todo!()
+    pub fn to_rollout_buffer(&mut self) -> RolloutBuffer {
+        let mut rb = RolloutBuffer::default();
+        rb.states = std::mem::take(&mut self.buffer.states)
+            .into_iter()
+            .map(|b| b.to_candle_tensor(&Device::Cpu))
+            .collect();
+        rb.actions = std::mem::take(&mut self.buffer.action)
+            .into_iter()
+            .map(|b| b.to_candle_tensor(&Device::Cpu))
+            .collect();
+        rb.rewards = std::mem::take(&mut self.buffer.rewards);
+        rb.dones = std::mem::take(&mut self.buffer.terminated)
+            .into_iter()
+            .zip(std::mem::take(&mut self.buffer.trancuated))
+            .map(|(terminated, trancuated)| terminated || trancuated)
+            .collect();
+        let mut next_states = std::mem::take(&mut self.buffer.next_states);
+        let last_state = next_states
+            .pop()
+            .map(|b| b.to_candle_tensor(&Device::Cpu))
+            .unwrap();
+        rb.states.push(last_state.clone());
+        rb.last_state = Some(last_state);
+        rb
     }
 }
