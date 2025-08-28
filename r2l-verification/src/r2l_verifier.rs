@@ -3,9 +3,9 @@ use candle_core::Device;
 use r2l_agents::AgentKind;
 use r2l_api::builders::{
     agents::{a2c::A2CBuilder, ppo::PPOBuilder},
-    env_pool::{
+    env_pool::VecPoolType,
+    sampler_hooks::{
         EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions, SequentialEnvHookTypes,
-        VecPoolType,
     },
 };
 use r2l_core::{

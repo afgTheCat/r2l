@@ -1,5 +1,8 @@
 use candle_core::{Device, Result, Tensor};
-use r2l_api::builders::env_pool::{NormalizerOptions, SequentialEnvHookTypes, VecPoolType};
+use r2l_api::builders::{
+    env_pool::VecPoolType,
+    sampler_hooks::{NormalizerOptions, SequentialEnvHookTypes},
+};
 use r2l_core::{
     env::{Env, EnvironmentDescription, SnapShot, Space},
     numeric::Buffer,

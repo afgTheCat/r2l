@@ -1,6 +1,7 @@
 use crate::builders::{
     agents::{a2c::A2CBuilder, ppo::PPOBuilder},
-    env_pool::{EnvBuilderTrait, VecPoolType},
+    env::EnvBuilderTrait,
+    env_pool::VecPoolType,
 };
 use candle_core::{Device, Result};
 use r2l_agents::AgentKind;

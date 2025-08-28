@@ -37,8 +37,8 @@ pub enum CollectionType<E: Env> {
 
 // what I can live with two different different structs here
 pub struct NewSampler<E: Env> {
-    env_steps: usize,
-    collection_type: CollectionType<E>,
+    pub env_steps: usize,
+    pub collection_type: CollectionType<E>,
 }
 
 impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {

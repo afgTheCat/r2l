@@ -1,12 +1,12 @@
 use crate::{
-    hooks::env_pool::{EmptySequentialVecEnv, EnvNormalizer, EvaluatorNormalizer},
-    utils::{evaluator::Evaluator, running_mean::RunningMeanStd},
+    builders::{env::EnvBuilderTrait, sampler_hooks::SequentialEnvHookTypes},
+    hooks::sampler::EmptySequentialVecEnv,
 };
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{Device, Result, Tensor};
 use crossbeam::sync::ShardedLock;
 use r2l_core::{
     distributions::Distribution,
-    env::{Env, EnvironmentDescription, RolloutMode},
+    env::{Env, RolloutMode},
     env_pools::{
         R2lEnvHolder, R2lEnvPool, SequentialVecEnvHooks, StepMode,
         thread_env_holder::{ThreadResult, WorkerTask, WorkerThread},
@@ -16,186 +16,15 @@ use r2l_core::{
     sampler::samplers::step_bound_sampler::VecEnvHolder2,
     utils::rollout_buffer::RolloutBuffer,
 };
-use r2l_gym::GymEnv;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 
-pub trait EnvBuilderTrait: Sync {
-    type Env: Env<Tensor = Buffer>;
-
-    fn build_env(&self, device: &Device) -> Result<Self::Env>;
-}
-
-impl EnvBuilderTrait for String {
-    type Env = GymEnv;
-
-    fn build_env(&self, device: &Device) -> Result<Self::Env> {
-        Ok(GymEnv::new(&self, None))
-    }
-}
-
-impl<E: Env<Tensor = Buffer>, F: Sync> EnvBuilderTrait for F
-where
-    F: Fn(&Device) -> Result<E>,
-{
-    type Env = E;
-
-    fn build_env(&self, device: &Device) -> Result<Self::Env> {
-        (self)(device)
-    }
-}
-
-pub struct NormalizerOptions {
-    pub epsilon: f32,
-    pub gamma: f32,
-    pub clip_obs: f32,
-    pub clip_rew: f32,
-}
-
-impl Default for NormalizerOptions {
-    fn default() -> Self {
-        Self {
-            clip_obs: 10.,
-            clip_rew: 10.,
-            epsilon: 1e-8,
-            gamma: 0.99,
-        }
-    }
-}
-
-impl NormalizerOptions {
-    pub fn new(epsilon: f32, gamma: f32, clip_obs: f32, clip_rew: f32) -> Self {
-        Self {
-            epsilon,
-            gamma,
-            clip_obs,
-            clip_rew,
-        }
-    }
-
-    pub fn build(
-        &self,
-        env_description: EnvironmentDescription,
-        n_envs: usize,
-        device: &Device,
-    ) -> EnvNormalizer {
-        let obs_rms = RunningMeanStd::new(env_description.observation_size(), device.clone());
-        let ret_rms = RunningMeanStd::new((), device.clone());
-        let returns = Tensor::zeros(n_envs, DType::F32, device).unwrap();
-        EnvNormalizer::new(
-            obs_rms,
-            ret_rms,
-            returns,
-            self.epsilon,
-            self.gamma,
-            self.clip_obs,
-            self.clip_rew,
-        )
-    }
-}
-
-pub struct EvaluatorOptions {
-    pub eval_episodes: usize,
-    pub eval_freq: usize,
-    pub eval_step: usize,
-    pub results: Arc<Mutex<Vec<Vec<f32>>>>,
-}
-
-impl EvaluatorOptions {
-    pub fn new(
-        eval_episodes: usize,
-        eval_freq: usize,
-        eval_steps: usize,
-    ) -> (Self, Arc<Mutex<Vec<Vec<f32>>>>) {
-        let results = Arc::new(Mutex::new(vec![vec![]]));
-        (
-            Self {
-                eval_episodes: eval_episodes,
-                eval_freq: eval_freq,
-                eval_step: eval_steps,
-                results: results.clone(),
-            },
-            results,
-        )
-    }
-
-    pub fn build<E: Env<Tensor = Buffer>>(&self, eval_env: E, n_envs: usize) -> Evaluator<E> {
-        Evaluator::new(
-            eval_env,
-            self.eval_episodes,
-            self.eval_freq * n_envs,
-            self.eval_step,
-            self.results.clone(),
-        )
-    }
-}
-
-impl Default for EvaluatorOptions {
-    fn default() -> Self {
-        Self {
-            eval_episodes: 10,
-            eval_freq: 10000,
-            eval_step: 1000,
-            results: Arc::new(Mutex::new(vec![vec![]])),
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct EvaluatorNormalizerOptions {
-    pub evaluator_options: EvaluatorOptions,
-    pub normalizer_options: NormalizerOptions,
-}
-
-impl EvaluatorNormalizerOptions {
-    pub fn new(evaluator_options: EvaluatorOptions, normalizer_options: NormalizerOptions) -> Self {
-        Self {
-            evaluator_options,
-            normalizer_options,
-        }
-    }
-
-    pub fn build<E: Env<Tensor = Buffer>>(
-        &self,
-        eval_env: E,
-        n_envs: usize,
-        device: Device,
-    ) -> EvaluatorNormalizer<E> {
-        let env_description = eval_env.env_description();
-        let normalizer = self
-            .normalizer_options
-            .build(env_description, n_envs, &device);
-        let evaluator = self.evaluator_options.build(eval_env, n_envs);
-        EvaluatorNormalizer {
-            evaluator,
-            normalizer,
-            device,
-        }
-    }
-}
-
-#[derive(Default)]
-pub enum SequentialEnvHookTypes {
-    #[default]
-    None,
-    EvaluatorOnly {
-        options: EvaluatorOptions,
-    },
-    NormalizerOnly {
-        options: NormalizerOptions,
-    },
-    EvaluatorNormalizer {
-        options: EvaluatorNormalizerOptions,
-    },
-}
-
 pub enum VecPoolType {
     Dummy,
     Dummy2,
     Vec,
-    Subprocessing,
     Sequential(SequentialEnvHookTypes),
 }
 
@@ -271,9 +100,6 @@ impl<EB: EnvBuilderTrait> BuilderType<EB> {
         }
     }
 }
-
-// TODO: remove this once we are there
-pub enum EnvHolder {}
 
 impl VecPoolType {
     pub fn to_r2l_pool_inner<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
@@ -402,7 +228,6 @@ impl VecPoolType {
                 // };
                 todo!()
             }
-            Self::Subprocessing => todo!(),
         }
     }
 

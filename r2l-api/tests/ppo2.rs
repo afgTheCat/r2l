@@ -1,9 +1,11 @@
 use candle_core::Result;
 use r2l_api::{
     builders::{
-        env_pool::{EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions},
-        env_pool::{SequentialEnvHookTypes, VecPoolType},
+        env_pool::VecPoolType,
         on_policy_algo::OnPolicyAlgorithmBuilder,
+        sampler_hooks::{
+            EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions, SequentialEnvHookTypes,
+        },
     },
     test_utils::run_gym_episodes,
 };
