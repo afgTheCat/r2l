@@ -8,7 +8,7 @@ use candle_core::{Device, Result};
 use r2l_agents::AgentKind;
 use r2l_core::{
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
-    sampler::samplers::NewSampler,
+    sampler::NewSampler,
 };
 use std::sync::Arc;
 

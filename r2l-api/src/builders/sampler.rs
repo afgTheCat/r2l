@@ -1,6 +1,7 @@
 use crate::builders::{env::EnvBuilderTrait, sampler_hooks2::EvaluatorNormalizerOptions2};
 use candle_core::Device;
 use r2l_core::sampler::{
+    CollectionType, NewSampler,
     env_pools::{
         FixedSizeEnvPoolKind, VariableSizedEnvPoolKind,
         thread_env_pool::{
@@ -10,7 +11,6 @@ use r2l_core::sampler::{
         },
         vec_env_pool::{FixedSizeVecEnvPool, VariableSizedVecEnvPool},
     },
-    samplers::{CollectionType, NewSampler},
     trajectory_buffers::{
         fixed_size_buffer::FixedSizeTrajectoryBuffer,
         variable_size_buffer::VariableSizedTrajectoryBuffer,

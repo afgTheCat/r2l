@@ -88,7 +88,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedVecEnvPool<E
         steps: usize,
     ) {
         for buffer in self.buffers.iter_mut() {
-            buffer.clear_and_step_with_epiosde_bound(distr, steps);
+            buffer.step_with_epiosde_bound(distr, steps);
         }
     }
 }

@@ -3,11 +3,9 @@ use candle_core::{Device, Result, Tensor};
 use r2l_core::{
     distributions::Distribution,
     env::Env,
-    // env_pools::SequentialVecEnvHooks,
     numeric::Buffer,
     sampler::{
-        samplers::SequntialStepBoundHooks,
-        trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer,
+        SequntialStepBoundHooks, trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer,
     },
 };
 

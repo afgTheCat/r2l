@@ -4,7 +4,7 @@ use crate::{
     utils::{evaluator::Evaluator, running_mean::RunningMeanStd},
 };
 use candle_core::{DType, Device, Tensor};
-use r2l_core::{env::EnvironmentDescription, sampler::samplers::SequntialStepBoundHooks};
+use r2l_core::{env::EnvironmentDescription, sampler::SequntialStepBoundHooks};
 use std::sync::{Arc, Mutex};
 
 pub struct EvaluatorOptions {

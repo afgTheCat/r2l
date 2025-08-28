@@ -10,9 +10,9 @@ use interprocess::local_socket::{
 use r2l_core::{
     distributions::{Distribution, DistributionKind},
     env::Env,
-    // env_pools::run_rollout,
     ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     numeric::Buffer,
+    sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
     utils::rollout_buffer::RolloutBuffer,
 };
 use r2l_gym::GymEnv;
@@ -82,9 +82,8 @@ struct Args {
 }
 
 pub struct Rollout<E: Env> {
-    env: E,
     conn: BufReader<Stream>,
-    rollout_buffer: RolloutBuffer,
+    trajectory_buffer: VariableSizedTrajectoryBuffer<E>,
     device: Device,
 }
 
@@ -102,21 +101,14 @@ impl<E: Env<Tensor = Buffer>> Rollout<E> {
                 distribution,
                 rollout_mode,
             } => {
-                // TODO: VariableSizedTrajectorBuf
-
-                // let state = self.rollout_buffer.reset(&mut self.env, &self.device)?;
-                // let (states, last_state) = run_rollout(
-                //     &distribution,
-                //     &mut self.env,
-                //     rollout_mode,
-                //     state,
-                //     &self.device,
-                // )?;
-                // self.rollout_buffer.set_states(states, last_state);
-                // let packet: PacketToSend<D> = PacketToSend::RolloutResult {
-                //     rollout: self.rollout_buffer.clone(),
-                // };
-                // send_packet(&mut self.conn, packet);
+                // FIXME: we should act as the sampler like we did the threads. This is not used
+                // currently but should be fixed (pretty high)
+                self.trajectory_buffer
+                    .step_with_epiosde_bound(&distribution, 1024);
+                let packet: PacketToSend<D> = PacketToSend::RolloutResult {
+                    rollout: self.trajectory_buffer.to_rollout_buffer(),
+                };
+                send_packet(&mut self.conn, packet);
                 Ok(true)
             }
             _ => unreachable!(),
@@ -137,8 +129,7 @@ fn main() -> Result<()> {
             let conn = BufReader::new(conn);
             let mut rollout = Rollout {
                 conn,
-                env,
-                rollout_buffer: RolloutBuffer::default(),
+                trajectory_buffer: VariableSizedTrajectoryBuffer::new(env),
                 device: Device::Cpu,
             };
             // TODO: other distributions/custom distributions need to be encoded

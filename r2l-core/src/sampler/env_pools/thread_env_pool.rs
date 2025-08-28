@@ -274,8 +274,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedWorkerThread<E> {
                     // SAFETY: the caller guarnatees that the reference will be valid for the duration
                     // of the work. The raw pointer will not be used beyond the unsafe block
                     let distr = unsafe { &*distr.0 };
-                    self.buffer
-                        .clear_and_step_with_epiosde_bound(distr, num_steps);
+                    self.buffer.step_with_epiosde_bound(distr, num_steps);
                     self.tx
                         .send(VariableSizedWorkerResult::StepMultipleWithStepBoundOk)
                         .unwrap();

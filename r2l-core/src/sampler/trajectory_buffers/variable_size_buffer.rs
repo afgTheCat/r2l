@@ -98,7 +98,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
         );
     }
 
-    pub fn clear_and_step_with_epiosde_bound<D: Distribution<Tensor = Tensor> + ?Sized>(
+    pub fn step_with_epiosde_bound<D: Distribution<Tensor = Tensor> + ?Sized>(
         &mut self,
         distr: &D,
         n_steps: usize,
@@ -111,6 +111,14 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
                 break;
             }
         }
+    }
+
+    pub fn run_episode<D: Distribution<Tensor = Tensor> + ?Sized>(
+        &mut self,
+        distr: &D,
+        episodes: usize,
+    ) {
+        todo!()
     }
 
     pub fn to_rollout_buffer(&mut self) -> RolloutBuffer {
