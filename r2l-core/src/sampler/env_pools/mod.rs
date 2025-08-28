@@ -19,15 +19,19 @@ pub mod vec_env_pool;
 pub trait FixedSizeEnvPool {
     type Env: Env<Tensor = Buffer>;
 
+    /// Return the number of environments
     fn num_envs(&self) -> usize;
 
-    // step each environment steps time
+    /// Take `steps` amount of steps using `distr`
     fn step<D: Distribution<Tensor = Tensor>>(&mut self, distr: &D, steps: usize);
 
-    // transfer ownership of the underlying fixed buffers
-    fn take_buffers(&mut self) -> Vec<FixedSizeStateBuffer<Self::Env>>;
+    /// Take one step and transfer `FixedSizeStateBuffer`
+    fn step_take_buffers<D: Distribution<Tensor = Tensor>>(
+        &mut self,
+        distr: &D,
+    ) -> Vec<FixedSizeStateBuffer<Self::Env>>;
 
-    // set the undelting fixed buffers
+    ///  Set the undelting buffer
     fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<Self::Env>>);
 
     // TODO: probably don't really need this in the future
@@ -43,23 +47,41 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
     type Env = E;
 
     fn num_envs(&self) -> usize {
-        todo!()
+        match self {
+            Self::FixedSizeVecEnvPool(pool) => pool.num_envs(),
+            Self::FixedSizeThreadEnvPool(pool) => pool.num_envs(),
+        }
     }
 
     fn step<D: Distribution<Tensor = Tensor>>(&mut self, distr: &D, steps: usize) {
-        todo!()
+        match self {
+            Self::FixedSizeVecEnvPool(pool) => pool.step(distr, steps),
+            Self::FixedSizeThreadEnvPool(pool) => pool.step(distr, steps),
+        }
     }
 
     fn to_rollout_buffers(&self) -> Vec<RolloutBuffer> {
-        todo!()
+        match self {
+            Self::FixedSizeVecEnvPool(pool) => pool.to_rollout_buffers(),
+            Self::FixedSizeThreadEnvPool(pool) => pool.to_rollout_buffers(),
+        }
     }
 
-    fn take_buffers(&mut self) -> Vec<FixedSizeStateBuffer<Self::Env>> {
-        todo!()
+    fn step_take_buffers<D: Distribution<Tensor = Tensor>>(
+        &mut self,
+        distr: &D,
+    ) -> Vec<FixedSizeStateBuffer<Self::Env>> {
+        match self {
+            Self::FixedSizeVecEnvPool(pool) => pool.step_take_buffers(distr),
+            Self::FixedSizeThreadEnvPool(pool) => pool.step_take_buffers(distr),
+        }
     }
 
     fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<Self::Env>>) {
-        todo!()
+        match self {
+            Self::FixedSizeVecEnvPool(pool) => pool.set_buffers(buffers),
+            Self::FixedSizeThreadEnvPool(pool) => pool.set_buffers(buffers),
+        }
     }
 }
 
@@ -87,11 +109,17 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedEnvPoolKind<
     type Env = E;
 
     fn num_envs(&self) -> usize {
-        todo!()
+        match self {
+            Self::VariableSizedVecEnvPool(pool) => pool.num_envs(),
+            Self::VariableSizedThreadEnvPool(pool) => pool.num_envs(),
+        }
     }
 
     fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer> {
-        todo!()
+        match self {
+            Self::VariableSizedVecEnvPool(pool) => pool.to_rollout_buffers(),
+            Self::VariableSizedThreadEnvPool(pool) => pool.to_rollout_buffers(),
+        }
     }
 
     fn step_with_episode_bound<D: Distribution<Tensor = Tensor>>(
@@ -99,6 +127,9 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedEnvPoolKind<
         distr: &D,
         steps: usize,
     ) {
-        todo!()
+        match self {
+            Self::VariableSizedVecEnvPool(pool) => pool.step_with_episode_bound(distr, steps),
+            Self::VariableSizedThreadEnvPool(pool) => pool.step_with_episode_bound(distr, steps),
+        }
     }
 }

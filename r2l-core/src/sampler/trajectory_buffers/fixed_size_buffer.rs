@@ -3,6 +3,7 @@ use crate::{
     env::{Env, SnapShot},
     numeric::Buffer,
     rng::RNG,
+    sampler::env_pools::FixedSizeEnvPool,
     utils::rollout_buffer::RolloutBuffer,
 };
 use candle_core::{Device, Tensor};
@@ -128,7 +129,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
     // TODO: I guess it would make sense to inject some data in here, right?
     // What we could do is have the hook inserted here and just send that but that's blocking +
     // slow + nighmeighrish
-    pub fn step(&mut self, distr: &impl Distribution<Tensor = Tensor>) {
+    pub fn step<D: Distribution<Tensor = Tensor> + ?Sized>(&mut self, distr: &D) {
         let Some(buffer) = &mut self.buffer else {
             todo!()
         };
@@ -162,7 +163,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
         );
     }
 
-    pub fn step_n(&mut self, distr: &impl Distribution<Tensor = Tensor>, steps: usize) {
+    pub fn step_n<D: Distribution<Tensor = Tensor> + ?Sized>(&mut self, distr: &D, steps: usize) {
         for _ in 0..steps {
             self.step(distr);
         }
@@ -176,18 +177,15 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
         }
     }
 
-    pub fn set_buffer(&mut self, buffer: FixedSizeStateBuffer<E>) {
-        self.buffer = Some(buffer)
+    pub fn to_rollout_buffer(&self) -> RolloutBuffer {
+        let Some(buffer) = self.buffer.as_ref() else {
+            panic!()
+        };
+        buffer.to_rollout_buffers2()
     }
 
-    pub fn send_buffer(
-        &mut self,
-        tx: Sender<FixedSizeStateBuffer<E>>,
-    ) -> Result<(), SendError<FixedSizeStateBuffer<E>>> {
-        let Some(buffer) = self.buffer.take() else {
-            todo!()
-        };
-        tx.send(buffer)
+    pub fn set_buffer(&mut self, buffer: FixedSizeStateBuffer<E>) {
+        self.buffer = Some(buffer)
     }
 
     pub fn receive_buffer(

@@ -25,7 +25,7 @@ pub trait SequntialStepBoundHooks<E: Env> {
     fn post_process_hook(&self) {}
 }
 
-enum CollectionType<E: Env> {
+pub enum CollectionType<E: Env> {
     StepBound {
         env_pool: FixedSizeEnvPoolKind<E>,
         hooks: Option<Box<dyn SequntialStepBoundHooks<E>>>,
@@ -51,8 +51,7 @@ impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {
                 if let Some(hooks) = hooks {
                     let mut steps_taken = 0;
                     while steps_taken < self.env_steps {
-                        env_pool.step(distr, 1);
-                        let mut buffers = env_pool.take_buffers();
+                        let mut buffers = env_pool.step_take_buffers(distr);
                         hooks.process_last_step(distr, &mut buffers);
                         env_pool.set_buffers(buffers);
                         steps_taken += 1;

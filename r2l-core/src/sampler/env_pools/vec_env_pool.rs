@@ -6,7 +6,7 @@ use crate::{
         env_pools::{FixedSizeEnvPool, VariableSizedEnvPool},
         trajectory_buffers::{
             fixed_size_buffer::{FixedSizeStateBuffer, FixedSizeTrajectoryBuffer},
-            variable_size_buffer::{VariableSizedStateBuffer, VariableSizedTrajectoryBuffer},
+            variable_size_buffer::VariableSizedTrajectoryBuffer,
         },
     },
     utils::rollout_buffer::RolloutBuffer,
@@ -30,7 +30,11 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
         }
     }
 
-    fn take_buffers(&mut self) -> Vec<FixedSizeStateBuffer<Self::Env>> {
+    fn step_take_buffers<D: Distribution<Tensor = Tensor>>(
+        &mut self,
+        distr: &D,
+    ) -> Vec<FixedSizeStateBuffer<Self::Env>> {
+        self.step(distr, 1);
         self.buffers
             .iter_mut()
             .map(|buf| buf.move_buffer())

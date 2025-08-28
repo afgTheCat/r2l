@@ -75,7 +75,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
         Self { env, buffer }
     }
 
-    pub fn step(&mut self, distr: &impl Distribution<Tensor = Tensor>) {
+    pub fn step<D: Distribution<Tensor = Tensor> + ?Sized>(&mut self, distr: &D) {
         let buffer = &mut self.buffer;
         let state = if let Some(obs) = buffer.next_states.last() {
             obs.clone()
@@ -107,9 +107,9 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
         );
     }
 
-    pub fn step_with_epiosde_bound(
+    pub fn step_with_epiosde_bound<D: Distribution<Tensor = Tensor> + ?Sized>(
         &mut self,
-        distr: &impl Distribution<Tensor = Tensor>,
+        distr: &D,
         n_steps: usize,
     ) {
         let mut steps_taken = 0;
