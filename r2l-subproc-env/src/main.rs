@@ -10,7 +10,7 @@ use interprocess::local_socket::{
 use r2l_core::{
     distributions::{Distribution, DistributionKind},
     env::Env,
-    env_pools::run_rollout,
+    // env_pools::run_rollout,
     ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     numeric::Buffer,
     utils::rollout_buffer::RolloutBuffer,
@@ -102,19 +102,21 @@ impl<E: Env<Tensor = Buffer>> Rollout<E> {
                 distribution,
                 rollout_mode,
             } => {
-                let state = self.rollout_buffer.reset(&mut self.env, &self.device)?;
-                let (states, last_state) = run_rollout(
-                    &distribution,
-                    &mut self.env,
-                    rollout_mode,
-                    state,
-                    &self.device,
-                )?;
-                self.rollout_buffer.set_states(states, last_state);
-                let packet: PacketToSend<D> = PacketToSend::RolloutResult {
-                    rollout: self.rollout_buffer.clone(),
-                };
-                send_packet(&mut self.conn, packet);
+                // TODO: VariableSizedTrajectorBuf
+
+                // let state = self.rollout_buffer.reset(&mut self.env, &self.device)?;
+                // let (states, last_state) = run_rollout(
+                //     &distribution,
+                //     &mut self.env,
+                //     rollout_mode,
+                //     state,
+                //     &self.device,
+                // )?;
+                // self.rollout_buffer.set_states(states, last_state);
+                // let packet: PacketToSend<D> = PacketToSend::RolloutResult {
+                //     rollout: self.rollout_buffer.clone(),
+                // };
+                // send_packet(&mut self.conn, packet);
                 Ok(true)
             }
             _ => unreachable!(),

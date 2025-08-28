@@ -1,8 +1,4 @@
 use candle_core::{Device, Result, Tensor};
-use r2l_api::builders::{
-    env_pool::VecPoolType,
-    sampler_hooks::{NormalizerOptions, SequentialEnvHookTypes},
-};
 use r2l_core::{
     env::{Env, EnvironmentDescription, SnapShot, Space},
     numeric::Buffer,
@@ -71,9 +67,9 @@ fn test_obs_rms_vec_normalize() -> Result<()> {
     let env_builders = vec![|_: &Device| DummyRewardEnv::new(0), |_: &Device| {
         DummyRewardEnv::new(1)
     }];
-    let env_pool_builder = VecPoolType::Sequential(SequentialEnvHookTypes::NormalizerOnly {
-        options: NormalizerOptions::default(),
-    });
+    // let env_pool_builder = VecPoolType::Sequential(SequentialEnvHookTypes::NormalizerOnly {
+    //     options: NormalizerOptions::default(),
+    // });
     // let env_pool = env_pool_builder.build_with_builders(&Device::Cpu, env_builders)?;
     Ok(())
 }

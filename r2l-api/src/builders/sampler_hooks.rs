@@ -6,7 +6,6 @@ use candle_core::{DType, Device, Tensor};
 use r2l_core::{
     env::{Env, EnvironmentDescription},
     numeric::Buffer,
-    sampler::samplers::SequntialStepBoundHooks,
 };
 use std::sync::{Arc, Mutex};
 

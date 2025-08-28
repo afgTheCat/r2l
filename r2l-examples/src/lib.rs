@@ -2,7 +2,6 @@ use candle_core::{DType, Device, Error, Tensor};
 use r2l_agents::ppo::PPP3HooksTrait;
 use r2l_agents::ppo::{HookResult, PPOBatchData};
 use r2l_api::builders::agents::ppo::PPOBuilder;
-use r2l_api::builders::env_pool::VecPoolType;
 use r2l_api::builders::sampler::{EnvBuilderType, EnvPoolType, SamplerType};
 use r2l_core::distributions::DistributionKind;
 use r2l_core::on_policy_algorithm::{

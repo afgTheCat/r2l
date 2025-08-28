@@ -1,7 +1,6 @@
 use crate::builders::{
     agents::{a2c::A2CBuilder, ppo::PPOBuilder},
     env::EnvBuilderTrait,
-    on_policy_algo::AgentType,
     sampler::{EnvBuilderType, EnvPoolType, SamplerType},
     sampler_hooks2::EvaluatorNormalizerOptions2,
 };
@@ -12,6 +11,11 @@ use r2l_core::{
     sampler::samplers::NewSampler,
 };
 use std::sync::Arc;
+
+pub enum AgentType {
+    PPO(PPOBuilder),
+    A2C(A2CBuilder),
+}
 
 pub struct OnPolicyAlgorithmBuilder2 {
     pub device: Device,
@@ -109,5 +113,9 @@ impl OnPolicyAlgorithmBuilder2 {
 
     pub fn set_n_step(&mut self, n_step: usize) {
         self.sampler_type.capacity = n_step;
+    }
+
+    pub fn set_hook_options(&mut self, hook_options: EvaluatorNormalizerOptions2) {
+        self.sampler_type.hook_options = hook_options;
     }
 }

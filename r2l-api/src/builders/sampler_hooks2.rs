@@ -1,14 +1,10 @@
-use candle_core::{DType, Device, Tensor};
-use r2l_core::{env::EnvironmentDescription, sampler::samplers::SequntialStepBoundHooks};
-
 use crate::{
     builders::env::EnvBuilderTrait,
     hooks::sampler::{EnvNormalizer, EvaluatorNormalizer},
-    utils::{
-        evaluator::{self, Evaluator},
-        running_mean::RunningMeanStd,
-    },
+    utils::{evaluator::Evaluator, running_mean::RunningMeanStd},
 };
+use candle_core::{DType, Device, Tensor};
+use r2l_core::{env::EnvironmentDescription, sampler::samplers::SequntialStepBoundHooks};
 use std::sync::{Arc, Mutex};
 
 pub struct EvaluatorOptions {
@@ -17,6 +13,18 @@ pub struct EvaluatorOptions {
     pub eval_freq: usize,
     pub eval_step: usize,
     pub results: Arc<Mutex<Vec<Vec<f32>>>>,
+}
+
+impl Default for EvaluatorOptions {
+    fn default() -> Self {
+        Self {
+            device: Device::Cpu,
+            eval_episodes: 10,
+            eval_freq: 10000,
+            eval_step: 1000,
+            results: Arc::new(Mutex::new(vec![vec![]])),
+        }
+    }
 }
 
 impl EvaluatorOptions {

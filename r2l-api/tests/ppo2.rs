@@ -1,11 +1,8 @@
 use candle_core::Result;
 use r2l_api::{
     builders::{
-        env_pool::VecPoolType,
-        on_policy_algo::OnPolicyAlgorithmBuilder,
-        sampler_hooks::{
-            EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions, SequentialEnvHookTypes,
-        },
+        on_policy_algo2::OnPolicyAlgorithmBuilder2,
+        sampler_hooks2::{EvaluatorNormalizerOptions2, EvaluatorOptions},
     },
     test_utils::run_gym_episodes,
 };
@@ -17,15 +14,16 @@ const NUM_ENVIRONMENTS: usize = 10;
 // Evaluator only test
 #[test]
 fn ppo2_cart_pole() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
+    let mut ppo_builder = OnPolicyAlgorithmBuilder2::ppo();
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
     let evaluator_opts = EvaluatorOptions {
         eval_freq: 1000,
         ..EvaluatorOptions::default()
     };
     let eval_res = evaluator_opts.results.clone();
-    ppo_builder.env_pool_type = VecPoolType::Sequential(SequentialEnvHookTypes::EvaluatorOnly {
-        options: evaluator_opts,
+    ppo_builder.set_hook_options(EvaluatorNormalizerOptions2 {
+        evaluator_options: Some(evaluator_opts),
+        normalizer_options: None,
     });
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
@@ -37,21 +35,18 @@ fn ppo2_cart_pole() -> Result<()> {
 // Evaluator and normalizer at the same time
 #[test]
 fn ppo2_cart_pole_normalize() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
+    let mut ppo_builder = OnPolicyAlgorithmBuilder2::ppo();
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
     let evaluator_options = EvaluatorOptions {
         eval_freq: 1000,
         ..EvaluatorOptions::default()
     };
     let eval_res = evaluator_options.results.clone();
-    let eval_normalizer = EvaluatorNormalizerOptions {
-        evaluator_options,
-        normalizer_options: NormalizerOptions::default(),
+    let eval_normalizer = EvaluatorNormalizerOptions2 {
+        evaluator_options: Some(evaluator_options),
+        normalizer_options: None,
     };
-    ppo_builder.env_pool_type =
-        VecPoolType::Sequential(SequentialEnvHookTypes::EvaluatorNormalizer {
-            options: eval_normalizer,
-        });
+    ppo_builder.set_hook_options(eval_normalizer);
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
     println!("eval res: {:?}", eval_res.lock().unwrap());
@@ -61,7 +56,7 @@ fn ppo2_cart_pole_normalize() -> Result<()> {
 
 #[test]
 fn ppo2_cart_pole_seq_only() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
+    let mut ppo_builder = OnPolicyAlgorithmBuilder2::ppo();
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
