@@ -1,5 +1,5 @@
 use crate::{Algorithm, agents::Agent, env::Sampler, utils::rollout_buffer::RolloutBuffer};
-use candle_core::Result;
+use candle_core::{Result, Tensor};
 
 macro_rules! break_on_hook_res {
     ($hook_res:expr) => {
@@ -33,7 +33,7 @@ impl LearningSchedule {
 pub trait OnPolicyAlgorithmHooks {
     fn init_hook(&mut self) -> bool;
 
-    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer]) -> bool;
+    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer<Tensor>]) -> bool;
 
     fn post_training_hook(&mut self) -> bool;
 
@@ -59,7 +59,7 @@ impl OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorightmsHooks {
         false
     }
 
-    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer]) -> bool {
+    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer<Tensor>]) -> bool {
         let total_reward = rollouts
             .iter()
             .map(|s| s.rewards.iter().sum::<f32>())

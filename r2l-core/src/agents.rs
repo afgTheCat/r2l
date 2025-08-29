@@ -10,5 +10,5 @@ pub trait Agent {
     fn distribution(&self) -> &Self::Dist;
 
     /// Instruments learnging with the rollout buffers collected
-    fn learn(&mut self, rollouts: Vec<RolloutBuffer>) -> Result<()>;
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()>;
 }

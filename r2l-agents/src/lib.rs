@@ -2,6 +2,7 @@ pub mod a2c;
 pub mod ppo;
 pub mod vpg;
 
+use candle_core::Tensor;
 use r2l_core::{
     agents::Agent, distributions::DistributionKind, policies::learning_modules::LearningModuleKind,
     utils::rollout_buffer::RolloutBuffer,
@@ -18,7 +19,7 @@ pub enum AgentKind {
 impl Agent for AgentKind {
     type Dist = DistributionKind;
 
-    fn learn(&mut self, rollouts: Vec<RolloutBuffer>) -> candle_core::Result<()> {
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> candle_core::Result<()> {
         match self {
             Self::A2C(a2c) => a2c.learn(rollouts),
             Self::PPO(ppo) => ppo.learn(rollouts),

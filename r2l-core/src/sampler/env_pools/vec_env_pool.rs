@@ -47,7 +47,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
             .collect()
     }
 
-    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer> {
+    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer<Tensor>> {
         self.buffers
             .iter()
             .map(|buff| {
@@ -75,7 +75,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedVecEnvPool<E
         self.buffers.len()
     }
 
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer> {
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>> {
         self.buffers
             .iter_mut()
             .map(|buff| buff.to_rollout_buffer())

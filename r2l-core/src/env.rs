@@ -84,9 +84,12 @@ pub enum RolloutMode {
     StepBound { n_steps: usize },
 }
 
+// ok so the thing is this:
 pub trait Sampler {
+    type Env: Env;
+
     fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distribution: &D,
-    ) -> Result<Vec<RolloutBuffer>>;
+    ) -> Result<Vec<RolloutBuffer<Tensor>>>;
 }

@@ -44,7 +44,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for VPG<D, L
         &self.distribution
     }
 
-    fn learn(&mut self, rollouts: Vec<RolloutBuffer>) -> Result<()> {
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
         let (advantages, returns) = calculate_advantages_and_returns(
             &rollouts,
             &self.learning_module,

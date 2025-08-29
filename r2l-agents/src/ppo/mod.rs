@@ -47,7 +47,7 @@ pub trait PPP3HooksTrait<D: Distribution, LM: PPOLearningModule> {
         &mut self,
         learning_module: &mut LM,
         distribution: &D,
-        rollout_buffers: &mut Vec<RolloutBuffer>,
+        rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
         advantages: &mut Advantages,
         returns: &mut Returns,
     ) -> Result<HookResult>;
@@ -56,7 +56,7 @@ pub trait PPP3HooksTrait<D: Distribution, LM: PPOLearningModule> {
         &mut self,
         learning_module: &mut LM,
         distribution: &D,
-        rollout_buffers: &Vec<RolloutBuffer>,
+        rollout_buffers: &Vec<RolloutBuffer<Tensor>>,
     ) -> Result<HookResult>;
 
     fn batch_hook(
@@ -77,7 +77,7 @@ impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3
         &mut self,
         learning_module: &mut LM,
         distribution: &D,
-        rollout_buffers: &mut Vec<RolloutBuffer>,
+        rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
         advantages: &mut Advantages,
         returns: &mut Returns,
     ) -> Result<HookResult> {
@@ -88,7 +88,7 @@ impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3
         &mut self,
         learning_module: &mut LM,
         distribution: &D,
-        rollout_buffers: &Vec<RolloutBuffer>,
+        rollout_buffers: &Vec<RolloutBuffer<Tensor>>,
     ) -> Result<HookResult> {
         Ok(HookResult::Break)
     }
@@ -167,7 +167,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
     // TODO: rename this to learning loop
     fn rollout_loop(
         &mut self,
-        rollouts: &Vec<RolloutBuffer>,
+        rollouts: &Vec<RolloutBuffer<Tensor>>,
         advantages: &Advantages,
         returns: &Returns,
         logps: &Logps,
@@ -197,7 +197,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for PPO<D, L
         &self.distribution
     }
 
-    fn learn(&mut self, mut rollouts: Vec<RolloutBuffer>) -> Result<()> {
+    fn learn(&mut self, mut rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
         let (mut advantages, mut returns) = calculate_advantages_and_returns(
             &rollouts,
             &self.learning_module,

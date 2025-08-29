@@ -31,7 +31,7 @@ pub trait A2CHooks<LM: A2CLearningModule> {
     fn before_learning_hook(
         &mut self,
         learning_module: &mut LM,
-        rollout_buffers: &mut Vec<RolloutBuffer>,
+        rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
         advantages: &mut Advantages,
         returns: &mut Returns,
     ) -> Result<HookResult>;
@@ -44,7 +44,7 @@ impl<LM: A2CLearningModule> A2CHooks<LM> for DefaultA2CHooks {
     fn before_learning_hook(
         &mut self,
         _learning_module: &mut LM,
-        _rollout_buffers: &mut Vec<RolloutBuffer>,
+        _rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
         _advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> Result<HookResult> {
@@ -89,7 +89,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> Agent for A2C<D, L
         &self.distribution
     }
 
-    fn learn(&mut self, mut rollouts: Vec<RolloutBuffer>) -> Result<()> {
+    fn learn(&mut self, mut rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
         let (mut advantages, mut returns) = calculate_advantages_and_returns(
             &rollouts,
             &self.learning_module,

@@ -1,8 +1,7 @@
-use r2l_core2::env::{Action, Env, Observation, SnapShot};
+mod dummy_env_holder;
 
 use crate::buffers::step_bound_buffer::StateBuffer;
-
-mod dummy_env_holder;
+use r2l_core2::env::{Action, Env, Observation, SnapShot};
 
 trait SequntialStepBoundHooks<Obs: Observation, Act: Action> {
     fn process_last_step<E: Env<Obs = Obs, Act = Act>>(&self, buffers: &mut Vec<StateBuffer<E>>);

@@ -52,10 +52,12 @@ impl<E: Env> NewSampler<E> {
 }
 
 impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {
+    type Env = E;
+
     fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
         &mut self,
         distr: &D,
-    ) -> Result<Vec<RolloutBuffer>> {
+    ) -> Result<Vec<RolloutBuffer<Tensor>>> {
         match &mut self.collection_type {
             CollectionType::StepBound { env_pool, hooks } => {
                 if let Some(hooks) = hooks {

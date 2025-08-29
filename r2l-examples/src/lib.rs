@@ -11,7 +11,6 @@ use r2l_core::policies::learning_modules::LearningModuleKind;
 use r2l_core::{
     Algorithm,
     distributions::Distribution,
-    env::RolloutMode,
     tensors::{PolicyLoss, ValueLoss},
     utils::rollout_buffer::{Advantages, RolloutBuffer},
 };
@@ -80,7 +79,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         &mut self,
         _learning_module: &mut LearningModuleKind,
         _distribution: &DistributionKind,
-        rollout_buffers: &mut Vec<RolloutBuffer>,
+        rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
         advantages: &mut Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
     ) -> candle_core::Result<HookResult> {
@@ -103,7 +102,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         &mut self,
         learning_module: &mut LearningModuleKind,
         distribution: &DistributionKind,
-        _rollout_buffers: &Vec<RolloutBuffer>,
+        _rollout_buffers: &Vec<RolloutBuffer<Tensor>>,
     ) -> candle_core::Result<HookResult> {
         self.current_epoch += 1;
         let should_stop = self.current_epoch == self.total_epochs;

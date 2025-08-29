@@ -42,7 +42,7 @@ pub enum FixedSizeWorkerResult<E: Env> {
     },
     MultiStepOk,
     RolloutBuffer {
-        buffer: RolloutBuffer,
+        buffer: RolloutBuffer<Tensor>,
     },
     SetBufferOk,
     EnvDescription {
@@ -197,7 +197,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
         buffs
     }
 
-    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer> {
+    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer<Tensor>> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
@@ -240,7 +240,7 @@ pub enum VariableSizedWorkerCommand {
 pub enum VariableSizedWorkerResult {
     StepMultipleWithStepBoundOk,
     RolloutBuffer {
-        buffer: RolloutBuffer,
+        buffer: RolloutBuffer<Tensor>,
     },
     EnvDescription {
         env_description: EnvironmentDescription,
@@ -342,7 +342,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedThreadEnvPoo
         self.channels.len()
     }
 
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer> {
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;

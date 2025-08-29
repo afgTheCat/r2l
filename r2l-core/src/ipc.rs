@@ -17,7 +17,7 @@ pub enum PacketToSend<'a, D: Distribution<Tensor = Tensor>> {
     },
     // Return the trained amount
     RolloutResult {
-        rollout: RolloutBuffer,
+        rollout: RolloutBuffer<Tensor>,
     },
 }
 
@@ -34,7 +34,7 @@ pub enum PacketToReceive<D: Distribution<Tensor = Tensor>> {
     },
     // Return the trained amount
     RolloutResult {
-        rollout: RolloutBuffer,
+        rollout: RolloutBuffer<Tensor>,
     },
 }
 

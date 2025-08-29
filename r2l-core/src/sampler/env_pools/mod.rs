@@ -35,7 +35,7 @@ pub trait FixedSizeEnvPool {
     fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<Self::Env>>);
 
     // TODO: probably don't really need this in the future
-    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer>;
+    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer<Tensor>>;
 }
 
 pub enum FixedSizeEnvPoolKind<E: Env> {
@@ -69,7 +69,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
         }
     }
 
-    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer> {
+    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer<Tensor>> {
         match self {
             Self::FixedSizeVecEnvPool(pool) => pool.to_rollout_buffers(),
             Self::FixedSizeThreadEnvPool(pool) => pool.to_rollout_buffers(),
@@ -100,7 +100,7 @@ pub trait VariableSizedEnvPool {
     fn num_envs(&self) -> usize;
 
     // TODO: should be removed once we have a trait for the trajectory buffers
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer>;
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>>;
 
     fn step_with_episode_bound<D: Distribution<Tensor = Tensor>>(
         &mut self,
@@ -133,7 +133,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedEnvPoolKind<
         }
     }
 
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer> {
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>> {
         match self {
             Self::VariableSizedVecEnvPool(pool) => pool.to_rollout_buffers(),
             Self::VariableSizedThreadEnvPool(pool) => pool.to_rollout_buffers(),

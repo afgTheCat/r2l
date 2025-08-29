@@ -3,11 +3,10 @@ use crate::{
     env::{Env, SnapShot},
     numeric::Buffer,
     rng::RNG,
-    sampler::env_pools::FixedSizeEnvPool,
     utils::rollout_buffer::RolloutBuffer,
 };
 use candle_core::{Device, Tensor};
-use crossbeam::channel::{Receiver, RecvError, SendError, Sender};
+use crossbeam::channel::{Receiver, RecvError};
 use rand::Rng;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 
@@ -70,7 +69,7 @@ impl<E: Env> FixedSizeStateBuffer<E> {
 
 impl<E: Env<Tensor = Buffer>> FixedSizeStateBuffer<E> {
     // TODO: this should be removed once we are done
-    pub fn to_rollout_buffer(&mut self, size: usize) -> RolloutBuffer {
+    pub fn to_rollout_buffer(&mut self, size: usize) -> RolloutBuffer<Tensor> {
         let mut rb = RolloutBuffer::default();
         for idx in 0..size {
             let next_state = self.next_states.dequeue().unwrap();
@@ -91,7 +90,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeStateBuffer<E> {
         rb
     }
 
-    pub fn to_rollout_buffers2(&self) -> RolloutBuffer {
+    pub fn to_rollout_buffers2(&self) -> RolloutBuffer<Tensor> {
         let mut rb = RolloutBuffer::default();
         for idx in 0..self.capacity {
             rb.states
@@ -176,7 +175,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
         }
     }
 
-    pub fn to_rollout_buffer(&self) -> RolloutBuffer {
+    pub fn to_rollout_buffer(&self) -> RolloutBuffer<Tensor> {
         let Some(buffer) = self.buffer.as_ref() else {
             panic!()
         };

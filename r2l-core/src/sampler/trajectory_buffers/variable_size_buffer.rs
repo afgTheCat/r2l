@@ -127,7 +127,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
         }
     }
 
-    pub fn to_rollout_buffer(&mut self) -> RolloutBuffer {
+    pub fn to_rollout_buffer(&mut self) -> RolloutBuffer<Tensor> {
         let mut rb = RolloutBuffer::default();
         rb.states = std::mem::take(&mut self.buffer.states)
             .into_iter()
