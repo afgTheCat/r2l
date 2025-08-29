@@ -29,16 +29,6 @@ impl Encode for RolloutBuffer<Tensor> {
         bincode::encode_into_writer(&actions, &mut encoder.writer(), writer_config)?;
         bincode::encode_into_writer(&self.rewards, &mut encoder.writer(), writer_config)?;
         bincode::encode_into_writer(&self.dones, &mut encoder.writer(), writer_config)?;
-        match &self.last_state {
-            None => 0u32.encode(encoder)?,
-            Some(last_state) => {
-                1u32.encode(encoder)?;
-                let last_state = last_state
-                    .to_vec1::<f32>()
-                    .map_err(|err| EncodeError::OtherString(err.to_string()))?;
-                bincode::encode_into_writer(&last_state, &mut encoder.writer(), writer_config)?;
-            }
-        };
         Ok(())
     }
 }
@@ -62,23 +52,11 @@ impl<C> Decode<C> for RolloutBuffer<Tensor> {
             .map_err(|err| DecodeError::OtherString(err.to_string()))?;
         let rewards: Vec<f32> = Vec::decode(decoder)?;
         let dones: Vec<bool> = Vec::decode(decoder)?;
-        let last_state_type = u32::decode(decoder)?;
-        let last_state: Option<Tensor> = match last_state_type {
-            0 => None,
-            1 => {
-                let last_state: Vec<f32> = Vec::decode(decoder)?;
-                let last_state = Tensor::from_slice(&last_state, last_state.len(), &Device::Cpu)
-                    .map_err(|err| DecodeError::OtherString(err.to_string()))?;
-                Some(last_state)
-            }
-            _ => unreachable!(),
-        };
         Ok(Self {
             states,
             actions,
             rewards,
             dones,
-            last_state,
         })
     }
 }

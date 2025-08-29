@@ -65,56 +65,41 @@ impl<E: Env> FixedSizeStateBuffer<E> {
     pub fn set_last_reward(&mut self, reward: f32) {
         self.rewards.enqueue(reward);
     }
-}
 
-impl<E: Env<Tensor = Buffer>> FixedSizeStateBuffer<E> {
-    // TODO: this should be removed once we are done
-    pub fn to_rollout_buffer(&mut self, size: usize) -> RolloutBuffer<Tensor> {
+    // TODO: verify if this works, alternatevly there is the old method commented out below
+    fn to_rollout_buffers2<D: Clone>(&mut self) -> RolloutBuffer<D>
+    where
+        E::Tensor: From<D>,
+        E::Tensor: Into<D>,
+    {
         let mut rb = RolloutBuffer::default();
-        for idx in 0..size {
+        for idx in 0..self.capacity {
             let next_state = self.next_states.dequeue().unwrap();
             let state = self.states.dequeue().unwrap();
             let action = self.action.dequeue().unwrap();
             let reward = self.rewards.dequeue().unwrap();
             let terminated = self.terminated.dequeue().unwrap();
             let truncuated = self.trancuated.dequeue().unwrap();
-            rb.states.push(state.to_candle_tensor(&Device::Cpu));
-            rb.actions.push(action.to_candle_tensor(&Device::Cpu));
+            if idx == self.capacity - 1 {
+                rb.states.push(next_state.into());
+            }
+            rb.states.push(state.into());
+            rb.actions.push(action.into());
             rb.rewards.push(reward);
             rb.dones.push(terminated || truncuated);
-            if idx == size - 1 {
-                rb.states.push(next_state.to_candle_tensor(&Device::Cpu));
-                rb.last_state = Some(next_state.to_candle_tensor(&Device::Cpu));
-            }
         }
         rb
     }
 
-    pub fn to_rollout_buffers2(&self) -> RolloutBuffer<Tensor> {
-        let mut rb = RolloutBuffer::default();
-        for idx in 0..self.capacity {
-            rb.states
-                .push(self.states[idx].to_candle_tensor(&Device::Cpu));
-            rb.actions
-                .push(self.action[idx].to_candle_tensor(&Device::Cpu));
-            rb.rewards.push(self.rewards[idx]);
-            rb.dones.push(self.terminated[idx] || self.trancuated[idx]);
-        }
-        let last_state = self
-            .next_states
-            .back()
-            .map(|b| b.to_candle_tensor(&Device::Cpu))
-            .unwrap()
-            .clone();
-        rb.states.push(last_state.clone());
-        rb.last_state = Some(last_state);
-        rb
+    pub fn last_state_terminates(&self) -> bool {
+        *self.terminated.back().unwrap() || *self.trancuated.back().unwrap()
     }
 }
 
 pub struct FixedSizeTrajectoryBuffer<E: Env> {
     pub env: E,
     pub buffer: Option<FixedSizeStateBuffer<E>>,
+    pub last_state: Option<E::Tensor>,
 }
 
 impl<E: Env> FixedSizeTrajectoryBuffer<E> {
@@ -122,6 +107,7 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
         Self {
             env,
             buffer: Some(FixedSizeStateBuffer::new(capacity)),
+            last_state: None,
         }
     }
 }
@@ -131,8 +117,11 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
         let Some(buffer) = &mut self.buffer else {
             todo!()
         };
-        let state = if let Some(obs) = buffer.next_states.back() {
-            obs.clone()
+        let state = if let Some(state) = buffer.next_states.back() {
+            state.clone()
+        // last state saved from previous rollout, so that we don't have to reset
+        } else if let Some(last_state) = self.last_state.take() {
+            last_state
         } else {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             self.env.reset(seed)
@@ -175,10 +164,14 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
         }
     }
 
-    pub fn to_rollout_buffer(&self) -> RolloutBuffer<Tensor> {
-        let Some(buffer) = self.buffer.as_ref() else {
+    pub fn to_rollout_buffer(&mut self) -> RolloutBuffer<Tensor> {
+        let Some(buffer) = self.buffer.as_mut() else {
             panic!()
         };
+        if !buffer.last_state_terminates() {
+            let last_state = buffer.next_states.back().cloned();
+            self.last_state = last_state;
+        }
         buffer.to_rollout_buffers2()
     }
 

@@ -197,7 +197,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
         buffs
     }
 
-    fn to_rollout_buffers(&self) -> Vec<RolloutBuffer<Tensor>> {
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;

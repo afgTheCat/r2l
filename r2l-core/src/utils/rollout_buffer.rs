@@ -1,7 +1,7 @@
-use crate::{env::Env, numeric::Buffer, policies::ValueFunction, rng::RNG};
+use crate::{policies::ValueFunction, rng::RNG};
 use candle_core::{Device, Result, Tensor};
 use derive_more::Deref;
-use rand::{Rng, seq::SliceRandom};
+use rand::seq::SliceRandom;
 
 #[derive(Debug, Clone)]
 pub struct RolloutBuffer<T: Clone> {
@@ -9,7 +9,6 @@ pub struct RolloutBuffer<T: Clone> {
     pub actions: Vec<T>,
     pub rewards: Vec<f32>,
     pub dones: Vec<bool>,
-    pub last_state: Option<T>,
 }
 
 impl<T: Clone> Default for RolloutBuffer<T> {
@@ -19,7 +18,6 @@ impl<T: Clone> Default for RolloutBuffer<T> {
             actions: vec![],
             rewards: vec![],
             dones: vec![],
-            last_state: None,
         }
     }
 }
@@ -28,7 +26,6 @@ impl<T: Clone> RolloutBuffer<T> {
     // TODO: this should be the last state
     pub fn set_last_state(&mut self, state: T) {
         self.states.push(state.clone());
-        self.last_state = Some(state);
     }
 
     pub fn sample_point(&self, index: usize) -> (&T, &T) {
@@ -37,23 +34,6 @@ impl<T: Clone> RolloutBuffer<T> {
 }
 
 impl RolloutBuffer<Tensor> {
-    pub fn reset(
-        &mut self,
-        env: &mut impl Env<Tensor = Buffer>,
-        device: &Device,
-    ) -> Result<Tensor> {
-        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-        self.states.clear();
-        self.actions.clear();
-        self.rewards.clear();
-        self.dones.clear();
-        if let Some(last_state) = self.last_state.take() {
-            Ok(last_state)
-        } else {
-            Ok(env.reset(seed).to_candle_tensor(device))
-        }
-    }
-
     // TODO: I don't know if this should be
     pub fn calculate_advantages_and_returns2(
         &self,

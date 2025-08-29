@@ -17,6 +17,33 @@ pub struct VariableSizedStateBuffer<E: Env> {
     trancuated: Vec<bool>,
 }
 
+impl<E: Env<Tensor = Buffer>> VariableSizedStateBuffer<E> {
+    fn to_rollout_buffer(&mut self) -> RolloutBuffer<Tensor> {
+        let mut rb = RolloutBuffer::default();
+        rb.states = std::mem::take(&mut self.states)
+            .into_iter()
+            .map(|b| b.to_candle_tensor(&Device::Cpu))
+            .collect();
+        rb.actions = std::mem::take(&mut self.action)
+            .into_iter()
+            .map(|b| b.to_candle_tensor(&Device::Cpu))
+            .collect();
+        rb.rewards = std::mem::take(&mut self.rewards);
+        rb.dones = std::mem::take(&mut self.terminated)
+            .into_iter()
+            .zip(std::mem::take(&mut self.trancuated))
+            .map(|(terminated, trancuated)| terminated || trancuated)
+            .collect();
+        let mut next_states = std::mem::take(&mut self.next_states);
+        let last_state = next_states
+            .pop()
+            .map(|b| b.to_candle_tensor(&Device::Cpu))
+            .unwrap();
+        rb.states.push(last_state.clone());
+        rb
+    }
+}
+
 // TODO: for some reason the Default proc macro trips up the compiler. We should investigate this
 // in the future.
 impl<E: Env> Default for VariableSizedStateBuffer<E> {
@@ -57,19 +84,28 @@ impl<E: Env> VariableSizedStateBuffer<E> {
 
 pub struct VariableSizedTrajectoryBuffer<E: Env> {
     pub env: E,
+    // TODO: maybe we could make this optional, signaling that the trajector whether the trajectory
+    // buffer currently holds the buffer or not
     pub buffer: VariableSizedStateBuffer<E>,
+    pub last_state: Option<E::Tensor>,
 }
 
 impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
     pub fn new(env: E) -> Self {
         let buffer: VariableSizedStateBuffer<E> = VariableSizedStateBuffer::default();
-        Self { env, buffer }
+        Self {
+            env,
+            buffer,
+            last_state: None,
+        }
     }
 
     pub fn step<D: Distribution<Tensor = Tensor> + ?Sized>(&mut self, distr: &D) {
         let buffer = &mut self.buffer;
         let state = if let Some(obs) = buffer.next_states.last() {
             obs.clone()
+        } else if let Some(last_state) = self.last_state.take() {
+            last_state
         } else {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             self.env.reset(seed)
@@ -128,28 +164,10 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
     }
 
     pub fn to_rollout_buffer(&mut self) -> RolloutBuffer<Tensor> {
-        let mut rb = RolloutBuffer::default();
-        rb.states = std::mem::take(&mut self.buffer.states)
-            .into_iter()
-            .map(|b| b.to_candle_tensor(&Device::Cpu))
-            .collect();
-        rb.actions = std::mem::take(&mut self.buffer.action)
-            .into_iter()
-            .map(|b| b.to_candle_tensor(&Device::Cpu))
-            .collect();
-        rb.rewards = std::mem::take(&mut self.buffer.rewards);
-        rb.dones = std::mem::take(&mut self.buffer.terminated)
-            .into_iter()
-            .zip(std::mem::take(&mut self.buffer.trancuated))
-            .map(|(terminated, trancuated)| terminated || trancuated)
-            .collect();
-        let mut next_states = std::mem::take(&mut self.buffer.next_states);
-        let last_state = next_states
-            .pop()
-            .map(|b| b.to_candle_tensor(&Device::Cpu))
-            .unwrap();
-        rb.states.push(last_state.clone());
-        rb.last_state = Some(last_state);
-        rb
+        if !self.buffer.last_state_terminates() {
+            let last_state = self.buffer.next_states.last().cloned();
+            self.last_state = last_state;
+        }
+        self.buffer.to_rollout_buffer()
     }
 }

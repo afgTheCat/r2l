@@ -49,6 +49,18 @@ pub struct Buffer<T: WithDType = f32> {
     pub dtype: DType,
 }
 
+impl Into<CandleTensor> for Buffer {
+    fn into(self) -> CandleTensor {
+        self.to_candle_tensor(&Device::Cpu)
+    }
+}
+
+impl From<CandleTensor> for Buffer {
+    fn from(value: CandleTensor) -> Self {
+        Buffer::from_candle_tensor(&value)
+    }
+}
+
 impl<T: WithDType> Buffer<T> {
     pub fn new(data: Vec<T>, shape: Vec<usize>, dtype: DType) -> Self {
         Self { data, shape, dtype }
