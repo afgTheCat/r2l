@@ -1,3 +1,6 @@
+pub mod thread_env_pool;
+pub mod vec_env_pool;
+
 use crate::{
     distributions::Distribution,
     env::{Env, EnvironmentDescription},
@@ -12,9 +15,50 @@ use crate::{
     utils::rollout_buffer::RolloutBuffer,
 };
 use candle_core::Tensor;
+use std::{fmt::Debug, marker::PhantomData};
 
-pub mod thread_env_pool;
-pub mod vec_env_pool;
+// wraps a distribution and auto converts
+struct DistributionWrapper<'a, D: Distribution, E: Env> {
+    distribution: &'a D,
+    env: PhantomData<E>,
+}
+
+// SAFETY: This can be safely shared between threads as the env is just a PhantomData
+unsafe impl<'a, D: Distribution, E: Env> Sync for DistributionWrapper<'a, D, E> {}
+
+impl<'a, D: Distribution, E: Env> Debug for DistributionWrapper<'a, D, E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+// impl<'a, D: Distribution, E: Env> Distribution for DistributionWrapper<'a, D, E>
+// where
+//     E::Tensor: From<D::Tensor>,
+//     E::Tensor: Into<D::Tensor>,
+// {
+//     type Tensor = E::Tensor;
+//
+//     fn std(&self) -> Result<f32> {
+//         todo!()
+//     }
+//
+//     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
+//         todo!()
+//     }
+//
+//     fn log_probs(&self, states: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
+//         todo!()
+//     }
+//
+//     fn entropy(&self) -> Result<Self::Tensor> {
+//         todo!()
+//     }
+//
+//     fn resample_noise(&mut self) -> candle_core::Result<()> {
+//         todo!()
+//     }
+// }
 
 pub trait FixedSizeEnvPool {
     type Env: Env<Tensor = Buffer>;
@@ -31,11 +75,14 @@ pub trait FixedSizeEnvPool {
         distr: &D,
     ) -> Vec<FixedSizeStateBuffer<Self::Env>>;
 
-    ///  Set the undelting buffer
+    /// Set the undelying buffer
     fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<Self::Env>>);
 
     // TODO: probably don't really need this in the future
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>>;
+    fn to_rollout_buffers<D: Clone>(&mut self) -> Vec<RolloutBuffer<D>>
+    where
+        <Self::Env as Env>::Tensor: From<D>,
+        <Self::Env as Env>::Tensor: Into<D>;
 }
 
 pub enum FixedSizeEnvPoolKind<E: Env> {
@@ -69,7 +116,11 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
         }
     }
 
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>> {
+    fn to_rollout_buffers<D: Clone>(&mut self) -> Vec<RolloutBuffer<D>>
+    where
+        <Self::Env as Env>::Tensor: From<D>,
+        <Self::Env as Env>::Tensor: Into<D>,
+    {
         match self {
             Self::FixedSizeVecEnvPool(pool) => pool.to_rollout_buffers(),
             Self::FixedSizeThreadEnvPool(pool) => pool.to_rollout_buffers(),

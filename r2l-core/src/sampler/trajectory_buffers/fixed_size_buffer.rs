@@ -1,11 +1,9 @@
 use crate::{
     distributions::Distribution,
     env::{Env, SnapShot},
-    numeric::Buffer,
     rng::RNG,
     utils::rollout_buffer::RolloutBuffer,
 };
-use candle_core::{Device, Tensor};
 use crossbeam::channel::{Receiver, RecvError};
 use rand::Rng;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
@@ -110,10 +108,12 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
             last_state: None,
         }
     }
-}
 
-impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
-    pub fn step<D: Distribution<Tensor = Tensor> + ?Sized>(&mut self, distr: &D) {
+    pub fn step<DT: Clone, D: Distribution<Tensor = DT> + ?Sized>(&mut self, distr: &D)
+    where
+        E::Tensor: From<DT>,
+        E::Tensor: Into<DT>,
+    {
         let Some(buffer) = &mut self.buffer else {
             todo!()
         };
@@ -126,15 +126,13 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             self.env.reset(seed)
         };
-        let action = distr
-            .get_action(state.to_candle_tensor(&Device::Cpu).unsqueeze(0).unwrap())
-            .unwrap();
+        let action = distr.get_action(state.clone().into()).unwrap();
         let SnapShot {
             state: mut next_state,
             reward,
             terminated,
             trancuated,
-        } = self.env.step(Buffer::from_candle_tensor(&action));
+        } = self.env.step(action.clone().into());
         let done = terminated || trancuated;
         if done {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
@@ -143,14 +141,21 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
         buffer.push(
             state,
             next_state,
-            Buffer::from_candle_tensor(&action),
+            action.into(),
             reward,
             terminated,
             trancuated,
         );
     }
 
-    pub fn step_n<D: Distribution<Tensor = Tensor> + ?Sized>(&mut self, distr: &D, steps: usize) {
+    pub fn step_n<DT: Clone, D: Distribution<Tensor = DT> + ?Sized>(
+        &mut self,
+        distr: &D,
+        steps: usize,
+    ) where
+        E::Tensor: From<DT>,
+        E::Tensor: Into<DT>,
+    {
         for _ in 0..steps {
             self.step(distr);
         }
@@ -164,7 +169,11 @@ impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
         }
     }
 
-    pub fn to_rollout_buffer(&mut self) -> RolloutBuffer<Tensor> {
+    pub fn to_rollout_buffer<D: Clone>(&mut self) -> RolloutBuffer<D>
+    where
+        E::Tensor: From<D>,
+        E::Tensor: Into<D>,
+    {
         let Some(buffer) = self.buffer.as_mut() else {
             panic!()
         };

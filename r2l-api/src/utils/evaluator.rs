@@ -47,7 +47,7 @@ impl<E: Env<Tensor = Buffer>> Evaluator<E> {
         } else {
             self.trajectory_buffer
                 .run_episodes(dist, self.eval_episodes);
-            let rb = self.trajectory_buffer.to_rollout_buffer();
+            let rb = self.trajectory_buffer.to_rollout_buffer::<Tensor>();
             let sum_rewads = rb.rewards.iter().sum::<f32>();
             let avg_rewards = sum_rewads / self.eval_episodes as f32;
             println!("Avg rew: {}", avg_rewards);

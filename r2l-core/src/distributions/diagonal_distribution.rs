@@ -85,6 +85,11 @@ impl Distribution for DiagGaussianDistribution {
     type Tensor = Tensor;
 
     fn get_action(&self, observation: Tensor) -> Result<Tensor> {
+        assert!(
+            observation.rank() == 1,
+            "Observation should be a flattened tensor"
+        );
+        let observation = observation.unsqueeze(0)?;
         let mu = self
             .mu_net
             .forward(&observation.unsqueeze(0)?)?

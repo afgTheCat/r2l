@@ -80,6 +80,11 @@ impl Distribution for CategoricalDistribution {
     type Tensor = Tensor;
 
     fn get_action(&self, observation: Tensor) -> Result<Tensor> {
+        assert!(
+            observation.rank() == 1,
+            "Observation should be a flattened tensor"
+        );
+        let observation = observation.unsqueeze(0)?;
         let logits = self.logits.forward(&observation)?;
         let action_probs: Vec<f32> = softmax(&logits, 1)?.squeeze(0)?.to_vec1()?;
         let distribution = WeightedIndex::new(&action_probs).map_err(Error::wrap)?;

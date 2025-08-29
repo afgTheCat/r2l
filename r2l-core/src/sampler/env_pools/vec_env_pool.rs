@@ -47,7 +47,11 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
             .collect()
     }
 
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>> {
+    fn to_rollout_buffers<D: Clone>(&mut self) -> Vec<RolloutBuffer<D>>
+    where
+        <Self::Env as Env>::Tensor: From<D>,
+        <Self::Env as Env>::Tensor: Into<D>,
+    {
         self.buffers
             .iter_mut()
             .map(|buff| buff.to_rollout_buffer())
