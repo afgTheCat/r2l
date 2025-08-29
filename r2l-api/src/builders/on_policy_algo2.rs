@@ -2,7 +2,7 @@ use crate::builders::{
     agents::{a2c::A2CBuilder, ppo::PPOBuilder},
     env::EnvBuilderTrait,
     sampler::{EnvBuilderType, EnvPoolType, SamplerType},
-    sampler_hooks2::EvaluatorNormalizerOptions2,
+    sampler_hooks2::EvaluatorNormalizerOptions,
 };
 use candle_core::{Device, Result};
 use r2l_agents::AgentKind;
@@ -83,7 +83,7 @@ impl OnPolicyAlgorithmBuilder2 {
         let agent_type = AgentType::PPO(PPOBuilder::default());
         let sampler_type = SamplerType {
             capacity: 2048,
-            hook_options: EvaluatorNormalizerOptions2::default(),
+            hook_options: EvaluatorNormalizerOptions::default(),
             env_pool_type: EnvPoolType::VecStep,
         };
         Self {
@@ -97,7 +97,7 @@ impl OnPolicyAlgorithmBuilder2 {
         let agent_type = AgentType::A2C(A2CBuilder::default());
         let sampler_type = SamplerType {
             capacity: 5,
-            hook_options: EvaluatorNormalizerOptions2::default(),
+            hook_options: EvaluatorNormalizerOptions::default(),
             env_pool_type: EnvPoolType::VecStep,
         };
         Self {
@@ -115,7 +115,7 @@ impl OnPolicyAlgorithmBuilder2 {
         self.sampler_type.capacity = n_step;
     }
 
-    pub fn set_hook_options(&mut self, hook_options: EvaluatorNormalizerOptions2) {
+    pub fn set_hook_options(&mut self, hook_options: EvaluatorNormalizerOptions) {
         self.sampler_type.hook_options = hook_options;
     }
 }

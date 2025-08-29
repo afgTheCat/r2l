@@ -113,12 +113,18 @@ impl<E: Env<Tensor = Buffer>> VariableSizedTrajectoryBuffer<E> {
         }
     }
 
-    pub fn run_episode<D: Distribution<Tensor = Tensor> + ?Sized>(
+    pub fn run_episodes<D: Distribution<Tensor = Tensor> + ?Sized>(
         &mut self,
         distr: &D,
         episodes: usize,
     ) {
-        todo!()
+        let mut ep_count = 0;
+        while ep_count < episodes {
+            self.step(distr);
+            if self.buffer.last_state_terminates() {
+                ep_count += 1;
+            }
+        }
     }
 
     pub fn to_rollout_buffer(&mut self) -> RolloutBuffer {

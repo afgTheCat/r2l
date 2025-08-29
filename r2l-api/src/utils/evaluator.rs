@@ -45,26 +45,27 @@ impl<E: Env<Tensor = Buffer>> Evaluator<E> {
             self.eval_step += n_envs;
             Ok(())
         } else {
-            // TODO: VariableSizedTrajectoryBuf
-            let mut all_rewards = vec![];
-            let mut dones = vec![];
-            for _ in 0..self.eval_episodes {
-                // TODO: variable sized buffer should be able to handle single episodes
-                self.trajectory_buffer.run_episode(dist, 1);
-                let rollout_buffer = self.trajectory_buffer.to_rollout_buffer();
-                all_rewards.push(rollout_buffer.rewards.clone());
-                dones.push(rollout_buffer.dones.clone());
-            }
-            let eps = dones
-                .iter()
-                .map(|x| x.iter().filter(|y| **y).count())
-                .sum::<usize>();
-            let sum_rewards_per_eps: Vec<f32> =
-                all_rewards.iter().map(|x| x.iter().sum::<f32>()).collect();
-            let avg_rewards = sum_rewards_per_eps.iter().sum::<f32>() / eps as f32;
+            self.trajectory_buffer
+                .run_episodes(dist, self.eval_episodes);
+            let rb = self.trajectory_buffer.to_rollout_buffer();
+            let sum_rewads = rb.rewards.iter().sum::<f32>();
+            let avg_rewards = sum_rewads / self.eval_episodes as f32;
             println!("Avg rew: {}", avg_rewards);
+
+            // TODO: if I recall correctly, this is pretty much whta sb3 does. Maybe we can have a
+            // batter solution?
+            let mut evaluation_results = vec![];
+            let mut current_res = 0f32;
+            for (rew, done) in rb.rewards.iter().zip(rb.dones.iter()) {
+                current_res += *rew;
+                if *done {
+                    evaluation_results.push(current_res);
+                    current_res = 0.;
+                }
+            }
+
             let mut eval_results = self.evaluations_results.lock().unwrap();
-            eval_results.push(sum_rewards_per_eps);
+            eval_results.push(evaluation_results);
             self.eval_step = 0;
             Ok(())
         }

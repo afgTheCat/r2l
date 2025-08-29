@@ -118,17 +118,16 @@ pub struct FixedSizeTrajectoryBuffer<E: Env> {
     pub buffer: Option<FixedSizeStateBuffer<E>>,
 }
 
-impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
+impl<E: Env> FixedSizeTrajectoryBuffer<E> {
     pub fn new(env: E, capacity: usize) -> Self {
         Self {
             env,
             buffer: Some(FixedSizeStateBuffer::new(capacity)),
         }
     }
+}
 
-    // TODO: I guess it would make sense to inject some data in here, right?
-    // What we could do is have the hook inserted here and just send that but that's blocking +
-    // slow + nighmeighrish
+impl<E: Env<Tensor = Buffer>> FixedSizeTrajectoryBuffer<E> {
     pub fn step<D: Distribution<Tensor = Tensor> + ?Sized>(&mut self, distr: &D) {
         let Some(buffer) = &mut self.buffer else {
             todo!()

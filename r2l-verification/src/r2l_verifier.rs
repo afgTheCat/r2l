@@ -6,7 +6,7 @@ use r2l_agents::AgentKind;
 use r2l_api::builders::{
     agents::{a2c::A2CBuilder, ppo::PPOBuilder},
     sampler::{EnvBuilderType, EnvPoolType, SamplerType},
-    sampler_hooks2::{EvaluatorNormalizerOptions2, EvaluatorOptions, NormalizerOptions},
+    sampler_hooks2::{EvaluatorNormalizerOptions, EvaluatorOptions, NormalizerOptions},
 };
 use r2l_core::{
     Algorithm,
@@ -26,8 +26,6 @@ fn r2l_verify(env_config: &EnvConfig) {
     let (evaluator_options, _results) =
         EvaluatorOptions::new(device.clone(), eval_episodes, eval_freq, 0);
     let normalizer_options = NormalizerOptions::new(1e-8, 0.99, 10., 10.);
-    // let eval_normalizer_options =
-    //     EvaluatorNormalizerOptions::new(evaluator_options, normalizer_options);
     let algo = args.get("algo").unwrap();
     let capacity = match algo.as_str() {
         // sb3 defaults to 2048 as n_steps
@@ -39,10 +37,10 @@ fn r2l_verify(env_config: &EnvConfig) {
     let sampler = SamplerType {
         capacity,
         env_pool_type: EnvPoolType::VecStep,
-        hook_options: EvaluatorNormalizerOptions2 {
-            evaluator_options: Some(evaluator_options),
-            normalizer_options: Some(normalizer_options),
-        },
+        hook_options: EvaluatorNormalizerOptions::eval_normalizer(
+            evaluator_options,
+            normalizer_options,
+        ),
     }
     .build_with_builder_type(
         EnvBuilderType::EnvBuilder {

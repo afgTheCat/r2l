@@ -2,7 +2,7 @@ use candle_core::Result;
 use r2l_api::{
     builders::{
         on_policy_algo2::OnPolicyAlgorithmBuilder2,
-        sampler_hooks2::{EvaluatorNormalizerOptions2, EvaluatorOptions},
+        sampler_hooks2::{EvaluatorNormalizerOptions, EvaluatorOptions},
     },
     test_utils::run_gym_episodes,
 };
@@ -21,10 +21,7 @@ fn ppo2_cart_pole() -> Result<()> {
         ..EvaluatorOptions::default()
     };
     let eval_res = evaluator_opts.results.clone();
-    ppo_builder.set_hook_options(EvaluatorNormalizerOptions2 {
-        evaluator_options: Some(evaluator_opts),
-        normalizer_options: None,
-    });
+    ppo_builder.set_hook_options(EvaluatorNormalizerOptions::evaluator(evaluator_opts));
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
     println!("eval res: {:?}", eval_res.lock().unwrap());
@@ -42,10 +39,7 @@ fn ppo2_cart_pole_normalize() -> Result<()> {
         ..EvaluatorOptions::default()
     };
     let eval_res = evaluator_options.results.clone();
-    let eval_normalizer = EvaluatorNormalizerOptions2 {
-        evaluator_options: Some(evaluator_options),
-        normalizer_options: None,
-    };
+    let eval_normalizer = EvaluatorNormalizerOptions::evaluator(evaluator_options);
     ppo_builder.set_hook_options(eval_normalizer);
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;

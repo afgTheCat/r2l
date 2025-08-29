@@ -113,27 +113,30 @@ impl NormalizerOptions {
 }
 
 #[derive(Default)]
-pub struct EvaluatorNormalizerOptions2 {
+pub struct EvaluatorNormalizerOptions {
     pub evaluator_options: Option<EvaluatorOptions>,
     pub normalizer_options: Option<NormalizerOptions>,
 }
 
-impl EvaluatorNormalizerOptions2 {
-    fn evaluator(eval_options: EvaluatorOptions) -> Self {
+impl EvaluatorNormalizerOptions {
+    pub fn evaluator(eval_options: EvaluatorOptions) -> Self {
         Self {
             evaluator_options: Some(eval_options),
             normalizer_options: None,
         }
     }
 
-    fn normalizer(norm_options: NormalizerOptions) -> Self {
+    pub fn normalizer(norm_options: NormalizerOptions) -> Self {
         Self {
             evaluator_options: None,
             normalizer_options: Some(norm_options),
         }
     }
 
-    fn eval_normalizer(eval_options: EvaluatorOptions, norm_options: NormalizerOptions) -> Self {
+    pub fn eval_normalizer(
+        eval_options: EvaluatorOptions,
+        norm_options: NormalizerOptions,
+    ) -> Self {
         Self {
             evaluator_options: Some(eval_options),
             normalizer_options: Some(norm_options),
@@ -141,7 +144,7 @@ impl EvaluatorNormalizerOptions2 {
     }
 }
 
-impl EvaluatorNormalizerOptions2 {
+impl EvaluatorNormalizerOptions {
     pub fn build<EB: EnvBuilderTrait>(
         &self,
         env_description: EnvironmentDescription,
@@ -150,25 +153,25 @@ impl EvaluatorNormalizerOptions2 {
         device: &Device,
     ) -> Option<Box<dyn SequntialStepBoundHooks<EB::Env>>> {
         match &self {
-            EvaluatorNormalizerOptions2 {
+            EvaluatorNormalizerOptions {
                 evaluator_options: None,
                 normalizer_options: None,
             } => None,
-            EvaluatorNormalizerOptions2 {
+            EvaluatorNormalizerOptions {
                 evaluator_options: Some(eval_options),
                 normalizer_options: None,
             } => {
                 let evaluator = eval_options.build(env_builder, n_envs);
                 Some(Box::new(evaluator))
             }
-            EvaluatorNormalizerOptions2 {
+            EvaluatorNormalizerOptions {
                 evaluator_options: None,
                 normalizer_options: Some(norm_options),
             } => {
                 let normalizer = norm_options.build(env_description, n_envs, device);
                 Some(Box::new(normalizer))
             }
-            EvaluatorNormalizerOptions2 {
+            EvaluatorNormalizerOptions {
                 evaluator_options: Some(eval_options),
                 normalizer_options: Some(norm_options),
             } => {

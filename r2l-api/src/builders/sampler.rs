@@ -1,4 +1,4 @@
-use crate::builders::{env::EnvBuilderTrait, sampler_hooks2::EvaluatorNormalizerOptions2};
+use crate::builders::{env::EnvBuilderTrait, sampler_hooks2::EvaluatorNormalizerOptions};
 use candle_core::Device;
 use r2l_core::sampler::{
     CollectionType, NewSampler,
@@ -178,7 +178,7 @@ pub enum EnvPoolType {
 // eigher this has to be build or it cannot have an assoc type
 pub struct SamplerType {
     pub capacity: usize,
-    pub hook_options: EvaluatorNormalizerOptions2,
+    pub hook_options: EvaluatorNormalizerOptions,
     pub env_pool_type: EnvPoolType,
 }
 
