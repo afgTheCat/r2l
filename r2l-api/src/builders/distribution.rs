@@ -1,12 +1,10 @@
 use candle_core::{Device, Result};
 use candle_nn::VarBuilder;
-use r2l_core::{
-    distributions::{
-        DistributionKind, categorical_distribution::CategoricalDistribution,
-        diagonal_distribution::DiagGaussianDistribution,
-    },
-    env::{EnvironmentDescription, Space},
+use r2l_candle_lm::distributions::{
+    DistributionKind, categorical_distribution::CategoricalDistribution,
+    diagonal_distribution::DiagGaussianDistribution,
 };
+use r2l_core::env::{EnvironmentDescription, Space};
 
 pub enum DistributionType {
     Dynamic,

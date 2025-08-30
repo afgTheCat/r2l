@@ -1,10 +1,10 @@
-use super::Distribution;
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 use bincode::{Decode, Encode};
 use candle_core::{Device, Error, Result, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
+use r2l_core::distributions::Distribution;
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 

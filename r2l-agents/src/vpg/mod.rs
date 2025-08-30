@@ -1,13 +1,13 @@
 use crate::ppo::PPOLearningModule;
 use candle_core::{Device, Result, Tensor};
+use r2l_candle_lm::{
+    learning_module::{LearningModule, PolicyValuesLosses},
+    tensors::{PolicyLoss, ValueLoss},
+};
 use r2l_core::{
     agents::Agent,
     distributions::Distribution,
-    policies::{
-        ValueFunction,
-        learning_modules::{LearningModule, PolicyValuesLosses},
-    },
-    tensors::{PolicyLoss, ValueLoss},
+    policies::ValueFunction,
     utils::rollout_buffer::{
         Logps, RolloutBatch, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns,
     },

@@ -1,12 +1,12 @@
 use candle_core::{Device, Result, Tensor};
+use r2l_candle_lm::{
+    learning_module::{LearningModule, LearningModuleKind, PolicyValuesLosses},
+    tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
+};
 use r2l_core::{
     agents::Agent,
     distributions::Distribution,
-    policies::{
-        ValueFunction,
-        learning_modules::{LearningModule, LearningModuleKind, PolicyValuesLosses},
-    },
-    tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
+    policies::ValueFunction,
     utils::rollout_buffer::{
         Advantages, Logps, Returns, RolloutBatch, RolloutBatchIterator, RolloutBuffer,
         calculate_advantages_and_returns,

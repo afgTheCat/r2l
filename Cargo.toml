@@ -7,19 +7,24 @@ members = [
   "r2l-subproc-env",
   "r2l-verification",
   "r2l-agents",
+  "r2l-candle-lm",
 ]
 resolver = "3"
 
 [workspace.dependencies]
-candle-core = { version = "0.9.1", features = ["cuda"] }
-burn = { version = "0.18.0", features = ["ndarray", "autodiff"] }
-candle-nn = { version = "0.9.1" }
 r2l-macros = { path = "r2l-macros", version = "0.0.1" }
 r2l-core = { path = "r2l-core", version = "0.0.1" }
 r2l-gym = { path = "r2l-gym", version = "0.0.1" }
 r2l-agents = { path = "r2l-agents", version = "0.0.1" }
 r2l-api = { path = "r2l-api", version = "0.0.1" }
+r2l-candle-lm = { path = "r2l-candle-lm" }
+candle-core = { version = "0.9.1", features = ["cuda"] }
+burn = { version = "0.18.0", features = ["ndarray", "autodiff"] }
+candle-nn = { version = "0.9.1" }
+either = "1.15.0"
+bincode = { version = "2.0.1", features = ["serde"] }
 crossbeam = "0.8.4"
+rand = "0.9.0"
 
 [workspace.package]
 version = "0.0.1"

@@ -3313,6 +3313,7 @@ version = "0.0.1"
 dependencies = [
  "candle-core",
  "candle-nn",
+ "r2l-candle-lm",
  "r2l-core",
  "r2l-macros",
 ]
@@ -3327,10 +3328,25 @@ dependencies = [
  "once_cell",
  "r2l-agents",
  "r2l-api",
+ "r2l-candle-lm",
  "r2l-core",
  "r2l-gym",
  "rand",
  "ringbuffer",
+]
+
+[[package]]
+name = "r2l-candle-lm"
+version = "0.0.1"
+dependencies = [
+ "bincode",
+ "candle-core",
+ "candle-nn",
+ "derive_more",
+ "either",
+ "r2l-core",
+ "rand",
+ "safetensors",
 ]
 
 [[package]]
@@ -3367,6 +3383,7 @@ dependencies = [
  "once_cell",
  "r2l-agents",
  "r2l-api",
+ "r2l-candle-lm",
  "r2l-core",
  "r2l-gym",
  "rand",
@@ -3414,6 +3431,7 @@ dependencies = [
  "candle-core",
  "clap",
  "interprocess",
+ "r2l-candle-lm",
  "r2l-core",
  "r2l-gym",
  "rand",

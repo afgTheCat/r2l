@@ -1,11 +1,11 @@
-use candle_core::{Result, Tensor};
-use candle_nn::{Module, Optimizer};
-
 use crate::{
-    policies::{OptimizerWithMaxGrad, ValueFunction},
+    optimizer::OptimizerWithMaxGrad,
     tensors::{PolicyLoss, ValueLoss},
     thread_safe_sequential::ThreadSafeSequential,
 };
+use candle_core::{Result, Tensor};
+use candle_nn::{Module, Optimizer};
+use r2l_core::policies::ValueFunction;
 
 // convinience trait
 pub trait LearningModule {

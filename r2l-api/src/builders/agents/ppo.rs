@@ -5,10 +5,8 @@ use crate::builders::{
 use candle_core::{DType, Device, Result};
 use candle_nn::{VarBuilder, VarMap};
 use r2l_agents::ppo::{EmptyPPO3Hooks, PPO};
-use r2l_core::{
-    distributions::DistributionKind, env::EnvironmentDescription,
-    policies::learning_modules::LearningModuleKind,
-};
+use r2l_candle_lm::{distributions::DistributionKind, learning_module::LearningModuleKind};
+use r2l_core::env::EnvironmentDescription;
 
 pub struct PPOBuilder {
     pub distribution_builder: DistributionBuilder,

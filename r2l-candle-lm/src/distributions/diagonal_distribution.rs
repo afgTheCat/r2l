@@ -1,4 +1,3 @@
-use super::Distribution;
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 use bincode::{
     Decode, Encode,
@@ -6,6 +5,7 @@ use bincode::{
 };
 use candle_core::{Device, Result, Tensor, safetensors::BufferedSafetensors};
 use candle_nn::{Module, VarBuilder};
+use r2l_core::distributions::Distribution;
 use safetensors::serialize;
 use std::f32;
 

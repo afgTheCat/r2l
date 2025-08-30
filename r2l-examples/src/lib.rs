@@ -3,15 +3,15 @@ use r2l_agents::ppo::PPP3HooksTrait;
 use r2l_agents::ppo::{HookResult, PPOBatchData};
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::builders::sampler::{EnvBuilderType, EnvPoolType, SamplerType};
-use r2l_core::distributions::DistributionKind;
+use r2l_candle_lm::distributions::DistributionKind;
+use r2l_candle_lm::learning_module::LearningModuleKind;
+use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
 use r2l_core::on_policy_algorithm::{
     DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
 };
-use r2l_core::policies::learning_modules::LearningModuleKind;
 use r2l_core::{
     Algorithm,
     distributions::Distribution,
-    tensors::{PolicyLoss, ValueLoss},
     utils::rollout_buffer::{Advantages, RolloutBuffer},
 };
 use std::sync::Arc;

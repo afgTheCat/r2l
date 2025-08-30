@@ -7,8 +7,9 @@ use clap::Parser;
 use interprocess::local_socket::{
     GenericNamespaced, Stream, ToNsName, traits::Stream as StreamTrait,
 };
+use r2l_candle_lm::distributions::DistributionKind;
 use r2l_core::{
-    distributions::{Distribution, DistributionKind},
+    distributions::Distribution,
     env::Env,
     ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     numeric::Buffer,
@@ -149,10 +150,8 @@ mod test {
     use interprocess::local_socket::{
         GenericNamespaced, ListenerOptions, ToNsName, traits::ListenerExt,
     };
-    use r2l_core::{
-        distributions::diagonal_distribution::DiagGaussianDistribution,
-        ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
-    };
+    use r2l_candle_lm::distributions::diagonal_distribution::DiagGaussianDistribution;
+    use r2l_core::ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet};
     use r2l_gym::GymEnv;
     use std::io::BufReader;
 

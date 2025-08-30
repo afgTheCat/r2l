@@ -3,10 +3,8 @@ pub mod ppo;
 pub mod vpg;
 
 use candle_core::Tensor;
-use r2l_core::{
-    agents::Agent, distributions::DistributionKind, policies::learning_modules::LearningModuleKind,
-    utils::rollout_buffer::RolloutBuffer,
-};
+use r2l_candle_lm::{distributions::DistributionKind, learning_module::LearningModuleKind};
+use r2l_core::{agents::Agent, utils::rollout_buffer::RolloutBuffer};
 
 use crate::{a2c::A2C, ppo::PPO, vpg::VPG};
 
