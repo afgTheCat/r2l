@@ -1,5 +1,10 @@
-use crate::{Algorithm, agents::Agent, env::Sampler, utils::rollout_buffer::RolloutBuffer};
-use candle_core::{Result, Tensor};
+use crate::{
+    Algorithm,
+    agents::{Agent, TensorOfAgent},
+    env::{Sampler, TensorOfSampler},
+    utils::rollout_buffer::RolloutBuffer,
+};
+use candle_core::Result;
 
 macro_rules! break_on_hook_res {
     ($hook_res:expr) => {
@@ -30,10 +35,10 @@ impl LearningSchedule {
     }
 }
 
-pub trait OnPolicyAlgorithmHooks {
+pub trait OnPolicyAlgorithmHooks<T: Clone> {
     fn init_hook(&mut self) -> bool;
 
-    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer<Tensor>]) -> bool;
+    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer<T>]) -> bool;
 
     fn post_training_hook(&mut self) -> bool;
 
@@ -54,12 +59,12 @@ impl DefaultOnPolicyAlgorightmsHooks {
     }
 }
 
-impl OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorightmsHooks {
+impl<T: Clone> OnPolicyAlgorithmHooks<T> for DefaultOnPolicyAlgorightmsHooks {
     fn init_hook(&mut self) -> bool {
         false
     }
 
-    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer<Tensor>]) -> bool {
+    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer<T>]) -> bool {
         let total_reward = rollouts
             .iter()
             .map(|s| s.rewards.iter().sum::<f32>())
@@ -105,13 +110,18 @@ impl OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorightmsHooks {
     }
 }
 
-pub struct OnPolicyAlgorithm<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks> {
+pub struct OnPolicyAlgorithm<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks<TensorOfAgent<A>>> {
     pub sampler: S,
     pub agent: A,
     pub hooks: H,
 }
 
-impl<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks> Algorithm for OnPolicyAlgorithm<S, A, H> {
+impl<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks<TensorOfAgent<A>>> Algorithm
+    for OnPolicyAlgorithm<S, A, H>
+where
+    TensorOfSampler<S>: From<TensorOfAgent<A>>,
+    TensorOfSampler<S>: Into<TensorOfAgent<A>>,
+{
     fn train(&mut self) -> Result<()> {
         if self.hooks.init_hook() {
             return Ok(());
@@ -126,7 +136,6 @@ impl<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks> Algorithm for OnPolicyAlgo
             self.agent.learn(rollouts)?;
             break_on_hook_res!(self.hooks.post_training_hook());
         }
-
         self.hooks.shutdown_hook()
     }
 }

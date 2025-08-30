@@ -1,6 +1,6 @@
 use crate::{distributions::Distribution, numeric::Buffer, utils::rollout_buffer::RolloutBuffer};
 use bincode::{Decode, Encode};
-use candle_core::{Result, Tensor};
+use candle_core::Result;
 
 #[derive(Debug, Clone)]
 pub enum Space {
@@ -88,8 +88,13 @@ pub enum RolloutMode {
 pub trait Sampler {
     type Env: Env;
 
-    fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
+    fn collect_rollouts<D: Distribution>(
         &mut self,
         distribution: &D,
-    ) -> Result<Vec<RolloutBuffer<Tensor>>>;
+    ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
+    where
+        <Self::Env as Env>::Tensor: From<D::Tensor>,
+        <Self::Env as Env>::Tensor: Into<D::Tensor>;
 }
+
+pub type TensorOfSampler<S> = <<S as Sampler>::Env as Env>::Tensor;

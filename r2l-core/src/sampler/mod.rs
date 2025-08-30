@@ -13,7 +13,7 @@ use crate::{
     },
     utils::rollout_buffer::RolloutBuffer,
 };
-use candle_core::{Result, Tensor};
+use candle_core::Result;
 use std::{fmt::Debug, marker::PhantomData};
 
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
@@ -113,10 +113,14 @@ impl<E: Env> NewSampler<E> {
 impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {
     type Env = E;
 
-    fn collect_rollouts<D: Distribution<Tensor = Tensor>>(
+    fn collect_rollouts<D: Distribution>(
         &mut self,
         distr: &D,
-    ) -> Result<Vec<RolloutBuffer<Tensor>>> {
+    ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
+    where
+        <Self::Env as Env>::Tensor: From<D::Tensor>,
+        <Self::Env as Env>::Tensor: Into<D::Tensor>,
+    {
         let distr: DistributionWrapper<D, E> = DistributionWrapper::new(distr);
         let rb = match &mut self.collection_type {
             CollectionType::StepBound { env_pool, hooks } => {
