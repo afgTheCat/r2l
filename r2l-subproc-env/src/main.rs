@@ -2,7 +2,7 @@
 // and supported gym env as well. Also we can experiment with fork/clone whatever on linux
 
 use bincode::{Decode, Encode};
-use candle_core::{Device, Error, Result};
+use candle_core::{Device, Error, Result, Tensor};
 use clap::Parser;
 use interprocess::local_socket::{
     GenericNamespaced, Stream, ToNsName, traits::Stream as StreamTrait,
@@ -10,9 +10,12 @@ use interprocess::local_socket::{
 use r2l_core::{
     distributions::{Distribution, DistributionKind},
     env::Env,
-    env_pools::run_rollout,
     ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
-    utils::rollout_buffer::RolloutBuffer,
+    numeric::Buffer,
+    sampler::{
+        DistributionWrapper,
+        trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
+    },
 };
 use r2l_gym::GymEnv;
 use std::io::BufReader;
@@ -81,13 +84,15 @@ struct Args {
 }
 
 pub struct Rollout<E: Env> {
-    env: E,
     conn: BufReader<Stream>,
-    rollout_buffer: RolloutBuffer,
+    trajectory_buffer: VariableSizedTrajectoryBuffer<E>,
+    device: Device,
 }
 
-impl<E: Env> Rollout<E> {
-    fn handle_packet<D: Distribution + Decode<()> + Encode>(&mut self) -> Result<bool> {
+impl<E: Env<Tensor = Buffer>> Rollout<E> {
+    fn handle_packet<D: Distribution<Tensor = Tensor> + Decode<()> + Encode>(
+        &mut self,
+    ) -> Result<bool> {
         let packet: PacketToReceive<D> = receive_packet(&mut self.conn);
         match packet {
             PacketToReceive::Halt => {
@@ -98,12 +103,14 @@ impl<E: Env> Rollout<E> {
                 distribution,
                 rollout_mode,
             } => {
-                let state = self.rollout_buffer.reset(&mut self.env)?;
-                let (states, last_state) =
-                    run_rollout(&distribution, &mut self.env, rollout_mode, state)?;
-                self.rollout_buffer.set_states(states, last_state);
+                // FIXME: we should act as the sampler like we did the threads. This is not used
+                // currently but should be added in the future
+                let distribution: DistributionWrapper<D, E> =
+                    DistributionWrapper::new(&distribution);
+                self.trajectory_buffer
+                    .step_with_epiosde_bound(&distribution, 1024);
                 let packet: PacketToSend<D> = PacketToSend::RolloutResult {
-                    rollout: self.rollout_buffer.clone(),
+                    rollout: self.trajectory_buffer.to_rollout_buffer().convert(),
                 };
                 send_packet(&mut self.conn, packet);
                 Ok(true)
@@ -117,7 +124,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
     match &args.env_construction_method {
         EnvConstructionMethod::GymEnv => {
-            let env = GymEnv::new(&args.env_name, None, &Device::Cpu)?;
+            let env = GymEnv::new(&args.env_name, None);
             let socket_name = args
                 .socket_name
                 .to_ns_name::<GenericNamespaced>()
@@ -126,8 +133,8 @@ fn main() -> Result<()> {
             let conn = BufReader::new(conn);
             let mut rollout = Rollout {
                 conn,
-                env,
-                rollout_buffer: RolloutBuffer::default(),
+                trajectory_buffer: VariableSizedTrajectoryBuffer::new(env),
+                device: Device::Cpu,
             };
             // TODO: other distributions/custom distributions need to be encoded
             while rollout.handle_packet::<DistributionKind>()? {}
@@ -178,7 +185,7 @@ mod test {
             .unwrap();
         let conn = listener.incoming().next().unwrap().unwrap();
         let mut conn = BufReader::new(conn);
-        let env = GymEnv::new(ENV_NAME, None, &candle_core::Device::Cpu).unwrap();
+        let env = GymEnv::new(ENV_NAME, None);
 
         send_packet(&mut conn, PacketToSend::<DiagGaussianDistribution>::Halt);
         let packet: PacketToReceive<DiagGaussianDistribution> = receive_packet(&mut conn);

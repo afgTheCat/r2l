@@ -77,8 +77,15 @@ impl CategoricalDistribution {
 }
 
 impl Distribution for CategoricalDistribution {
-    fn get_action(&self, observation: &Tensor) -> Result<(Tensor, Tensor)> {
-        let logits = self.logits.forward(observation)?;
+    type Tensor = Tensor;
+
+    fn get_action(&self, observation: Tensor) -> Result<Tensor> {
+        assert!(
+            observation.rank() == 1,
+            "Observation should be a flattened tensor"
+        );
+        let observation = observation.unsqueeze(0)?;
+        let logits = self.logits.forward(&observation)?;
         let action_probs: Vec<f32> = softmax(&logits, 1)?.squeeze(0)?.to_vec1()?;
         let distribution = WeightedIndex::new(&action_probs).map_err(Error::wrap)?;
         let action = distribution.sample(&mut rand::rng());
@@ -86,11 +93,10 @@ impl Distribution for CategoricalDistribution {
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
         let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
-        let logp = self.log_probs(observation, &action.unsqueeze(0)?)?.detach();
-        Ok((action, logp))
+        Ok(action)
     }
 
-    fn log_probs(&self, states: &Tensor, actions: &Tensor) -> Result<Tensor> {
+    fn log_probs(&self, states: Tensor, actions: Tensor) -> Result<Tensor> {
         let logits = self.logits.forward(&states)?;
         let log_probs = log_softmax(&logits, 1)?;
         actions.mul(&log_probs)?.sum(1)

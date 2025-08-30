@@ -1,9 +1,18 @@
 [workspace]
-members = ["r2l-core", "r2l-gym", "r2l-macros", "r2l-examples", "r2l-subproc-env", "r2l-verification", "r2l-agents", "r2l-api"]
-resolver = "2"
+members = [
+  "r2l-core",
+  "r2l-gym",
+  "r2l-macros",
+  "r2l-examples",
+  "r2l-subproc-env",
+  "r2l-verification",
+  "r2l-agents",
+]
+resolver = "3"
 
 [workspace.dependencies]
 candle-core = { version = "0.9.1", features = ["cuda"] }
+burn = { version = "0.18.0", features = ["ndarray", "autodiff"] }
 candle-nn = { version = "0.9.1" }
 r2l-macros = { path = "r2l-macros", version = "0.0.1" }
 r2l-core = { path = "r2l-core", version = "0.0.1" }

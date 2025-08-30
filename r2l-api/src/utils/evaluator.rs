@@ -1,22 +1,20 @@
+use candle_core::{Device, Result, Tensor};
+use r2l_core::{
+    distributions::Distribution, env::Env, numeric::Buffer,
+    sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
+};
 use std::sync::{Arc, Mutex};
 
-use candle_core::{Result, Tensor};
-use r2l_core::{
-    distributions::Distribution,
-    env::Env,
-    env_pools::{SequentialVecEnvHooks, single_step_env_with_buffer},
-    utils::rollout_buffer::RolloutBuffer,
-};
-
 pub struct Evaluator<E: Env> {
-    pub env: E,
+    pub trajectory_buffer: VariableSizedTrajectoryBuffer<E>,
     pub eval_episodes: usize,
     pub eval_freq: usize,
     pub eval_step: usize,
     pub evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
+    pub device: Device,
 }
 
-impl<E: Env> Evaluator<E> {
+impl<E: Env<Tensor = Buffer>> Evaluator<E> {
     pub fn new(
         env: E,
         eval_episodes: usize,
@@ -25,11 +23,12 @@ impl<E: Env> Evaluator<E> {
         evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
     ) -> Self {
         Self {
-            env,
+            trajectory_buffer: VariableSizedTrajectoryBuffer::new(env),
             eval_episodes,
             eval_freq,
             eval_step,
             evaluations_results,
+            device: Device::Cpu,
         }
     }
 
@@ -37,52 +36,38 @@ impl<E: Env> Evaluator<E> {
         self.evaluations_results.clone()
     }
 
-    pub fn evaluate(&mut self, dist: &dyn Distribution, n_envs: usize) -> Result<()> {
+    pub fn evaluate(
+        &mut self,
+        dist: &dyn Distribution<Tensor = E::Tensor>,
+        n_envs: usize,
+    ) -> Result<()> {
         if self.eval_step < self.eval_freq {
             self.eval_step += n_envs;
             Ok(())
         } else {
-            let mut all_rewards = vec![];
-            let mut dones = vec![];
-            for _ in 0..self.eval_episodes {
-                let mut state = self.env.reset(rand::random())?;
-                let mut rollout_buffer = RolloutBuffer::default();
-                while let (next_state, false) =
-                    single_step_env_with_buffer(dist, &state, &mut self.env, &mut rollout_buffer)?
-                {
-                    state = next_state;
-                }
-                all_rewards.push(rollout_buffer.rewards.clone());
-                dones.push(rollout_buffer.dones.clone());
-            }
-            let eps = dones
-                .iter()
-                .map(|x| x.iter().filter(|y| **y).count())
-                .sum::<usize>();
-            let sum_rewards_per_eps: Vec<f32> =
-                all_rewards.iter().map(|x| x.iter().sum::<f32>()).collect();
-            let avg_rewards = sum_rewards_per_eps.iter().sum::<f32>() / eps as f32;
+            self.trajectory_buffer
+                .run_episodes(dist, self.eval_episodes);
+            let rb = self.trajectory_buffer.to_rollout_buffer();
+            let sum_rewads = rb.rewards.iter().sum::<f32>();
+            let avg_rewards = sum_rewads / self.eval_episodes as f32;
             println!("Avg rew: {}", avg_rewards);
+
+            // TODO: if I recall correctly, this is pretty much whta sb3 does. Maybe we can have a
+            // batter solution?
+            let mut evaluation_results = vec![];
+            let mut current_res = 0f32;
+            for (rew, done) in rb.rewards.iter().zip(rb.dones.iter()) {
+                current_res += *rew;
+                if *done {
+                    evaluation_results.push(current_res);
+                    current_res = 0.;
+                }
+            }
+
             let mut eval_results = self.evaluations_results.lock().unwrap();
-            eval_results.push(sum_rewards_per_eps);
+            eval_results.push(evaluation_results);
             self.eval_step = 0;
             Ok(())
         }
-    }
-}
-
-impl<E: Env> SequentialVecEnvHooks for Evaluator<E> {
-    fn step_hook(
-        &mut self,
-        distribution: &dyn Distribution,
-        states: &mut Vec<(Tensor, Tensor, f32, f32, bool)>,
-    ) -> candle_core::Result<bool> {
-        let n_envs = states.len();
-        self.evaluate(distribution, n_envs)?;
-        Ok(false)
-    }
-
-    fn post_step_hook(&mut self, last_states: &mut Vec<Tensor>) -> candle_core::Result<bool> {
-        Ok(false)
     }
 }

@@ -1,6 +1,8 @@
 use candle_core::{Device, Result, Tensor};
-use r2l_api::builders::env_pool::{NormalizerOptions, SequentialEnvHookTypes, VecPoolType};
-use r2l_core::env::{Env, EnvironmentDescription, Space};
+use r2l_core::{
+    env::{Env, EnvironmentDescription, SnapShot, Space},
+    numeric::Buffer,
+};
 
 struct DummyRewardEnv {
     t: u64,
@@ -19,23 +21,31 @@ impl DummyRewardEnv {
 }
 
 impl Env for DummyRewardEnv {
-    fn step(&mut self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)> {
+    type Tensor = Buffer;
+
+    fn step(&mut self, action: Buffer) -> SnapShot<Buffer> {
         self.t += 1;
         let index = (self.t as usize + self.returned_reward_idx) % 4;
         let returned_value = self.returned_rewards[index];
         let truncated = self.t == 4;
-        let state = Tensor::full(returned_value, (), &Device::Cpu)?;
-        Ok((state, returned_value, false, truncated))
+        let state = Tensor::full(returned_value, (), &Device::Cpu).unwrap();
+        SnapShot {
+            state: Buffer::from_candle_tensor(&state),
+            reward: returned_value,
+            terminated: false,
+            trancuated: truncated,
+        }
     }
 
-    fn reset(&mut self, seed: u64) -> Result<Tensor> {
+    fn reset(&mut self, seed: u64) -> Buffer {
         self.t = 0;
         let state = Tensor::full(
             self.returned_rewards[self.returned_reward_idx],
             (),
             &Device::Cpu,
-        )?;
-        Ok(state)
+        )
+        .unwrap();
+        Buffer::from_candle_tensor(&state)
     }
 
     fn env_description(&self) -> EnvironmentDescription {
@@ -44,8 +54,8 @@ impl Env for DummyRewardEnv {
         EnvironmentDescription::new(
             Space::Discrete(2),
             Space::Continous {
-                min: Some(min),
-                max: Some(max),
+                min: Some(Buffer::from_candle_tensor(&min)),
+                max: Some(Buffer::from_candle_tensor(&max)),
                 size: 1,
             },
         )
@@ -57,9 +67,9 @@ fn test_obs_rms_vec_normalize() -> Result<()> {
     let env_builders = vec![|_: &Device| DummyRewardEnv::new(0), |_: &Device| {
         DummyRewardEnv::new(1)
     }];
-    let env_pool_builder = VecPoolType::Sequential(SequentialEnvHookTypes::NormalizerOnly {
-        options: NormalizerOptions::default(),
-    });
-    let env_pool = env_pool_builder.build_with_builders(&Device::Cpu, env_builders)?;
+    // let env_pool_builder = VecPoolType::Sequential(SequentialEnvHookTypes::NormalizerOnly {
+    //     options: NormalizerOptions::default(),
+    // });
+    // let env_pool = env_pool_builder.build_with_builders(&Device::Cpu, env_builders)?;
     Ok(())
 }

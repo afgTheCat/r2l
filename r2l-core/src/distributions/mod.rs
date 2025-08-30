@@ -1,5 +1,3 @@
-// TODO: should distributions be their own crate?
-
 pub mod categorical_distribution;
 pub mod diagonal_distribution;
 
@@ -7,29 +5,67 @@ use bincode::{Decode, Encode};
 use candle_core::{Result, Tensor};
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
-use enum_dispatch::enum_dispatch;
 use std::{f32, fmt::Debug};
 
 // TODO: Decoding will need a context to store what device we want the tensors to be decoded to
 // The phylosophy behind this should be that distributions are stateless, therfore cloenable and
 // 'static and self contained. Will see if we can stick to this, but it is the agent that has the
 // liberty to not be stateless and such
-#[enum_dispatch]
-pub trait Distribution: Sync + Debug + 'static {
-    fn get_action(&self, observation: &Tensor) -> Result<(Tensor, Tensor)>;
-    fn log_probs(&self, states: &Tensor, actions: &Tensor) -> Result<Tensor>;
+pub trait Distribution: Sync + Debug {
+    type Tensor: Clone;
+
+    fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
+    fn log_probs(&self, states: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor>;
     fn std(&self) -> Result<f32>;
-    fn entropy(&self) -> Result<Tensor>;
+    fn entropy(&self) -> Result<Self::Tensor>;
     fn resample_noise(&mut self) -> Result<()> {
         Ok(())
     }
 }
 
 #[derive(Debug)]
-#[enum_dispatch(Distribution)]
 pub enum DistributionKind {
     Categorical(CategoricalDistribution),
     DiagGaussian(DiagGaussianDistribution),
+}
+
+impl Distribution for DistributionKind {
+    type Tensor = Tensor;
+
+    fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
+        match self {
+            Self::Categorical(cat) => cat.get_action(observation),
+            Self::DiagGaussian(diag) => diag.get_action(observation),
+        }
+    }
+
+    fn log_probs(&self, states: Self::Tensor, actions: Self::Tensor) -> Result<Tensor> {
+        match self {
+            Self::Categorical(cat) => cat.log_probs(states, actions),
+            Self::DiagGaussian(diag) => diag.log_probs(states, actions),
+        }
+    }
+
+    fn entropy(&self) -> Result<Self::Tensor> {
+        match self {
+            Self::Categorical(cat) => cat.entropy(),
+            Self::DiagGaussian(diag) => diag.entropy(),
+        }
+    }
+
+    fn std(&self) -> Result<f32> {
+        match self {
+            Self::Categorical(cat) => cat.std(),
+            Self::DiagGaussian(diag) => diag.std(),
+        }
+    }
+
+    fn resample_noise(&mut self) -> Result<()> {
+        match self {
+            Self::Categorical(cat) => cat.resample_noise(),
+            Self::DiagGaussian(diag) => diag.resample_noise(),
+        }
+    }
 }
 
 impl Encode for DistributionKind {

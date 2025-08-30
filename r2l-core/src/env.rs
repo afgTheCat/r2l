@@ -1,13 +1,13 @@
-use crate::{distributions::Distribution, rng::RNG, utils::rollout_buffer::RolloutBuffer};
+use crate::{distributions::Distribution, numeric::Buffer, utils::rollout_buffer::RolloutBuffer};
 use bincode::{Decode, Encode};
-use candle_core::{Result, Tensor};
+use candle_core::Result;
 
 #[derive(Debug, Clone)]
 pub enum Space {
     Discrete(usize),
     Continous {
-        min: Option<Tensor>,
-        max: Option<Tensor>,
+        min: Option<Buffer>,
+        max: Option<Buffer>,
         size: usize,
     },
 }
@@ -52,9 +52,29 @@ impl EnvironmentDescription {
     }
 }
 
+// TODO: This is a useful thing buffer needs to be go
+pub struct SnapShot<T> {
+    pub state: T,
+    pub reward: f32,
+    pub terminated: bool,
+    pub trancuated: bool,
+}
+
+pub struct SnapShot2<T> {
+    pub state: T,
+    pub next_state: T,
+    pub action: T,
+    pub reward: f32,
+    pub terminated: bool,
+    pub trancuated: bool,
+}
+
 pub trait Env {
-    fn reset(&mut self, seed: u64) -> Result<Tensor>;
-    fn step(&mut self, action: &Tensor) -> Result<(Tensor, f32, bool, bool)>;
+    // TODO: we need to figure the right tensor kind here!
+    type Tensor: Clone;
+
+    fn reset(&mut self, seed: u64) -> Self::Tensor;
+    fn step(&mut self, action: Self::Tensor) -> SnapShot<Self::Tensor>;
     fn env_description(&self) -> EnvironmentDescription;
 }
 
@@ -64,15 +84,17 @@ pub enum RolloutMode {
     StepBound { n_steps: usize },
 }
 
-// TODO: we may want to get rid of the env pool trait and submerge it into the env trait
-pub trait EnvPool {
+// ok so the thing is this:
+pub trait Sampler {
+    type Env: Env;
+
     fn collect_rollouts<D: Distribution>(
         &mut self,
         distribution: &D,
-        rollout_mode: RolloutMode,
-    ) -> Result<Vec<RolloutBuffer>>;
-
-    fn env_description(&self) -> EnvironmentDescription;
-
-    fn num_env(&self) -> usize;
+    ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
+    where
+        <Self::Env as Env>::Tensor: From<D::Tensor>,
+        <Self::Env as Env>::Tensor: Into<D::Tensor>;
 }
+
+pub type TensorOfSampler<S> = <<S as Sampler>::Env as Env>::Tensor;

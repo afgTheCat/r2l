@@ -82,7 +82,14 @@ impl DiagGaussianDistribution {
 }
 
 impl Distribution for DiagGaussianDistribution {
-    fn get_action(&self, observation: &Tensor) -> Result<(Tensor, Tensor)> {
+    type Tensor = Tensor;
+
+    fn get_action(&self, observation: Tensor) -> Result<Tensor> {
+        assert!(
+            observation.rank() == 1,
+            "Observation should be a flattened tensor"
+        );
+        let observation = observation.unsqueeze(0)?;
         let mu = self
             .mu_net
             .forward(&observation.unsqueeze(0)?)?
@@ -90,12 +97,11 @@ impl Distribution for DiagGaussianDistribution {
         let std = self.log_std.exp()?.unsqueeze(0)?;
         let noise = Tensor::randn(0f32, 1., self.log_std.shape(), self.log_std.device())?;
         let action = (mu + std.mul(&noise.unsqueeze(0)?)?)?.squeeze(0)?.detach();
-        let logp = self.log_probs(observation, &action.unsqueeze(0)?)?.detach();
-        Ok((action, logp))
+        Ok(action)
     }
 
-    fn log_probs(&self, states: &Tensor, actions: &Tensor) -> Result<Tensor> {
-        let mu = self.mu_net.forward(states)?;
+    fn log_probs(&self, states: Tensor, actions: Tensor) -> Result<Tensor> {
+        let mu = self.mu_net.forward(&states)?;
         let std = self.log_std.exp()?.broadcast_as(mu.shape())?;
         let var = std.sqr()?;
         let log_sqrt_2pi = f32::ln(f32::sqrt(2f32 * f32::consts::PI));
