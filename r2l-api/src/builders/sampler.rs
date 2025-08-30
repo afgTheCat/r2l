@@ -134,7 +134,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
                     let (command_tx, command_rx) =
                         crossbeam::channel::unbounded::<VariableSizedWorkerCommand<EB::Env>>();
                     let (result_tx, result_rx) =
-                        crossbeam::channel::unbounded::<VariableSizedWorkerResult>();
+                        crossbeam::channel::unbounded::<VariableSizedWorkerResult<EB::Env>>();
                     channels.insert(id, (command_tx, result_rx));
                     let device_cloned = device.clone();
                     let eb_cloned = builder.clone();
@@ -150,7 +150,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
                     let (command_tx, command_rx) =
                         crossbeam::channel::unbounded::<VariableSizedWorkerCommand<EB::Env>>();
                     let (result_tx, result_rx) =
-                        crossbeam::channel::unbounded::<VariableSizedWorkerResult>();
+                        crossbeam::channel::unbounded::<VariableSizedWorkerResult<EB::Env>>();
                     channels.insert(id, (command_tx, result_rx));
                     let device_cloned = device.clone();
                     let eb_cloned = builder.clone();

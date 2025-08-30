@@ -273,10 +273,10 @@ pub enum VariableSizedWorkerCommand<E: Env> {
     GetEnvDescription,
 }
 
-pub enum VariableSizedWorkerResult {
+pub enum VariableSizedWorkerResult<E: Env> {
     StepMultipleWithStepBoundOk,
     RolloutBuffer {
-        buffer: RolloutBuffer<Tensor>,
+        buffer: RolloutBuffer<E::Tensor>,
     },
     EnvDescription {
         env_description: EnvironmentDescription,
@@ -284,14 +284,14 @@ pub enum VariableSizedWorkerResult {
 }
 
 pub struct VariableSizedWorkerThread<E: Env<Tensor = Buffer>> {
-    tx: Sender<VariableSizedWorkerResult>,
+    tx: Sender<VariableSizedWorkerResult<E>>,
     rx: Receiver<VariableSizedWorkerCommand<E>>,
     buffer: VariableSizedTrajectoryBuffer<E>,
 }
 
 impl<E: Env<Tensor = Buffer>> VariableSizedWorkerThread<E> {
     pub fn new(
-        tx: Sender<VariableSizedWorkerResult>,
+        tx: Sender<VariableSizedWorkerResult<E>>,
         rx: Receiver<VariableSizedWorkerCommand<E>>,
         env: E,
     ) -> Self {
@@ -337,7 +337,7 @@ pub struct VariableSizedThreadEnvPool<E: Env> {
         usize,
         (
             Sender<VariableSizedWorkerCommand<E>>,
-            Receiver<VariableSizedWorkerResult>,
+            Receiver<VariableSizedWorkerResult<E>>,
         ),
     >,
     _env: PhantomData<E>,
@@ -349,7 +349,7 @@ impl<E: Env> VariableSizedThreadEnvPool<E> {
             usize,
             (
                 Sender<VariableSizedWorkerCommand<E>>,
-                Receiver<VariableSizedWorkerResult>,
+                Receiver<VariableSizedWorkerResult<E>>,
             ),
         >,
     ) -> Self {
@@ -378,7 +378,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedThreadEnvPoo
         self.channels.len()
     }
 
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>> {
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<E::Tensor>> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;

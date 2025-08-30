@@ -18,13 +18,13 @@ use std::{fmt::Debug, marker::PhantomData};
 
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
 // Arc::RwLock for the underlying distribution.
-struct DistributionWrapper<'a, D: Distribution, E: Env> {
+pub struct DistributionWrapper<'a, D: Distribution, E: Env> {
     distribution: &'a D,
     env: PhantomData<E>,
 }
 
 impl<'a, D: Distribution, E: Env> DistributionWrapper<'a, D, E> {
-    fn new(distribution: &'a D) -> Self {
+    pub fn new(distribution: &'a D) -> Self {
         Self {
             distribution,
             env: PhantomData,
@@ -118,7 +118,7 @@ impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {
         distr: &D,
     ) -> Result<Vec<RolloutBuffer<Tensor>>> {
         let distr: DistributionWrapper<D, E> = DistributionWrapper::new(distr);
-        match &mut self.collection_type {
+        let rb = match &mut self.collection_type {
             CollectionType::StepBound { env_pool, hooks } => {
                 if let Some(hooks) = hooks {
                     let mut steps_taken = 0;
@@ -131,16 +131,13 @@ impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {
                 } else {
                     env_pool.step(&distr, self.env_steps);
                 }
-                Ok(env_pool
-                    .to_rollout_buffers()
-                    .into_iter()
-                    .map(|rb| rb.convert())
-                    .collect())
+                env_pool.to_rollout_buffers()
             }
             CollectionType::EpisodeBound { env_pool } => {
                 env_pool.step_with_episode_bound(&distr, self.env_steps);
-                Ok(env_pool.to_rollout_buffers())
+                env_pool.to_rollout_buffers()
             }
-        }
+        };
+        Ok(rb.into_iter().map(|rb| rb.convert()).collect())
     }
 }

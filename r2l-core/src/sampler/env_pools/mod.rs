@@ -14,7 +14,6 @@ use crate::{
     },
     utils::rollout_buffer::RolloutBuffer,
 };
-use candle_core::Tensor;
 
 pub trait FixedSizeEnvPool {
     type Env: Env<Tensor = Buffer>;
@@ -104,7 +103,7 @@ pub trait VariableSizedEnvPool {
     fn num_envs(&self) -> usize;
 
     // TODO: should be removed once we have a trait for the trajectory buffers
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>>;
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<<Self::Env as Env>::Tensor>>;
 
     fn step_with_episode_bound<D: Distribution<Tensor = <Self::Env as Env>::Tensor>>(
         &mut self,
@@ -137,7 +136,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedEnvPoolKind<
         }
     }
 
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>> {
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<E::Tensor>> {
         match self {
             Self::VariableSizedVecEnvPool(pool) => pool.to_rollout_buffers(),
             Self::VariableSizedThreadEnvPool(pool) => pool.to_rollout_buffers(),

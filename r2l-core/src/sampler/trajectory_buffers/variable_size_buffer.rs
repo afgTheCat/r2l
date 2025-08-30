@@ -16,20 +16,10 @@ pub struct VariableSizedStateBuffer<E: Env> {
 }
 
 impl<E: Env> VariableSizedStateBuffer<E> {
-    fn to_rollout_buffer<D: Clone>(&mut self) -> RolloutBuffer<D>
-    where
-        E::Tensor: From<D>,
-        E::Tensor: Into<D>,
-    {
+    fn to_rollout_buffer(&mut self) -> RolloutBuffer<E::Tensor> {
         let mut rb = RolloutBuffer::default();
-        rb.states = std::mem::take(&mut self.states)
-            .into_iter()
-            .map(|b| b.into())
-            .collect();
-        rb.actions = std::mem::take(&mut self.action)
-            .into_iter()
-            .map(|b| b.into())
-            .collect();
+        rb.states = std::mem::take(&mut self.states);
+        rb.actions = std::mem::take(&mut self.action);
         rb.rewards = std::mem::take(&mut self.rewards);
         rb.dones = std::mem::take(&mut self.terminated)
             .into_iter()
@@ -37,7 +27,7 @@ impl<E: Env> VariableSizedStateBuffer<E> {
             .map(|(terminated, trancuated)| terminated || trancuated)
             .collect();
         let mut next_states = std::mem::take(&mut self.next_states);
-        let last_state = next_states.pop().map(|b| b.into()).unwrap();
+        let last_state = next_states.pop().unwrap();
         rb.states.push(last_state.clone());
         rb
     }
@@ -99,11 +89,7 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
         }
     }
 
-    pub fn step<DT: Clone, D: Distribution<Tensor = DT> + ?Sized>(&mut self, distr: &D)
-    where
-        E::Tensor: From<DT>,
-        E::Tensor: Into<DT>,
-    {
+    pub fn step<D: Distribution<Tensor = E::Tensor> + ?Sized>(&mut self, distr: &D) {
         let buffer = &mut self.buffer;
         let state = if let Some(obs) = buffer.next_states.last() {
             obs.clone()
@@ -137,14 +123,11 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
         );
     }
 
-    pub fn step_with_epiosde_bound<DT: Clone, D: Distribution<Tensor = DT> + ?Sized>(
+    pub fn step_with_epiosde_bound<D: Distribution<Tensor = E::Tensor> + ?Sized>(
         &mut self,
         distr: &D,
         n_steps: usize,
-    ) where
-        E::Tensor: From<DT>,
-        E::Tensor: Into<DT>,
-    {
+    ) {
         let mut steps_taken = 0;
         loop {
             self.step(distr);
@@ -155,14 +138,11 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
         }
     }
 
-    pub fn run_episodes<DT: Clone, D: Distribution<Tensor = DT> + ?Sized>(
+    pub fn run_episodes<D: Distribution<Tensor = E::Tensor> + ?Sized>(
         &mut self,
         distr: &D,
         episodes: usize,
-    ) where
-        E::Tensor: From<DT>,
-        E::Tensor: Into<DT>,
-    {
+    ) {
         let mut ep_count = 0;
         while ep_count < episodes {
             self.step(distr);
@@ -172,11 +152,7 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
         }
     }
 
-    pub fn to_rollout_buffer<D: Clone>(&mut self) -> RolloutBuffer<D>
-    where
-        E::Tensor: From<D>,
-        E::Tensor: Into<D>,
-    {
+    pub fn to_rollout_buffer(&mut self) -> RolloutBuffer<E::Tensor> {
         if !self.buffer.last_state_terminates() {
             let last_state = self.buffer.next_states.last().cloned();
             self.last_state = last_state;
