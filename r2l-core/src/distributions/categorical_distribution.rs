@@ -93,7 +93,6 @@ impl Distribution for CategoricalDistribution {
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
         let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
-        // let logp = self.log_probs(observation, action.unsqueeze(0)?)?.detach();
         Ok(action)
     }
 
