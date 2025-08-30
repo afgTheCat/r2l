@@ -11,7 +11,7 @@ use std::{f32, fmt::Debug};
 // The phylosophy behind this should be that distributions are stateless, therfore cloenable and
 // 'static and self contained. Will see if we can stick to this, but it is the agent that has the
 // liberty to not be stateless and such
-pub trait Distribution: Sync + Debug + 'static {
+pub trait Distribution: Sync + Debug {
     type Tensor;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;

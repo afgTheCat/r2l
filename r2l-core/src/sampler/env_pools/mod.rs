@@ -15,50 +15,6 @@ use crate::{
     utils::rollout_buffer::RolloutBuffer,
 };
 use candle_core::Tensor;
-use std::{fmt::Debug, marker::PhantomData};
-
-// wraps a distribution and auto converts
-struct DistributionWrapper<'a, D: Distribution, E: Env> {
-    distribution: &'a D,
-    env: PhantomData<E>,
-}
-
-// SAFETY: This can be safely shared between threads as the env is just a PhantomData
-unsafe impl<'a, D: Distribution, E: Env> Sync for DistributionWrapper<'a, D, E> {}
-
-impl<'a, D: Distribution, E: Env> Debug for DistributionWrapper<'a, D, E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
-// impl<'a, D: Distribution, E: Env> Distribution for DistributionWrapper<'a, D, E>
-// where
-//     E::Tensor: From<D::Tensor>,
-//     E::Tensor: Into<D::Tensor>,
-// {
-//     type Tensor = E::Tensor;
-//
-//     fn std(&self) -> Result<f32> {
-//         todo!()
-//     }
-//
-//     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-//         todo!()
-//     }
-//
-//     fn log_probs(&self, states: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
-//         todo!()
-//     }
-//
-//     fn entropy(&self) -> Result<Self::Tensor> {
-//         todo!()
-//     }
-//
-//     fn resample_noise(&mut self) -> candle_core::Result<()> {
-//         todo!()
-//     }
-// }
 
 pub trait FixedSizeEnvPool {
     type Env: Env<Tensor = Buffer>;
@@ -67,10 +23,14 @@ pub trait FixedSizeEnvPool {
     fn num_envs(&self) -> usize;
 
     /// Take `steps` amount of steps using `distr`
-    fn step<D: Distribution<Tensor = Tensor>>(&mut self, distr: &D, steps: usize);
+    fn step<D: Distribution<Tensor = <Self::Env as Env>::Tensor>>(
+        &mut self,
+        distr: &D,
+        steps: usize,
+    );
 
     /// Take one step and transfer `FixedSizeStateBuffer`
-    fn step_take_buffers<D: Distribution<Tensor = Tensor>>(
+    fn step_take_buffers<D: Distribution<Tensor = <Self::Env as Env>::Tensor>>(
         &mut self,
         distr: &D,
     ) -> Vec<FixedSizeStateBuffer<Self::Env>>;
@@ -109,7 +69,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
         }
     }
 
-    fn step<D: Distribution<Tensor = Tensor>>(&mut self, distr: &D, steps: usize) {
+    fn step<D: Distribution<Tensor = E::Tensor>>(&mut self, distr: &D, steps: usize) {
         match self {
             Self::FixedSizeVecEnvPool(pool) => pool.step(distr, steps),
             Self::FixedSizeThreadEnvPool(pool) => pool.step(distr, steps),
@@ -127,7 +87,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
         }
     }
 
-    fn step_take_buffers<D: Distribution<Tensor = Tensor>>(
+    fn step_take_buffers<D: Distribution<Tensor = E::Tensor>>(
         &mut self,
         distr: &D,
     ) -> Vec<FixedSizeStateBuffer<Self::Env>> {
@@ -153,7 +113,7 @@ pub trait VariableSizedEnvPool {
     // TODO: should be removed once we have a trait for the trajectory buffers
     fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<Tensor>>;
 
-    fn step_with_episode_bound<D: Distribution<Tensor = Tensor>>(
+    fn step_with_episode_bound<D: Distribution<Tensor = <Self::Env as Env>::Tensor>>(
         &mut self,
         distr: &D,
         steps: usize,
@@ -191,7 +151,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedEnvPoolKind<
         }
     }
 
-    fn step_with_episode_bound<D: Distribution<Tensor = Tensor>>(
+    fn step_with_episode_bound<D: Distribution<Tensor = E::Tensor>>(
         &mut self,
         distr: &D,
         steps: usize,

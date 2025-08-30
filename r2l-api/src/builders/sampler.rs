@@ -132,7 +132,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
             Self::EnvBuilder { builder, n_envs } => {
                 for id in 0..*n_envs {
                     let (command_tx, command_rx) =
-                        crossbeam::channel::unbounded::<VariableSizedWorkerCommand>();
+                        crossbeam::channel::unbounded::<VariableSizedWorkerCommand<EB::Env>>();
                     let (result_tx, result_rx) =
                         crossbeam::channel::unbounded::<VariableSizedWorkerResult>();
                     channels.insert(id, (command_tx, result_rx));
@@ -148,7 +148,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
             Self::EnvBuilderVec { builders } => {
                 for (id, builder) in builders.iter().enumerate() {
                     let (command_tx, command_rx) =
-                        crossbeam::channel::unbounded::<VariableSizedWorkerCommand>();
+                        crossbeam::channel::unbounded::<VariableSizedWorkerCommand<EB::Env>>();
                     let (result_tx, result_rx) =
                         crossbeam::channel::unbounded::<VariableSizedWorkerResult>();
                     channels.insert(id, (command_tx, result_rx));

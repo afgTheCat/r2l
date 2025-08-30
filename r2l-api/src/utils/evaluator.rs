@@ -38,7 +38,7 @@ impl<E: Env<Tensor = Buffer>> Evaluator<E> {
 
     pub fn evaluate(
         &mut self,
-        dist: &dyn Distribution<Tensor = Tensor>,
+        dist: &dyn Distribution<Tensor = E::Tensor>,
         n_envs: usize,
     ) -> Result<()> {
         if self.eval_step < self.eval_freq {

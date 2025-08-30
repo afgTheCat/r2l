@@ -30,13 +30,13 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
         self.buffers.len()
     }
 
-    fn step<D: Distribution<Tensor = Tensor>>(&mut self, distr: &D, steps: usize) {
+    fn step<D: Distribution<Tensor = E::Tensor>>(&mut self, distr: &D, steps: usize) {
         for buf in self.buffers.iter_mut() {
             buf.step_n(distr, steps);
         }
     }
 
-    fn step_take_buffers<D: Distribution<Tensor = Tensor>>(
+    fn step_take_buffers<D: Distribution<Tensor = E::Tensor>>(
         &mut self,
         distr: &D,
     ) -> Vec<FixedSizeStateBuffer<Self::Env>> {
@@ -83,7 +83,7 @@ impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedVecEnvPool<E
             .collect()
     }
 
-    fn step_with_episode_bound<D: Distribution<Tensor = Tensor>>(
+    fn step_with_episode_bound<D: Distribution<Tensor = E::Tensor>>(
         &mut self,
         distr: &D,
         steps: usize,
