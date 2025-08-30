@@ -13,7 +13,6 @@ use r2l_core::{
     ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     numeric::Buffer,
     sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
-    utils::rollout_buffer::RolloutBuffer,
 };
 use r2l_gym::GymEnv;
 use std::io::BufReader;

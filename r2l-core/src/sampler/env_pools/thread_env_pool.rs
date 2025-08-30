@@ -229,11 +229,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
         buffs
     }
 
-    fn to_rollout_buffers<D: Clone>(&mut self) -> Vec<RolloutBuffer<D>>
-    where
-        <Self::Env as Env>::Tensor: From<D>,
-        <Self::Env as Env>::Tensor: Into<D>,
-    {
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<E::Tensor>> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
@@ -244,23 +240,8 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
         for idx in 0..num_envs {
             let rx = &self.channels.get(&idx).unwrap().1;
             // TODO: this is ugly, implement the Into trait wherever we can
-            let FixedSizeWorkerResult::RolloutBuffer {
-                buffer:
-                    RolloutBuffer {
-                        states,
-                        actions,
-                        rewards,
-                        dones,
-                    },
-            } = rx.recv().unwrap()
-            else {
+            let FixedSizeWorkerResult::RolloutBuffer { buffer } = rx.recv().unwrap() else {
                 panic!()
-            };
-            let buffer: RolloutBuffer<D> = RolloutBuffer {
-                states: states.into_iter().map(|b| b.into()).collect(),
-                actions: actions.into_iter().map(|b| b.into()).collect(),
-                rewards,
-                dones,
             };
             buffs.push(buffer.into());
         }

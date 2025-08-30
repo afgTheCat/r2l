@@ -39,10 +39,7 @@ pub trait FixedSizeEnvPool {
     fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<Self::Env>>);
 
     // TODO: probably don't really need this in the future
-    fn to_rollout_buffers<D: Clone>(&mut self) -> Vec<RolloutBuffer<D>>
-    where
-        <Self::Env as Env>::Tensor: From<D>,
-        <Self::Env as Env>::Tensor: Into<D>;
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<<Self::Env as Env>::Tensor>>;
 }
 
 pub enum FixedSizeEnvPoolKind<E: Env> {
@@ -76,11 +73,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
         }
     }
 
-    fn to_rollout_buffers<D: Clone>(&mut self) -> Vec<RolloutBuffer<D>>
-    where
-        <Self::Env as Env>::Tensor: From<D>,
-        <Self::Env as Env>::Tensor: Into<D>,
-    {
+    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<E::Tensor>> {
         match self {
             Self::FixedSizeVecEnvPool(pool) => pool.to_rollout_buffers(),
             Self::FixedSizeThreadEnvPool(pool) => pool.to_rollout_buffers(),

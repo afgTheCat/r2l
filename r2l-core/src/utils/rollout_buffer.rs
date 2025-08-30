@@ -11,6 +11,26 @@ pub struct RolloutBuffer<T: Clone> {
     pub dones: Vec<bool>,
 }
 
+impl<T: Clone> RolloutBuffer<T> {
+    pub fn convert<U: Clone>(self) -> RolloutBuffer<U>
+    where
+        T: Into<U>,
+    {
+        let RolloutBuffer {
+            states,
+            actions,
+            rewards,
+            dones,
+        } = self;
+        RolloutBuffer {
+            states: states.into_iter().map(|s| s.into()).collect(),
+            actions: actions.into_iter().map(|s| s.into()).collect(),
+            rewards,
+            dones,
+        }
+    }
+}
+
 impl<T: Clone> Default for RolloutBuffer<T> {
     fn default() -> Self {
         Self {

@@ -131,7 +131,11 @@ impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {
                 } else {
                     env_pool.step(&distr, self.env_steps);
                 }
-                Ok(env_pool.to_rollout_buffers())
+                Ok(env_pool
+                    .to_rollout_buffers()
+                    .into_iter()
+                    .map(|rb| rb.convert())
+                    .collect())
             }
             CollectionType::EpisodeBound { env_pool } => {
                 env_pool.step_with_episode_bound(&distr, self.env_steps);

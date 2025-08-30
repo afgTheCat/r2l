@@ -1,9 +1,11 @@
 use crate::{
     distributions::Distribution,
     env::{Env, SnapShot},
+    numeric::Buffer,
     rng::RNG,
     utils::rollout_buffer::RolloutBuffer,
 };
+use candle_core::{Device, Tensor};
 use crossbeam::channel::{Receiver, RecvError};
 use rand::Rng;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
