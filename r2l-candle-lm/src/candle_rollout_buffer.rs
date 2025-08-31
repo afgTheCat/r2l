@@ -31,7 +31,7 @@ impl Encode for CandleRolloutBuffer {
             .map(|t| t.to_vec1::<f32>())
             .collect::<Result<Vec<_>>>()
             .map_err(|err| EncodeError::OtherString(err.to_string()))?;
-        bincode::encode_into_writer(&states, &mut encoder.writer(), writer_config)?;
+        bincode::encode_into_writer(&states, encoder.writer(), writer_config)?;
         let actions = self
             .0
             .actions
@@ -39,9 +39,9 @@ impl Encode for CandleRolloutBuffer {
             .map(|t| t.to_vec1::<f32>())
             .collect::<Result<Vec<_>>>()
             .map_err(|err| EncodeError::OtherString(err.to_string()))?;
-        bincode::encode_into_writer(&actions, &mut encoder.writer(), writer_config)?;
-        bincode::encode_into_writer(&self.0.rewards, &mut encoder.writer(), writer_config)?;
-        bincode::encode_into_writer(&self.0.dones, &mut encoder.writer(), writer_config)?;
+        bincode::encode_into_writer(&actions, encoder.writer(), writer_config)?;
+        bincode::encode_into_writer(&self.0.rewards, encoder.writer(), writer_config)?;
+        bincode::encode_into_writer(&self.0.dones, encoder.writer(), writer_config)?;
         Ok(())
     }
 }

@@ -178,7 +178,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
     ) -> Result<()> {
         loop {
             let mut batch_iter = RolloutBatchIterator::new(
-                &rollouts,
+                rollouts,
                 advantages,
                 returns,
                 logps,
@@ -188,7 +188,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
             self.batching_loop(&mut batch_iter)?;
             let rollout_hook_res =
                 self.hooks
-                    .rollout_hook(&mut self.learning_module, &self.distribution, &rollouts);
+                    .rollout_hook(&mut self.learning_module, &self.distribution, rollouts);
             process_hook_result!(rollout_hook_res);
         }
     }
@@ -204,7 +204,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for PPO<D, L
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
         let mut rollouts: Vec<CandleRolloutBuffer> = rollouts
             .into_iter()
-            .map(|rb| CandleRolloutBuffer::from(rb))
+            .map(CandleRolloutBuffer::from)
             .collect();
 
         let (mut advantages, mut returns) = calculate_advantages_and_returns(

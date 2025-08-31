@@ -28,7 +28,7 @@ impl Encode for DiagGaussianDistribution {
         let data = [("noise", &self.noise), ("log_std", &self.log_std)];
         bincode::encode_into_writer(
             serialize(data, &None).map_err(|err| EncodeError::OtherString(err.to_string()))?,
-            &mut encoder.writer(),
+            encoder.writer(),
             writer_config,
         )
     }

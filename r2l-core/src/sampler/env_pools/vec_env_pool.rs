@@ -73,7 +73,7 @@ impl<E: Env> VariableSizedEnvPool for VariableSizedVecEnvPool<E> {
     fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<E::Tensor>> {
         self.buffers
             .iter_mut()
-            .map(|buff| buff.to_rollout_buffer())
+            .map(|buff| buff.take_rollout_buffer())
             .collect()
     }
 

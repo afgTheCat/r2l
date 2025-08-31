@@ -29,7 +29,7 @@ pub enum LearningSchedule {
 impl LearningSchedule {
     pub fn total_step_bound(total_steps: usize) -> Self {
         Self::TotalStepBound {
-            total_steps: total_steps,
+            total_steps,
             current_step: 0,
         }
     }

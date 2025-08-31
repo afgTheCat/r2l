@@ -52,15 +52,15 @@ impl From<String> for RolloutType {
 
 #[derive(Parser, Debug, Clone)]
 enum DeviceType {
-    CPU,
-    CUDA,
+    Cpu,
+    Cuda,
 }
 
 impl From<String> for DeviceType {
     fn from(value: String) -> Self {
         match value.as_str() {
-            "cpu" => Self::CPU,
-            "cuda" => Self::CUDA,
+            "cpu" => Self::Cpu,
+            "cuda" => Self::Cuda,
             _ => unreachable!(),
         }
     }

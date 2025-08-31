@@ -35,7 +35,7 @@ impl<'a, D: Distribution, E: Env> DistributionWrapper<'a, D, E> {
 unsafe impl<'a, D: Distribution, E: Env> Sync for DistributionWrapper<'a, D, E> {}
 
 impl<'a, D: Distribution, E: Env> Debug for DistributionWrapper<'a, D, E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }

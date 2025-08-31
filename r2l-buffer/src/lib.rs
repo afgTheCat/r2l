@@ -14,7 +14,7 @@ pub enum DType {
 }
 
 impl DType {
-    fn to_candle_dtype(&self) -> CandleDType {
+    pub fn to_candle_dtype(&self) -> CandleDType {
         match self {
             DType::U8 => CandleDType::U8,
             DType::U32 => CandleDType::U32,
@@ -26,7 +26,7 @@ impl DType {
         }
     }
 
-    fn from_candle_dtype(dtype: CandleDType) -> DType {
+    pub fn from_candle_dtype(dtype: CandleDType) -> DType {
         match dtype {
             CandleDType::U8 => DType::U8,
             CandleDType::U32 => DType::U32,
@@ -49,9 +49,9 @@ pub struct Buffer<T: WithDType = f32> {
     pub dtype: DType,
 }
 
-impl Into<CandleTensor> for Buffer {
-    fn into(self) -> CandleTensor {
-        self.to_candle_tensor(&Device::Cpu)
+impl From<Buffer> for CandleTensor {
+    fn from(val: Buffer) -> Self {
+        val.to_candle_tensor(&Device::Cpu)
     }
 }
 
@@ -72,8 +72,8 @@ impl<T: WithDType> Buffer<T> {
     }
 
     pub fn to_candle_tensor(&self, device: &Device) -> CandleTensor {
-        let Buffer { data, shape, dtype } = self.clone();
-        CandleTensor::from_vec(data, shape, &device).unwrap()
+        let Buffer { data, shape, .. } = self.clone();
+        CandleTensor::from_vec(data, shape, device).unwrap()
     }
 
     // TODO: burn tensor

@@ -65,7 +65,7 @@ impl<E: Env> FixedSizeStateBuffer<E> {
     }
 
     // TODO: verify if this works, alternatevly there is the old method commented out below
-    fn to_rollout_buffers2(&mut self) -> RolloutBuffer<E::Tensor> {
+    fn take_rollout_buffers2(&mut self) -> RolloutBuffer<E::Tensor> {
         let mut rb = RolloutBuffer::default();
         for idx in 0..self.capacity {
             let next_state = self.next_states.dequeue().unwrap();
@@ -118,26 +118,19 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             self.env.reset(seed).unwrap()
         };
-        let action = distr.get_action(state.clone().into()).unwrap();
+        let action = distr.get_action(state.clone()).unwrap();
         let SnapShot {
             state: mut next_state,
             reward,
             terminated,
             trancuated,
-        } = self.env.step(action.clone().into()).unwrap();
+        } = self.env.step(action.clone()).unwrap();
         let done = terminated || trancuated;
         if done {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             next_state = self.env.reset(seed).unwrap();
         }
-        buffer.push(
-            state,
-            next_state,
-            action.into(),
-            reward,
-            terminated,
-            trancuated,
-        );
+        buffer.push(state, next_state, action, reward, terminated, trancuated);
     }
 
     pub fn step_n<D: Distribution<Tensor = E::Tensor> + ?Sized>(
@@ -166,7 +159,7 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
             let last_state = buffer.next_states.back().cloned();
             self.last_state = last_state;
         }
-        buffer.to_rollout_buffers2()
+        buffer.take_rollout_buffers2()
     }
 
     pub fn set_buffer(&mut self, buffer: FixedSizeStateBuffer<E>) {

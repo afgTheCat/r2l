@@ -16,20 +16,24 @@ pub struct VariableSizedStateBuffer<E: Env> {
 }
 
 impl<E: Env> VariableSizedStateBuffer<E> {
-    fn to_rollout_buffer(&mut self) -> RolloutBuffer<E::Tensor> {
-        let mut rb = RolloutBuffer::default();
-        rb.states = std::mem::take(&mut self.states);
-        rb.actions = std::mem::take(&mut self.action);
-        rb.rewards = std::mem::take(&mut self.rewards);
-        rb.dones = std::mem::take(&mut self.terminated)
+    fn take_rollout_buffer(&mut self) -> RolloutBuffer<E::Tensor> {
+        let mut states = std::mem::take(&mut self.states);
+        let actions = std::mem::take(&mut self.action);
+        let rewards = std::mem::take(&mut self.rewards);
+        let dones = std::mem::take(&mut self.terminated)
             .into_iter()
             .zip(std::mem::take(&mut self.trancuated))
             .map(|(terminated, trancuated)| terminated || trancuated)
             .collect();
         let mut next_states = std::mem::take(&mut self.next_states);
         let last_state = next_states.pop().unwrap();
-        rb.states.push(last_state.clone());
-        rb
+        states.push(last_state.clone());
+        RolloutBuffer {
+            states,
+            actions,
+            rewards,
+            dones,
+        }
     }
 }
 
@@ -99,26 +103,19 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             self.env.reset(seed).unwrap()
         };
-        let action = distr.get_action(state.clone().into()).unwrap();
+        let action = distr.get_action(state.clone()).unwrap();
         let SnapShot {
             state: mut next_state,
             reward,
             terminated,
             trancuated,
-        } = self.env.step(action.clone().into()).unwrap();
+        } = self.env.step(action.clone()).unwrap();
         let done = terminated || trancuated;
         if done {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             next_state = self.env.reset(seed).unwrap();
         }
-        buffer.push(
-            state,
-            next_state,
-            action.into(),
-            reward,
-            terminated,
-            trancuated,
-        );
+        buffer.push(state, next_state, action, reward, terminated, trancuated);
     }
 
     pub fn step_with_epiosde_bound<D: Distribution<Tensor = E::Tensor> + ?Sized>(
@@ -150,11 +147,11 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
         }
     }
 
-    pub fn to_rollout_buffer(&mut self) -> RolloutBuffer<E::Tensor> {
+    pub fn take_rollout_buffer(&mut self) -> RolloutBuffer<E::Tensor> {
         if !self.buffer.last_state_terminates() {
             let last_state = self.buffer.next_states.last().cloned();
             self.last_state = last_state;
         }
-        self.buffer.to_rollout_buffer()
+        self.buffer.take_rollout_buffer()
     }
 }
