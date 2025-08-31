@@ -100,7 +100,7 @@ impl<E: Env> SequntialStepBoundHooks<E> for Evaluator<E> {
 impl<E: Env<Tensor = Buffer>> SequntialStepBoundHooks<E> for EnvNormalizer {
     fn process_last_step(
         &mut self,
-        distr: &dyn Distribution<Tensor = E::Tensor>,
+        _distr: &dyn Distribution<Tensor = E::Tensor>,
         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
     ) {
         self.normalize_buffers(buffers, &Device::Cpu).unwrap()

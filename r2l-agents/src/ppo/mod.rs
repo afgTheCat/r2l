@@ -79,32 +79,32 @@ pub struct EmptyPPO3Hooks;
 impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3Hooks {
     fn before_learning_hook(
         &mut self,
-        learning_module: &mut LM,
-        distribution: &D,
-        rollout_buffers: &mut Vec<CandleRolloutBuffer>,
-        advantages: &mut Advantages,
-        returns: &mut Returns,
+        _learning_module: &mut LM,
+        _distribution: &D,
+        _rollout_buffers: &mut Vec<CandleRolloutBuffer>,
+        _advantages: &mut Advantages,
+        _returns: &mut Returns,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
     fn rollout_hook(
         &mut self,
-        learning_module: &mut LM,
-        distribution: &D,
-        rollout_buffers: &Vec<CandleRolloutBuffer>,
+        _learning_module: &mut LM,
+        _distribution: &D,
+        _rollout_buffers: &Vec<CandleRolloutBuffer>,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Break)
     }
 
     fn batch_hook(
         &mut self,
-        learning_module: &mut LM,
-        distribution: &D,
-        rollout_batch: &RolloutBatch,
-        policy_loss: &mut PolicyLoss,
-        value_loss: &mut ValueLoss,
-        data: &PPOBatchData,
+        _learning_module: &mut LM,
+        _distribution: &D,
+        _rollout_batch: &RolloutBatch,
+        _policy_loss: &mut PolicyLoss,
+        _value_loss: &mut ValueLoss,
+        _data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Continue)
     }

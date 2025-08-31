@@ -10,11 +10,7 @@ use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
 use r2l_core::on_policy_algorithm::{
     DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
 };
-use r2l_core::{
-    Algorithm,
-    distributions::Distribution,
-    utils::rollout_buffer::{Advantages, RolloutBuffer},
-};
+use r2l_core::{Algorithm, distributions::Distribution, utils::rollout_buffer::Advantages};
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::{any::Any, f64};

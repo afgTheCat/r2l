@@ -8,7 +8,6 @@ license.workspace = true
 readme = "README.md"
 
 [dependencies]
-# candle-nn = { workspace = true }
 r2l-macros = { workspace = true }
 rand = { workspace = true }
 interprocess = "2.2.3" 
