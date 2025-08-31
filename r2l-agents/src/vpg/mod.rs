@@ -2,6 +2,9 @@ use crate::ppo::PPOLearningModule;
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use r2l_candle_lm::{
+    candle_rollout_buffer::{
+        CandleRolloutBuffer, RolloutBatch, RolloutBatchIterator, calculate_advantages_and_returns,
+    },
     learning_module::PolicyValuesLosses,
     tensors::{PolicyLoss, ValueLoss},
 };
@@ -9,9 +12,7 @@ use r2l_core::{
     agents::Agent,
     distributions::Distribution,
     policies::{LearningModule, ValueFunction},
-    utils::rollout_buffer::{
-        Logps, RolloutBatch, RolloutBatchIterator, RolloutBuffer, calculate_advantages_and_returns,
-    },
+    utils::rollout_buffer::{Logps, RolloutBuffer},
 };
 
 pub trait VPG3LearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
@@ -46,6 +47,10 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for VPG<D, L
     }
 
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
+        let rollouts: Vec<CandleRolloutBuffer> = rollouts
+            .into_iter()
+            .map(|rb| CandleRolloutBuffer::from(rb))
+            .collect();
         let (advantages, returns) = calculate_advantages_and_returns(
             &rollouts,
             &self.learning_module,
@@ -56,8 +61,9 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for VPG<D, L
             rollouts
                 .iter()
                 .map(|roll| {
-                    let states = Tensor::stack(&roll.states[0..roll.states.len() - 1], 0).unwrap();
-                    let actions = Tensor::stack(&roll.actions, 0).unwrap();
+                    let states =
+                        Tensor::stack(&roll.0.states[0..roll.0.states.len() - 1], 0).unwrap();
+                    let actions = Tensor::stack(&roll.0.actions, 0).unwrap();
                     self.distribution()
                         .log_probs(states, actions)
                         .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())

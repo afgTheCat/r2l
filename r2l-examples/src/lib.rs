@@ -3,6 +3,7 @@ use r2l_agents::ppo::PPP3HooksTrait;
 use r2l_agents::ppo::{HookResult, PPOBatchData};
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::builders::sampler::{EnvBuilderType, EnvPoolType, SamplerType};
+use r2l_candle_lm::candle_rollout_buffer::{CandleRolloutBuffer, RolloutBatch};
 use r2l_candle_lm::distributions::DistributionKind;
 use r2l_candle_lm::learning_module::LearningModuleKind;
 use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
@@ -79,7 +80,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         &mut self,
         _learning_module: &mut LearningModuleKind,
         _distribution: &DistributionKind,
-        rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
+        rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         advantages: &mut Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
     ) -> candle_core::Result<HookResult> {
@@ -87,8 +88,8 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         let mut total_rewards: f32 = 0.;
         let mut total_episodes: usize = 0;
         for rb in rollout_buffers {
-            total_rewards += rb.rewards.iter().sum::<f32>();
-            total_episodes += rb.dones.iter().filter(|x| **x).count();
+            total_rewards += rb.0.rewards.iter().sum::<f32>();
+            total_episodes += rb.0.dones.iter().filter(|x| **x).count();
         }
         advantages.normalize();
         let avarage_reward = total_rewards / total_episodes as f32;
@@ -102,7 +103,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         &mut self,
         learning_module: &mut LearningModuleKind,
         distribution: &DistributionKind,
-        _rollout_buffers: &Vec<RolloutBuffer<Tensor>>,
+        _rollout_buffers: &Vec<CandleRolloutBuffer>,
     ) -> candle_core::Result<HookResult> {
         self.current_epoch += 1;
         let should_stop = self.current_epoch == self.total_epochs;
@@ -123,7 +124,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         &mut self,
         _learning_module: &mut LearningModuleKind,
         distribution: &DistributionKind,
-        _rollout_batch: &r2l_core::utils::rollout_buffer::RolloutBatch,
+        _rollout_batch: &RolloutBatch,
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,

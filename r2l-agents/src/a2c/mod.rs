@@ -2,6 +2,9 @@ use crate::ppo::HookResult;
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use r2l_candle_lm::{
+    candle_rollout_buffer::{
+        CandleRolloutBuffer, RolloutBatchIterator, calculate_advantages_and_returns,
+    },
     learning_module::{LearningModuleKind, PolicyValuesLosses},
     tensors::{PolicyLoss, ValueLoss},
 };
@@ -9,10 +12,7 @@ use r2l_core::{
     agents::Agent,
     distributions::Distribution,
     policies::{LearningModule, ValueFunction},
-    utils::rollout_buffer::{
-        Advantages, Logps, Returns, RolloutBatchIterator, RolloutBuffer,
-        calculate_advantages_and_returns,
-    },
+    utils::rollout_buffer::{Advantages, Logps, Returns, RolloutBuffer},
 };
 
 macro_rules! process_hook_result {
@@ -35,7 +35,7 @@ pub trait A2CHooks<LM: A2CLearningModule> {
     fn before_learning_hook(
         &mut self,
         learning_module: &mut LM,
-        rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
+        rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         advantages: &mut Advantages,
         returns: &mut Returns,
     ) -> candle_core::Result<HookResult>;
@@ -48,7 +48,7 @@ impl<LM: A2CLearningModule> A2CHooks<LM> for DefaultA2CHooks {
     fn before_learning_hook(
         &mut self,
         _learning_module: &mut LM,
-        _rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
+        _rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         _advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> candle_core::Result<HookResult> {
@@ -93,7 +93,11 @@ impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> Agent for A2C<D, L
         &self.distribution
     }
 
-    fn learn(&mut self, mut rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
+        let mut rollouts: Vec<CandleRolloutBuffer> = rollouts
+            .into_iter()
+            .map(|rb| CandleRolloutBuffer::from(rb))
+            .collect();
         let (mut advantages, mut returns) = calculate_advantages_and_returns(
             &rollouts,
             &self.learning_module,
@@ -110,8 +114,9 @@ impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> Agent for A2C<D, L
             rollouts
                 .iter()
                 .map(|roll| {
-                    let states = Tensor::stack(&roll.states[0..roll.states.len() - 1], 0).unwrap();
-                    let actions = Tensor::stack(&roll.actions, 0).unwrap();
+                    let states =
+                        Tensor::stack(&roll.0.states[0..roll.0.states.len() - 1], 0).unwrap();
+                    let actions = Tensor::stack(&roll.0.actions, 0).unwrap();
                     self.distribution()
                         .log_probs(states, actions)
                         .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())

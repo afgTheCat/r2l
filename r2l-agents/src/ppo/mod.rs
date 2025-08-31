@@ -1,6 +1,9 @@
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use r2l_candle_lm::{
+    candle_rollout_buffer::{
+        CandleRolloutBuffer, RolloutBatch, RolloutBatchIterator, calculate_advantages_and_returns,
+    },
     learning_module::{LearningModuleKind, PolicyValuesLosses},
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
 };
@@ -8,10 +11,7 @@ use r2l_core::{
     agents::Agent,
     distributions::Distribution,
     policies::{LearningModule, ValueFunction},
-    utils::rollout_buffer::{
-        Advantages, Logps, Returns, RolloutBatch, RolloutBatchIterator, RolloutBuffer,
-        calculate_advantages_and_returns,
-    },
+    utils::rollout_buffer::{Advantages, Logps, Returns, RolloutBuffer},
 };
 use std::ops::Deref;
 
@@ -51,7 +51,7 @@ pub trait PPP3HooksTrait<D: Distribution, LM: PPOLearningModule> {
         &mut self,
         learning_module: &mut LM,
         distribution: &D,
-        rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
+        rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         advantages: &mut Advantages,
         returns: &mut Returns,
     ) -> candle_core::Result<HookResult>;
@@ -60,7 +60,7 @@ pub trait PPP3HooksTrait<D: Distribution, LM: PPOLearningModule> {
         &mut self,
         learning_module: &mut LM,
         distribution: &D,
-        rollout_buffers: &Vec<RolloutBuffer<Tensor>>,
+        rollout_buffers: &Vec<CandleRolloutBuffer>,
     ) -> candle_core::Result<HookResult>;
 
     fn batch_hook(
@@ -81,7 +81,7 @@ impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3
         &mut self,
         learning_module: &mut LM,
         distribution: &D,
-        rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
+        rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         advantages: &mut Advantages,
         returns: &mut Returns,
     ) -> candle_core::Result<HookResult> {
@@ -92,7 +92,7 @@ impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3
         &mut self,
         learning_module: &mut LM,
         distribution: &D,
-        rollout_buffers: &Vec<RolloutBuffer<Tensor>>,
+        rollout_buffers: &Vec<CandleRolloutBuffer>,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Break)
     }
@@ -171,7 +171,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
     // TODO: rename this to learning loop
     fn rollout_loop(
         &mut self,
-        rollouts: &Vec<RolloutBuffer<Tensor>>,
+        rollouts: &Vec<CandleRolloutBuffer>,
         advantages: &Advantages,
         returns: &Returns,
         logps: &Logps,
@@ -201,7 +201,12 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for PPO<D, L
         &self.distribution
     }
 
-    fn learn(&mut self, mut rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
+        let mut rollouts: Vec<CandleRolloutBuffer> = rollouts
+            .into_iter()
+            .map(|rb| CandleRolloutBuffer::from(rb))
+            .collect();
+
         let (mut advantages, mut returns) = calculate_advantages_and_returns(
             &rollouts,
             &self.learning_module,
@@ -219,8 +224,9 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for PPO<D, L
             rollouts
                 .iter()
                 .map(|roll| {
-                    let states = Tensor::stack(&roll.states[0..roll.states.len() - 1], 0).unwrap();
-                    let actions = Tensor::stack(&roll.actions, 0).unwrap();
+                    let states =
+                        Tensor::stack(&roll.0.states[0..roll.0.states.len() - 1], 0).unwrap();
+                    let actions = Tensor::stack(&roll.0.actions, 0).unwrap();
                     self.distribution()
                         .log_probs(states, actions)
                         .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())

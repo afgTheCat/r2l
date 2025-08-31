@@ -29,10 +29,6 @@ fn clip_grad(t: &Tensor, varmap: &VarMap, max_norm: f32) -> Result<GradStore> {
     Ok(grad_store)
 }
 
-pub trait ValueFunction {
-    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor>;
-}
-
 pub struct OptimizerWithMaxGrad {
     pub optimizer: AdamW,
     pub max_grad_norm: Option<f32>,

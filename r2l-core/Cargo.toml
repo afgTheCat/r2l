@@ -8,10 +8,9 @@ license.workspace = true
 readme = "README.md"
 
 [dependencies]
-candle-core = { workspace = true }
-candle-nn = { workspace = true }
+# candle-nn = { workspace = true }
 r2l-macros = { workspace = true }
-rand = "0.9.0"
+rand = { workspace = true }
 interprocess = "2.2.3" 
 rayon = "1.10.0"
 derive_more = { version = "2.0.1", features = ["full"] }
@@ -27,3 +26,4 @@ anyhow = { workspace = true }
 [dev-dependencies]
 r2l-api = { workspace = true }
 r2l-buffer = { workspace = true }
+candle-core = { workspace = true }

@@ -1,5 +1,6 @@
 // Eventually we want to load the environments as dynamic libraries via libloading or dlopen-rs
 // and supported gym env as well. Also we can experiment with fork/clone whatever on linux
+// TODO: This will need to be fixed, but this is probably v0.0.3
 
 use bincode::{Decode, Encode};
 use candle_core::{Device, Error, Result, Tensor};
@@ -11,7 +12,7 @@ use r2l_candle_lm::distributions::DistributionKind;
 use r2l_core::{
     distributions::Distribution,
     env::Env,
-    ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
+    // ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
 };
 use r2l_gym::GymEnv;
@@ -90,31 +91,32 @@ impl<E: Env> Rollout<E> {
     fn handle_packet<D: Distribution<Tensor = Tensor> + Decode<()> + Encode>(
         &mut self,
     ) -> Result<bool> {
-        let packet: PacketToReceive<D> = receive_packet(&mut self.conn);
-        match packet {
-            PacketToReceive::Halt => {
-                send_packet(&mut self.conn, PacketToSend::<D>::Halting);
-                Ok(false)
-            }
-            PacketToReceive::StartRollout {
-                distribution,
-                rollout_mode,
-            } => {
-                // FIXME: we should act as the sampler like we did the threads. This is not used
-                // currently but should be added in the future
-                //
-                // let distribution: DistributionWrapper<D, E> =
-                //     DistributionWrapper::new(&distribution);
-                // self.trajectory_buffer
-                //     .step_with_epiosde_bound(&distribution, 1024);
-                // let packet: PacketToSend<D> = PacketToSend::RolloutResult {
-                //     rollout: self.trajectory_buffer.to_rollout_buffer().convert(),
-                // };
-                // send_packet(&mut self.conn, packet);
-                Ok(true)
-            }
-            _ => unreachable!(),
-        }
+        Ok(false)
+        // let packet: PacketToReceive<D> = receive_packet(&mut self.conn);
+        // match packet {
+        //     PacketToReceive::Halt => {
+        //         send_packet(&mut self.conn, PacketToSend::<D>::Halting);
+        //         Ok(false)
+        //     }
+        //     PacketToReceive::StartRollout {
+        //         distribution,
+        //         rollout_mode,
+        //     } => {
+        //         // FIXME: we should act as the sampler like we did the threads. This is not used
+        //         // currently but should be added in the future
+        //         //
+        //         // let distribution: DistributionWrapper<D, E> =
+        //         //     DistributionWrapper::new(&distribution);
+        //         // self.trajectory_buffer
+        //         //     .step_with_epiosde_bound(&distribution, 1024);
+        //         // let packet: PacketToSend<D> = PacketToSend::RolloutResult {
+        //         //     rollout: self.trajectory_buffer.to_rollout_buffer().convert(),
+        //         // };
+        //         // send_packet(&mut self.conn, packet);
+        //         Ok(true)
+        //     }
+        //     _ => unreachable!(),
+        // }
     }
 }
 
@@ -148,7 +150,7 @@ mod test {
         GenericNamespaced, ListenerOptions, ToNsName, traits::ListenerExt,
     };
     use r2l_candle_lm::distributions::diagonal_distribution::DiagGaussianDistribution;
-    use r2l_core::ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet};
+    // use r2l_core::ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet};
     use r2l_gym::GymEnv;
     use std::io::BufReader;
 
@@ -183,8 +185,8 @@ mod test {
         let mut conn = BufReader::new(conn);
         let env = GymEnv::new(ENV_NAME, None);
 
-        send_packet(&mut conn, PacketToSend::<DiagGaussianDistribution>::Halt);
-        let packet: PacketToReceive<DiagGaussianDistribution> = receive_packet(&mut conn);
-        assert!(matches!(packet, PacketToReceive::Halting));
+        // send_packet(&mut conn, PacketToSend::<DiagGaussianDistribution>::Halt);
+        // let packet: PacketToReceive<DiagGaussianDistribution> = receive_packet(&mut conn);
+        // assert!(matches!(packet, PacketToReceive::Halting));
     }
 }
