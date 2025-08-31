@@ -1,7 +1,6 @@
 use crate::{
     distributions::Distribution,
     env::{Env, EnvironmentDescription},
-    numeric::Buffer,
     sampler::{
         env_pools::{FixedSizeEnvPool, VariableSizedEnvPool},
         trajectory_buffers::{
@@ -11,7 +10,6 @@ use crate::{
     },
     utils::rollout_buffer::RolloutBuffer,
 };
-use candle_core::Tensor;
 use crossbeam::channel::{Receiver, Sender};
 use std::{collections::HashMap, marker::PhantomData};
 
@@ -78,17 +76,17 @@ pub enum FixedSizeWorkerResult<E: Env> {
     },
     SetBufferOk,
     EnvDescription {
-        env_description: EnvironmentDescription,
+        env_description: EnvironmentDescription<E::Tensor>,
     },
 }
 
-pub struct FixedSizeWorkerThread<E: Env<Tensor = Buffer>> {
+pub struct FixedSizeWorkerThread<E: Env> {
     tx: Sender<FixedSizeWorkerResult<E>>,
     rx: Receiver<FixedSizeWorkerCommand<E>>,
     buffer: FixedSizeTrajectoryBuffer<E>,
 }
 
-impl<E: Env<Tensor = Buffer>> FixedSizeWorkerThread<E> {
+impl<E: Env> FixedSizeWorkerThread<E> {
     pub fn new(
         tx: Sender<FixedSizeWorkerResult<E>>,
         rx: Receiver<FixedSizeWorkerCommand<E>>,
@@ -167,7 +165,7 @@ impl<E: Env> FixedSizeThreadEnvPool<E> {
         Self { channels }
     }
 
-    pub fn env_description(&self) -> EnvironmentDescription {
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         let (sender, receiver) = self.channels.get(&0).unwrap();
         sender
             .send(FixedSizeWorkerCommand::GetEnvDescription)
@@ -181,7 +179,7 @@ impl<E: Env> FixedSizeThreadEnvPool<E> {
 }
 
 // TODO: iterating through all the channels twice is a common pattern here. Can automate?
-impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
+impl<E: Env> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
     type Env = E;
 
     fn num_envs(&self) -> usize {
@@ -279,17 +277,17 @@ pub enum VariableSizedWorkerResult<E: Env> {
         buffer: RolloutBuffer<E::Tensor>,
     },
     EnvDescription {
-        env_description: EnvironmentDescription,
+        env_description: EnvironmentDescription<E::Tensor>,
     },
 }
 
-pub struct VariableSizedWorkerThread<E: Env<Tensor = Buffer>> {
+pub struct VariableSizedWorkerThread<E: Env> {
     tx: Sender<VariableSizedWorkerResult<E>>,
     rx: Receiver<VariableSizedWorkerCommand<E>>,
     buffer: VariableSizedTrajectoryBuffer<E>,
 }
 
-impl<E: Env<Tensor = Buffer>> VariableSizedWorkerThread<E> {
+impl<E: Env> VariableSizedWorkerThread<E> {
     pub fn new(
         tx: Sender<VariableSizedWorkerResult<E>>,
         rx: Receiver<VariableSizedWorkerCommand<E>>,
@@ -359,7 +357,7 @@ impl<E: Env> VariableSizedThreadEnvPool<E> {
         }
     }
 
-    pub fn env_description(&self) -> EnvironmentDescription {
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         let (tx, rx) = self.channels.get(&0).unwrap();
         tx.send(VariableSizedWorkerCommand::GetEnvDescription)
             .unwrap();
@@ -371,7 +369,7 @@ impl<E: Env> VariableSizedThreadEnvPool<E> {
     }
 }
 
-impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedThreadEnvPool<E> {
+impl<E: Env> VariableSizedEnvPool for VariableSizedThreadEnvPool<E> {
     type Env = E;
 
     fn num_envs(&self) -> usize {

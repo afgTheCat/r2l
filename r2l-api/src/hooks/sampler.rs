@@ -1,9 +1,9 @@
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 use candle_core::{Device, Result, Tensor};
+use r2l_buffer::Buffer;
 use r2l_core::{
     distributions::Distribution,
     env::Env,
-    numeric::Buffer,
     sampler::{
         SequntialStepBoundHooks, trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer,
     },
@@ -84,7 +84,7 @@ impl EnvNormalizer {
     }
 }
 
-impl<E: Env<Tensor = Buffer>> SequntialStepBoundHooks<E> for Evaluator<E> {
+impl<E: Env> SequntialStepBoundHooks<E> for Evaluator<E> {
     fn process_last_step(
         &mut self,
         distr: &dyn Distribution<Tensor = E::Tensor>,

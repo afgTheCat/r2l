@@ -7,7 +7,9 @@ use crate::builders::{
 use anyhow::Result;
 use candle_core::Device;
 use r2l_agents::AgentKind;
+use r2l_buffer::Buffer;
 use r2l_core::{
+    env::Env,
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     sampler::NewSampler,
 };
@@ -44,7 +46,7 @@ impl Default for OnPolicyAlgorithmBuilder2 {
 }
 
 impl OnPolicyAlgorithmBuilder2 {
-    pub fn build<EB: EnvBuilderTrait>(
+    pub fn build<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
         &self,
         env_builder: EB,
         n_envs: usize,

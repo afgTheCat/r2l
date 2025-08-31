@@ -40,10 +40,10 @@ impl Default for PPOBuilder {
 }
 
 impl PPOBuilder {
-    pub fn build(
+    pub fn build<T>(
         &self,
         device: &Device,
-        env_description: &EnvironmentDescription,
+        env_description: &EnvironmentDescription<T>,
     ) -> Result<PPO<DistributionKind, LearningModuleKind>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =

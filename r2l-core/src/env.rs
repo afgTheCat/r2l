@@ -1,18 +1,18 @@
-use crate::{distributions::Distribution, numeric::Buffer, utils::rollout_buffer::RolloutBuffer};
+use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
 use anyhow::Result;
 use bincode::{Decode, Encode};
 
 #[derive(Debug, Clone)]
-pub enum Space {
+pub enum Space<T> {
     Discrete(usize),
     Continous {
-        min: Option<Buffer>,
-        max: Option<Buffer>,
+        min: Option<T>,
+        max: Option<T>,
         size: usize,
     },
 }
 
-impl Space {
+impl<T> Space<T> {
     pub fn continous_from_dims(dims: Vec<usize>) -> Self {
         Self::Continous {
             min: None,
@@ -30,13 +30,13 @@ impl Space {
 }
 
 #[derive(Debug, Clone)]
-pub struct EnvironmentDescription {
-    pub observation_space: Space,
-    pub action_space: Space,
+pub struct EnvironmentDescription<T> {
+    pub observation_space: Space<T>,
+    pub action_space: Space<T>,
 }
 
-impl EnvironmentDescription {
-    pub fn new(observation_space: Space, action_space: Space) -> Self {
+impl<T> EnvironmentDescription<T> {
+    pub fn new(observation_space: Space<T>, action_space: Space<T>) -> Self {
         Self {
             observation_space,
             action_space,
@@ -62,11 +62,11 @@ pub struct SnapShot<T> {
 
 pub trait Env {
     //  TODO: we might want to introduce more than just one kind of Tensors
-    type Tensor: Clone;
+    type Tensor: Clone + Send;
 
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
     fn step(&mut self, action: Self::Tensor) -> Result<SnapShot<Self::Tensor>>;
-    fn env_description(&self) -> EnvironmentDescription;
+    fn env_description(&self) -> EnvironmentDescription<Self::Tensor>;
 }
 
 #[derive(Debug, Clone, Copy, Encode, Decode)]

@@ -1,6 +1,6 @@
-use candle_core::{Device, Result, Tensor};
+use candle_core::{Device, Result};
 use r2l_core::{
-    distributions::Distribution, env::Env, numeric::Buffer,
+    distributions::Distribution, env::Env,
     sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
 };
 use std::sync::{Arc, Mutex};
@@ -14,7 +14,7 @@ pub struct Evaluator<E: Env> {
     pub device: Device,
 }
 
-impl<E: Env<Tensor = Buffer>> Evaluator<E> {
+impl<E: Env> Evaluator<E> {
     pub fn new(
         env: E,
         eval_episodes: usize,

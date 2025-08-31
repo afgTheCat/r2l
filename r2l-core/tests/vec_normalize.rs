@@ -1,9 +1,7 @@
 use anyhow::Result;
 use candle_core::{Device, Tensor};
-use r2l_core::{
-    env::{Env, EnvironmentDescription, SnapShot, Space},
-    numeric::Buffer,
-};
+use r2l_buffer::Buffer;
+use r2l_core::env::{Env, EnvironmentDescription, SnapShot, Space};
 
 struct DummyRewardEnv {
     t: u64,
@@ -51,7 +49,7 @@ impl Env for DummyRewardEnv {
         Ok(state)
     }
 
-    fn env_description(&self) -> EnvironmentDescription {
+    fn env_description(&self) -> EnvironmentDescription<Buffer> {
         let min = Tensor::full(-1., (), &Device::Cpu).unwrap();
         let max = Tensor::full(1., (), &Device::Cpu).unwrap();
         EnvironmentDescription::new(

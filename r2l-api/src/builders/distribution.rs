@@ -19,11 +19,11 @@ pub struct DistributionBuilder {
 }
 
 impl DistributionBuilder {
-    pub fn build(
+    pub fn build<T>(
         &self,
         distribution_varbuilder: &VarBuilder,
         device: &Device,
-        env_description: &EnvironmentDescription,
+        env_description: &EnvironmentDescription<T>,
     ) -> Result<DistributionKind> {
         let action_size = env_description.action_size();
         let observation_size = env_description.observation_size();

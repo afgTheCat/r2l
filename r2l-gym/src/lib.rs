@@ -3,15 +3,13 @@ use pyo3::{
     PyObject, PyResult, Python,
     types::{PyAnyMethods, PyDict},
 };
-use r2l_core::{
-    env::{Env, EnvironmentDescription, SnapShot, Space},
-    numeric::{Buffer, DType},
-};
+use r2l_buffer::{Buffer, DType};
+use r2l_core::env::{Env, EnvironmentDescription, SnapShot, Space};
 
 pub struct GymEnv {
     env: PyObject,
-    action_space: Space,
-    observation_space: Space,
+    action_space: Space<Buffer>,
+    observation_space: Space<Buffer>,
 }
 
 impl GymEnv {
@@ -63,11 +61,11 @@ impl GymEnv {
         self.action_space.size()
     }
 
-    pub fn observation_space(&self) -> Space {
+    pub fn observation_space(&self) -> Space<Buffer> {
         self.observation_space.clone()
     }
 
-    pub fn action_space(&self) -> Space {
+    pub fn action_space(&self) -> Space<Buffer> {
         self.action_space.clone()
     }
 
@@ -126,7 +124,7 @@ impl Env for GymEnv {
         Ok(snapshot)
     }
 
-    fn env_description(&self) -> EnvironmentDescription {
+    fn env_description(&self) -> EnvironmentDescription<Buffer> {
         EnvironmentDescription {
             observation_space: self.observation_space.clone(),
             action_space: self.action_space.clone(),

@@ -4,7 +4,6 @@ pub mod trajectory_buffers;
 use crate::{
     distributions::Distribution,
     env::{Env, EnvironmentDescription, Sampler},
-    numeric::Buffer,
     sampler::{
         env_pools::{
             FixedSizeEnvPool, FixedSizeEnvPoolKind, VariableSizedEnvPool, VariableSizedEnvPoolKind,
@@ -102,7 +101,7 @@ pub struct NewSampler<E: Env> {
 }
 
 impl<E: Env> NewSampler<E> {
-    pub fn env_description(&self) -> EnvironmentDescription {
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         match &self.collection_type {
             CollectionType::StepBound { env_pool, .. } => env_pool.env_description(),
             CollectionType::EpisodeBound { env_pool } => env_pool.env_description(),
@@ -110,7 +109,7 @@ impl<E: Env> NewSampler<E> {
     }
 }
 
-impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {
+impl<E: Env> Sampler for NewSampler<E> {
     type Env = E;
 
     fn collect_rollouts<D: Distribution>(

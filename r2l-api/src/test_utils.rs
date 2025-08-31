@@ -1,8 +1,8 @@
 use anyhow::Result;
 use candle_core::{Device, Tensor};
+use r2l_buffer::Buffer;
 use r2l_core::distributions::Distribution;
 use r2l_core::env::{Env, SnapShot};
-use r2l_core::numeric::Buffer;
 use r2l_gym::GymEnv;
 
 pub fn run_gym_episodes(

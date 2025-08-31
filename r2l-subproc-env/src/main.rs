@@ -12,11 +12,7 @@ use r2l_core::{
     distributions::Distribution,
     env::Env,
     ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
-    numeric::Buffer,
-    sampler::{
-        DistributionWrapper,
-        trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
-    },
+    sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
 };
 use r2l_gym::GymEnv;
 use std::io::BufReader;
@@ -90,7 +86,7 @@ pub struct Rollout<E: Env> {
     device: Device,
 }
 
-impl<E: Env<Tensor = Buffer>> Rollout<E> {
+impl<E: Env> Rollout<E> {
     fn handle_packet<D: Distribution<Tensor = Tensor> + Decode<()> + Encode>(
         &mut self,
     ) -> Result<bool> {
@@ -106,14 +102,15 @@ impl<E: Env<Tensor = Buffer>> Rollout<E> {
             } => {
                 // FIXME: we should act as the sampler like we did the threads. This is not used
                 // currently but should be added in the future
-                let distribution: DistributionWrapper<D, E> =
-                    DistributionWrapper::new(&distribution);
-                self.trajectory_buffer
-                    .step_with_epiosde_bound(&distribution, 1024);
-                let packet: PacketToSend<D> = PacketToSend::RolloutResult {
-                    rollout: self.trajectory_buffer.to_rollout_buffer().convert(),
-                };
-                send_packet(&mut self.conn, packet);
+                //
+                // let distribution: DistributionWrapper<D, E> =
+                //     DistributionWrapper::new(&distribution);
+                // self.trajectory_buffer
+                //     .step_with_epiosde_bound(&distribution, 1024);
+                // let packet: PacketToSend<D> = PacketToSend::RolloutResult {
+                //     rollout: self.trajectory_buffer.to_rollout_buffer().convert(),
+                // };
+                // send_packet(&mut self.conn, packet);
                 Ok(true)
             }
             _ => unreachable!(),

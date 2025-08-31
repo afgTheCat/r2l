@@ -25,11 +25,11 @@ pub struct LearningModuleBuilder {
 }
 
 impl LearningModuleBuilder {
-    pub fn build(
+    pub fn build<T>(
         &self,
         distribution_varmap: VarMap,
         distr_var_builder: VarBuilder,
-        env_description: &EnvironmentDescription,
+        env_description: &EnvironmentDescription<T>,
         device: &Device,
     ) -> Result<LearningModuleKind> {
         let input_size = env_description.observation_size();
