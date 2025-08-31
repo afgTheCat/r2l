@@ -225,6 +225,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.99"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0674a1ddeecb70197781e945de4b3b8ffb61fa939a5597bcf48503737663100"
+
+[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3311,6 +3317,7 @@ checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 name = "r2l-agents"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "candle-core",
  "candle-nn",
  "r2l-candle-lm",
@@ -3322,6 +3329,7 @@ dependencies = [
 name = "r2l-api"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "candle-core",
  "candle-nn",
  "crossbeam",
@@ -3339,6 +3347,7 @@ dependencies = [
 name = "r2l-candle-lm"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bincode",
  "candle-core",
  "candle-nn",
@@ -3353,6 +3362,7 @@ dependencies = [
 name = "r2l-core"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bincode",
  "candle-core",
  "candle-nn",
@@ -3374,6 +3384,7 @@ dependencies = [
 name = "r2l-examples"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "candle-core",
  "crossterm 0.29.0",
  "eframe",
@@ -3394,6 +3405,7 @@ dependencies = [
 name = "r2l-gym"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "once_cell",
  "pyo3",
  "r2l-core",

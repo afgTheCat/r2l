@@ -2,8 +2,9 @@
 pub mod categorical_distribution;
 pub mod diagonal_distribution;
 
+use anyhow::Result;
 use bincode::{Decode, Encode};
-use candle_core::{Result, Tensor};
+use candle_core::Tensor;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
 use r2l_core::distributions::Distribution;

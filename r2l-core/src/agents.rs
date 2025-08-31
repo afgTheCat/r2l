@@ -1,5 +1,5 @@
 use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
-use candle_core::Result;
+use anyhow::Result;
 
 pub trait Agent {
     // The distribution

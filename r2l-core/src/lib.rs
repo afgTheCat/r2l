@@ -27,17 +27,16 @@
 pub mod agents;
 pub mod distributions;
 pub mod env;
+pub mod error;
 pub mod ipc;
 pub mod numeric;
 pub mod on_policy_algorithm;
 pub mod policies;
 pub mod rng;
 pub mod sampler;
-// pub mod tensors;
-// pub mod thread_safe_sequential;
 pub mod utils;
 
-use candle_core::Result;
+use anyhow::Result;
 
 /// A learning algorithm. Currently only `OnPolicyAlgorithm` implements this trait, but in the
 /// future an off policy alternative is also going to implement it.

@@ -1,4 +1,4 @@
-use candle_core::Result;
+use anyhow::Result;
 use std::fmt::Debug;
 
 // TODO: Decoding will need a context to store what device we want the tensors to be decoded to

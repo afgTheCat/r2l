@@ -97,21 +97,19 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
             last_state
         } else {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            self.env.reset(seed)
+            self.env.reset(seed).unwrap()
         };
-        // TODO: we used to unsqueze here. I am guessing that we will have to provide a unified
-        // structure to states and actions. Best way seem to be unsquezing 1d vectors
         let action = distr.get_action(state.clone().into()).unwrap();
         let SnapShot {
             state: mut next_state,
             reward,
             terminated,
             trancuated,
-        } = self.env.step(action.clone().into());
+        } = self.env.step(action.clone().into()).unwrap();
         let done = terminated || trancuated;
         if done {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            next_state = self.env.reset(seed);
+            next_state = self.env.reset(seed).unwrap();
         }
         buffer.push(
             state,

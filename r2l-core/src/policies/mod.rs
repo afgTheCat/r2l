@@ -1,5 +1,14 @@
-use candle_core::{Result, Tensor};
+use anyhow::Result;
+
+// convinience trait
+pub trait LearningModule {
+    type Losses;
+
+    fn update(&mut self, losses: Self::Losses) -> Result<()>;
+}
 
 pub trait ValueFunction {
-    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor>;
+    type Tensor: Clone;
+
+    fn calculate_values(&self, observation: &Self::Tensor) -> Result<Self::Tensor>;
 }

@@ -109,7 +109,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         if should_stop {
             // snapshot the learned things, API can be much better
             self.current_rollout += 1;
-            self.progress.std = distribution.std()?;
+            self.progress.std = distribution.std().unwrap();
             self.progress.learning_rate = learning_module.policy_learning_rate();
             let progress = self.progress.clear();
             self.tx.send(Box::new(progress)).map_err(Error::wrap)?;
@@ -128,7 +128,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
-        let entropy = distribution.entropy()?;
+        let entropy = distribution.entropy().unwrap();
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.ent_coeff, (), &device)? * entropy.neg()?)?;
         self.progress
@@ -182,7 +182,7 @@ impl PPOProgress {
     }
 }
 
-pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
+pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
     let device = Device::Cpu;

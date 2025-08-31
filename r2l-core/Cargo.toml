@@ -22,6 +22,7 @@ safetensors = "0.4.1"
 smol = "2.0.2"
 crossbeam = { workspace = true }
 ringbuffer = "0.16.0"
+anyhow = { workspace = true }
 
 [dev-dependencies]
 r2l-api = { workspace = true }

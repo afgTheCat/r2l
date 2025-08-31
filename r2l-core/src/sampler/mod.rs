@@ -13,7 +13,7 @@ use crate::{
     },
     utils::rollout_buffer::RolloutBuffer,
 };
-use candle_core::Result;
+use anyhow::Result;
 use std::{fmt::Debug, marker::PhantomData};
 
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
@@ -67,7 +67,7 @@ where
         Ok(entropy.into())
     }
 
-    fn resample_noise(&mut self) -> candle_core::Result<()> {
+    fn resample_noise(&mut self) -> Result<()> {
         // TODO: we may want the distribution to be behind a RwLock, but I doubt that this will be
         // called a whole lot. In future releases we should enable finer control of noise sampling
         todo!()

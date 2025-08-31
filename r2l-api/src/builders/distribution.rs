@@ -1,4 +1,5 @@
-use candle_core::{Device, Result};
+use anyhow::Result;
+use candle_core::Device;
 use candle_nn::VarBuilder;
 use r2l_candle_lm::distributions::{
     DistributionKind, categorical_distribution::CategoricalDistribution,

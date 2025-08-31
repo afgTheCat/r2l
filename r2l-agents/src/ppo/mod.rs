@@ -1,12 +1,13 @@
-use candle_core::{Device, Result, Tensor};
+use anyhow::Result;
+use candle_core::{Device, Tensor};
 use r2l_candle_lm::{
-    learning_module::{LearningModule, LearningModuleKind, PolicyValuesLosses},
+    learning_module::{LearningModuleKind, PolicyValuesLosses},
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
 };
 use r2l_core::{
     agents::Agent,
     distributions::Distribution,
-    policies::ValueFunction,
+    policies::{LearningModule, ValueFunction},
     utils::rollout_buffer::{
         Advantages, Logps, Returns, RolloutBatch, RolloutBatchIterator, RolloutBuffer,
         calculate_advantages_and_returns,
@@ -35,7 +36,10 @@ macro_rules! process_hook_result {
     };
 }
 
-pub trait PPOLearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
+pub trait PPOLearningModule:
+    LearningModule<Losses = PolicyValuesLosses> + ValueFunction<Tensor = Tensor>
+{
+}
 
 impl PPOLearningModule for LearningModuleKind {}
 
@@ -50,14 +54,14 @@ pub trait PPP3HooksTrait<D: Distribution, LM: PPOLearningModule> {
         rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
         advantages: &mut Advantages,
         returns: &mut Returns,
-    ) -> Result<HookResult>;
+    ) -> candle_core::Result<HookResult>;
 
     fn rollout_hook(
         &mut self,
         learning_module: &mut LM,
         distribution: &D,
         rollout_buffers: &Vec<RolloutBuffer<Tensor>>,
-    ) -> Result<HookResult>;
+    ) -> candle_core::Result<HookResult>;
 
     fn batch_hook(
         &mut self,
@@ -67,7 +71,7 @@ pub trait PPP3HooksTrait<D: Distribution, LM: PPOLearningModule> {
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
-    ) -> Result<HookResult>;
+    ) -> candle_core::Result<HookResult>;
 }
 
 pub struct EmptyPPO3Hooks;
@@ -80,7 +84,7 @@ impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3
         rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
         advantages: &mut Advantages,
         returns: &mut Returns,
-    ) -> Result<HookResult> {
+    ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
@@ -89,7 +93,7 @@ impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3
         learning_module: &mut LM,
         distribution: &D,
         rollout_buffers: &Vec<RolloutBuffer<Tensor>>,
-    ) -> Result<HookResult> {
+    ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Break)
     }
 
@@ -101,7 +105,7 @@ impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
-    ) -> Result<HookResult> {
+    ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 }

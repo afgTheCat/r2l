@@ -1,13 +1,14 @@
 use crate::ppo::HookResult;
-use candle_core::{Device, Result, Tensor};
+use anyhow::Result;
+use candle_core::{Device, Tensor};
 use r2l_candle_lm::{
-    learning_module::{LearningModule, LearningModuleKind, PolicyValuesLosses},
+    learning_module::{LearningModuleKind, PolicyValuesLosses},
     tensors::{PolicyLoss, ValueLoss},
 };
 use r2l_core::{
     agents::Agent,
     distributions::Distribution,
-    policies::ValueFunction,
+    policies::{LearningModule, ValueFunction},
     utils::rollout_buffer::{
         Advantages, Logps, Returns, RolloutBatchIterator, RolloutBuffer,
         calculate_advantages_and_returns,
@@ -23,7 +24,10 @@ macro_rules! process_hook_result {
     };
 }
 
-pub trait A2CLearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
+pub trait A2CLearningModule:
+    LearningModule<Losses = PolicyValuesLosses> + ValueFunction<Tensor = Tensor>
+{
+}
 
 impl A2CLearningModule for LearningModuleKind {}
 
@@ -34,7 +38,7 @@ pub trait A2CHooks<LM: A2CLearningModule> {
         rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
         advantages: &mut Advantages,
         returns: &mut Returns,
-    ) -> Result<HookResult>;
+    ) -> candle_core::Result<HookResult>;
 }
 
 pub struct DefaultA2CHooks;
@@ -47,7 +51,7 @@ impl<LM: A2CLearningModule> A2CHooks<LM> for DefaultA2CHooks {
         _rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
         _advantages: &mut Advantages,
         _returns: &mut Returns,
-    ) -> Result<HookResult> {
+    ) -> candle_core::Result<HookResult> {
         todo!()
     }
 }

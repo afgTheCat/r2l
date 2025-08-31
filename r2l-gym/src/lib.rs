@@ -1,3 +1,4 @@
+use anyhow::Result;
 use pyo3::{
     PyObject, PyResult, Python,
     types::{PyAnyMethods, PyDict},
@@ -78,20 +79,20 @@ impl GymEnv {
 impl Env for GymEnv {
     type Tensor = Buffer;
 
-    fn reset(&mut self, seed: u64) -> Buffer {
-        Python::with_gil(|py| {
+    fn reset(&mut self, seed: u64) -> Result<Buffer> {
+        let state = Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
             kwargs.set_item("seed", seed)?;
             let state = self.env.call_method(py, "reset", (), Some(&kwargs))?;
             let step = state.bind(py);
             let state = step.get_item(0)?.extract()?;
             PyResult::Ok(Buffer::from_vec(state, DType::F32))
-        })
-        .unwrap()
+        })?;
+        Ok(state)
     }
 
-    fn step(&mut self, action: Buffer) -> SnapShot<Buffer> {
-        Python::with_gil(|py| {
+    fn step(&mut self, action: Buffer) -> Result<SnapShot<Buffer>> {
+        let snapshot = Python::with_gil(|py| {
             let step = match &self.action_space {
                 Space::Continous {
                     min: Some(min),
@@ -121,8 +122,8 @@ impl Env for GymEnv {
                 terminated,
                 trancuated,
             })
-        })
-        .unwrap()
+        })?;
+        Ok(snapshot)
     }
 
     fn env_description(&self) -> EnvironmentDescription {

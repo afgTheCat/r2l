@@ -2,7 +2,8 @@ use crate::builders::{
     distribution::{DistributionBuilder, DistributionType},
     learning_module::{LearningModuleBuilder, LearningModuleType},
 };
-use candle_core::{DType, Device, Result};
+use anyhow::Result;
+use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
 use r2l_agents::a2c::{A2C, DefaultA2CHooks};
 use r2l_candle_lm::{distributions::DistributionKind, learning_module::LearningModuleKind};

@@ -10,6 +10,7 @@ readme = "README.md"
 [dependencies]
 r2l-core = { workspace = true }
 pyo3 = { version = "0.24.1", features = ["auto-initialize", "abi3-py311"] } 
+anyhow = { workspace = true }
 
 [dev-dependencies]
 once_cell = "1.21.3"

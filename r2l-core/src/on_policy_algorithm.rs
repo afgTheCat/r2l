@@ -4,7 +4,7 @@ use crate::{
     env::{Sampler, TensorOfSampler},
     utils::rollout_buffer::RolloutBuffer,
 };
-use candle_core::Result;
+use anyhow::Result;
 
 macro_rules! break_on_hook_res {
     ($hook_res:expr) => {

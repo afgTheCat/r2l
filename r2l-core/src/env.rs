@@ -1,6 +1,6 @@
 use crate::{distributions::Distribution, numeric::Buffer, utils::rollout_buffer::RolloutBuffer};
+use anyhow::Result;
 use bincode::{Decode, Encode};
-use candle_core::Result;
 
 #[derive(Debug, Clone)]
 pub enum Space {
@@ -60,21 +60,12 @@ pub struct SnapShot<T> {
     pub trancuated: bool,
 }
 
-pub struct SnapShot2<T> {
-    pub state: T,
-    pub next_state: T,
-    pub action: T,
-    pub reward: f32,
-    pub terminated: bool,
-    pub trancuated: bool,
-}
-
 pub trait Env {
-    // TODO: we need to figure the right tensor kind here!
+    //  TODO: we might want to introduce more than just one kind of Tensors
     type Tensor: Clone;
 
-    fn reset(&mut self, seed: u64) -> Self::Tensor;
-    fn step(&mut self, action: Self::Tensor) -> SnapShot<Self::Tensor>;
+    fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
+    fn step(&mut self, action: Self::Tensor) -> Result<SnapShot<Self::Tensor>>;
     fn env_description(&self) -> EnvironmentDescription;
 }
 

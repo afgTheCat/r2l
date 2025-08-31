@@ -17,6 +17,7 @@ r2l-candle-lm = { workspace = true }
 crossbeam = { workspace = true }
 ringbuffer = "0.16.0"
 rand = "0.9.0"
+anyhow = { workspace = true }
 
 [features]
 test-utils = []

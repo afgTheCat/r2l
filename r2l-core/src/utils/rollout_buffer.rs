@@ -1,5 +1,6 @@
 use crate::{policies::ValueFunction, rng::RNG};
-use candle_core::{Device, Result, Tensor};
+use anyhow::Result;
+use candle_core::{Device, Tensor};
 use derive_more::Deref;
 use rand::seq::SliceRandom;
 
@@ -57,7 +58,7 @@ impl RolloutBuffer<Tensor> {
     // TODO: I don't know if this should be
     pub fn calculate_advantages_and_returns2(
         &self,
-        value_func: &impl ValueFunction,
+        value_func: &impl ValueFunction<Tensor = Tensor>,
         gamma: f32,
         lambda: f32,
     ) -> Result<(Vec<f32>, Vec<f32>)> {
@@ -113,7 +114,7 @@ pub struct Returns(Vec<Vec<f32>>);
 
 pub fn calculate_advantages_and_returns(
     rollouts: &[RolloutBuffer<Tensor>],
-    value_func: &impl ValueFunction,
+    value_func: &impl ValueFunction<Tensor = Tensor>,
     gamma: f32,
     lambda: f32,
 ) -> (Advantages, Returns) {

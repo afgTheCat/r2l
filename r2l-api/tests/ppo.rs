@@ -1,4 +1,4 @@
-use candle_core::Result;
+use anyhow::Result;
 use r2l_api::builders::on_policy_algo2::OnPolicyAlgorithmBuilder2;
 use r2l_api::builders::sampler::EnvPoolType;
 use r2l_api::test_utils::run_gym_episodes;

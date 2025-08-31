@@ -25,6 +25,7 @@ either = "1.15.0"
 bincode = { version = "2.0.1", features = ["serde"] }
 crossbeam = "0.8.4"
 rand = "0.9.0"
+anyhow = { version = "1.0.99" }
 
 [workspace.package]
 version = "0.0.1"

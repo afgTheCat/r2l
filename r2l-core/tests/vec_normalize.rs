@@ -1,4 +1,5 @@
-use candle_core::{Device, Result, Tensor};
+use anyhow::Result;
+use candle_core::{Device, Tensor};
 use r2l_core::{
     env::{Env, EnvironmentDescription, SnapShot, Space},
     numeric::Buffer,
@@ -23,21 +24,22 @@ impl DummyRewardEnv {
 impl Env for DummyRewardEnv {
     type Tensor = Buffer;
 
-    fn step(&mut self, action: Buffer) -> SnapShot<Buffer> {
+    fn step(&mut self, action: Buffer) -> Result<SnapShot<Buffer>> {
         self.t += 1;
         let index = (self.t as usize + self.returned_reward_idx) % 4;
         let returned_value = self.returned_rewards[index];
         let truncated = self.t == 4;
         let state = Tensor::full(returned_value, (), &Device::Cpu).unwrap();
-        SnapShot {
+        let snapshot = SnapShot {
             state: Buffer::from_candle_tensor(&state),
             reward: returned_value,
             terminated: false,
             trancuated: truncated,
-        }
+        };
+        Ok(snapshot)
     }
 
-    fn reset(&mut self, seed: u64) -> Buffer {
+    fn reset(&mut self, seed: u64) -> Result<Buffer> {
         self.t = 0;
         let state = Tensor::full(
             self.returned_rewards[self.returned_reward_idx],
@@ -45,7 +47,8 @@ impl Env for DummyRewardEnv {
             &Device::Cpu,
         )
         .unwrap();
-        Buffer::from_candle_tensor(&state)
+        let state = Buffer::from_candle_tensor(&state);
+        Ok(state)
     }
 
     fn env_description(&self) -> EnvironmentDescription {

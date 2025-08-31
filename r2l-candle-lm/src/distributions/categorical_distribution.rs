@@ -1,6 +1,7 @@
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
+use anyhow::Result;
 use bincode::{Decode, Encode};
-use candle_core::{Device, Error, Result, Tensor};
+use candle_core::{Device, Error, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
@@ -99,7 +100,8 @@ impl Distribution for CategoricalDistribution {
     fn log_probs(&self, states: Tensor, actions: Tensor) -> Result<Tensor> {
         let logits = self.logits.forward(&states)?;
         let log_probs = log_softmax(&logits, 1)?;
-        actions.mul(&log_probs)?.sum(1)
+        let log_probs = actions.mul(&log_probs)?.sum(1)?;
+        Ok(log_probs)
     }
 
     fn std(&self) -> Result<f32> {
