@@ -61,7 +61,7 @@ pub struct SnapShot<T> {
 }
 
 pub trait Env {
-    //  TODO: we might want to introduce more than just one kind of Tensors
+    //  TODO: we might want to introduce more than just one kind of Tensors.
     type Tensor: Clone + Send;
 
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
@@ -75,7 +75,7 @@ pub enum RolloutMode {
     StepBound { n_steps: usize },
 }
 
-// ok so the thing is this:
+// TODO:
 pub trait Sampler {
     type Env: Env;
 

@@ -10,3 +10,4 @@ license.workspace = true
 burn = { workspace = true }
 r2l-core = { workspace = true }
 anyhow = { workspace = true }
+rand = { workspace = true }

@@ -1,5 +1,5 @@
 mod distributions;
-mod sequential;
+pub mod sequential;
 
 use burn::optim::adaptor::OptimizerAdaptor;
 use burn::optim::{AdamW, GradientsParams, Optimizer};
