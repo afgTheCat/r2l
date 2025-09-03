@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
 use anyhow::Result;
 use bincode::{Decode, Encode};
@@ -62,7 +64,7 @@ pub struct SnapShot<T> {
 
 pub trait Env {
     //  TODO: we might want to introduce more than just one kind of Tensors.
-    type Tensor: Clone + Send;
+    type Tensor: Clone + Send + Sync + Debug + 'static;
 
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
     fn step(&mut self, action: Self::Tensor) -> Result<SnapShot<Self::Tensor>>;
@@ -81,7 +83,7 @@ pub trait Sampler {
 
     fn collect_rollouts<D: Distribution>(
         &mut self,
-        distribution: &D,
+        distribution: D,
     ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
     where
         <Self::Env as Env>::Tensor: From<D::Tensor>,

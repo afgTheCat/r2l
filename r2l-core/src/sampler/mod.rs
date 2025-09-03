@@ -17,13 +17,14 @@ use std::{fmt::Debug, marker::PhantomData};
 
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
 // Arc::RwLock for the underlying distribution.
-pub struct DistributionWrapper<'a, D: Distribution, E: Env> {
-    distribution: &'a D,
-    env: PhantomData<E>,
+#[derive(Debug)]
+pub struct DistributionWrapper<D: Distribution, T: Clone + Sync + Debug + 'static> {
+    distribution: D,
+    env: PhantomData<T>,
 }
 
-impl<'a, D: Distribution, E: Env> DistributionWrapper<'a, D, E> {
-    pub fn new(distribution: &'a D) -> Self {
+impl<D: Distribution, T: Clone + Sync + Debug + 'static> DistributionWrapper<D, T> {
+    pub fn new(distribution: D) -> Self {
         Self {
             distribution,
             env: PhantomData,
@@ -32,20 +33,20 @@ impl<'a, D: Distribution, E: Env> DistributionWrapper<'a, D, E> {
 }
 
 // SAFETY: This can be safely shared between threads as the env is just a PhantomData
-unsafe impl<'a, D: Distribution, E: Env> Sync for DistributionWrapper<'a, D, E> {}
+unsafe impl<D: Distribution, T: Clone + Sync + Debug + 'static> Sync for DistributionWrapper<D, T> {}
 
-impl<'a, D: Distribution, E: Env> Debug for DistributionWrapper<'a, D, E> {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
+// impl<D: Distribution, E: Env> Debug for DistributionWrapper<D, E> {
+//     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         todo!()
+//     }
+// }
 
-impl<'a, D: Distribution, E: Env> Distribution for DistributionWrapper<'a, D, E>
+impl<D: Distribution, T: Clone + Sync + Debug + 'static> Distribution for DistributionWrapper<D, T>
 where
-    E::Tensor: From<D::Tensor>,
-    E::Tensor: Into<D::Tensor>,
+    T: From<D::Tensor>,
+    T: Into<D::Tensor>,
 {
-    type Tensor = E::Tensor;
+    type Tensor = T;
 
     fn std(&self) -> Result<f32> {
         self.distribution.std()
@@ -114,13 +115,13 @@ impl<E: Env> Sampler for NewSampler<E> {
 
     fn collect_rollouts<D: Distribution>(
         &mut self,
-        distr: &D,
+        distr: D,
     ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
     where
         <Self::Env as Env>::Tensor: From<D::Tensor>,
         <Self::Env as Env>::Tensor: Into<D::Tensor>,
     {
-        let distr: DistributionWrapper<D, E> = DistributionWrapper::new(distr);
+        let distr: DistributionWrapper<D, E::Tensor> = DistributionWrapper::new(distr);
         let rb = match &mut self.collection_type {
             CollectionType::StepBound { env_pool, hooks } => {
                 if let Some(hooks) = hooks {

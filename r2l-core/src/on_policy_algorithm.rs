@@ -129,7 +129,7 @@ where
         loop {
             // rollout phase
             let distribution = self.agent.distribution();
-            let mut rollouts = self.sampler.collect_rollouts(&distribution)?;
+            let mut rollouts = self.sampler.collect_rollouts(distribution)?;
             break_on_hook_res!(self.hooks.post_rollout_hook(&mut rollouts));
 
             // learning phase
