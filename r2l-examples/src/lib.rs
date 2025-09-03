@@ -1,6 +1,6 @@
 use candle_core::{DType, Device, Error, Tensor};
-use r2l_agents::ppo::PPP3HooksTrait;
-use r2l_agents::ppo::{HookResult, PPOBatchData};
+use r2l_agents::ppo::{HookResult, PPO, PPOBatchData};
+use r2l_agents::ppo::{PPOCore, PPOHooksTrait};
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::builders::sampler::{EnvBuilderType, EnvPoolType, SamplerType};
 use r2l_candle_lm::candle_rollout_buffer::{CandleRolloutBuffer, RolloutBatch};
@@ -71,11 +71,10 @@ impl PPOHook {
     }
 }
 
-impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
+impl PPOHooksTrait<PPOCore<DistributionKind, LearningModuleKind>> for PPOHook {
     fn before_learning_hook(
         &mut self,
-        _learning_module: &mut LearningModuleKind,
-        _distribution: &DistributionKind,
+        _agent: &mut PPOCore<DistributionKind, LearningModuleKind>,
         rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         advantages: &mut Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
@@ -97,8 +96,7 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
 
     fn rollout_hook(
         &mut self,
-        learning_module: &mut LearningModuleKind,
-        distribution: &DistributionKind,
+        agent: &mut PPOCore<DistributionKind, LearningModuleKind>,
         _rollout_buffers: &Vec<CandleRolloutBuffer>,
     ) -> candle_core::Result<HookResult> {
         self.current_epoch += 1;
@@ -106,8 +104,8 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         if should_stop {
             // snapshot the learned things, API can be much better
             self.current_rollout += 1;
-            self.progress.std = distribution.std().unwrap();
-            self.progress.learning_rate = learning_module.policy_learning_rate();
+            self.progress.std = agent.distribution.std().unwrap();
+            self.progress.learning_rate = agent.learning_module.policy_learning_rate();
             let progress = self.progress.clear();
             self.tx.send(Box::new(progress)).map_err(Error::wrap)?;
             Ok(HookResult::Break)
@@ -118,14 +116,13 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
 
     fn batch_hook(
         &mut self,
-        _learning_module: &mut LearningModuleKind,
-        distribution: &DistributionKind,
+        agent: &mut PPOCore<DistributionKind, LearningModuleKind>,
         _rollout_batch: &RolloutBatch,
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
-        let entropy = distribution.entropy().unwrap();
+        let entropy = agent.distribution.entropy().unwrap();
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.ent_coeff, (), &device)? * entropy.neg()?)?;
         self.progress

@@ -46,74 +46,44 @@ impl PPOLearningModule for LearningModuleKind {}
 // TODO: we could just pass the agent inside. Also we should probably set the rollout buffer inside
 // the agent to some buffer, so that we also don't really need that as a parameter. Much cleaner
 // design to be honest
-pub trait PPP3HooksTrait<D: Distribution, LM: PPOLearningModule> {
+pub trait PPOHooksTrait<A> {
     fn before_learning_hook(
         &mut self,
-        learning_module: &mut LM,
-        distribution: &D,
+        agent: &mut A,
         rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         advantages: &mut Advantages,
         returns: &mut Returns,
-    ) -> candle_core::Result<HookResult>;
-
-    fn rollout_hook(
-        &mut self,
-        learning_module: &mut LM,
-        distribution: &D,
-        rollout_buffers: &Vec<CandleRolloutBuffer>,
-    ) -> candle_core::Result<HookResult>;
-
-    fn batch_hook(
-        &mut self,
-        learning_module: &mut LM,
-        distribution: &D,
-        rollout_batch: &RolloutBatch,
-        policy_loss: &mut PolicyLoss,
-        value_loss: &mut ValueLoss,
-        data: &PPOBatchData,
-    ) -> candle_core::Result<HookResult>;
-}
-
-pub struct EmptyPPO3Hooks;
-
-impl<D: Distribution, LM: PPOLearningModule> PPP3HooksTrait<D, LM> for EmptyPPO3Hooks {
-    fn before_learning_hook(
-        &mut self,
-        _learning_module: &mut LM,
-        _distribution: &D,
-        _rollout_buffers: &mut Vec<CandleRolloutBuffer>,
-        _advantages: &mut Advantages,
-        _returns: &mut Returns,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
     fn rollout_hook(
         &mut self,
-        _learning_module: &mut LM,
-        _distribution: &D,
-        _rollout_buffers: &Vec<CandleRolloutBuffer>,
+        agent: &mut A,
+        rollout_buffers: &Vec<CandleRolloutBuffer>,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Break)
     }
 
     fn batch_hook(
         &mut self,
-        _learning_module: &mut LM,
-        _distribution: &D,
-        _rollout_batch: &RolloutBatch,
-        _policy_loss: &mut PolicyLoss,
-        _value_loss: &mut ValueLoss,
-        _data: &PPOBatchData,
+        agent: &mut A,
+        rollout_batch: &RolloutBatch,
+        policy_loss: &mut PolicyLoss,
+        value_loss: &mut ValueLoss,
+        data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 }
 
-pub struct PPO<D: Distribution, LM: PPOLearningModule> {
+pub struct EmptyPPO3Hooks;
+
+impl<A> PPOHooksTrait<A> for EmptyPPO3Hooks {}
+
+pub struct PPOCore<D: Distribution, LM: PPOLearningModule> {
     pub distribution: D,
     pub learning_module: LM,
-    pub hooks: Box<dyn PPP3HooksTrait<D, LM>>,
     pub clip_range: f32,
     pub gamma: f32,
     pub lambda: f32,
@@ -121,22 +91,29 @@ pub struct PPO<D: Distribution, LM: PPOLearningModule> {
     pub device: Device,
 }
 
+// This could be something more generic
+pub struct PPO<D: Distribution, LM: PPOLearningModule> {
+    pub ppo: PPOCore<D, LM>,
+    pub hooks: Box<dyn PPOHooksTrait<PPOCore<D, LM>>>,
+}
+
 impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
+        let ppo = &mut self.ppo;
         loop {
             let Some(batch) = batch_iter.next() else {
                 return Ok(());
             };
             let logp = Logp(
-                self.distribution
+                ppo.distribution
                     .log_probs(batch.observations.clone(), batch.actions.clone())?,
             );
             let values_pred =
-                ValuesPred(self.learning_module.calculate_values(&batch.observations)?);
+                ValuesPred(ppo.learning_module.calculate_values(&batch.observations)?);
             let mut value_loss = ValueLoss(batch.returns.sub(&values_pred)?.sqr()?.mean_all()?);
             let logp_diff = LogpDiff((logp.deref() - &batch.logp_old)?);
             let ratio = logp_diff.exp()?;
-            let clip_adv = (ratio.clamp(1. - self.clip_range, 1. + self.clip_range)?
+            let clip_adv = (ratio.clamp(1. - ppo.clip_range, 1. + ppo.clip_range)?
                 * batch.advantages.clone())?;
             let mut policy_loss = PolicyLoss(
                 Tensor::minimum(&(&ratio * &batch.advantages)?, &clip_adv)?
@@ -149,15 +126,10 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
                 logp_diff,
                 ratio,
             };
-            let hook_result = self.hooks.batch_hook(
-                &mut self.learning_module,
-                &self.distribution,
-                &batch,
-                &mut policy_loss,
-                &mut value_loss,
-                &ppo_data,
-            )?;
-            self.learning_module.update(PolicyValuesLosses {
+            let hook_result =
+                self.hooks
+                    .batch_hook(ppo, &batch, &mut policy_loss, &mut value_loss, &ppo_data)?;
+            ppo.learning_module.update(PolicyValuesLosses {
                 policy_loss,
                 value_loss,
             })?;
@@ -182,13 +154,11 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
                 advantages,
                 returns,
                 logps,
-                self.sample_size,
-                self.device.clone(),
+                self.ppo.sample_size,
+                self.ppo.device.clone(),
             );
             self.batching_loop(&mut batch_iter)?;
-            let rollout_hook_res =
-                self.hooks
-                    .rollout_hook(&mut self.learning_module, &self.distribution, rollouts);
+            let rollout_hook_res = self.hooks.rollout_hook(&mut self.ppo, rollouts);
             process_hook_result!(rollout_hook_res);
         }
     }
@@ -198,7 +168,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for PPO<D, L
     type Dist = D;
 
     fn distribution(&self) -> &Self::Dist {
-        &self.distribution
+        &self.ppo.distribution
     }
 
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
@@ -209,13 +179,12 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for PPO<D, L
 
         let (mut advantages, mut returns) = calculate_advantages_and_returns(
             &rollouts,
-            &self.learning_module,
-            self.gamma,
-            self.lambda,
+            &self.ppo.learning_module,
+            self.ppo.gamma,
+            self.ppo.lambda,
         );
         let before_learning_hook_res = self.hooks.before_learning_hook(
-            &mut self.learning_module,
-            &self.distribution,
+            &mut self.ppo,
             &mut rollouts,
             &mut advantages,
             &mut returns,

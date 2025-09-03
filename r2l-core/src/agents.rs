@@ -5,7 +5,7 @@ pub trait Agent {
     // The distribution
     type Dist: Distribution;
 
-    /// Retriesve the underlying distribution
+    /// Retriesve the underlying distribution.
     fn distribution(&self) -> &Self::Dist;
 
     /// Instruments learnging with the rollout buffers collected
