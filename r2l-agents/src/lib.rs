@@ -26,7 +26,7 @@ impl Agent for AgentKind {
         }
     }
 
-    fn distribution(&self) -> &Self::Dist {
+    fn distribution(&self) -> Self::Dist {
         match self {
             Self::A2C(a2c) => a2c.distribution(),
             Self::PPO(ppo) => ppo.distribution(),

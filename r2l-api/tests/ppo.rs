@@ -41,7 +41,7 @@ fn ppo_cart_pole1() -> Result<()> {
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
-    run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
+    run_gym_episodes("CartPole-v1", 10, &ppo.agent.distribution())?;
     Ok(())
 }
 
@@ -51,7 +51,7 @@ fn ppo_cart_pole2() -> Result<()> {
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
-    run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
+    run_gym_episodes("CartPole-v1", 10, &ppo.agent.distribution())?;
     Ok(())
 }
 
@@ -62,7 +62,7 @@ fn ppo_cart_pole3() -> Result<()> {
     ppo_builder.set_env_pool_type(EnvPoolType::ThreadStep);
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
-    run_gym_episodes("CartPole-v1", 10, ppo.agent.distribution())?;
+    run_gym_episodes("CartPole-v1", 10, &ppo.agent.distribution())?;
     Ok(())
 }
 

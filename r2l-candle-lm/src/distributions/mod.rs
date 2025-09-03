@@ -10,7 +10,7 @@ use diagonal_distribution::DiagGaussianDistribution;
 use r2l_core::distributions::Distribution;
 use std::{f32, fmt::Debug};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DistributionKind {
     Categorical(CategoricalDistribution),
     DiagGaussian(DiagGaussianDistribution),

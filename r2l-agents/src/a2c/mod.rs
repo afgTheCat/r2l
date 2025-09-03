@@ -86,11 +86,11 @@ impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> A2C<D, LM> {
     }
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> Agent for A2C<D, LM> {
+impl<D: Distribution<Tensor = Tensor> + Clone, LM: A2CLearningModule> Agent for A2C<D, LM> {
     type Dist = D;
 
-    fn distribution(&self) -> &Self::Dist {
-        &self.distribution
+    fn distribution(&self) -> Self::Dist {
+        self.distribution.clone()
     }
 
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {

@@ -11,7 +11,7 @@ use safetensors::serialize;
 use std::f32;
 
 // TODO: we may want to resample the noise better than it is now
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiagGaussianDistribution {
     noise: Tensor,
     mu_net: ThreadSafeSequential,

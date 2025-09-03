@@ -164,11 +164,11 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
     }
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> Agent for PPO<D, LM> {
+impl<D: Distribution<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for PPO<D, LM> {
     type Dist = D;
 
-    fn distribution(&self) -> &Self::Dist {
-        &self.ppo.distribution
+    fn distribution(&self) -> Self::Dist {
+        self.ppo.distribution.clone()
     }
 
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
