@@ -51,10 +51,14 @@ pub enum FixedSizeWorkerCommand<E: Env> {
     SingleStep {
         distr: OpaqueDistrPtr<E>,
     },
+    SingleStep2,
     // Multi step
     MultiStep {
         num_steps: usize,
         distr: OpaqueDistrPtr<E>,
+    },
+    MultiStep2 {
+        num_steps: usize,
     },
     // Return the trajectory buffer. This will probably not be needed
     ReturnRolloutBuffer,
@@ -74,7 +78,11 @@ pub enum FixedSizeWorkerResult<E: Env> {
     Step {
         buffer: Box<FixedSizeStateBuffer<E>>,
     },
+    Step2 {
+        buffer: Box<FixedSizeStateBuffer<E>>,
+    },
     MultiStepOk,
+    MultiStep2Ok,
     RolloutBuffer {
         buffer: Box<RolloutBuffer<E::Tensor>>,
     },
@@ -150,6 +158,24 @@ impl<E: Env> FixedSizeWorkerThread<E> {
                     self.buffer.set_distr(Some(distr));
                     self.tx.send(FixedSizeWorkerResult::SetDistrOk).unwrap();
                 }
+                FixedSizeWorkerCommand::SingleStep2 => {
+                    self.buffer.step2();
+                    let buffer = self.buffer.move_buffer();
+                    self.tx
+                        .send(FixedSizeWorkerResult::Step2 {
+                            buffer: Box::new(buffer),
+                        })
+                        .unwrap();
+                }
+                FixedSizeWorkerCommand::MultiStep2 { num_steps } => {
+                    // SAFETY: the caller guarnatees that the reference will be valid for the duration
+                    // of the work. The raw pointer will not be used beyond the unsafe block
+                    // let distr = unsafe { &*distr.into_distr_trait_obj_ptr() };
+                    self.buffer.step_n2(num_steps);
+                    self.tx
+                        .send(FixedSizeWorkerResult::MultiStep2Ok {})
+                        .unwrap();
+                }
             }
         }
     }
@@ -194,6 +220,36 @@ impl<E: Env> FixedSizeThreadEnvPool<E> {
             let rx = &self.channels.get(&idx).unwrap().1;
             rx.recv().unwrap();
         }
+    }
+
+    pub fn step2(&mut self, steps: usize) {
+        let num_envs = self.num_envs();
+        for idx in 0..num_envs {
+            let tx = &self.channels.get(&idx).unwrap().0;
+            tx.send(FixedSizeWorkerCommand::MultiStep2 { num_steps: steps })
+                .unwrap();
+        }
+        for idx in 0..num_envs {
+            let rx = &self.channels.get(&idx).unwrap().1;
+            rx.recv().unwrap();
+        }
+    }
+
+    pub fn step_take_buffers2(&mut self) -> Vec<FixedSizeStateBuffer<E>> {
+        let num_envs = self.num_envs();
+        for idx in 0..num_envs {
+            let tx = &self.channels.get(&idx).unwrap().0;
+            tx.send(FixedSizeWorkerCommand::SingleStep2 {}).unwrap();
+        }
+        let mut buffs = Vec::with_capacity(num_envs);
+        for idx in 0..num_envs {
+            let rx = &self.channels.get(&idx).unwrap().1;
+            let FixedSizeWorkerResult::Step2 { buffer } = rx.recv().unwrap() else {
+                panic!()
+            };
+            buffs.push(*buffer);
+        }
+        buffs
     }
 }
 
@@ -286,6 +342,9 @@ pub enum VariableSizedWorkerCommand<E: Env> {
         num_steps: usize,
         distr: OpaqueDistrPtr<E>,
     },
+    StepMultipleWithStepBound2 {
+        num_steps: usize,
+    },
     // Return the trajectory buffer. This will probably not be needed
     ReturnRolloutBuffer,
     // Return the environment description
@@ -305,6 +364,7 @@ pub enum VariableSizedWorkerResult<E: Env> {
         env_description: EnvironmentDescription<E::Tensor>,
     },
     SetDistrOk,
+    StepMultipleWithStepBound2Ok,
 }
 
 pub struct VariableSizedWorkerThread<E: Env> {
@@ -353,6 +413,13 @@ impl<E: Env> VariableSizedWorkerThread<E> {
                 }
                 VariableSizedWorkerCommand::SetDistr { distr } => {
                     self.buffer.set_distr(Some(distr));
+                    self.tx.send(VariableSizedWorkerResult::SetDistrOk).unwrap();
+                }
+                VariableSizedWorkerCommand::StepMultipleWithStepBound2 { num_steps } => {
+                    self.buffer.step_with_epiosde_bound2(num_steps);
+                    self.tx
+                        .send(VariableSizedWorkerResult::StepMultipleWithStepBound2Ok)
+                        .unwrap();
                 }
             }
         }
@@ -385,6 +452,33 @@ impl<E: Env> VariableSizedThreadEnvPool<E> {
             panic!()
         };
         env_description
+    }
+
+    pub fn set_distr<D: Distribution<Tensor = E::Tensor> + Clone>(&mut self, distr: D) {
+        let num_envs = self.num_envs();
+        for idx in 0..num_envs {
+            let tx = &self.channels.get(&idx).unwrap().0;
+            let distr: Box<dyn Distribution<Tensor = E::Tensor>> = Box::new(distr.clone());
+            tx.send(VariableSizedWorkerCommand::SetDistr { distr })
+                .unwrap();
+        }
+        for idx in 0..num_envs {
+            let rx = &self.channels.get(&idx).unwrap().1;
+            rx.recv().unwrap();
+        }
+    }
+
+    fn step_with_episode_bound2(&mut self, steps: usize) {
+        let num_envs = self.num_envs();
+        for idx in 0..num_envs {
+            let tx = &self.channels.get(&idx).unwrap().0;
+            tx.send(VariableSizedWorkerCommand::StepMultipleWithStepBound2 { num_steps: steps })
+                .unwrap();
+        }
+        for idx in 0..num_envs {
+            let rx = &self.channels.get(&idx).unwrap().1;
+            rx.recv().unwrap();
+        }
     }
 }
 

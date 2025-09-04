@@ -19,6 +19,27 @@ impl<E: Env> FixedSizeVecEnvPool<E> {
     pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         self.buffers[0].env.env_description()
     }
+
+    pub fn set_distr<D: Distribution<Tensor = E::Tensor> + Clone>(&mut self, distr: D) {
+        for buffer in self.buffers.iter_mut() {
+            let distr: Box<dyn Distribution<Tensor = E::Tensor>> = Box::new(distr.clone());
+            buffer.set_distr(Some(distr));
+        }
+    }
+
+    pub fn step2(&mut self, steps: usize) {
+        for buf in self.buffers.iter_mut() {
+            buf.step_n2(steps);
+        }
+    }
+
+    pub fn step_take_buffers2(&mut self) -> Vec<FixedSizeStateBuffer<E>> {
+        self.step2(1);
+        self.buffers
+            .iter_mut()
+            .map(|buf| buf.move_buffer())
+            .collect()
+    }
 }
 
 impl<E: Env> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
@@ -61,6 +82,21 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
 
 pub struct VariableSizedVecEnvPool<E: Env> {
     pub buffers: Vec<VariableSizedTrajectoryBuffer<E>>,
+}
+
+impl<E: Env> VariableSizedVecEnvPool<E> {
+    fn step_with_epiosde_bound2<D: Distribution<Tensor = E::Tensor> + Clone>(
+        &mut self,
+        distr: D,
+        steps: usize,
+    ) {
+        for buffer in self.buffers.iter_mut() {
+            let distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>> =
+                Some(Box::new(distr.clone()));
+            buffer.set_distr(distr);
+            buffer.step_with_epiosde_bound2(steps);
+        }
+    }
 }
 
 impl<E: Env> VariableSizedEnvPool for VariableSizedVecEnvPool<E> {
