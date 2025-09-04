@@ -80,6 +80,7 @@ pub struct VariableSizedTrajectoryBuffer<E: Env> {
     // TODO: maybe we could make this optional, signaling that the trajector whether the trajectory
     // buffer currently holds the buffer or not
     pub buffer: VariableSizedStateBuffer<E>,
+    pub distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>>,
     pub last_state: Option<E::Tensor>,
 }
 
@@ -89,6 +90,7 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
         Self {
             env,
             buffer,
+            distr: None,
             last_state: None,
         }
     }
@@ -153,5 +155,9 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
             self.last_state = last_state;
         }
         self.buffer.take_rollout_buffer()
+    }
+
+    pub fn set_distr(&mut self, distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>>) {
+        self.distr = distr;
     }
 }

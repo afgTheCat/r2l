@@ -2,6 +2,7 @@ use crate::{
     distributions::Distribution,
     env::{Env, SnapShot},
     rng::RNG,
+    sampler::env_pools::FixedSizeEnvPool,
     utils::rollout_buffer::RolloutBuffer,
 };
 use crossbeam::channel::{Receiver, RecvError};
@@ -93,6 +94,7 @@ impl<E: Env> FixedSizeStateBuffer<E> {
 pub struct FixedSizeTrajectoryBuffer<E: Env> {
     pub env: E,
     pub buffer: Option<FixedSizeStateBuffer<E>>,
+    pub distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>>,
     pub last_state: Option<E::Tensor>,
 }
 
@@ -101,8 +103,44 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
         Self {
             env,
             buffer: Some(FixedSizeStateBuffer::new(capacity)),
+            distr: None,
             last_state: None,
         }
+    }
+
+    pub fn set_distr(&mut self, distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>>) {
+        self.distr = distr;
+    }
+
+    pub fn step2(&mut self) {
+        let Some(buffer) = &mut self.buffer else {
+            todo!()
+        };
+        let Some(distr) = &mut self.distr else {
+            todo!()
+        };
+        let state = if let Some(state) = buffer.next_states.back() {
+            state.clone()
+        // last state saved from previous rollout, so that we don't have to reset
+        } else if let Some(last_state) = self.last_state.take() {
+            last_state
+        } else {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            self.env.reset(seed).unwrap()
+        };
+        let action = distr.get_action(state.clone()).unwrap();
+        let SnapShot {
+            state: mut next_state,
+            reward,
+            terminated,
+            trancuated,
+        } = self.env.step(action.clone()).unwrap();
+        let done = terminated || trancuated;
+        if done {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            next_state = self.env.reset(seed).unwrap();
+        }
+        buffer.push(state, next_state, action, reward, terminated, trancuated);
     }
 
     pub fn step<D: Distribution<Tensor = E::Tensor> + ?Sized>(&mut self, distr: &D) {
@@ -140,6 +178,12 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
     ) {
         for _ in 0..steps {
             self.step(distr);
+        }
+    }
+
+    pub fn step_n2(&mut self, steps: usize) {
+        for _ in 0..steps {
+            self.step2();
         }
     }
 

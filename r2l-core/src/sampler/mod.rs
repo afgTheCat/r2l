@@ -18,12 +18,12 @@ use std::{fmt::Debug, marker::PhantomData};
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
 // Arc::RwLock for the underlying distribution.
 #[derive(Debug)]
-pub struct DistributionWrapper<D: Distribution, T: Clone + Sync + Debug + 'static> {
+pub struct DistributionWrapper<D: Distribution, T: Clone + Send + Sync + Debug + 'static> {
     distribution: D,
     env: PhantomData<T>,
 }
 
-impl<D: Distribution, T: Clone + Sync + Debug + 'static> DistributionWrapper<D, T> {
+impl<D: Distribution, T: Clone + Send + Sync + Debug + 'static> DistributionWrapper<D, T> {
     pub fn new(distribution: D) -> Self {
         Self {
             distribution,
@@ -33,7 +33,11 @@ impl<D: Distribution, T: Clone + Sync + Debug + 'static> DistributionWrapper<D, 
 }
 
 // SAFETY: This can be safely shared between threads as the env is just a PhantomData
-unsafe impl<D: Distribution, T: Clone + Sync + Debug + 'static> Sync for DistributionWrapper<D, T> {}
+unsafe impl<D: Distribution, T: Send + Clone + Sync + Debug + 'static> Sync
+    for DistributionWrapper<D, T>
+{
+}
+// unsafe impl<D: Distribution, T: Clone + Sync + Debug + 'static> Sync for DistributionWrapper<D, T> {}
 
 // impl<D: Distribution, E: Env> Debug for DistributionWrapper<D, E> {
 //     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -41,7 +45,8 @@ unsafe impl<D: Distribution, T: Clone + Sync + Debug + 'static> Sync for Distrib
 //     }
 // }
 
-impl<D: Distribution, T: Clone + Sync + Debug + 'static> Distribution for DistributionWrapper<D, T>
+impl<D: Distribution, T: Send + Clone + Sync + Debug + 'static> Distribution
+    for DistributionWrapper<D, T>
 where
     T: From<D::Tensor>,
     T: Into<D::Tensor>,
@@ -95,7 +100,6 @@ pub enum CollectionType<E: Env> {
     },
 }
 
-// what I can live with two different different structs here
 pub struct NewSampler<E: Env> {
     pub env_steps: usize,
     pub collection_type: CollectionType<E>,

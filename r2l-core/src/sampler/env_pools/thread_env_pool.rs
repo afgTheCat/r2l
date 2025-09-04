@@ -64,6 +64,10 @@ pub enum FixedSizeWorkerCommand<E: Env> {
     },
     // Get env description
     GetEnvDescription,
+    // Set the distr
+    SetDistr {
+        distr: Box<dyn Distribution<Tensor = E::Tensor>>,
+    },
 }
 
 pub enum FixedSizeWorkerResult<E: Env> {
@@ -78,6 +82,7 @@ pub enum FixedSizeWorkerResult<E: Env> {
     EnvDescription {
         env_description: EnvironmentDescription<E::Tensor>,
     },
+    SetDistrOk,
 }
 
 pub struct FixedSizeWorkerThread<E: Env> {
@@ -141,6 +146,10 @@ impl<E: Env> FixedSizeWorkerThread<E> {
                         .send(FixedSizeWorkerResult::EnvDescription { env_description })
                         .unwrap();
                 }
+                FixedSizeWorkerCommand::SetDistr { distr } => {
+                    self.buffer.set_distr(Some(distr));
+                    self.tx.send(FixedSizeWorkerResult::SetDistrOk).unwrap();
+                }
             }
         }
     }
@@ -173,6 +182,18 @@ impl<E: Env> FixedSizeThreadEnvPool<E> {
             panic!()
         };
         env_description
+    }
+
+    pub fn set_distr<D: Distribution<Tensor = E::Tensor> + Clone>(&self, distr: D) {
+        for idx in 0..self.num_envs() {
+            let distr: Box<dyn Distribution<Tensor = E::Tensor>> = Box::new(distr.clone());
+            let tx = &self.channels.get(&idx).unwrap().0;
+            tx.send(FixedSizeWorkerCommand::SetDistr { distr }).unwrap();
+        }
+        for idx in 0..self.channels.len() {
+            let rx = &self.channels.get(&idx).unwrap().1;
+            rx.recv().unwrap();
+        }
     }
 }
 
@@ -269,6 +290,10 @@ pub enum VariableSizedWorkerCommand<E: Env> {
     ReturnRolloutBuffer,
     // Return the environment description
     GetEnvDescription,
+    // Set the distr
+    SetDistr {
+        distr: Box<dyn Distribution<Tensor = E::Tensor>>,
+    },
 }
 
 pub enum VariableSizedWorkerResult<E: Env> {
@@ -279,6 +304,7 @@ pub enum VariableSizedWorkerResult<E: Env> {
     EnvDescription {
         env_description: EnvironmentDescription<E::Tensor>,
     },
+    SetDistrOk,
 }
 
 pub struct VariableSizedWorkerThread<E: Env> {
@@ -324,6 +350,9 @@ impl<E: Env> VariableSizedWorkerThread<E> {
                     self.tx
                         .send(VariableSizedWorkerResult::EnvDescription { env_description })
                         .unwrap();
+                }
+                VariableSizedWorkerCommand::SetDistr { distr } => {
+                    self.buffer.set_distr(Some(distr));
                 }
             }
         }
