@@ -4,7 +4,6 @@ pub mod trajectory_buffers;
 use crate::{
     distributions::Distribution,
     env::{Env, EnvironmentDescription, Sampler},
-    numeric::Buffer,
     sampler::{
         env_pools::{
             FixedSizeEnvPool, FixedSizeEnvPoolKind, VariableSizedEnvPool, VariableSizedEnvPoolKind,
@@ -13,18 +12,19 @@ use crate::{
     },
     utils::rollout_buffer::RolloutBuffer,
 };
-use candle_core::Result;
+use anyhow::Result;
 use std::{fmt::Debug, marker::PhantomData};
 
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
 // Arc::RwLock for the underlying distribution.
-pub struct DistributionWrapper<'a, D: Distribution, E: Env> {
-    distribution: &'a D,
-    env: PhantomData<E>,
+#[derive(Debug)]
+pub struct DistributionWrapper<D: Distribution, T: Clone + Send + Sync + Debug + 'static> {
+    distribution: D,
+    env: PhantomData<T>,
 }
 
-impl<'a, D: Distribution, E: Env> DistributionWrapper<'a, D, E> {
-    pub fn new(distribution: &'a D) -> Self {
+impl<D: Distribution, T: Clone + Send + Sync + Debug + 'static> DistributionWrapper<D, T> {
+    pub fn new(distribution: D) -> Self {
         Self {
             distribution,
             env: PhantomData,
@@ -33,20 +33,25 @@ impl<'a, D: Distribution, E: Env> DistributionWrapper<'a, D, E> {
 }
 
 // SAFETY: This can be safely shared between threads as the env is just a PhantomData
-unsafe impl<'a, D: Distribution, E: Env> Sync for DistributionWrapper<'a, D, E> {}
-
-impl<'a, D: Distribution, E: Env> Debug for DistributionWrapper<'a, D, E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
-impl<'a, D: Distribution, E: Env> Distribution for DistributionWrapper<'a, D, E>
-where
-    E::Tensor: From<D::Tensor>,
-    E::Tensor: Into<D::Tensor>,
+unsafe impl<D: Distribution, T: Send + Clone + Sync + Debug + 'static> Sync
+    for DistributionWrapper<D, T>
 {
-    type Tensor = E::Tensor;
+}
+// unsafe impl<D: Distribution, T: Clone + Sync + Debug + 'static> Sync for DistributionWrapper<D, T> {}
+
+// impl<D: Distribution, E: Env> Debug for DistributionWrapper<D, E> {
+//     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         todo!()
+//     }
+// }
+
+impl<D: Distribution, T: Send + Clone + Sync + Debug + 'static> Distribution
+    for DistributionWrapper<D, T>
+where
+    T: From<D::Tensor>,
+    T: Into<D::Tensor>,
+{
+    type Tensor = T;
 
     fn std(&self) -> Result<f32> {
         self.distribution.std()
@@ -67,7 +72,7 @@ where
         Ok(entropy.into())
     }
 
-    fn resample_noise(&mut self) -> candle_core::Result<()> {
+    fn resample_noise(&mut self) -> Result<()> {
         // TODO: we may want the distribution to be behind a RwLock, but I doubt that this will be
         // called a whole lot. In future releases we should enable finer control of noise sampling
         todo!()
@@ -95,14 +100,13 @@ pub enum CollectionType<E: Env> {
     },
 }
 
-// what I can live with two different different structs here
 pub struct NewSampler<E: Env> {
     pub env_steps: usize,
     pub collection_type: CollectionType<E>,
 }
 
 impl<E: Env> NewSampler<E> {
-    pub fn env_description(&self) -> EnvironmentDescription {
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         match &self.collection_type {
             CollectionType::StepBound { env_pool, .. } => env_pool.env_description(),
             CollectionType::EpisodeBound { env_pool } => env_pool.env_description(),
@@ -110,18 +114,18 @@ impl<E: Env> NewSampler<E> {
     }
 }
 
-impl<E: Env<Tensor = Buffer>> Sampler for NewSampler<E> {
+impl<E: Env> Sampler for NewSampler<E> {
     type Env = E;
 
     fn collect_rollouts<D: Distribution>(
         &mut self,
-        distr: &D,
+        distr: D,
     ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
     where
         <Self::Env as Env>::Tensor: From<D::Tensor>,
         <Self::Env as Env>::Tensor: Into<D::Tensor>,
     {
-        let distr: DistributionWrapper<D, E> = DistributionWrapper::new(distr);
+        let distr: DistributionWrapper<D, E::Tensor> = DistributionWrapper::new(distr);
         let rb = match &mut self.collection_type {
             CollectionType::StepBound { env_pool, hooks } => {
                 if let Some(hooks) = hooks {

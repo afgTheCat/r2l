@@ -1,4 +1,3 @@
-mod hook_container;
 mod policy_hook;
 mod training_hook;
 

@@ -1,10 +1,10 @@
 use candle_core::Device;
 use candle_core::Result;
-use r2l_core::{env::Env, numeric::Buffer};
+use r2l_core::env::Env;
 use r2l_gym::GymEnv;
 
 pub trait EnvBuilderTrait: Sync + Send + 'static {
-    type Env: Env<Tensor = Buffer>;
+    type Env: Env;
 
     fn build_env(&self, device: &Device) -> Result<Self::Env>;
 }
@@ -17,7 +17,7 @@ impl EnvBuilderTrait for String {
     }
 }
 
-impl<E: Env<Tensor = Buffer>, F: Sync + Send + 'static> EnvBuilderTrait for F
+impl<E: Env, F: Sync + Send + 'static> EnvBuilderTrait for F
 where
     F: Fn(&Device) -> Result<E>,
 {

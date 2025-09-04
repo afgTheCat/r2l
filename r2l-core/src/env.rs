@@ -1,18 +1,20 @@
-use crate::{distributions::Distribution, numeric::Buffer, utils::rollout_buffer::RolloutBuffer};
+use std::fmt::Debug;
+
+use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
+use anyhow::Result;
 use bincode::{Decode, Encode};
-use candle_core::Result;
 
 #[derive(Debug, Clone)]
-pub enum Space {
+pub enum Space<T> {
     Discrete(usize),
     Continous {
-        min: Option<Buffer>,
-        max: Option<Buffer>,
+        min: Option<T>,
+        max: Option<T>,
         size: usize,
     },
 }
 
-impl Space {
+impl<T> Space<T> {
     pub fn continous_from_dims(dims: Vec<usize>) -> Self {
         Self::Continous {
             min: None,
@@ -30,13 +32,13 @@ impl Space {
 }
 
 #[derive(Debug, Clone)]
-pub struct EnvironmentDescription {
-    pub observation_space: Space,
-    pub action_space: Space,
+pub struct EnvironmentDescription<T> {
+    pub observation_space: Space<T>,
+    pub action_space: Space<T>,
 }
 
-impl EnvironmentDescription {
-    pub fn new(observation_space: Space, action_space: Space) -> Self {
+impl<T> EnvironmentDescription<T> {
+    pub fn new(observation_space: Space<T>, action_space: Space<T>) -> Self {
         Self {
             observation_space,
             action_space,
@@ -60,22 +62,13 @@ pub struct SnapShot<T> {
     pub trancuated: bool,
 }
 
-pub struct SnapShot2<T> {
-    pub state: T,
-    pub next_state: T,
-    pub action: T,
-    pub reward: f32,
-    pub terminated: bool,
-    pub trancuated: bool,
-}
-
 pub trait Env {
-    // TODO: we need to figure the right tensor kind here!
-    type Tensor: Clone;
+    //  TODO: we might want to introduce more than just one kind of Tensors.
+    type Tensor: Clone + Send + Sync + Debug + 'static;
 
-    fn reset(&mut self, seed: u64) -> Self::Tensor;
-    fn step(&mut self, action: Self::Tensor) -> SnapShot<Self::Tensor>;
-    fn env_description(&self) -> EnvironmentDescription;
+    fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
+    fn step(&mut self, action: Self::Tensor) -> Result<SnapShot<Self::Tensor>>;
+    fn env_description(&self) -> EnvironmentDescription<Self::Tensor>;
 }
 
 #[derive(Debug, Clone, Copy, Encode, Decode)]
@@ -84,13 +77,13 @@ pub enum RolloutMode {
     StepBound { n_steps: usize },
 }
 
-// ok so the thing is this:
+// TODO:
 pub trait Sampler {
     type Env: Env;
 
     fn collect_rollouts<D: Distribution>(
         &mut self,
-        distribution: &D,
+        distribution: D,
     ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
     where
         <Self::Env as Env>::Tensor: From<D::Tensor>,

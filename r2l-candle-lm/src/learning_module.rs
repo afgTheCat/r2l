@@ -1,20 +1,12 @@
-use std::f64;
-
-use candle_core::{Result, Tensor};
-use candle_nn::{Module, Optimizer};
-
 use crate::{
-    policies::{OptimizerWithMaxGrad, ValueFunction},
+    optimizer::OptimizerWithMaxGrad,
     tensors::{PolicyLoss, ValueLoss},
     thread_safe_sequential::ThreadSafeSequential,
 };
-
-// convinience trait
-pub trait LearningModule {
-    type Losses;
-
-    fn update(&mut self, losses: Self::Losses) -> Result<()>;
-}
+use anyhow::{Ok, Result};
+use candle_core::Tensor;
+use candle_nn::{Module, Optimizer};
+use r2l_core::policies::{LearningModule, ValueFunction};
 
 // I guess cloning is fine here, hope it does
 pub struct PolicyValuesLosses {
@@ -48,8 +40,11 @@ impl LearningModule for DecoupledActorCriticLM {
 
 // TODO: maybe value function could be a subtrait on LearningModule?
 impl ValueFunction for DecoupledActorCriticLM {
+    type Tensor = Tensor;
+
     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
-        self.value_net.forward(observation)?.squeeze(1)
+        let value = self.value_net.forward(observation)?.squeeze(1)?;
+        Ok(value)
     }
 }
 
@@ -75,8 +70,11 @@ impl LearningModule for ParalellActorCriticLM {
 }
 
 impl ValueFunction for ParalellActorCriticLM {
+    type Tensor = Tensor;
+
     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
-        self.value_net.forward(observation)?.squeeze(1)
+        let value = self.value_net.forward(observation)?.squeeze(1)?;
+        Ok(value)
     }
 }
 
@@ -106,6 +104,8 @@ impl LearningModule for LearningModuleKind {
 }
 
 impl ValueFunction for LearningModuleKind {
+    type Tensor = Tensor;
+
     fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
         match self {
             Self::Decoupled(decoupled) => decoupled.calculate_values(observation),

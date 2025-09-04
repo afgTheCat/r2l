@@ -1,19 +1,16 @@
 use candle_core::{DType, Device, Error, Tensor};
-use r2l_agents::ppo::PPP3HooksTrait;
-use r2l_agents::ppo::{HookResult, PPOBatchData};
+use r2l_agents::ppo::{HookResult, PPO, PPOBatchData};
+use r2l_agents::ppo::{PPOCore, PPOHooksTrait};
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::builders::sampler::{EnvBuilderType, EnvPoolType, SamplerType};
-use r2l_core::distributions::DistributionKind;
+use r2l_candle_lm::candle_rollout_buffer::{CandleRolloutBuffer, RolloutBatch};
+use r2l_candle_lm::distributions::DistributionKind;
+use r2l_candle_lm::learning_module::LearningModuleKind;
+use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
 use r2l_core::on_policy_algorithm::{
     DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
 };
-use r2l_core::policies::learning_modules::LearningModuleKind;
-use r2l_core::{
-    Algorithm,
-    distributions::Distribution,
-    tensors::{PolicyLoss, ValueLoss},
-    utils::rollout_buffer::{Advantages, RolloutBuffer},
-};
+use r2l_core::{Algorithm, distributions::Distribution, utils::rollout_buffer::Advantages};
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::{any::Any, f64};
@@ -74,12 +71,11 @@ impl PPOHook {
     }
 }
 
-impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
+impl PPOHooksTrait<PPOCore<DistributionKind, LearningModuleKind>> for PPOHook {
     fn before_learning_hook(
         &mut self,
-        _learning_module: &mut LearningModuleKind,
-        _distribution: &DistributionKind,
-        rollout_buffers: &mut Vec<RolloutBuffer<Tensor>>,
+        _agent: &mut PPOCore<DistributionKind, LearningModuleKind>,
+        rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         advantages: &mut Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
     ) -> candle_core::Result<HookResult> {
@@ -87,8 +83,8 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
         let mut total_rewards: f32 = 0.;
         let mut total_episodes: usize = 0;
         for rb in rollout_buffers {
-            total_rewards += rb.rewards.iter().sum::<f32>();
-            total_episodes += rb.dones.iter().filter(|x| **x).count();
+            total_rewards += rb.0.rewards.iter().sum::<f32>();
+            total_episodes += rb.0.dones.iter().filter(|x| **x).count();
         }
         advantages.normalize();
         let avarage_reward = total_rewards / total_episodes as f32;
@@ -100,17 +96,16 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
 
     fn rollout_hook(
         &mut self,
-        learning_module: &mut LearningModuleKind,
-        distribution: &DistributionKind,
-        _rollout_buffers: &Vec<RolloutBuffer<Tensor>>,
+        agent: &mut PPOCore<DistributionKind, LearningModuleKind>,
+        _rollout_buffers: &Vec<CandleRolloutBuffer>,
     ) -> candle_core::Result<HookResult> {
         self.current_epoch += 1;
         let should_stop = self.current_epoch == self.total_epochs;
         if should_stop {
             // snapshot the learned things, API can be much better
             self.current_rollout += 1;
-            self.progress.std = distribution.std()?;
-            self.progress.learning_rate = learning_module.policy_learning_rate();
+            self.progress.std = agent.distribution.std().unwrap();
+            self.progress.learning_rate = agent.learning_module.policy_learning_rate();
             let progress = self.progress.clear();
             self.tx.send(Box::new(progress)).map_err(Error::wrap)?;
             Ok(HookResult::Break)
@@ -121,14 +116,13 @@ impl PPP3HooksTrait<DistributionKind, LearningModuleKind> for PPOHook {
 
     fn batch_hook(
         &mut self,
-        _learning_module: &mut LearningModuleKind,
-        distribution: &DistributionKind,
-        _rollout_batch: &r2l_core::utils::rollout_buffer::RolloutBatch,
+        agent: &mut PPOCore<DistributionKind, LearningModuleKind>,
+        _rollout_batch: &RolloutBatch,
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
-        let entropy = distribution.entropy()?;
+        let entropy = agent.distribution.entropy().unwrap();
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.ent_coeff, (), &device)? * entropy.neg()?)?;
         self.progress
@@ -182,7 +176,7 @@ impl PPOProgress {
     }
 }
 
-pub fn train_ppo(tx: Sender<EventBox>) -> candle_core::Result<()> {
+pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
     let device = Device::Cpu;

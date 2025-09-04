@@ -1,16 +1,15 @@
+use anyhow::Result;
 use pyo3::{
     PyObject, PyResult, Python,
     types::{PyAnyMethods, PyDict},
 };
-use r2l_core::{
-    env::{Env, EnvironmentDescription, SnapShot, Space},
-    numeric::{Buffer, DType},
-};
+use r2l_buffer::{Buffer, DType};
+use r2l_core::env::{Env, EnvironmentDescription, SnapShot, Space};
 
 pub struct GymEnv {
     env: PyObject,
-    action_space: Space,
-    observation_space: Space,
+    action_space: Space<Buffer>,
+    observation_space: Space<Buffer>,
 }
 
 impl GymEnv {
@@ -62,11 +61,11 @@ impl GymEnv {
         self.action_space.size()
     }
 
-    pub fn observation_space(&self) -> Space {
+    pub fn observation_space(&self) -> Space<Buffer> {
         self.observation_space.clone()
     }
 
-    pub fn action_space(&self) -> Space {
+    pub fn action_space(&self) -> Space<Buffer> {
         self.action_space.clone()
     }
 
@@ -78,20 +77,20 @@ impl GymEnv {
 impl Env for GymEnv {
     type Tensor = Buffer;
 
-    fn reset(&mut self, seed: u64) -> Buffer {
-        Python::with_gil(|py| {
+    fn reset(&mut self, seed: u64) -> Result<Buffer> {
+        let state = Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
             kwargs.set_item("seed", seed)?;
             let state = self.env.call_method(py, "reset", (), Some(&kwargs))?;
             let step = state.bind(py);
             let state = step.get_item(0)?.extract()?;
             PyResult::Ok(Buffer::from_vec(state, DType::F32))
-        })
-        .unwrap()
+        })?;
+        Ok(state)
     }
 
-    fn step(&mut self, action: Buffer) -> SnapShot<Buffer> {
-        Python::with_gil(|py| {
+    fn step(&mut self, action: Buffer) -> Result<SnapShot<Buffer>> {
+        let snapshot = Python::with_gil(|py| {
             let step = match &self.action_space {
                 Space::Continous {
                     min: Some(min),
@@ -121,11 +120,11 @@ impl Env for GymEnv {
                 terminated,
                 trancuated,
             })
-        })
-        .unwrap()
+        })?;
+        Ok(snapshot)
     }
 
-    fn env_description(&self) -> EnvironmentDescription {
+    fn env_description(&self) -> EnvironmentDescription<Buffer> {
         EnvironmentDescription {
             observation_space: self.observation_space.clone(),
             action_space: self.action_space.clone(),

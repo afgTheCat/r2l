@@ -31,8 +31,8 @@ fn skip_header(input: &str) -> IResult<&str, ()> {
     Ok((input, ()))
 }
 
-fn parse_key_value(input: &str) -> IResult<&str, (String, String)> {
-    let (input, p) = alt((tag("- - - "), tag("  - - "))).parse(input)?;
+pub fn parse_key_value(input: &str) -> IResult<&str, (String, String)> {
+    let (input, _) = alt((tag("- - - "), tag("  - - "))).parse(input)?;
     let (input, key) = take_until("\n").parse(input)?;
     let (input, _) = newline(input)?;
     let (input, _) = tag("    - ").parse(input)?;

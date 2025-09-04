@@ -1,6 +1,6 @@
-use candle_core::{Device, Result, Tensor};
+use candle_core::{Device, Result};
 use r2l_core::{
-    distributions::Distribution, env::Env, numeric::Buffer,
+    distributions::Distribution, env::Env,
     sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
 };
 use std::sync::{Arc, Mutex};
@@ -14,7 +14,7 @@ pub struct Evaluator<E: Env> {
     pub device: Device,
 }
 
-impl<E: Env<Tensor = Buffer>> Evaluator<E> {
+impl<E: Env> Evaluator<E> {
     pub fn new(
         env: E,
         eval_episodes: usize,
@@ -47,7 +47,7 @@ impl<E: Env<Tensor = Buffer>> Evaluator<E> {
         } else {
             self.trajectory_buffer
                 .run_episodes(dist, self.eval_episodes);
-            let rb = self.trajectory_buffer.to_rollout_buffer();
+            let rb = self.trajectory_buffer.take_rollout_buffer();
             let sum_rewads = rb.rewards.iter().sum::<f32>();
             let avg_rewards = sum_rewads / self.eval_episodes as f32;
             println!("Avg rew: {}", avg_rewards);

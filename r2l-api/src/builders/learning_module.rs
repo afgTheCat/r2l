@@ -1,13 +1,11 @@
 use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
-use r2l_core::{
-    env::EnvironmentDescription,
-    policies::{
-        OptimizerWithMaxGrad,
-        learning_modules::{DecoupledActorCriticLM, LearningModuleKind, ParalellActorCriticLM},
-    },
+use r2l_candle_lm::{
+    learning_module::{DecoupledActorCriticLM, LearningModuleKind, ParalellActorCriticLM},
+    optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::build_sequential,
 };
+use r2l_core::env::EnvironmentDescription;
 
 pub enum LearningModuleType {
     Paralell {
@@ -27,11 +25,11 @@ pub struct LearningModuleBuilder {
 }
 
 impl LearningModuleBuilder {
-    pub fn build(
+    pub fn build<T>(
         &self,
         distribution_varmap: VarMap,
         distr_var_builder: VarBuilder,
-        env_description: &EnvironmentDescription,
+        env_description: &EnvironmentDescription<T>,
         device: &Device,
     ) -> Result<LearningModuleKind> {
         let input_size = env_description.observation_size();

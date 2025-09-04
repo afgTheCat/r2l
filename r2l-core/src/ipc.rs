@@ -1,11 +1,10 @@
 use crate::{distributions::Distribution, env::RolloutMode, utils::rollout_buffer::RolloutBuffer};
 use bincode::{Decode, Encode};
-use candle_core::Tensor;
 use interprocess::local_socket::Stream;
 use std::io::{BufReader, Read, Write};
 
 #[derive(Debug, Encode)]
-pub enum PacketToSend<'a, D: Distribution<Tensor = Tensor>> {
+pub enum PacketToSend<'a, D: Distribution, T: Clone> {
     // Send command to halt training
     Halt,
     // Ack halting command
@@ -17,12 +16,12 @@ pub enum PacketToSend<'a, D: Distribution<Tensor = Tensor>> {
     },
     // Return the trained amount
     RolloutResult {
-        rollout: RolloutBuffer<Tensor>,
+        rollout: RolloutBuffer<T>,
     },
 }
 
 #[derive(Debug, Decode)]
-pub enum PacketToReceive<D: Distribution<Tensor = Tensor>> {
+pub enum PacketToReceive<D: Distribution, T: Clone> {
     // Send command to halt training
     Halt,
     // Ack halting command
@@ -34,7 +33,7 @@ pub enum PacketToReceive<D: Distribution<Tensor = Tensor>> {
     },
     // Return the trained amount
     RolloutResult {
-        rollout: RolloutBuffer<Tensor>,
+        rollout: RolloutBuffer<T>,
     },
 }
 

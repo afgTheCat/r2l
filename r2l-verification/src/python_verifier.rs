@@ -11,11 +11,14 @@ fn parse_null(arg_val: &String, py: Python) -> Option<PyObject> {
 }
 
 fn parse_str(arg_val: &String, py: Python) -> Option<PyObject> {
-    Some(arg_val.to_object(py))
+    Some(arg_val.into_pyobject(py).unwrap().into_any().unbind())
 }
 
 fn parse_int(arg_val: &String, py: Python) -> Option<PyObject> {
-    arg_val.parse::<i64>().ok().map(|v| v.to_object(py))
+    arg_val
+        .parse::<i64>()
+        .ok()
+        .map(|v| v.into_pyobject(py).unwrap().into_any().unbind())
 }
 
 fn parse_bool(arg_val: &String, py: Python) -> Option<PyObject> {

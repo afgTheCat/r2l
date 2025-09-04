@@ -1,16 +1,17 @@
-use super::Distribution;
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
+use anyhow::Result;
 use bincode::{
     Decode, Encode,
     error::{DecodeError, EncodeError},
 };
-use candle_core::{Device, Result, Tensor, safetensors::BufferedSafetensors};
+use candle_core::{Device, Tensor, safetensors::BufferedSafetensors};
 use candle_nn::{Module, VarBuilder};
+use r2l_core::distributions::Distribution;
 use safetensors::serialize;
 use std::f32;
 
 // TODO: we may want to resample the noise better than it is now
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiagGaussianDistribution {
     noise: Tensor,
     mu_net: ThreadSafeSequential,
@@ -27,7 +28,7 @@ impl Encode for DiagGaussianDistribution {
         let data = [("noise", &self.noise), ("log_std", &self.log_std)];
         bincode::encode_into_writer(
             serialize(data, &None).map_err(|err| EncodeError::OtherString(err.to_string()))?,
-            &mut encoder.writer(),
+            encoder.writer(),
             writer_config,
         )
     }
@@ -109,7 +110,8 @@ impl Distribution for DiagGaussianDistribution {
         let log_probs = ((((actions - &mu)?.sqr()? / (2. * var)?)?.neg()?
             - &self.log_std.broadcast_as(mu.shape())?)?
             - log_sqrt_2pi)?;
-        log_probs.sum(1)
+        let log_probs = log_probs.sum(1)?;
+        Ok(log_probs)
     }
 
     fn entropy(&self) -> Result<Tensor> {
@@ -118,11 +120,13 @@ impl Distribution for DiagGaussianDistribution {
             self.log_std.shape(),
             self.log_std.device(),
         )?;
-        log_2pi_plus_1_div_2.add(&self.log_std)?.sum_all()
+        let entropy = log_2pi_plus_1_div_2.add(&self.log_std)?.sum_all()?;
+        Ok(entropy)
     }
 
     fn std(&self) -> Result<f32> {
-        self.log_std.exp()?.mean_all()?.to_scalar::<f32>()
+        let std = self.log_std.exp()?.mean_all()?.to_scalar::<f32>()?;
+        Ok(std)
     }
 
     fn resample_noise(&mut self) -> Result<()> {

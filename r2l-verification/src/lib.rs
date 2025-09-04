@@ -1,8 +1,8 @@
 // Tools for verification
-mod experiment_manager;
-mod parse_config;
-mod python_verifier;
-mod r2l_verifier;
+pub mod experiment_manager;
+pub mod parse_config;
+pub mod python_verifier;
+pub mod r2l_verifier;
 
 // TODO: move this to a dedicated tests folder
 #[cfg(test)]

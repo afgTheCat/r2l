@@ -4,7 +4,6 @@ pub mod vec_env_pool;
 use crate::{
     distributions::Distribution,
     env::{Env, EnvironmentDescription},
-    numeric::Buffer,
     sampler::{
         env_pools::{
             thread_env_pool::{FixedSizeThreadEnvPool, VariableSizedThreadEnvPool},
@@ -16,7 +15,7 @@ use crate::{
 };
 
 pub trait FixedSizeEnvPool {
-    type Env: Env<Tensor = Buffer>;
+    type Env: Env;
 
     /// Return the number of environments
     fn num_envs(&self) -> usize;
@@ -47,7 +46,7 @@ pub enum FixedSizeEnvPoolKind<E: Env> {
 }
 
 impl<E: Env> FixedSizeEnvPoolKind<E> {
-    pub fn env_description(&self) -> EnvironmentDescription {
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         match self {
             Self::FixedSizeVecEnvPool(env_pool) => env_pool.env_description(),
             Self::FixedSizeThreadEnvPool(env_pool) => env_pool.env_description(),
@@ -55,7 +54,7 @@ impl<E: Env> FixedSizeEnvPoolKind<E> {
     }
 }
 
-impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
+impl<E: Env> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
     type Env = E;
 
     fn num_envs(&self) -> usize {
@@ -98,7 +97,7 @@ impl<E: Env<Tensor = Buffer>> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
 }
 
 pub trait VariableSizedEnvPool {
-    type Env: Env<Tensor = Buffer>;
+    type Env: Env;
 
     fn num_envs(&self) -> usize;
 
@@ -118,7 +117,7 @@ pub enum VariableSizedEnvPoolKind<E: Env> {
 }
 
 impl<E: Env> VariableSizedEnvPoolKind<E> {
-    pub fn env_description(&self) -> EnvironmentDescription {
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         match self {
             Self::VariableSizedVecEnvPool(env_pool) => env_pool.buffers[0].env.env_description(),
             Self::VariableSizedThreadEnvPool(env_pool) => env_pool.env_description(),
@@ -126,7 +125,7 @@ impl<E: Env> VariableSizedEnvPoolKind<E> {
     }
 }
 
-impl<E: Env<Tensor = Buffer>> VariableSizedEnvPool for VariableSizedEnvPoolKind<E> {
+impl<E: Env> VariableSizedEnvPool for VariableSizedEnvPoolKind<E> {
     type Env = E;
 
     fn num_envs(&self) -> usize {

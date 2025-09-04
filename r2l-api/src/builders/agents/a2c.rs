@@ -2,13 +2,12 @@ use crate::builders::{
     distribution::{DistributionBuilder, DistributionType},
     learning_module::{LearningModuleBuilder, LearningModuleType},
 };
-use candle_core::{DType, Device, Result};
+use anyhow::Result;
+use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
 use r2l_agents::a2c::{A2C, DefaultA2CHooks};
-use r2l_core::{
-    distributions::DistributionKind, env::EnvironmentDescription,
-    policies::learning_modules::LearningModuleKind,
-};
+use r2l_candle_lm::{distributions::DistributionKind, learning_module::LearningModuleKind};
+use r2l_core::env::EnvironmentDescription;
 
 pub struct A2CBuilder {
     pub distribution_builder: DistributionBuilder,
@@ -41,10 +40,10 @@ impl Default for A2CBuilder {
 }
 
 impl A2CBuilder {
-    pub fn build(
+    pub fn build<T>(
         &self,
         device: &Device,
-        env_description: &EnvironmentDescription,
+        env_description: &EnvironmentDescription<T>,
     ) -> Result<A2C<DistributionKind, LearningModuleKind>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =

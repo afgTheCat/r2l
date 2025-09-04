@@ -1,19 +1,23 @@
 use crate::builders::{env::EnvBuilderTrait, sampler_hooks2::EvaluatorNormalizerOptions};
 use candle_core::Device;
-use r2l_core::sampler::{
-    CollectionType, NewSampler,
-    env_pools::{
-        FixedSizeEnvPoolKind, VariableSizedEnvPoolKind,
-        thread_env_pool::{
-            FixedSizeThreadEnvPool, FixedSizeWorkerCommand, FixedSizeWorkerResult,
-            FixedSizeWorkerThread, VariableSizedThreadEnvPool, VariableSizedWorkerCommand,
-            VariableSizedWorkerResult, VariableSizedWorkerThread,
+use r2l_buffer::Buffer;
+use r2l_core::{
+    env::Env,
+    sampler::{
+        CollectionType, NewSampler,
+        env_pools::{
+            FixedSizeEnvPoolKind, VariableSizedEnvPoolKind,
+            thread_env_pool::{
+                FixedSizeThreadEnvPool, FixedSizeWorkerCommand, FixedSizeWorkerResult,
+                FixedSizeWorkerThread, VariableSizedThreadEnvPool, VariableSizedWorkerCommand,
+                VariableSizedWorkerResult, VariableSizedWorkerThread,
+            },
+            vec_env_pool::{FixedSizeVecEnvPool, VariableSizedVecEnvPool},
         },
-        vec_env_pool::{FixedSizeVecEnvPool, VariableSizedVecEnvPool},
-    },
-    trajectory_buffers::{
-        fixed_size_buffer::FixedSizeTrajectoryBuffer,
-        variable_size_buffer::VariableSizedTrajectoryBuffer,
+        trajectory_buffers::{
+            fixed_size_buffer::FixedSizeTrajectoryBuffer,
+            variable_size_buffer::VariableSizedTrajectoryBuffer,
+        },
     },
 };
 use std::{collections::HashMap, sync::Arc};
@@ -183,7 +187,10 @@ pub struct SamplerType {
 }
 
 impl SamplerType {
-    pub fn build_with_builder_type<EB: EnvBuilderTrait>(
+    pub fn build_with_builder_type<
+        E: Env<Tensor = Buffer> + 'static,
+        EB: EnvBuilderTrait<Env = E>,
+    >(
         &self,
         builder_type: EnvBuilderType<EB>,
         device: &Device,

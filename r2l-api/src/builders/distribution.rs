@@ -1,12 +1,11 @@
-use candle_core::{Device, Result};
+use anyhow::Result;
+use candle_core::Device;
 use candle_nn::VarBuilder;
-use r2l_core::{
-    distributions::{
-        DistributionKind, categorical_distribution::CategoricalDistribution,
-        diagonal_distribution::DiagGaussianDistribution,
-    },
-    env::{EnvironmentDescription, Space},
+use r2l_candle_lm::distributions::{
+    DistributionKind, categorical_distribution::CategoricalDistribution,
+    diagonal_distribution::DiagGaussianDistribution,
 };
+use r2l_core::env::{EnvironmentDescription, Space};
 
 pub enum DistributionType {
     Dynamic,
@@ -20,11 +19,11 @@ pub struct DistributionBuilder {
 }
 
 impl DistributionBuilder {
-    pub fn build(
+    pub fn build<T>(
         &self,
         distribution_varbuilder: &VarBuilder,
         device: &Device,
-        env_description: &EnvironmentDescription,
+        env_description: &EnvironmentDescription<T>,
     ) -> Result<DistributionKind> {
         let action_size = env_description.action_size();
         let observation_size = env_description.observation_size();

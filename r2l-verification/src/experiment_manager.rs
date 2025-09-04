@@ -17,7 +17,7 @@ fn parse_env_kwarg(arg_val: String, py: Python) -> Option<PyObject> {
     }
 }
 
-static MAP_CONFIG_TO_EXP_MANAGER: Lazy<
+pub static MAP_CONFIG_TO_EXP_MANAGER: Lazy<
     Mutex<HashMap<String, fn(String, Python) -> Option<PyObject>>>,
 > = Lazy::new(|| {
     let mut m = HashMap::new();

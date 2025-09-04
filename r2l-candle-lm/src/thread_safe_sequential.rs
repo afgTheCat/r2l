@@ -45,7 +45,7 @@ impl Encode for LinearLayer {
         bincode::encode_into_writer(
             self.serialize()
                 .map_err(|err| EncodeError::OtherString(err.to_string()))?,
-            &mut encoder.writer(),
+            encoder.writer(),
             writer_config,
         )?;
         self.weight_name.encode(encoder)?;
@@ -94,7 +94,7 @@ impl Encode for ActivationLayer {
         let writer_config = bincode::config::standard();
         bincode::encode_into_writer(
             bincode::serde::encode_to_vec(self.0, writer_config)?,
-            &mut encoder.writer(),
+            encoder.writer(),
             writer_config,
         )
     }
@@ -207,14 +207,12 @@ pub fn build_sequential(
         let layer_pp = format!("{prefix}{layer_idx}");
         if layer_idx == num_layers - 1 {
             let layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
-            nn = nn.add(ThreadSafeLayer::linear(layer))
+            nn = nn.add_layer(ThreadSafeLayer::linear(layer))
         } else {
             let lin_layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
-            nn = nn
-                .add(ThreadSafeLayer::linear(lin_layer))
-                .add(ThreadSafeLayer::activation(ActivationLayer(
-                    Activation::Relu,
-                )));
+            nn = nn.add_layer(ThreadSafeLayer::linear(lin_layer)).add_layer(
+                ThreadSafeLayer::activation(ActivationLayer(Activation::Relu)),
+            );
         }
         last_dim = *layer_size;
     }
@@ -222,7 +220,7 @@ pub fn build_sequential(
 }
 
 impl ThreadSafeSequential {
-    pub fn add(mut self, layer: ThreadSafeLayer) -> Self {
+    pub fn add_layer(mut self, layer: ThreadSafeLayer) -> Self {
         self.layers.push(layer);
         self
     }
