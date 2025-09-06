@@ -81,7 +81,7 @@ pub enum RolloutMode {
 pub trait Sampler {
     type Env: Env;
 
-    fn collect_rollouts<D: Distribution>(
+    fn collect_rollouts<D: Distribution + Clone>(
         &mut self,
         distribution: D,
     ) -> Result<Vec<RolloutBuffer<D::Tensor>>>

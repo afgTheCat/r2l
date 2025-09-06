@@ -17,13 +17,13 @@ use std::{fmt::Debug, marker::PhantomData};
 
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
 // Arc::RwLock for the underlying distribution.
-#[derive(Debug)]
-pub struct DistributionWrapper<D: Distribution, T: Clone + Send + Sync + Debug + 'static> {
+#[derive(Debug, Clone)]
+pub struct DistributionWrapper<D: Distribution + Clone, T: Clone + Send + Sync + Debug + 'static> {
     distribution: D,
     env: PhantomData<T>,
 }
 
-impl<D: Distribution, T: Clone + Send + Sync + Debug + 'static> DistributionWrapper<D, T> {
+impl<D: Distribution + Clone, T: Clone + Send + Sync + Debug + 'static> DistributionWrapper<D, T> {
     pub fn new(distribution: D) -> Self {
         Self {
             distribution,
@@ -33,7 +33,7 @@ impl<D: Distribution, T: Clone + Send + Sync + Debug + 'static> DistributionWrap
 }
 
 // SAFETY: This can be safely shared between threads as the env is just a PhantomData
-unsafe impl<D: Distribution, T: Send + Clone + Sync + Debug + 'static> Sync
+unsafe impl<D: Distribution + Clone, T: Send + Clone + Sync + Debug + 'static> Sync
     for DistributionWrapper<D, T>
 {
 }
@@ -45,7 +45,7 @@ unsafe impl<D: Distribution, T: Send + Clone + Sync + Debug + 'static> Sync
 //     }
 // }
 
-impl<D: Distribution, T: Send + Clone + Sync + Debug + 'static> Distribution
+impl<D: Distribution + Clone, T: Send + Clone + Sync + Debug + 'static> Distribution
     for DistributionWrapper<D, T>
 where
     T: From<D::Tensor>,
@@ -117,33 +117,33 @@ impl<E: Env> NewSampler<E> {
 impl<E: Env> Sampler for NewSampler<E> {
     type Env = E;
 
-    fn collect_rollouts<D: Distribution>(
+    fn collect_rollouts<D: Distribution + Clone>(
         &mut self,
         distr: D,
     ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
     where
-        <Self::Env as Env>::Tensor: From<D::Tensor>,
-        <Self::Env as Env>::Tensor: Into<D::Tensor>,
+        E::Tensor: From<D::Tensor>,
+        E::Tensor: Into<D::Tensor>,
     {
         let distr: DistributionWrapper<D, E::Tensor> = DistributionWrapper::new(distr);
         let rb = match &mut self.collection_type {
             CollectionType::StepBound { env_pool, hooks } => {
                 if let Some(hooks) = hooks {
+                    env_pool.set_distr(distr.clone());
                     let mut steps_taken = 0;
                     while steps_taken < self.env_steps {
-                        let mut buffers = env_pool.step_take_buffers(&distr);
+                        let mut buffers = env_pool.step_take_buffers();
                         hooks.process_last_step(&distr, &mut buffers);
                         env_pool.set_buffers(buffers);
                         steps_taken += 1;
                     }
+                    env_pool.take_rollout_buffers()
                 } else {
-                    env_pool.step(&distr, self.env_steps);
+                    env_pool.step_n(distr, self.env_steps)
                 }
-                env_pool.to_rollout_buffers()
             }
             CollectionType::EpisodeBound { env_pool } => {
-                env_pool.step_with_episode_bound(&distr, self.env_steps);
-                env_pool.to_rollout_buffers()
+                env_pool.step_with_episode_bound(distr, self.env_steps)
             }
         };
         Ok(rb.into_iter().map(|rb| rb.convert()).collect())

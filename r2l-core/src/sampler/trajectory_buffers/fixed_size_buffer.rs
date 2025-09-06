@@ -2,7 +2,6 @@ use crate::{
     distributions::Distribution,
     env::{Env, SnapShot},
     rng::RNG,
-    sampler::env_pools::FixedSizeEnvPool,
     utils::rollout_buffer::RolloutBuffer,
 };
 use crossbeam::channel::{Receiver, RecvError};
@@ -195,7 +194,7 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
         }
     }
 
-    pub fn to_rollout_buffer(&mut self) -> RolloutBuffer<E::Tensor> {
+    pub fn take_rollout_buffer(&mut self) -> RolloutBuffer<E::Tensor> {
         let Some(buffer) = self.buffer.as_mut() else {
             panic!()
         };

@@ -11,53 +11,13 @@ use crate::{
     utils::rollout_buffer::RolloutBuffer,
 };
 use crossbeam::channel::{Receiver, Sender};
-use std::{collections::HashMap, marker::PhantomData};
-
-type DistrTraitObj<'a, T> = dyn Distribution<Tensor = T> + 'a;
-type DistrTraitObjPtr<'a, T> = *const DistrTraitObj<'a, T>;
-
-pub struct OpaqueDistrPtr<E: Env> {
-    ptr: *const (),
-    env_type: PhantomData<E>,
-}
-
-unsafe impl<E: Env> Send for OpaqueDistrPtr<E> {}
-unsafe impl<E: Env> Sync for OpaqueDistrPtr<E> {}
-
-impl<E: Env> OpaqueDistrPtr<E> {
-    unsafe fn into_distr_trait_obj_ptr<'a>(self) -> DistrTraitObjPtr<'a, E::Tensor> {
-        unsafe { &**self.ptr.cast::<DistrTraitObjPtr<'a, E::Tensor>>() }
-    }
-
-    fn from_trait_obj<'a>(ptr: DistrTraitObjPtr<'a, E::Tensor>) -> Self {
-        let ptr = ptr as *const ();
-        Self {
-            ptr,
-            env_type: PhantomData,
-        }
-    }
-}
-
-// type DistrPtrType = *const dyn Distribution<Tensor = Tensor>;
-// pub struct DistrPtr(DistrPtrType);
-//
-// // TODO: write a safety comment here. Also these are just new types for a const pointer, accessing
-// // them is already unsafe
-// unsafe impl Send for DistrPtr {}
-// unsafe impl Sync for DistrPtr {}
+use std::collections::HashMap;
 
 pub enum FixedSizeWorkerCommand<E: Env> {
     // Single step and return tranfer the buffers
-    SingleStep {
-        distr: OpaqueDistrPtr<E>,
-    },
-    SingleStep2,
-    // Multi step
+    SingleStep,
+    // },
     MultiStep {
-        num_steps: usize,
-        distr: OpaqueDistrPtr<E>,
-    },
-    MultiStep2 {
         num_steps: usize,
     },
     // Return the trajectory buffer. This will probably not be needed
@@ -75,14 +35,10 @@ pub enum FixedSizeWorkerCommand<E: Env> {
 }
 
 pub enum FixedSizeWorkerResult<E: Env> {
-    Step {
-        buffer: Box<FixedSizeStateBuffer<E>>,
-    },
     Step2 {
         buffer: Box<FixedSizeStateBuffer<E>>,
     },
     MultiStepOk,
-    MultiStep2Ok,
     RolloutBuffer {
         buffer: Box<RolloutBuffer<E::Tensor>>,
     },
@@ -117,27 +73,8 @@ impl<E: Env> FixedSizeWorkerThread<E> {
         loop {
             let command = self.rx.recv().unwrap();
             match command {
-                FixedSizeWorkerCommand::SingleStep { distr } => {
-                    // SAFETY: the caller guarnatees that the reference will be valid for the duration
-                    // of the work. The raw pointer will not be used beyond the unsafe block
-                    let distr = unsafe { &*distr.into_distr_trait_obj_ptr() };
-                    self.buffer.step(distr);
-                    let buffer = self.buffer.move_buffer();
-                    self.tx
-                        .send(FixedSizeWorkerResult::Step {
-                            buffer: Box::new(buffer),
-                        })
-                        .unwrap();
-                }
-                FixedSizeWorkerCommand::MultiStep { num_steps, distr } => {
-                    // SAFETY: the caller guarnatees that the reference will be valid for the duration
-                    // of the work. The raw pointer will not be used beyond the unsafe block
-                    let distr = unsafe { &*distr.into_distr_trait_obj_ptr() };
-                    self.buffer.step_n(distr, num_steps);
-                    self.tx.send(FixedSizeWorkerResult::MultiStepOk {}).unwrap();
-                }
                 FixedSizeWorkerCommand::ReturnRolloutBuffer => {
-                    let buffer = self.buffer.to_rollout_buffer();
+                    let buffer = self.buffer.take_rollout_buffer();
                     self.tx
                         .send(FixedSizeWorkerResult::RolloutBuffer {
                             buffer: Box::new(buffer),
@@ -158,7 +95,7 @@ impl<E: Env> FixedSizeWorkerThread<E> {
                     self.buffer.set_distr(Some(distr));
                     self.tx.send(FixedSizeWorkerResult::SetDistrOk).unwrap();
                 }
-                FixedSizeWorkerCommand::SingleStep2 => {
+                FixedSizeWorkerCommand::SingleStep => {
                     self.buffer.step2();
                     let buffer = self.buffer.move_buffer();
                     self.tx
@@ -167,14 +104,9 @@ impl<E: Env> FixedSizeWorkerThread<E> {
                         })
                         .unwrap();
                 }
-                FixedSizeWorkerCommand::MultiStep2 { num_steps } => {
-                    // SAFETY: the caller guarnatees that the reference will be valid for the duration
-                    // of the work. The raw pointer will not be used beyond the unsafe block
-                    // let distr = unsafe { &*distr.into_distr_trait_obj_ptr() };
+                FixedSizeWorkerCommand::MultiStep { num_steps } => {
                     self.buffer.step_n2(num_steps);
-                    self.tx
-                        .send(FixedSizeWorkerResult::MultiStep2Ok {})
-                        .unwrap();
+                    self.tx.send(FixedSizeWorkerResult::MultiStepOk {}).unwrap();
                 }
             }
         }
@@ -209,37 +141,20 @@ impl<E: Env> FixedSizeThreadEnvPool<E> {
         };
         env_description
     }
+}
 
-    pub fn set_distr<D: Distribution<Tensor = E::Tensor> + Clone>(&self, distr: D) {
-        for idx in 0..self.num_envs() {
-            let distr: Box<dyn Distribution<Tensor = E::Tensor>> = Box::new(distr.clone());
-            let tx = &self.channels.get(&idx).unwrap().0;
-            tx.send(FixedSizeWorkerCommand::SetDistr { distr }).unwrap();
-        }
-        for idx in 0..self.channels.len() {
-            let rx = &self.channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
-        }
+impl<E: Env> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
+    type Env = E;
+
+    fn num_envs(&self) -> usize {
+        self.channels.len()
     }
 
-    pub fn step2(&mut self, steps: usize) {
+    fn step_take_buffers(&mut self) -> Vec<FixedSizeStateBuffer<Self::Env>> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
-            tx.send(FixedSizeWorkerCommand::MultiStep2 { num_steps: steps })
-                .unwrap();
-        }
-        for idx in 0..num_envs {
-            let rx = &self.channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
-        }
-    }
-
-    pub fn step_take_buffers2(&mut self) -> Vec<FixedSizeStateBuffer<E>> {
-        let num_envs = self.num_envs();
-        for idx in 0..num_envs {
-            let tx = &self.channels.get(&idx).unwrap().0;
-            tx.send(FixedSizeWorkerCommand::SingleStep2 {}).unwrap();
+            tx.send(FixedSizeWorkerCommand::SingleStep {}).unwrap();
         }
         let mut buffs = Vec::with_capacity(num_envs);
         for idx in 0..num_envs {
@@ -251,59 +166,38 @@ impl<E: Env> FixedSizeThreadEnvPool<E> {
         }
         buffs
     }
-}
 
-// TODO: iterating through all the channels twice is a common pattern here. Can automate?
-impl<E: Env> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
-    type Env = E;
-
-    fn num_envs(&self) -> usize {
-        self.channels.len()
-    }
-
-    fn step<D: Distribution<Tensor = E::Tensor>>(&mut self, distr: &D, steps: usize) {
-        let num_envs = self.num_envs();
-        let ptr: DistrTraitObjPtr<_> = distr;
-        for idx in 0..num_envs {
+    fn set_distr<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+        &mut self,
+        distr: D,
+    ) {
+        for idx in 0..self.num_envs() {
+            let distr: Box<dyn Distribution<Tensor = E::Tensor>> = Box::new(distr.clone());
             let tx = &self.channels.get(&idx).unwrap().0;
-            tx.send(FixedSizeWorkerCommand::MultiStep {
-                num_steps: steps,
-                distr: OpaqueDistrPtr::from_trait_obj(ptr),
-            })
-            .unwrap();
+            tx.send(FixedSizeWorkerCommand::SetDistr { distr }).unwrap();
         }
-        for idx in 0..num_envs {
+        for idx in 0..self.channels.len() {
             let rx = &self.channels.get(&idx).unwrap().1;
             rx.recv().unwrap();
         }
     }
 
-    fn step_take_buffers<D: Distribution<Tensor = E::Tensor>>(
+    fn step_n<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
         &mut self,
-        distr: &D,
-    ) -> Vec<FixedSizeStateBuffer<Self::Env>> {
+        distr: D,
+        steps: usize,
+    ) -> Vec<RolloutBuffer<<Self::Env as Env>::Tensor>> {
+        self.set_distr(distr);
         let num_envs = self.num_envs();
-        let ptr: DistrTraitObjPtr<_> = distr;
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
-            tx.send(FixedSizeWorkerCommand::SingleStep {
-                distr: OpaqueDistrPtr::from_trait_obj(ptr),
-            })
-            .unwrap();
+            tx.send(FixedSizeWorkerCommand::MultiStep { num_steps: steps })
+                .unwrap();
         }
-        let mut buffs = Vec::with_capacity(num_envs);
         for idx in 0..num_envs {
             let rx = &self.channels.get(&idx).unwrap().1;
-            let FixedSizeWorkerResult::Step { buffer } = rx.recv().unwrap() else {
-                panic!()
-            };
-            buffs.push(*buffer);
+            rx.recv().unwrap();
         }
-        buffs
-    }
-
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<E::Tensor>> {
-        let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
             tx.send(FixedSizeWorkerCommand::ReturnRolloutBuffer)
@@ -334,14 +228,29 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
             rx.recv().unwrap();
         }
     }
+
+    fn take_rollout_buffers(&mut self) -> Vec<RolloutBuffer<<Self::Env as Env>::Tensor>> {
+        let num_envs = self.num_envs();
+        for idx in 0..num_envs {
+            let tx = &self.channels.get(&idx).unwrap().0;
+            tx.send(FixedSizeWorkerCommand::ReturnRolloutBuffer)
+                .unwrap();
+        }
+        let mut buffs = Vec::with_capacity(num_envs);
+        for idx in 0..num_envs {
+            let rx = &self.channels.get(&idx).unwrap().1;
+            // TODO: this is ugly, implement the Into trait wherever we can
+            let FixedSizeWorkerResult::RolloutBuffer { buffer } = rx.recv().unwrap() else {
+                panic!()
+            };
+            buffs.push(*buffer);
+        }
+        buffs
+    }
 }
 
 pub enum VariableSizedWorkerCommand<E: Env> {
     // Multi step
-    StepMultipleWithStepBound {
-        num_steps: usize,
-        distr: OpaqueDistrPtr<E>,
-    },
     StepMultipleWithStepBound2 {
         num_steps: usize,
     },
@@ -356,7 +265,6 @@ pub enum VariableSizedWorkerCommand<E: Env> {
 }
 
 pub enum VariableSizedWorkerResult<E: Env> {
-    StepMultipleWithStepBoundOk,
     RolloutBuffer {
         buffer: RolloutBuffer<E::Tensor>,
     },
@@ -390,15 +298,6 @@ impl<E: Env> VariableSizedWorkerThread<E> {
         loop {
             let command = self.rx.recv().unwrap();
             match command {
-                VariableSizedWorkerCommand::StepMultipleWithStepBound { num_steps, distr } => {
-                    // SAFETY: the caller guarnatees that the reference will be valid for the duration
-                    // of the work. The raw pointer will not be used beyond the unsafe block
-                    let distr = unsafe { &*distr.into_distr_trait_obj_ptr() };
-                    self.buffer.step_with_epiosde_bound(distr, num_steps);
-                    self.tx
-                        .send(VariableSizedWorkerResult::StepMultipleWithStepBoundOk)
-                        .unwrap();
-                }
                 VariableSizedWorkerCommand::ReturnRolloutBuffer => {
                     let buffer = self.buffer.take_rollout_buffer();
                     self.tx
@@ -438,23 +337,20 @@ pub struct VariableSizedThreadEnvPool<E: Env> {
     channels: VariableSizedChannelMap<E>,
 }
 
-impl<E: Env> VariableSizedThreadEnvPool<E> {
-    pub fn new(channels: VariableSizedChannelMap<E>) -> Self {
-        Self { channels }
+impl<E: Env> VariableSizedEnvPool for VariableSizedThreadEnvPool<E> {
+    type Env = E;
+
+    fn num_envs(&self) -> usize {
+        self.channels.len()
     }
 
-    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
-        let (tx, rx) = self.channels.get(&0).unwrap();
-        tx.send(VariableSizedWorkerCommand::GetEnvDescription)
-            .unwrap();
-        let VariableSizedWorkerResult::EnvDescription { env_description } = rx.recv().unwrap()
-        else {
-            panic!()
-        };
-        env_description
-    }
-
-    pub fn set_distr<D: Distribution<Tensor = E::Tensor> + Clone>(&mut self, distr: D) {
+    // TODO: we should have one kind of command that sets the distribution and makes the env go
+    // brrr
+    fn step_with_episode_bound<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+        &mut self,
+        distr: D,
+        steps: usize,
+    ) -> Vec<RolloutBuffer<<Self::Env as Env>::Tensor>> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
@@ -466,9 +362,7 @@ impl<E: Env> VariableSizedThreadEnvPool<E> {
             let rx = &self.channels.get(&idx).unwrap().1;
             rx.recv().unwrap();
         }
-    }
 
-    fn step_with_episode_bound2(&mut self, steps: usize) {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
@@ -479,18 +373,6 @@ impl<E: Env> VariableSizedThreadEnvPool<E> {
             let rx = &self.channels.get(&idx).unwrap().1;
             rx.recv().unwrap();
         }
-    }
-}
-
-impl<E: Env> VariableSizedEnvPool for VariableSizedThreadEnvPool<E> {
-    type Env = E;
-
-    fn num_envs(&self) -> usize {
-        self.channels.len()
-    }
-
-    fn to_rollout_buffers(&mut self) -> Vec<RolloutBuffer<E::Tensor>> {
-        let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
             tx.send(VariableSizedWorkerCommand::ReturnRolloutBuffer)
@@ -506,25 +388,21 @@ impl<E: Env> VariableSizedEnvPool for VariableSizedThreadEnvPool<E> {
         }
         buffs
     }
+}
 
-    fn step_with_episode_bound<D: Distribution<Tensor = E::Tensor>>(
-        &mut self,
-        distr: &D,
-        steps: usize,
-    ) {
-        let num_envs = self.num_envs();
-        let ptr: DistrTraitObjPtr<_> = distr;
-        for idx in 0..num_envs {
-            let tx = &self.channels.get(&idx).unwrap().0;
-            tx.send(VariableSizedWorkerCommand::StepMultipleWithStepBound {
-                num_steps: steps,
-                distr: OpaqueDistrPtr::from_trait_obj(ptr),
-            })
+impl<E: Env> VariableSizedThreadEnvPool<E> {
+    pub fn new(channels: VariableSizedChannelMap<E>) -> Self {
+        Self { channels }
+    }
+
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
+        let (tx, rx) = self.channels.get(&0).unwrap();
+        tx.send(VariableSizedWorkerCommand::GetEnvDescription)
             .unwrap();
-        }
-        for idx in 0..num_envs {
-            let rx = &self.channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
-        }
+        let VariableSizedWorkerResult::EnvDescription { env_description } = rx.recv().unwrap()
+        else {
+            panic!()
+        };
+        env_description
     }
 }
