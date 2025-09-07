@@ -1,13 +1,55 @@
+use anyhow::Result;
 use burn::{
     prelude::Backend,
     tensor::{Tensor, TensorData},
 };
 use r2l_core::{
+    policies::ValueFunction,
     rng::RNG,
     utils::rollout_buffer::{Advantages, Logps, Returns, RolloutBuffer},
 };
 use rand::seq::SliceRandom;
+
 pub struct BurnRolloutBuffer<B: Backend>(pub RolloutBuffer<Tensor<B, 1>>);
+
+impl<B: Backend> BurnRolloutBuffer<B> {
+    pub fn new(rollout_buffer: RolloutBuffer<Tensor<B, 1>>) -> Self {
+        Self(rollout_buffer)
+    }
+
+    pub fn calculate_advantages_and_returns(
+        &self,
+        value_func: &impl ValueFunction<Tensor = Tensor<B, 1>>,
+        gamma: f32,
+        lambda: f32,
+    ) -> Result<(Vec<f32>, Vec<f32>)> {
+        let values = value_func.calculate_values(&self.0.states)?;
+        let values: Vec<f32> = values.to_data().to_vec().unwrap();
+        let total_steps = self.0.rewards.len();
+        let mut advantages: Vec<f32> = vec![0.; total_steps];
+        let mut returns: Vec<f32> = vec![0.; total_steps];
+        let mut last_gae_lam: f32 = 0.;
+        for i in (0..total_steps).rev() {
+            let next_non_terminal = if self.0.dones[i] {
+                last_gae_lam = 0.;
+                0f32
+            } else {
+                1.
+            };
+            let delta = self.0.rewards[i] + next_non_terminal * gamma * values[i + 1] - values[i];
+            last_gae_lam = delta + next_non_terminal * gamma * lambda * last_gae_lam;
+            advantages[i] = last_gae_lam;
+            returns[i] = last_gae_lam + values[i];
+        }
+        Ok((advantages, returns))
+    }
+}
+
+impl<B: Backend> From<RolloutBuffer<Tensor<B, 1>>> for BurnRolloutBuffer<B> {
+    fn from(value: RolloutBuffer<Tensor<B, 1>>) -> Self {
+        Self(value)
+    }
+}
 
 pub struct RolloutBatchIterator<'a, B: Backend> {
     rollouts: &'a [BurnRolloutBuffer<B>],
@@ -52,6 +94,23 @@ pub struct RolloutBatch<B: Backend> {
     pub returns: Tensor<B, 1>,
     pub advantages: Tensor<B, 1>,
     pub logp_old: Tensor<B, 1>,
+}
+
+pub fn calculate_advantages_and_returns<B: Backend>(
+    rollouts: &[BurnRolloutBuffer<B>],
+    value_func: &impl ValueFunction<Tensor = Tensor<B, 1>>,
+    gamma: f32,
+    lambda: f32,
+) -> (Advantages, Returns) {
+    let (advantages, returns): (Vec<Vec<f32>>, Vec<Vec<f32>>) = rollouts
+        .iter()
+        .map(|rollout| {
+            rollout
+                .calculate_advantages_and_returns(value_func, gamma, lambda)
+                .unwrap() // TODO: get rid of this unwrap
+        })
+        .unzip();
+    (Advantages(advantages), Returns(returns))
 }
 
 impl<'a, B: Backend> Iterator for RolloutBatchIterator<'a, B> {

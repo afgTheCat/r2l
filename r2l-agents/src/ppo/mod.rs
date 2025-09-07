@@ -143,22 +143,22 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
     // TODO: rename this to learning loop
     fn rollout_loop(
         &mut self,
-        rollouts: &Vec<CandleRolloutBuffer>,
-        advantages: &Advantages,
-        returns: &Returns,
-        logps: &Logps,
+        rollouts: Vec<CandleRolloutBuffer>,
+        advantages: Advantages,
+        returns: Returns,
+        logps: Logps,
     ) -> Result<()> {
         loop {
             let mut batch_iter = RolloutBatchIterator::new(
-                rollouts,
-                advantages,
-                returns,
-                logps,
+                &rollouts,
+                &advantages,
+                &returns,
+                &logps,
                 self.ppo.sample_size,
                 self.ppo.device.clone(),
             );
             self.batching_loop(&mut batch_iter)?;
-            let rollout_hook_res = self.hooks.rollout_hook(&mut self.ppo, rollouts);
+            let rollout_hook_res = self.hooks.rollout_hook(&mut self.ppo, &rollouts);
             process_hook_result!(rollout_hook_res);
         }
     }
@@ -202,7 +202,7 @@ impl<D: Distribution<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for 
                 .collect::<Result<Vec<Vec<f32>>>>()?,
         );
         process_hook_result!(before_learning_hook_res);
-        self.rollout_loop(&rollouts, &advantages, &returns, &logps)?;
+        self.rollout_loop(rollouts, advantages, returns, logps)?;
         Ok(())
     }
 }

@@ -4,7 +4,9 @@ use burn::{
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_burn_lm::{
-    burn_rollout_buffer::{BurnRolloutBuffer, RolloutBatch, RolloutBatchIterator},
+    burn_rollout_buffer::{
+        BurnRolloutBuffer, RolloutBatchIterator, calculate_advantages_and_returns,
+    },
     learning_module::{ParalellActorCriticLM, PolicyValuesLosses},
 };
 use r2l_core::policies::ValueFunction;
@@ -21,6 +23,8 @@ struct BurnPPO<
     lm: ParalellActorCriticLM<B, D>,
     pub clip_range: f32,
     pub sample_size: usize,
+    pub gamma: f32,
+    pub lambda: f32,
 }
 
 impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
@@ -74,10 +78,19 @@ where
     }
 }
 
+fn uplift_tensor<const N: usize, B: AutodiffBackend>(
+    t: Tensor<B::InnerBackend, N>,
+) -> Tensor<B, N> {
+    let device = Default::default();
+    let data = t.into_data();
+    Tensor::from_data(data, &device)
+}
+
 impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
     Agent for BurnPPO<B, D>
 where
-    <D as AutodiffModule<B>>::InnerModule: ModuleDisplay + Distribution,
+    <D as AutodiffModule<B>>::InnerModule:
+        ModuleDisplay + Distribution<Tensor = Tensor<B::InnerBackend, 1>>,
 {
     type Dist = D::InnerModule;
 
@@ -86,6 +99,44 @@ where
     }
 
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<TensorOfAgent<Self>>>) -> Result<()> {
-        todo!()
+        let rollouts: Vec<RolloutBuffer<Tensor<B, 1>>> = rollouts
+            .into_iter()
+            .map(
+                |RolloutBuffer {
+                     states,
+                     actions,
+                     rewards,
+                     dones,
+                 }| {
+                    RolloutBuffer {
+                        states: states.into_iter().map(uplift_tensor).collect(),
+                        actions: actions.into_iter().map(uplift_tensor).collect(),
+                        rewards,
+                        dones,
+                    }
+                },
+            )
+            .collect();
+
+        let mut rollouts = rollouts
+            .into_iter()
+            .map(|r| BurnRolloutBuffer::new(r))
+            .collect::<Vec<_>>();
+
+        let (mut advantages, mut returns) =
+            calculate_advantages_and_returns(&rollouts, &self.lm, self.gamma, self.lambda);
+        let logps = rollouts
+            .iter()
+            .map(|roll| {
+                let states = &roll.0.states[0..roll.0.states.len() - 1];
+                let actions = &roll.0.actions;
+                self.lm.model.distr.log_probs(states, actions).map(|t| {
+                    let t: Tensor<B, 1> = t.squeeze(0);
+                    t.to_data().to_vec().unwrap()
+                })
+            })
+            .collect::<Result<Vec<Vec<f32>>>>()?;
+        self.learning_loop(&rollouts, &advantages, &returns, &Logps(logps))?;
+        Ok(())
     }
 }

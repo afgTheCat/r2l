@@ -84,8 +84,8 @@ impl<C> Decode<C> for CandleRolloutBuffer {
 // }
 
 impl CandleRolloutBuffer {
-    // TODO: I don't know if this should be
-    pub fn calculate_advantages_and_returns2(
+    // These methods should be a function of the trajectory buffer
+    pub fn calculate_advantages_and_returns(
         &self,
         value_func: &impl ValueFunction<Tensor = Tensor>,
         gamma: f32,
@@ -131,7 +131,7 @@ pub fn calculate_advantages_and_returns(
         .iter()
         .map(|rollout| {
             rollout
-                .calculate_advantages_and_returns2(value_func, gamma, lambda)
+                .calculate_advantages_and_returns(value_func, gamma, lambda)
                 .unwrap() // TODO: get rid of this unwrap
         })
         .unzip();
