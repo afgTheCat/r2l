@@ -26,7 +26,7 @@ impl Distribution for DistributionKind {
         }
     }
 
-    fn log_probs(&self, states: Self::Tensor, actions: Self::Tensor) -> Result<Tensor> {
+    fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Tensor> {
         match self {
             Self::Categorical(cat) => cat.log_probs(states, actions),
             Self::DiagGaussian(diag) => diag.log_probs(states, actions),

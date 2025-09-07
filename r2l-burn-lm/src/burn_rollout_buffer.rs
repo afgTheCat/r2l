@@ -47,11 +47,11 @@ impl<'a, B: Backend> RolloutBatchIterator<'a, B> {
 }
 
 pub struct RolloutBatch<B: Backend> {
-    pub observations: Tensor<B, 2>,
-    pub actions: Tensor<B, 2>,
-    pub returns: Tensor<B, 2>,
-    pub advantages: Tensor<B, 2>,
-    pub logp_old: Tensor<B, 2>,
+    pub observations: Vec<Tensor<B, 1>>,
+    pub actions: Vec<Tensor<B, 1>>,
+    pub returns: Tensor<B, 1>,
+    pub advantages: Tensor<B, 1>,
+    pub logp_old: Tensor<B, 1>,
 }
 
 impl<'a, B: Backend> Iterator for RolloutBatchIterator<'a, B> {
@@ -65,7 +65,7 @@ impl<'a, B: Backend> Iterator for RolloutBatchIterator<'a, B> {
         }
         let batch_indicies = &self.indicies[self.current..self.current + self.sample_size];
         self.current += self.sample_size;
-        let (states, actions, advantages, returns, logps) = batch_indicies.iter().fold(
+        let (observations, actions, advantages, returns, logps) = batch_indicies.iter().fold(
             (vec![], vec![], vec![], vec![], vec![]),
             |(mut states, mut actions, mut advantages, mut returns, mut logps),
              (rollout_idx, idx)| {
@@ -81,8 +81,6 @@ impl<'a, B: Backend> Iterator for RolloutBatchIterator<'a, B> {
                 (states, actions, advantages, returns, logps)
             },
         );
-        let states = Tensor::stack(states, 0);
-        let actions = Tensor::stack(actions, 0);
         let ret_len = returns.len();
         let returns = Tensor::from_data(TensorData::new(returns, vec![ret_len]), &device);
         let adv = advantages.len();
@@ -90,7 +88,7 @@ impl<'a, B: Backend> Iterator for RolloutBatchIterator<'a, B> {
         let logp_len = logps.len();
         let logp_old = Tensor::from_data(TensorData::new(logps, vec![logp_len]), &device);
         Some(RolloutBatch {
-            observations: states,
+            observations,
             actions,
             returns,
             advantages,

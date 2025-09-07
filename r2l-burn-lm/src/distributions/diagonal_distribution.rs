@@ -38,7 +38,7 @@ impl<B: Backend> Distribution for DiagGaussianDistribution<B> {
 
     // FIXME: we probably want a differnt type states, actions etc. Alternatively we should have a
     // different trait, as log_probs are not really used during inference.
-    fn log_probs(&self, states: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
+    fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
         todo!()
     }
 

@@ -91,8 +91,7 @@ impl CandleRolloutBuffer {
         gamma: f32,
         lambda: f32,
     ) -> Result<(Vec<f32>, Vec<f32>)> {
-        let states = Tensor::stack(&self.0.states, 0)?;
-        let values_stacked = value_func.calculate_values(&states).unwrap();
+        let values_stacked = value_func.calculate_values(&self.0.states).unwrap();
         let values: Vec<f32> = values_stacked.to_vec1()?;
         let total_steps = self.0.rewards.len();
         let mut advantages: Vec<f32> = vec![0.; total_steps];
@@ -115,8 +114,8 @@ impl CandleRolloutBuffer {
 }
 
 pub struct RolloutBatch {
-    pub observations: Tensor,
-    pub actions: Tensor,
+    pub observations: Vec<Tensor>,
+    pub actions: Vec<Tensor>,
     pub returns: Tensor,
     pub advantages: Tensor,
     pub logp_old: Tensor,
@@ -189,7 +188,7 @@ impl<'a> Iterator for RolloutBatchIterator<'a> {
         }
         let batch_indicies = &self.indicies[self.current..self.current + self.sample_size];
         self.current += self.sample_size;
-        let (states, actions, advantages, returns, logps) = batch_indicies.iter().fold(
+        let (observations, actions, advantages, returns, logps) = batch_indicies.iter().fold(
             (vec![], vec![], vec![], vec![], vec![]),
             |(mut states, mut actions, mut advantages, mut returns, mut logps),
              (rollout_idx, idx)| {
@@ -197,21 +196,19 @@ impl<'a> Iterator for RolloutBatchIterator<'a> {
                 let adv = self.advantages[*rollout_idx][*idx];
                 let ret = self.returns[*rollout_idx][*idx];
                 let logp = self.logps[*rollout_idx][*idx];
-                states.push(state);
-                actions.push(action);
+                states.push(state.clone());
+                actions.push(action.clone());
                 advantages.push(adv);
                 returns.push(ret);
                 logps.push(logp);
                 (states, actions, advantages, returns, logps)
             },
         );
-        let states = Tensor::stack(&states, 0).ok()?;
-        let actions = Tensor::stack(&actions, 0).ok()?;
         let returns = Tensor::from_slice(&returns, returns.len(), &self.device).ok()?;
         let advantages = Tensor::from_slice(&advantages, advantages.len(), &self.device).ok()?;
         let logp_old = Tensor::from_slice(&logps, logps.len(), &self.device).ok()?;
         Some(RolloutBatch {
-            observations: states,
+            observations,
             actions,
             returns,
             advantages,

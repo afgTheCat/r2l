@@ -74,7 +74,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> A2C<D, LM> {
             };
             let logps = self
                 .distribution
-                .log_probs(batch.observations.clone(), batch.actions.clone())?;
+                .log_probs(&batch.observations, &batch.actions)?;
             let values_pred = self.learning_module.calculate_values(&batch.observations)?;
             let value_loss = ValueLoss(batch.returns.sub(&values_pred)?.sqr()?.mean_all()?);
             let policy_loss = PolicyLoss(batch.advantages.mul(&logps)?.neg()?.mean_all()?);
@@ -114,9 +114,8 @@ impl<D: Distribution<Tensor = Tensor> + Clone, LM: A2CLearningModule> Agent for 
             rollouts
                 .iter()
                 .map(|roll| {
-                    let states =
-                        Tensor::stack(&roll.0.states[0..roll.0.states.len() - 1], 0).unwrap();
-                    let actions = Tensor::stack(&roll.0.actions, 0).unwrap();
+                    let states = &roll.0.states[0..roll.0.states.len() - 1];
+                    let actions = &roll.0.actions;
                     self.distribution()
                         .log_probs(states, actions)
                         .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())

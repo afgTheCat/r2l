@@ -32,19 +32,6 @@ impl<D: Distribution + Clone, T: Clone + Send + Sync + Debug + 'static> Distribu
     }
 }
 
-// SAFETY: This can be safely shared between threads as the env is just a PhantomData
-unsafe impl<D: Distribution + Clone, T: Send + Clone + Sync + Debug + 'static> Sync
-    for DistributionWrapper<D, T>
-{
-}
-// unsafe impl<D: Distribution, T: Clone + Sync + Debug + 'static> Sync for DistributionWrapper<D, T> {}
-
-// impl<D: Distribution, E: Env> Debug for DistributionWrapper<D, E> {
-//     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         todo!()
-//     }
-// }
-
 impl<D: Distribution + Clone, T: Send + Clone + Sync + Debug + 'static> Distribution
     for DistributionWrapper<D, T>
 where
@@ -62,8 +49,20 @@ where
         Ok(action.into())
     }
 
-    fn log_probs(&self, states: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
-        let log_probs = self.distribution.log_probs(states.into(), actions.into())?;
+    fn log_probs(
+        &self,
+        observations: &[Self::Tensor],
+        actions: &[Self::Tensor],
+    ) -> Result<Self::Tensor> {
+        let observations = observations
+            .into_iter()
+            .map(|o| o.clone().into())
+            .collect::<Vec<_>>();
+        let actions = actions
+            .into_iter()
+            .map(|a| a.clone().into())
+            .collect::<Vec<_>>();
+        let log_probs = self.distribution.log_probs(&observations, &actions)?;
         Ok(log_probs.into())
     }
 

@@ -61,9 +61,11 @@ impl<D: Distribution<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for 
             rollouts
                 .iter()
                 .map(|roll| {
-                    let states =
-                        Tensor::stack(&roll.0.states[0..roll.0.states.len() - 1], 0).unwrap();
-                    let actions = Tensor::stack(&roll.0.actions, 0).unwrap();
+                    let states = &roll.0.states[0..roll.0.states.len() - 1];
+                    let actions = &roll.0.actions;
+                    // let states =
+                    //     Tensor::stack(&roll.0.states[0..roll.0.states.len() - 1], 0).unwrap();
+                    // let actions = Tensor::stack(&roll.0.actions, 0).unwrap();
                     self.distribution()
                         .log_probs(states, actions)
                         .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())

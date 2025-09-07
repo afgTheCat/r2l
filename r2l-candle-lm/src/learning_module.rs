@@ -42,8 +42,9 @@ impl LearningModule for DecoupledActorCriticLM {
 impl ValueFunction for DecoupledActorCriticLM {
     type Tensor = Tensor;
 
-    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
-        let value = self.value_net.forward(observation)?.squeeze(1)?;
+    fn calculate_values(&self, observations: &[Tensor]) -> Result<Tensor> {
+        let observations = Tensor::stack(observations, 0)?;
+        let value = self.value_net.forward(&observations)?.squeeze(1)?;
         Ok(value)
     }
 }
@@ -72,8 +73,9 @@ impl LearningModule for ParalellActorCriticLM {
 impl ValueFunction for ParalellActorCriticLM {
     type Tensor = Tensor;
 
-    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
-        let value = self.value_net.forward(observation)?.squeeze(1)?;
+    fn calculate_values(&self, observations: &[Tensor]) -> Result<Tensor> {
+        let observations = Tensor::stack(observations, 0)?;
+        let value = self.value_net.forward(&observations)?.squeeze(1)?;
         Ok(value)
     }
 }
@@ -106,7 +108,7 @@ impl LearningModule for LearningModuleKind {
 impl ValueFunction for LearningModuleKind {
     type Tensor = Tensor;
 
-    fn calculate_values(&self, observation: &Tensor) -> Result<Tensor> {
+    fn calculate_values(&self, observation: &[Tensor]) -> Result<Tensor> {
         match self {
             Self::Decoupled(decoupled) => decoupled.calculate_values(observation),
             Self::Paralell(paralell) => paralell.calculate_values(observation),

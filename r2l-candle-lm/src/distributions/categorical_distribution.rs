@@ -97,7 +97,9 @@ impl Distribution for CategoricalDistribution {
         Ok(action)
     }
 
-    fn log_probs(&self, states: Tensor, actions: Tensor) -> Result<Tensor> {
+    fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
+        let states = Tensor::stack(&states, 0)?;
+        let actions = Tensor::stack(&actions, 0)?;
         let logits = self.logits.forward(&states)?;
         let log_probs = log_softmax(&logits, 1)?;
         let log_probs = actions.mul(&log_probs)?.sum(1)?;

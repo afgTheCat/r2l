@@ -35,8 +35,8 @@ impl<B: Backend> Distribution for CategoricalDistribution<B> {
     // FIXME: check the other fixme comment for DiagGaussian
     fn log_probs(
         &self,
-        states: Self::Tensor,
-        actions: Self::Tensor,
+        states: &[Self::Tensor],
+        actions: &[Self::Tensor],
     ) -> anyhow::Result<Self::Tensor> {
         todo!()
     }

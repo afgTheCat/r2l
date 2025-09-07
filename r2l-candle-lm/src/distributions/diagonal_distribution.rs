@@ -101,7 +101,9 @@ impl Distribution for DiagGaussianDistribution {
         Ok(action)
     }
 
-    fn log_probs(&self, states: Tensor, actions: Tensor) -> Result<Tensor> {
+    fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
+        let states = Tensor::stack(&states, 0)?;
+        let actions = Tensor::stack(&actions, 0)?;
         let mu = self.mu_net.forward(&states)?;
         let std = self.log_std.exp()?.broadcast_as(mu.shape())?;
         let var = std.sqr()?;

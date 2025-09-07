@@ -10,5 +10,5 @@ pub trait LearningModule {
 pub trait ValueFunction {
     type Tensor: Clone;
 
-    fn calculate_values(&self, observation: &Self::Tensor) -> Result<Self::Tensor>;
+    fn calculate_values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor>;
 }
