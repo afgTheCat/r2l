@@ -5234,8 +5234,10 @@ name = "r2l-agents"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "burn",
  "candle-core 0.9.1",
  "candle-nn",
+ "r2l-burn-lm",
  "r2l-candle-lm",
  "r2l-core",
  "r2l-macros",

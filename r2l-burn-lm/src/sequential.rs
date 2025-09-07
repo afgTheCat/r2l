@@ -1,6 +1,5 @@
 use burn::nn::LinearConfig;
 use burn::tensor::activation::relu;
-use burn::tensor::module::linear;
 use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
 
 #[derive(Debug, Clone, Module)]
@@ -62,66 +61,66 @@ impl<B: Backend> Sequential<B> {
     }
 }
 
-#[derive(Debug)]
-pub struct FrozenLinear<B: Backend> {
-    pub weight: Tensor<B, 2>,
-    pub bias: Option<Tensor<B, 1>>,
-}
-
-impl<B: Backend> FrozenLinear<B> {
-    pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
-        linear(input, self.weight.clone(), self.bias.clone())
-    }
-
-    pub fn from_linear(linear: Linear<B>) -> Self {
-        Self {
-            weight: linear.weight.val(),
-            bias: linear.bias.map(|b| b.val()),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum FrozenLayer<B: Backend> {
-    Activation(ReluAct),
-    LinearLayer(FrozenLinear<B>),
-}
-
-impl<B: Backend> FrozenLayer<B> {
-    pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
-        match &self {
-            Self::LinearLayer(linear) => linear.forward(input),
-            Self::Activation(ReluAct) => relu(input),
-        }
-    }
-
-    pub fn from_layer(layer: Layer<B>) -> Self {
-        match layer {
-            Layer::LinearLayer(linear) => Self::LinearLayer(FrozenLinear::from_linear(linear)),
-            Layer::Activation(act) => Self::Activation(act),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct FrozenSequential<B: Backend> {
-    pub layers: Vec<FrozenLayer<B>>,
-}
-
-impl<B: Backend> FrozenSequential<B> {
-    pub fn forward(&self, mut input: Tensor<B, 2>) -> Tensor<B, 2> {
-        for layer in self.layers.iter() {
-            input = layer.forward(input)
-        }
-        input
-    }
-
-    pub fn from_sequential(sequential: Sequential<B>) -> Self {
-        let layers = sequential
-            .layers
-            .into_iter()
-            .map(FrozenLayer::from_layer)
-            .collect::<Vec<_>>();
-        Self { layers }
-    }
-}
+// #[derive(Debug)]
+// pub struct FrozenLinear<B: Backend> {
+//     pub weight: Tensor<B, 2>,
+//     pub bias: Option<Tensor<B, 1>>,
+// }
+//
+// impl<B: Backend> FrozenLinear<B> {
+//     pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+//         linear(input, self.weight.clone(), self.bias.clone())
+//     }
+//
+//     pub fn from_linear(linear: Linear<B>) -> Self {
+//         Self {
+//             weight: linear.weight.val(),
+//             bias: linear.bias.map(|b| b.val()),
+//         }
+//     }
+// }
+//
+// #[derive(Debug)]
+// pub enum FrozenLayer<B: Backend> {
+//     Activation(ReluAct),
+//     LinearLayer(FrozenLinear<B>),
+// }
+//
+// impl<B: Backend> FrozenLayer<B> {
+//     pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+//         match &self {
+//             Self::LinearLayer(linear) => linear.forward(input),
+//             Self::Activation(ReluAct) => relu(input),
+//         }
+//     }
+//
+//     pub fn from_layer(layer: Layer<B>) -> Self {
+//         match layer {
+//             Layer::LinearLayer(linear) => Self::LinearLayer(FrozenLinear::from_linear(linear)),
+//             Layer::Activation(act) => Self::Activation(act),
+//         }
+//     }
+// }
+//
+// #[derive(Debug)]
+// pub struct FrozenSequential<B: Backend> {
+//     pub layers: Vec<FrozenLayer<B>>,
+// }
+//
+// impl<B: Backend> FrozenSequential<B> {
+//     pub fn forward(&self, mut input: Tensor<B, 2>) -> Tensor<B, 2> {
+//         for layer in self.layers.iter() {
+//             input = layer.forward(input)
+//         }
+//         input
+//     }
+//
+//     pub fn from_sequential(sequential: Sequential<B>) -> Self {
+//         let layers = sequential
+//             .layers
+//             .into_iter()
+//             .map(FrozenLayer::from_layer)
+//             .collect::<Vec<_>>();
+//         Self { layers }
+//     }
+// }

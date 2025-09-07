@@ -17,6 +17,7 @@ use crate::{
 pub trait FixedSizeEnvPool {
     type Env: Env;
 
+    // num envs
     fn num_envs(&self) -> usize;
 
     /// async mode
@@ -35,6 +36,7 @@ pub trait FixedSizeEnvPool {
     /// set the distribution
     fn set_distr<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(&mut self, distr: D);
 
+    // take rollout buffer
     fn take_rollout_buffers(&mut self) -> Vec<RolloutBuffer<<Self::Env as Env>::Tensor>>;
 }
 

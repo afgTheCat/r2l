@@ -1,24 +1,20 @@
+use crate::sequential::Sequential;
 use anyhow::Result;
+use burn::module::Module;
 use burn::tensor::Distribution as BurnDistribution;
 use burn::tensor::cast::ToElement;
 use burn::{prelude::Backend, tensor::Tensor};
 use r2l_core::distributions::Distribution;
 
-use crate::sequential::FrozenSequential;
-
-#[derive(Debug)]
+#[derive(Debug, Module)]
 pub struct DiagGaussianDistribution<B: Backend> {
-    pub mu_net: FrozenSequential<B>,
-    pub value_net: FrozenSequential<B>,
+    pub mu_net: Sequential<B>,
+    pub value_net: Sequential<B>,
     pub log_std: Tensor<B, 2>,
 }
 
 impl<B: Backend> DiagGaussianDistribution<B> {
-    pub fn new(
-        mu_net: FrozenSequential<B>,
-        value_net: FrozenSequential<B>,
-        log_std: Tensor<B, 2>,
-    ) -> Self {
+    pub fn new(mu_net: Sequential<B>, value_net: Sequential<B>, log_std: Tensor<B, 2>) -> Self {
         Self {
             mu_net,
             value_net,

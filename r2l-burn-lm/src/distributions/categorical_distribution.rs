@@ -1,15 +1,16 @@
-use crate::sequential::FrozenSequential;
+use crate::sequential::Sequential;
 use burn::{
+    module::Module,
     prelude::Backend,
     tensor::{Tensor, TensorData, activation::softmax},
 };
 use r2l_core::distributions::Distribution;
 use rand::distr::Distribution as RandDistributiion;
-use rand::{Rng, distr::weighted::WeightedIndex};
+use rand::distr::weighted::WeightedIndex;
 
-#[derive(Debug)]
+#[derive(Debug, Module)]
 pub struct CategoricalDistribution<B: Backend> {
-    logits: FrozenSequential<B>,
+    logits: Sequential<B>,
     action_size: usize,
 }
 

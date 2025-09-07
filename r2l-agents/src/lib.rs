@@ -1,4 +1,5 @@
 pub mod a2c;
+pub mod burn_agents;
 pub mod ppo;
 pub mod vpg;
 

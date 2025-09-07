@@ -16,7 +16,7 @@ use std::collections::HashMap;
 pub enum FixedSizeWorkerCommand<E: Env> {
     // Single step and return tranfer the buffers
     SingleStep,
-    // },
+    // MultiStep
     MultiStep {
         num_steps: usize,
     },
