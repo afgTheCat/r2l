@@ -81,7 +81,7 @@ pub struct EmptyPPO3Hooks;
 
 impl<A> PPOHooksTrait<A> for EmptyPPO3Hooks {}
 
-pub struct PPOCore<D: Distribution, LM: PPOLearningModule> {
+pub struct CandlePPOCore<D: Distribution, LM: PPOLearningModule> {
     pub distribution: D,
     pub learning_module: LM,
     pub clip_range: f32,
@@ -92,12 +92,12 @@ pub struct PPOCore<D: Distribution, LM: PPOLearningModule> {
 }
 
 // This could be something more generic
-pub struct PPO<D: Distribution, LM: PPOLearningModule> {
-    pub ppo: PPOCore<D, LM>,
-    pub hooks: Box<dyn PPOHooksTrait<PPOCore<D, LM>>>,
+pub struct CandlePPO<D: Distribution, LM: PPOLearningModule> {
+    pub ppo: CandlePPOCore<D, LM>,
+    pub hooks: Box<dyn PPOHooksTrait<CandlePPOCore<D, LM>>>,
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
+impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> CandlePPO<D, LM> {
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         let ppo = &mut self.ppo;
         loop {
@@ -141,7 +141,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
     }
 
     // TODO: rename this to learning loop
-    fn rollout_loop(
+    fn learning_loop(
         &mut self,
         rollouts: Vec<CandleRolloutBuffer>,
         advantages: Advantages,
@@ -164,7 +164,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> PPO<D, LM> {
     }
 }
 
-impl<D: Distribution<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for PPO<D, LM> {
+impl<D: Distribution<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for CandlePPO<D, LM> {
     type Dist = D;
 
     fn distribution(&self) -> Self::Dist {
@@ -189,6 +189,7 @@ impl<D: Distribution<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for 
             &mut advantages,
             &mut returns,
         );
+        process_hook_result!(before_learning_hook_res);
         let logps = Logps(
             rollouts
                 .iter()
@@ -201,8 +202,7 @@ impl<D: Distribution<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for 
                 })
                 .collect::<Result<Vec<Vec<f32>>>>()?,
         );
-        process_hook_result!(before_learning_hook_res);
-        self.rollout_loop(rollouts, advantages, returns, logps)?;
+        self.learning_loop(rollouts, advantages, returns, logps)?;
         Ok(())
     }
 }

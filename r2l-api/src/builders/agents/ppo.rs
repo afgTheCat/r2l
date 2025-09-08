@@ -5,7 +5,7 @@ use crate::builders::{
 use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_agents::ppo::{EmptyPPO3Hooks, PPO, PPOCore};
+use r2l_agents::candle_agents::ppo::{CandlePPO, CandlePPOCore, EmptyPPO3Hooks};
 use r2l_candle_lm::{distributions::DistributionKind, learning_module::LearningModuleKind};
 use r2l_core::env::EnvironmentDescription;
 
@@ -44,7 +44,7 @@ impl PPOBuilder {
         &self,
         device: &Device,
         env_description: &EnvironmentDescription<T>,
-    ) -> Result<PPO<DistributionKind, LearningModuleKind>> {
+    ) -> Result<CandlePPO<DistributionKind, LearningModuleKind>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
             VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
@@ -57,7 +57,7 @@ impl PPOBuilder {
             env_description,
             device,
         )?;
-        let core = PPOCore {
+        let core = CandlePPOCore {
             distribution,
             learning_module,
             clip_range: self.clip_range,
@@ -66,7 +66,7 @@ impl PPOBuilder {
             lambda: self.lambda,
             sample_size: self.sample_size,
         };
-        Ok(PPO {
+        Ok(CandlePPO {
             ppo: core,
             hooks: Box::new(EmptyPPO3Hooks),
         })

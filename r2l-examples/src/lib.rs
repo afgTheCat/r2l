@@ -1,6 +1,6 @@
 use candle_core::{DType, Device, Error, Tensor};
-use r2l_agents::ppo::{HookResult, PPO, PPOBatchData};
-use r2l_agents::ppo::{PPOCore, PPOHooksTrait};
+use r2l_agents::candle_agents::ppo::{CandlePPOCore, PPOHooksTrait};
+use r2l_agents::candle_agents::ppo::{HookResult, PPOBatchData};
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::builders::sampler::{EnvBuilderType, EnvPoolType, SamplerType};
 use r2l_candle_lm::candle_rollout_buffer::{CandleRolloutBuffer, RolloutBatch};
@@ -71,10 +71,10 @@ impl PPOHook {
     }
 }
 
-impl PPOHooksTrait<PPOCore<DistributionKind, LearningModuleKind>> for PPOHook {
+impl PPOHooksTrait<CandlePPOCore<DistributionKind, LearningModuleKind>> for PPOHook {
     fn before_learning_hook(
         &mut self,
-        _agent: &mut PPOCore<DistributionKind, LearningModuleKind>,
+        _agent: &mut CandlePPOCore<DistributionKind, LearningModuleKind>,
         rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         advantages: &mut Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
@@ -96,7 +96,7 @@ impl PPOHooksTrait<PPOCore<DistributionKind, LearningModuleKind>> for PPOHook {
 
     fn rollout_hook(
         &mut self,
-        agent: &mut PPOCore<DistributionKind, LearningModuleKind>,
+        agent: &mut CandlePPOCore<DistributionKind, LearningModuleKind>,
         _rollout_buffers: &Vec<CandleRolloutBuffer>,
     ) -> candle_core::Result<HookResult> {
         self.current_epoch += 1;
@@ -116,7 +116,7 @@ impl PPOHooksTrait<PPOCore<DistributionKind, LearningModuleKind>> for PPOHook {
 
     fn batch_hook(
         &mut self,
-        agent: &mut PPOCore<DistributionKind, LearningModuleKind>,
+        agent: &mut CandlePPOCore<DistributionKind, LearningModuleKind>,
         _rollout_batch: &RolloutBatch,
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,

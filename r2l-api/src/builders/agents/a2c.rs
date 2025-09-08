@@ -5,7 +5,7 @@ use crate::builders::{
 use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_agents::a2c::{A2C, DefaultA2CHooks};
+use r2l_agents::candle_agents::a2c::{A2C, DefaultA2CHooks};
 use r2l_candle_lm::{distributions::DistributionKind, learning_module::LearningModuleKind};
 use r2l_core::env::EnvironmentDescription;
 

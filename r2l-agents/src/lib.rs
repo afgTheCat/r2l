@@ -1,18 +1,16 @@
-pub mod a2c;
 pub mod burn_agents;
-pub mod ppo;
-pub mod vpg;
+pub mod candle_agents;
 
 use anyhow::Result;
 use candle_core::Tensor;
 use r2l_candle_lm::{distributions::DistributionKind, learning_module::LearningModuleKind};
 use r2l_core::{agents::Agent, utils::rollout_buffer::RolloutBuffer};
 
-use crate::{a2c::A2C, ppo::PPO, vpg::VPG};
+use crate::candle_agents::{a2c::A2C, ppo::CandlePPO, vpg::VPG};
 
 pub enum AgentKind {
     A2C(A2C<DistributionKind, LearningModuleKind>),
-    PPO(PPO<DistributionKind, LearningModuleKind>),
+    PPO(CandlePPO<DistributionKind, LearningModuleKind>),
     VPG(VPG<DistributionKind, LearningModuleKind>),
 }
 

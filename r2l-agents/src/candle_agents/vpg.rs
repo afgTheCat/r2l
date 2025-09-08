@@ -1,4 +1,4 @@
-use crate::ppo::PPOLearningModule;
+use crate::candle_agents::ppo::PPOLearningModule;
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use r2l_candle_lm::{
