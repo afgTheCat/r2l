@@ -20,14 +20,14 @@ pub enum AgentType {
     A2C(A2CBuilder),
 }
 
-pub struct OnPolicyAlgorithmBuilder2 {
+pub struct OnPolicyAlgorithmBuilder {
     pub device: Device,
     pub sampler_type: SamplerType,
     pub agent_type: AgentType,
     pub learning_schedule: LearningSchedule,
 }
 
-impl Default for OnPolicyAlgorithmBuilder2 {
+impl Default for OnPolicyAlgorithmBuilder {
     fn default() -> Self {
         Self {
             device: Device::Cpu,
@@ -45,7 +45,7 @@ impl Default for OnPolicyAlgorithmBuilder2 {
     }
 }
 
-impl OnPolicyAlgorithmBuilder2 {
+impl OnPolicyAlgorithmBuilder {
     pub fn build<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
         &self,
         env_builder: EB,

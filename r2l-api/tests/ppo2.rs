@@ -1,7 +1,7 @@
 use anyhow::Result;
 use r2l_api::{
     builders::{
-        on_policy_algo2::OnPolicyAlgorithmBuilder2,
+        on_policy_algo2::OnPolicyAlgorithmBuilder,
         sampler_hooks2::{EvaluatorNormalizerOptions, EvaluatorOptions},
     },
     test_utils::run_gym_episodes,
@@ -14,7 +14,7 @@ const NUM_ENVIRONMENTS: usize = 10;
 // Evaluator only test
 #[test]
 fn ppo2_cart_pole() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder2::ppo();
+    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
     let evaluator_opts = EvaluatorOptions {
         eval_freq: 1000,
@@ -32,7 +32,7 @@ fn ppo2_cart_pole() -> Result<()> {
 // Evaluator and normalizer at the same time
 #[test]
 fn ppo2_cart_pole_normalize() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder2::ppo();
+    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
     let evaluator_options = EvaluatorOptions {
         eval_freq: 1000,
@@ -50,7 +50,7 @@ fn ppo2_cart_pole_normalize() -> Result<()> {
 
 #[test]
 fn ppo2_cart_pole_seq_only() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder2::ppo();
+    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;

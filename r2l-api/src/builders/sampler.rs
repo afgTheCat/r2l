@@ -42,42 +42,36 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
         }
     }
 
-    fn build_fixed_sized_vec(
-        &self,
-        capacity: usize,
-        device: &Device,
-    ) -> FixedSizeVecEnvPool<EB::Env> {
+    fn build_fixed_sized_vec(&self, capacity: usize) -> FixedSizeVecEnvPool<EB::Env> {
         match self {
             Self::EnvBuilder { builder, n_envs } => {
                 let buffers = (0..*n_envs)
-                    .map(|_| {
-                        FixedSizeTrajectoryBuffer::new(builder.build_env(device).unwrap(), capacity)
-                    })
+                    .map(|_| FixedSizeTrajectoryBuffer::new(builder.build_env().unwrap(), capacity))
                     .collect();
                 FixedSizeVecEnvPool { buffers }
             }
             Self::EnvBuilderVec { builders } => {
                 let buffers = builders
                     .iter()
-                    .map(|b| FixedSizeTrajectoryBuffer::new(b.build_env(device).unwrap(), capacity))
+                    .map(|b| FixedSizeTrajectoryBuffer::new(b.build_env().unwrap(), capacity))
                     .collect();
                 FixedSizeVecEnvPool { buffers }
             }
         }
     }
 
-    fn build_variable_sized_vec(&self, device: &Device) -> VariableSizedVecEnvPool<EB::Env> {
+    fn build_variable_sized_vec(&self) -> VariableSizedVecEnvPool<EB::Env> {
         match self {
             Self::EnvBuilder { builder, n_envs } => {
                 let buffers = (0..*n_envs)
-                    .map(|_| VariableSizedTrajectoryBuffer::new(builder.build_env(device).unwrap()))
+                    .map(|_| VariableSizedTrajectoryBuffer::new(builder.build_env().unwrap()))
                     .collect();
                 VariableSizedVecEnvPool { buffers }
             }
             Self::EnvBuilderVec { builders } => {
                 let buffers = builders
                     .iter()
-                    .map(|b| VariableSizedTrajectoryBuffer::new(b.build_env(device).unwrap()))
+                    .map(|b| VariableSizedTrajectoryBuffer::new(b.build_env().unwrap()))
                     .collect();
                 VariableSizedVecEnvPool { buffers }
             }
@@ -85,11 +79,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
     }
 
     // TODO: should this also launch the worker threads?
-    fn build_fixed_sized_thread(
-        &self,
-        capacity: usize,
-        device: &Device,
-    ) -> FixedSizeThreadEnvPool<EB::Env> {
+    fn build_fixed_sized_thread(&self, capacity: usize) -> FixedSizeThreadEnvPool<EB::Env> {
         let mut channels = HashMap::new();
         match self {
             Self::EnvBuilder { builder, n_envs } => {
@@ -99,10 +89,9 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
                     let (result_tx, result_rx) =
                         crossbeam::channel::unbounded::<FixedSizeWorkerResult<EB::Env>>();
                     channels.insert(id, (command_tx, result_rx));
-                    let device_cloned = device.clone();
                     let eb_cloned = builder.clone();
                     std::thread::spawn(move || {
-                        let env = eb_cloned.build_env(&device_cloned).unwrap();
+                        let env = eb_cloned.build_env().unwrap();
                         let mut worker =
                             FixedSizeWorkerThread::new(result_tx, command_rx, env, capacity);
                         worker.handle_commands();
@@ -116,10 +105,9 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
                     let (result_tx, result_rx) =
                         crossbeam::channel::unbounded::<FixedSizeWorkerResult<EB::Env>>();
                     channels.insert(id, (command_tx, result_rx));
-                    let device_cloned = device.clone();
                     let eb_cloned = builder.clone();
                     std::thread::spawn(move || {
-                        let env = eb_cloned.build_env(&device_cloned).unwrap();
+                        let env = eb_cloned.build_env().unwrap();
                         let mut worker =
                             FixedSizeWorkerThread::new(result_tx, command_rx, env, capacity);
                         worker.handle_commands();
@@ -130,7 +118,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
         FixedSizeThreadEnvPool::new(channels)
     }
 
-    fn build_variable_sized_thread(&self, device: &Device) -> VariableSizedThreadEnvPool<EB::Env> {
+    fn build_variable_sized_thread(&self) -> VariableSizedThreadEnvPool<EB::Env> {
         let mut channels = HashMap::new();
         match self {
             Self::EnvBuilder { builder, n_envs } => {
@@ -140,10 +128,9 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
                     let (result_tx, result_rx) =
                         crossbeam::channel::unbounded::<VariableSizedWorkerResult<EB::Env>>();
                     channels.insert(id, (command_tx, result_rx));
-                    let device_cloned = device.clone();
                     let eb_cloned = builder.clone();
                     std::thread::spawn(move || {
-                        let env = eb_cloned.build_env(&device_cloned).unwrap();
+                        let env = eb_cloned.build_env().unwrap();
                         let mut worker = VariableSizedWorkerThread::new(result_tx, command_rx, env);
                         worker.handle_commmand();
                     });
@@ -156,10 +143,9 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
                     let (result_tx, result_rx) =
                         crossbeam::channel::unbounded::<VariableSizedWorkerResult<EB::Env>>();
                     channels.insert(id, (command_tx, result_rx));
-                    let device_cloned = device.clone();
                     let eb_cloned = builder.clone();
                     std::thread::spawn(move || {
-                        let env = eb_cloned.build_env(&device_cloned).unwrap();
+                        let env = eb_cloned.build_env().unwrap();
                         let mut worker = VariableSizedWorkerThread::new(result_tx, command_rx, env);
                         worker.handle_commmand();
                     });
@@ -198,12 +184,12 @@ impl SamplerType {
         let n_envs = builder_type.num_envs();
         let collection_type = match self.env_pool_type {
             EnvPoolType::VecVariable => {
-                let env_pool = builder_type.build_variable_sized_vec(device);
+                let env_pool = builder_type.build_variable_sized_vec();
                 let env_pool = VariableSizedEnvPoolKind::VariableSizedVecEnvPool(env_pool);
                 CollectionType::EpisodeBound { env_pool }
             }
             EnvPoolType::VecStep => {
-                let env_pool = builder_type.build_fixed_sized_vec(self.capacity, device);
+                let env_pool = builder_type.build_fixed_sized_vec(self.capacity);
                 let env_desctiption = env_pool.env_description();
                 let env_builder = builder_type.env_builder();
                 let hooks =
@@ -213,12 +199,12 @@ impl SamplerType {
                 CollectionType::StepBound { env_pool, hooks }
             }
             EnvPoolType::ThreadVariable => {
-                let env_pool = builder_type.build_variable_sized_thread(device);
+                let env_pool = builder_type.build_variable_sized_thread();
                 let env_pool = VariableSizedEnvPoolKind::VariableSizedThreadEnvPool(env_pool);
                 CollectionType::EpisodeBound { env_pool }
             }
             EnvPoolType::ThreadStep => {
-                let env_pool = builder_type.build_fixed_sized_thread(self.capacity, device);
+                let env_pool = builder_type.build_fixed_sized_thread(self.capacity);
                 let env_desctiption = env_pool.env_description();
                 let env_builder = builder_type.env_builder();
                 let hooks =

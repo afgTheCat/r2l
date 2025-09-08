@@ -56,7 +56,7 @@ impl EvaluatorOptions {
         env_builder: &EB,
         n_envs: usize,
     ) -> Evaluator<EB::Env> {
-        let env = env_builder.build_env(&self.device).unwrap();
+        let env = env_builder.build_env().unwrap();
         Evaluator::new(
             env,
             self.eval_episodes,
