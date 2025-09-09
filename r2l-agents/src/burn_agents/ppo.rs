@@ -34,11 +34,33 @@ pub struct BurnPPOCore<
 > where
     <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
 {
-    lm: ParalellActorCriticLM<B, D>,
+    pub lm: ParalellActorCriticLM<B, D>,
     pub clip_range: f32,
     pub sample_size: usize,
     pub gamma: f32,
     pub lambda: f32,
+}
+
+impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
+    BurnPPOCore<B, D>
+where
+    <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
+{
+    pub fn new(
+        lm: ParalellActorCriticLM<B, D>,
+        clip_range: f32,
+        sample_size: usize,
+        gamma: f32,
+        lambda: f32,
+    ) -> Self {
+        Self {
+            lm,
+            clip_range,
+            sample_size,
+            gamma,
+            lambda,
+        }
+    }
 }
 
 pub trait BurnPPPHooksTrait<
@@ -53,7 +75,9 @@ pub trait BurnPPPHooksTrait<
         rollout_buffers: &mut Vec<BurnRolloutBuffer<B>>,
         advantages: &mut Advantages,
         returns: &mut Returns,
-    ) -> anyhow::Result<HookResult>;
+    ) -> anyhow::Result<HookResult> {
+        Ok(HookResult::Continue)
+    }
 
     fn rollout_hook(
         &mut self,
@@ -75,14 +99,23 @@ pub trait BurnPPPHooksTrait<
     }
 }
 
+pub struct EmptyBurnPPOHooks;
+
+impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
+    BurnPPPHooksTrait<B, D> for EmptyBurnPPOHooks
+where
+    <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
+{
+}
+
 pub struct BurnPPO<
     B: AutodiffBackend,
     D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>,
 > where
     <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
 {
-    core: BurnPPOCore<B, D>,
-    hooks: Box<dyn BurnPPPHooksTrait<B, D>>,
+    pub core: BurnPPOCore<B, D>,
+    pub hooks: Box<dyn BurnPPPHooksTrait<B, D>>,
 }
 
 impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
@@ -90,6 +123,10 @@ impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Ten
 where
     <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
 {
+    pub fn new(core: BurnPPOCore<B, D>, hooks: Box<dyn BurnPPPHooksTrait<B, D>>) -> Self {
+        Self { core, hooks }
+    }
+
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator<B>) -> Result<()> {
         loop {
             let distr = &self.core.lm.model.distr;

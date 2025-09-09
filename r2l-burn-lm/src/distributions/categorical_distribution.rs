@@ -14,6 +14,17 @@ pub struct CategoricalDistribution<B: Backend> {
     action_size: usize,
 }
 
+impl<B: Backend> CategoricalDistribution<B> {
+    pub fn build(logits_layers: &[usize]) -> Self {
+        let action_size = *logits_layers.last().unwrap();
+        let logits: Sequential<B> = Sequential::build(logits_layers);
+        Self {
+            logits,
+            action_size,
+        }
+    }
+}
+
 impl<B: Backend> Distribution for CategoricalDistribution<B> {
     type Tensor = Tensor<B, 1>;
 

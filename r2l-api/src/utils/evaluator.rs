@@ -21,6 +21,7 @@ impl<E: Env> Evaluator<E> {
         eval_freq: usize,
         eval_step: usize,
         evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
+        device: Device,
     ) -> Self {
         Self {
             trajectory_buffer: VariableSizedTrajectoryBuffer::new(env),
@@ -28,7 +29,7 @@ impl<E: Env> Evaluator<E> {
             eval_freq,
             eval_step,
             evaluations_results,
-            device: Device::Cpu,
+            device,
         }
     }
 

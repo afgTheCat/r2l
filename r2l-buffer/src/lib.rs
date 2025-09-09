@@ -1,5 +1,6 @@
 // TODO: all the external facing traits should be framework agnostic
 
+use burn::{prelude::Backend, tensor::Tensor as BurnTensor};
 use candle_core::{DType as CandleDType, Device, Tensor as CandleTensor, WithDType};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -47,6 +48,18 @@ pub struct Buffer<T: WithDType = f32> {
     pub data: Vec<T>,
     pub shape: Vec<usize>,
     pub dtype: DType,
+}
+
+impl<B: Backend> From<Buffer> for BurnTensor<B, 1> {
+    fn from(value: Buffer) -> Self {
+        todo!()
+    }
+}
+
+impl<B: Backend> From<BurnTensor<B, 1>> for Buffer {
+    fn from(value: BurnTensor<B, 1>) -> Self {
+        todo!()
+    }
 }
 
 impl From<Buffer> for CandleTensor {

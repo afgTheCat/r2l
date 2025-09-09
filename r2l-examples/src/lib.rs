@@ -185,13 +185,10 @@ pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
         hook_options: Default::default(),
         env_pool_type: EnvPoolType::VecVariable, // TODO: Change this to VecVariable
     }
-    .build_with_builder_type(
-        EnvBuilderType::EnvBuilder {
-            builder: Arc::new(ENV_NAME.to_owned()),
-            n_envs: 1,
-        },
-        &device,
-    );
+    .build_with_builder_type(EnvBuilderType::EnvBuilder {
+        builder: Arc::new(ENV_NAME.to_owned()),
+        n_envs: 1,
+    });
     let env_description = sampler.env_description();
     let mut agent = PPOBuilder::default().build(&device, &env_description)?;
     agent.hooks = Box::new(ppo_hook);

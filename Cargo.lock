@@ -5248,6 +5248,7 @@ name = "r2l-api"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "burn",
  "candle-core 0.9.1",
  "candle-nn",
  "crossbeam",
@@ -5255,6 +5256,7 @@ dependencies = [
  "r2l-agents",
  "r2l-api",
  "r2l-buffer",
+ "r2l-burn-lm",
  "r2l-candle-lm",
  "r2l-core",
  "r2l-gym",
@@ -5266,6 +5268,7 @@ dependencies = [
 name = "r2l-buffer"
 version = "0.0.1"
 dependencies = [
+ "burn",
  "candle-core 0.9.1",
 ]
 

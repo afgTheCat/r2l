@@ -12,7 +12,6 @@ use r2l_core::{
 use std::sync::{Arc, Mutex};
 
 pub struct EvaluatorOptions {
-    pub device: Device,
     pub eval_episodes: usize,
     pub eval_freq: usize,
     pub eval_step: usize,
@@ -22,7 +21,6 @@ pub struct EvaluatorOptions {
 impl Default for EvaluatorOptions {
     fn default() -> Self {
         Self {
-            device: Device::Cpu,
             eval_episodes: 10,
             eval_freq: 10000,
             eval_step: 1000,
@@ -33,7 +31,6 @@ impl Default for EvaluatorOptions {
 
 impl EvaluatorOptions {
     pub fn new(
-        device: Device,
         eval_episodes: usize,
         eval_freq: usize,
         eval_steps: usize,
@@ -41,7 +38,7 @@ impl EvaluatorOptions {
         let results = Arc::new(Mutex::new(vec![vec![]]));
         (
             Self {
-                device,
+                // device,
                 eval_episodes,
                 eval_freq,
                 eval_step: eval_steps,
@@ -55,6 +52,7 @@ impl EvaluatorOptions {
         &self,
         env_builder: &EB,
         n_envs: usize,
+        device: Device,
     ) -> Evaluator<EB::Env> {
         let env = env_builder.build_env().unwrap();
         Evaluator::new(
@@ -63,6 +61,7 @@ impl EvaluatorOptions {
             self.eval_freq * n_envs,
             self.eval_step,
             self.results.clone(),
+            device,
         )
     }
 }
@@ -120,30 +119,35 @@ impl NormalizerOptions {
 pub struct EvaluatorNormalizerOptions {
     pub evaluator_options: Option<EvaluatorOptions>,
     pub normalizer_options: Option<NormalizerOptions>,
+    pub device: Option<Device>,
 }
 
 impl EvaluatorNormalizerOptions {
-    pub fn evaluator(eval_options: EvaluatorOptions) -> Self {
+    pub fn evaluator(eval_options: EvaluatorOptions, device: Device) -> Self {
         Self {
             evaluator_options: Some(eval_options),
             normalizer_options: None,
+            device: Some(device),
         }
     }
 
-    pub fn normalizer(norm_options: NormalizerOptions) -> Self {
+    pub fn normalizer(norm_options: NormalizerOptions, device: Device) -> Self {
         Self {
             evaluator_options: None,
             normalizer_options: Some(norm_options),
+            device: Some(device),
         }
     }
 
     pub fn eval_normalizer(
         eval_options: EvaluatorOptions,
         norm_options: NormalizerOptions,
+        device: Device,
     ) -> Self {
         Self {
             evaluator_options: Some(eval_options),
             normalizer_options: Some(norm_options),
+            device: Some(device),
         }
     }
 }
@@ -154,37 +158,44 @@ impl EvaluatorNormalizerOptions {
         env_description: EnvironmentDescription<<EB::Env as Env>::Tensor>,
         env_builder: &EB,
         n_envs: usize,
-        device: &Device,
+        // device: &Device,
     ) -> Option<Box<dyn SequntialStepBoundHooks<EB::Env>>> {
         match &self {
             EvaluatorNormalizerOptions {
                 evaluator_options: None,
                 normalizer_options: None,
+                device,
             } => None,
             EvaluatorNormalizerOptions {
                 evaluator_options: Some(eval_options),
                 normalizer_options: None,
+                device,
             } => {
-                let evaluator = eval_options.build(env_builder, n_envs);
+                let device = device.as_ref().unwrap().clone();
+                let evaluator = eval_options.build(env_builder, n_envs, device);
                 Some(Box::new(evaluator))
             }
             EvaluatorNormalizerOptions {
                 evaluator_options: None,
                 normalizer_options: Some(norm_options),
+                device,
             } => {
-                let normalizer = norm_options.build(env_description, n_envs, device);
+                let device = device.as_ref().unwrap().clone();
+                let normalizer = norm_options.build(env_description, n_envs, &device);
                 Some(Box::new(normalizer))
             }
             EvaluatorNormalizerOptions {
                 evaluator_options: Some(eval_options),
                 normalizer_options: Some(norm_options),
+                device,
             } => {
-                let evaluator = eval_options.build(env_builder, n_envs);
-                let normalizer = norm_options.build(env_description, n_envs, device);
+                let device = device.as_ref().unwrap().clone();
+                let evaluator = eval_options.build(env_builder, n_envs, device.clone());
+                let normalizer = norm_options.build(env_description, n_envs, &device);
                 Some(Box::new(EvaluatorNormalizer {
                     evaluator,
                     normalizer,
-                    device: device.clone(),
+                    device,
                 }))
             }
         }

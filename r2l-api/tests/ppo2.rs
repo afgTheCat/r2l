@@ -1,4 +1,5 @@
 use anyhow::Result;
+use candle_core::Device;
 use r2l_api::{
     builders::{
         on_policy_algo2::OnPolicyAlgorithmBuilder,
@@ -21,7 +22,10 @@ fn ppo2_cart_pole() -> Result<()> {
         ..EvaluatorOptions::default()
     };
     let eval_res = evaluator_opts.results.clone();
-    ppo_builder.set_hook_options(EvaluatorNormalizerOptions::evaluator(evaluator_opts));
+    ppo_builder.set_hook_options(EvaluatorNormalizerOptions::evaluator(
+        evaluator_opts,
+        Device::Cpu,
+    ));
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;
     println!("eval res: {:?}", eval_res.lock().unwrap());
@@ -39,7 +43,7 @@ fn ppo2_cart_pole_normalize() -> Result<()> {
         ..EvaluatorOptions::default()
     };
     let eval_res = evaluator_options.results.clone();
-    let eval_normalizer = EvaluatorNormalizerOptions::evaluator(evaluator_options);
+    let eval_normalizer = EvaluatorNormalizerOptions::evaluator(evaluator_options, Device::Cpu);
     ppo_builder.set_hook_options(eval_normalizer);
     let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
     ppo.train()?;

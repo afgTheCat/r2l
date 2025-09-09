@@ -13,7 +13,9 @@ r2l-gym = { workspace = true }
 r2l-agents = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
+burn = { workspace = true }
 r2l-candle-lm = { workspace = true }
+r2l-burn-lm = { workspace = true }
 crossbeam = { workspace = true }
 r2l-buffer = { workspace = true }
 ringbuffer = "0.16.0"

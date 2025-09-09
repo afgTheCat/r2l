@@ -22,6 +22,12 @@ pub struct ParalellActorModel<B: Backend, M: Module<B>> {
     pub value_net: Sequential<B>,
 }
 
+impl<B: Backend, M: Module<B>> ParalellActorModel<B, M> {
+    pub fn new(distr: M, value_net: Sequential<B>) -> Self {
+        Self { distr, value_net }
+    }
+}
+
 // TODO: this is messy, like mega messy.
 pub struct ParalellActorCriticLM<
     B: AutodiffBackend,
@@ -30,7 +36,20 @@ pub struct ParalellActorCriticLM<
     <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
 {
     pub model: ParalellActorModel<B, M>,
-    optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
+    pub optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
+}
+
+impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
+    ParalellActorCriticLM<B, M>
+where
+    <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
+{
+    pub fn new(
+        model: ParalellActorModel<B, M>,
+        optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
+    ) -> Self {
+        Self { model, optimizer }
+    }
 }
 
 impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>

@@ -1,8 +1,8 @@
 use crate::sequential::Sequential;
 use anyhow::Result;
 use burn::module::Module;
-use burn::tensor::Distribution as BurnDistribution;
 use burn::tensor::cast::ToElement;
+use burn::tensor::{Distribution as BurnDistribution, Shape};
 use burn::{prelude::Backend, tensor::Tensor};
 use r2l_core::distributions::Distribution;
 
@@ -19,6 +19,23 @@ impl<B: Backend> DiagGaussianDistribution<B> {
             mu_net,
             value_net,
             log_std,
+        }
+    }
+
+    pub fn build(mu_layers: &[usize], value_layers: &[usize]) -> Self {
+        let device = Default::default();
+        let action_size = *mu_layers.last().unwrap();
+        let mu_net: Sequential<B> = Sequential::build(mu_layers);
+        let value_net: Sequential<B> = Sequential::build(value_layers);
+        let log_std: Tensor<B, 2> = Tensor::random(
+            Shape::new([action_size]),
+            burn::tensor::Distribution::Normal(0., 1.),
+            &device,
+        );
+        Self {
+            mu_net,
+            log_std,
+            value_net,
         }
     }
 }

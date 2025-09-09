@@ -8,4 +8,5 @@ license.workspace = true
 
 [dependencies]
 candle-core = { workspace = true }
+burn = { workspace = true }
 

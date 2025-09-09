@@ -23,8 +23,7 @@ fn r2l_verify(env_config: &EnvConfig) {
     let n_timesteps: f64 = config.get("n_timesteps").unwrap().parse().unwrap();
     let n_envs = config.get("n_envs").unwrap().parse().unwrap();
     println!("{}", eval_freq);
-    let (evaluator_options, _results) =
-        EvaluatorOptions::new(device.clone(), eval_episodes, eval_freq, 0);
+    let (evaluator_options, _results) = EvaluatorOptions::new(eval_episodes, eval_freq, 0);
     let normalizer_options = NormalizerOptions::new(1e-8, 0.99, 10., 10.);
     let algo = args.get("algo").unwrap();
     let capacity = match algo.as_str() {
@@ -40,15 +39,13 @@ fn r2l_verify(env_config: &EnvConfig) {
         hook_options: EvaluatorNormalizerOptions::eval_normalizer(
             evaluator_options,
             normalizer_options,
+            Device::Cpu,
         ),
     }
-    .build_with_builder_type(
-        EnvBuilderType::EnvBuilder {
-            builder: Arc::new(env_name.clone()),
-            n_envs,
-        },
-        &device,
-    );
+    .build_with_builder_type(EnvBuilderType::EnvBuilder {
+        builder: Arc::new(env_name.clone()),
+        n_envs,
+    });
     let learning_schedule = LearningSchedule::TotalStepBound {
         total_steps: n_timesteps as usize,
         current_step: 0,

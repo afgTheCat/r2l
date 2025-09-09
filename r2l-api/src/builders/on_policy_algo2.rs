@@ -52,13 +52,12 @@ impl OnPolicyAlgorithmBuilder {
         n_envs: usize,
     ) -> Result<OnPolicyAlgorithm<NewSampler<EB::Env>, AgentKind, DefaultOnPolicyAlgorightmsHooks>>
     {
-        let sampler = self.sampler_type.build_with_builder_type(
-            EnvBuilderType::EnvBuilder {
+        let sampler = self
+            .sampler_type
+            .build_with_builder_type(EnvBuilderType::EnvBuilder {
                 builder: Arc::new(env_builder),
                 n_envs,
-            },
-            &self.device,
-        );
+            });
         let env_description = sampler.env_description();
         let agent = match &self.agent_type {
             AgentType::PPO(builder) => {

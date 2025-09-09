@@ -179,7 +179,6 @@ impl SamplerType {
     >(
         &self,
         builder_type: EnvBuilderType<EB>,
-        device: &Device,
     ) -> NewSampler<EB::Env> {
         let n_envs = builder_type.num_envs();
         let collection_type = match self.env_pool_type {
@@ -192,9 +191,9 @@ impl SamplerType {
                 let env_pool = builder_type.build_fixed_sized_vec(self.capacity);
                 let env_desctiption = env_pool.env_description();
                 let env_builder = builder_type.env_builder();
-                let hooks =
-                    self.hook_options
-                        .build(env_desctiption, env_builder.as_ref(), n_envs, device);
+                let hooks = self
+                    .hook_options
+                    .build(env_desctiption, env_builder.as_ref(), n_envs);
                 let env_pool = FixedSizeEnvPoolKind::FixedSizeVecEnvPool(env_pool);
                 CollectionType::StepBound { env_pool, hooks }
             }
@@ -207,9 +206,9 @@ impl SamplerType {
                 let env_pool = builder_type.build_fixed_sized_thread(self.capacity);
                 let env_desctiption = env_pool.env_description();
                 let env_builder = builder_type.env_builder();
-                let hooks =
-                    self.hook_options
-                        .build(env_desctiption, env_builder.as_ref(), n_envs, device);
+                let hooks = self
+                    .hook_options
+                    .build(env_desctiption, env_builder.as_ref(), n_envs);
                 let env_pool = FixedSizeEnvPoolKind::FixedSizeThreadEnvPool(env_pool);
                 CollectionType::StepBound { env_pool, hooks }
             }
