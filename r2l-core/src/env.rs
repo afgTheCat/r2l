@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::{distributions::Distribution, utils::rollout_buffer::RolloutBuffer};
+use crate::{distributions::Policy, utils::rollout_buffer::RolloutBuffer};
 use anyhow::Result;
 use bincode::{Decode, Encode};
 
@@ -81,7 +81,7 @@ pub enum RolloutMode {
 pub trait Sampler {
     type Env: Env;
 
-    fn collect_rollouts<D: Distribution + Clone>(
+    fn collect_rollouts<D: Policy + Clone>(
         &mut self,
         distribution: D,
     ) -> Result<Vec<RolloutBuffer<D::Tensor>>>

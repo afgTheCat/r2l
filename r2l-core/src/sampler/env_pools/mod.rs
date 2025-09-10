@@ -2,7 +2,7 @@ pub mod thread_env_pool;
 pub mod vec_env_pool;
 
 use crate::{
-    distributions::Distribution,
+    distributions::Policy,
     env::{Env, EnvironmentDescription},
     sampler::{
         env_pools::{
@@ -21,7 +21,7 @@ pub trait FixedSizeEnvPool {
     fn num_envs(&self) -> usize;
 
     /// async mode
-    fn step_n<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+    fn step_n<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
         &mut self,
         distr: D,
         steps: usize,
@@ -34,7 +34,7 @@ pub trait FixedSizeEnvPool {
     fn set_buffers(&mut self, buffers: Vec<FixedSizeStateBuffer<Self::Env>>);
 
     /// set the distribution
-    fn set_distr<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(&mut self, distr: D);
+    fn set_distr<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(&mut self, distr: D);
 
     // take rollout buffer
     fn take_rollout_buffers(&mut self) -> Vec<RolloutBuffer<<Self::Env as Env>::Tensor>>;
@@ -57,7 +57,7 @@ impl<E: Env> FixedSizeEnvPoolKind<E> {
 impl<E: Env> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
     type Env = E;
 
-    fn step_n<D: Distribution<Tensor = E::Tensor> + Clone>(
+    fn step_n<D: Policy<Tensor = E::Tensor> + Clone>(
         &mut self,
         distr: D,
         steps: usize,
@@ -82,7 +82,7 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeEnvPoolKind<E> {
         }
     }
 
-    fn set_distr<D: Distribution<Tensor = E::Tensor> + Clone>(&mut self, distr: D) {
+    fn set_distr<D: Policy<Tensor = E::Tensor> + Clone>(&mut self, distr: D) {
         match self {
             Self::FixedSizeVecEnvPool(pool) => pool.set_distr(distr),
             Self::FixedSizeThreadEnvPool(pool) => pool.set_distr(distr),
@@ -109,7 +109,7 @@ pub trait VariableSizedEnvPool {
 
     fn num_envs(&self) -> usize;
 
-    fn step_with_episode_bound<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+    fn step_with_episode_bound<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
         &mut self,
         distr: D,
         steps: usize,
@@ -140,7 +140,7 @@ impl<E: Env> VariableSizedEnvPool for VariableSizedEnvPoolKind<E> {
         }
     }
 
-    fn step_with_episode_bound<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+    fn step_with_episode_bound<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
         &mut self,
         distr: D,
         steps: usize,

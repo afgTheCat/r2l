@@ -1,5 +1,5 @@
 use crate::{
-    distributions::Distribution,
+    distributions::Policy,
     env::{Env, SnapShot},
     rng::RNG,
     utils::rollout_buffer::RolloutBuffer,
@@ -93,7 +93,7 @@ impl<E: Env> FixedSizeStateBuffer<E> {
 pub struct FixedSizeTrajectoryBuffer<E: Env> {
     pub env: E,
     pub buffer: Option<FixedSizeStateBuffer<E>>,
-    pub distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>>,
+    pub distr: Option<Box<dyn Policy<Tensor = E::Tensor>>>,
     pub last_state: Option<E::Tensor>,
 }
 
@@ -107,7 +107,7 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
         }
     }
 
-    pub fn set_distr(&mut self, distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>>) {
+    pub fn set_distr(&mut self, distr: Option<Box<dyn Policy<Tensor = E::Tensor>>>) {
         self.distr = distr;
     }
 
@@ -142,7 +142,7 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
         buffer.push(state, next_state, action, reward, terminated, trancuated);
     }
 
-    pub fn step<D: Distribution<Tensor = E::Tensor> + ?Sized>(&mut self, distr: &D) {
+    pub fn step<D: Policy<Tensor = E::Tensor> + ?Sized>(&mut self, distr: &D) {
         let Some(buffer) = &mut self.buffer else {
             todo!()
         };
@@ -170,11 +170,7 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
         buffer.push(state, next_state, action, reward, terminated, trancuated);
     }
 
-    pub fn step_n<D: Distribution<Tensor = E::Tensor> + ?Sized>(
-        &mut self,
-        distr: &D,
-        steps: usize,
-    ) {
+    pub fn step_n<D: Policy<Tensor = E::Tensor> + ?Sized>(&mut self, distr: &D, steps: usize) {
         for _ in 0..steps {
             self.step(distr);
         }

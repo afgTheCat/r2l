@@ -7,7 +7,7 @@ use bincode::{Decode, Encode};
 use candle_core::Tensor;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
-use r2l_core::distributions::Distribution;
+use r2l_core::distributions::Policy;
 use std::{f32, fmt::Debug};
 
 #[derive(Debug, Clone)]
@@ -16,7 +16,7 @@ pub enum DistributionKind {
     DiagGaussian(DiagGaussianDistribution),
 }
 
-impl Distribution for DistributionKind {
+impl Policy for DistributionKind {
     type Tensor = Tensor;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {

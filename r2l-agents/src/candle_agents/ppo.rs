@@ -9,7 +9,7 @@ use r2l_candle_lm::{
 };
 use r2l_core::{
     agents::Agent,
-    distributions::Distribution,
+    distributions::Policy,
     policies::{LearningModule, ValueFunction},
     utils::rollout_buffer::{Advantages, Logps, Returns, RolloutBuffer},
 };
@@ -81,7 +81,7 @@ pub struct EmptyPPO3Hooks;
 
 impl<A> PPOHooksTrait<A> for EmptyPPO3Hooks {}
 
-pub struct CandlePPOCore<D: Distribution, LM: PPOLearningModule> {
+pub struct CandlePPOCore<D: Policy, LM: PPOLearningModule> {
     pub distribution: D,
     pub learning_module: LM,
     pub clip_range: f32,
@@ -92,12 +92,12 @@ pub struct CandlePPOCore<D: Distribution, LM: PPOLearningModule> {
 }
 
 // This could be something more generic
-pub struct CandlePPO<D: Distribution, LM: PPOLearningModule> {
+pub struct CandlePPO<D: Policy, LM: PPOLearningModule> {
     pub ppo: CandlePPOCore<D, LM>,
     pub hooks: Box<dyn PPOHooksTrait<CandlePPOCore<D, LM>>>,
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> CandlePPO<D, LM> {
+impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule> CandlePPO<D, LM> {
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         let ppo = &mut self.ppo;
         loop {
@@ -164,7 +164,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> CandlePPO<D, LM> {
     }
 }
 
-impl<D: Distribution<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for CandlePPO<D, LM> {
+impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for CandlePPO<D, LM> {
     type Dist = D;
 
     fn distribution(&self) -> Self::Dist {

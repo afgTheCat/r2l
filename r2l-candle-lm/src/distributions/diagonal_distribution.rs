@@ -6,7 +6,7 @@ use bincode::{
 };
 use candle_core::{Device, Tensor, safetensors::BufferedSafetensors};
 use candle_nn::{Module, VarBuilder};
-use r2l_core::distributions::Distribution;
+use r2l_core::distributions::Policy;
 use safetensors::serialize;
 use std::f32;
 
@@ -82,7 +82,7 @@ impl DiagGaussianDistribution {
     }
 }
 
-impl Distribution for DiagGaussianDistribution {
+impl Policy for DiagGaussianDistribution {
     type Tensor = Tensor;
 
     fn get_action(&self, observation: Tensor) -> Result<Tensor> {

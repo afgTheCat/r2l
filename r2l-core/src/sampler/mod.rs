@@ -2,7 +2,7 @@ pub mod env_pools;
 pub mod trajectory_buffers;
 
 use crate::{
-    distributions::Distribution,
+    distributions::Policy,
     env::{Env, EnvironmentDescription, Sampler},
     sampler::{
         env_pools::{
@@ -18,12 +18,12 @@ use std::{fmt::Debug, marker::PhantomData};
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
 // Arc::RwLock for the underlying distribution.
 #[derive(Debug, Clone)]
-pub struct DistributionWrapper<D: Distribution + Clone, T: Clone + Send + Sync + Debug + 'static> {
+pub struct DistributionWrapper<D: Policy + Clone, T: Clone + Send + Sync + Debug + 'static> {
     distribution: D,
     env: PhantomData<T>,
 }
 
-impl<D: Distribution + Clone, T: Clone + Send + Sync + Debug + 'static> DistributionWrapper<D, T> {
+impl<D: Policy + Clone, T: Clone + Send + Sync + Debug + 'static> DistributionWrapper<D, T> {
     pub fn new(distribution: D) -> Self {
         Self {
             distribution,
@@ -32,7 +32,7 @@ impl<D: Distribution + Clone, T: Clone + Send + Sync + Debug + 'static> Distribu
     }
 }
 
-impl<D: Distribution + Clone, T: Send + Clone + Sync + Debug + 'static> Distribution
+impl<D: Policy + Clone, T: Send + Clone + Sync + Debug + 'static> Policy
     for DistributionWrapper<D, T>
 where
     T: From<D::Tensor>,
@@ -81,7 +81,7 @@ where
 pub trait SequntialStepBoundHooks<E: Env> {
     fn process_last_step(
         &mut self,
-        distr: &dyn Distribution<Tensor = E::Tensor>,
+        distr: &dyn Policy<Tensor = E::Tensor>,
         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
     );
 
@@ -116,7 +116,7 @@ impl<E: Env> NewSampler<E> {
 impl<E: Env> Sampler for NewSampler<E> {
     type Env = E;
 
-    fn collect_rollouts<D: Distribution + Clone>(
+    fn collect_rollouts<D: Policy + Clone>(
         &mut self,
         distr: D,
     ) -> Result<Vec<RolloutBuffer<D::Tensor>>>

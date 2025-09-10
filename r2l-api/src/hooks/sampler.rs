@@ -2,7 +2,7 @@ use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 use candle_core::{Device, Result, Tensor};
 use r2l_buffer::Buffer;
 use r2l_core::{
-    distributions::Distribution,
+    distributions::Policy,
     env::Env,
     sampler::{
         SequntialStepBoundHooks, trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer,
@@ -87,7 +87,7 @@ impl EnvNormalizer {
 impl<E: Env> SequntialStepBoundHooks<E> for Evaluator<E> {
     fn process_last_step(
         &mut self,
-        distr: &dyn Distribution<Tensor = E::Tensor>,
+        distr: &dyn Policy<Tensor = E::Tensor>,
         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
     ) {
         let n_envs = buffers.len();
@@ -100,7 +100,7 @@ impl<E: Env> SequntialStepBoundHooks<E> for Evaluator<E> {
 impl<E: Env<Tensor = Buffer>> SequntialStepBoundHooks<E> for EnvNormalizer {
     fn process_last_step(
         &mut self,
-        _distr: &dyn Distribution<Tensor = E::Tensor>,
+        _distr: &dyn Policy<Tensor = E::Tensor>,
         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
     ) {
         self.normalize_buffers(buffers, &Device::Cpu).unwrap()
@@ -128,7 +128,7 @@ impl<E: Env> EvaluatorNormalizer<E> {
 impl<E: Env<Tensor = Buffer>> SequntialStepBoundHooks<E> for EvaluatorNormalizer<E> {
     fn process_last_step(
         &mut self,
-        distr: &dyn Distribution<Tensor = E::Tensor>,
+        distr: &dyn Policy<Tensor = E::Tensor>,
         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
     ) {
         let n_envs = buffers.len();

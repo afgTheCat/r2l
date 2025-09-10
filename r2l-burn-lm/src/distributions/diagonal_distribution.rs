@@ -4,7 +4,7 @@ use burn::module::Module;
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape};
 use burn::{prelude::Backend, tensor::Tensor};
-use r2l_core::distributions::Distribution;
+use r2l_core::distributions::Policy;
 
 #[derive(Debug, Module)]
 pub struct DiagGaussianDistribution<B: Backend> {
@@ -40,7 +40,7 @@ impl<B: Backend> DiagGaussianDistribution<B> {
     }
 }
 
-impl<B: Backend> Distribution for DiagGaussianDistribution<B> {
+impl<B: Backend> Policy for DiagGaussianDistribution<B> {
     type Tensor = Tensor<B, 1>;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {

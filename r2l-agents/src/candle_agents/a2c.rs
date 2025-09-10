@@ -10,7 +10,7 @@ use r2l_candle_lm::{
 };
 use r2l_core::{
     agents::Agent,
-    distributions::Distribution,
+    distributions::Policy,
     policies::{LearningModule, ValueFunction},
     utils::rollout_buffer::{Advantages, Logps, Returns, RolloutBuffer},
 };
@@ -56,7 +56,7 @@ impl<LM: A2CLearningModule> A2CHooks<LM> for DefaultA2CHooks {
     }
 }
 
-pub struct A2C<D: Distribution, LM: A2CLearningModule> {
+pub struct A2C<D: Policy, LM: A2CLearningModule> {
     pub distribution: D,
     pub learning_module: LM,
     pub hooks: Box<dyn A2CHooks<LM>>,
@@ -66,7 +66,7 @@ pub struct A2C<D: Distribution, LM: A2CLearningModule> {
     pub sample_size: usize,
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> A2C<D, LM> {
+impl<D: Policy<Tensor = Tensor>, LM: A2CLearningModule> A2C<D, LM> {
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         loop {
             let Some(batch) = batch_iter.next() else {
@@ -86,7 +86,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: A2CLearningModule> A2C<D, LM> {
     }
 }
 
-impl<D: Distribution<Tensor = Tensor> + Clone, LM: A2CLearningModule> Agent for A2C<D, LM> {
+impl<D: Policy<Tensor = Tensor> + Clone, LM: A2CLearningModule> Agent for A2C<D, LM> {
     type Dist = D;
 
     fn distribution(&self) -> Self::Dist {

@@ -54,7 +54,7 @@ fn build_algo() -> OnPolicyAlgorithm<
     let ppo_core = BurnPPOCore::new(paralell_actor_critic_lm, 0.1, 100, 0.99, 0.99);
     let agent = BurnPPO::new(ppo_core, Box::new(EmptyBurnPPOHooks));
     let op_hooks = DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::RolloutBound {
-        total_rollouts: 100,
+        total_rollouts: 1000,
         current_rollout: 0,
     });
     OnPolicyAlgorithm {

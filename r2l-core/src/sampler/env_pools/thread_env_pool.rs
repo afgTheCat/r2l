@@ -1,5 +1,5 @@
 use crate::{
-    distributions::Distribution,
+    distributions::Policy,
     env::{Env, EnvironmentDescription},
     sampler::{
         env_pools::{FixedSizeEnvPool, VariableSizedEnvPool},
@@ -30,7 +30,7 @@ pub enum FixedSizeWorkerCommand<E: Env> {
     GetEnvDescription,
     // Set the distr
     SetDistr {
-        distr: Box<dyn Distribution<Tensor = E::Tensor>>,
+        distr: Box<dyn Policy<Tensor = E::Tensor>>,
     },
 }
 
@@ -167,12 +167,9 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
         buffs
     }
 
-    fn set_distr<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
-        &mut self,
-        distr: D,
-    ) {
+    fn set_distr<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(&mut self, distr: D) {
         for idx in 0..self.num_envs() {
-            let distr: Box<dyn Distribution<Tensor = E::Tensor>> = Box::new(distr.clone());
+            let distr: Box<dyn Policy<Tensor = E::Tensor>> = Box::new(distr.clone());
             let tx = &self.channels.get(&idx).unwrap().0;
             tx.send(FixedSizeWorkerCommand::SetDistr { distr }).unwrap();
         }
@@ -182,7 +179,7 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
         }
     }
 
-    fn step_n<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+    fn step_n<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
         &mut self,
         distr: D,
         steps: usize,
@@ -260,7 +257,7 @@ pub enum VariableSizedWorkerCommand<E: Env> {
     GetEnvDescription,
     // Set the distr
     SetDistr {
-        distr: Box<dyn Distribution<Tensor = E::Tensor>>,
+        distr: Box<dyn Policy<Tensor = E::Tensor>>,
     },
 }
 
@@ -346,7 +343,7 @@ impl<E: Env> VariableSizedEnvPool for VariableSizedThreadEnvPool<E> {
 
     // TODO: we should have one kind of command that sets the distribution and makes the env go
     // brrr
-    fn step_with_episode_bound<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+    fn step_with_episode_bound<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
         &mut self,
         distr: D,
         steps: usize,
@@ -354,7 +351,7 @@ impl<E: Env> VariableSizedEnvPool for VariableSizedThreadEnvPool<E> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
-            let distr: Box<dyn Distribution<Tensor = E::Tensor>> = Box::new(distr.clone());
+            let distr: Box<dyn Policy<Tensor = E::Tensor>> = Box::new(distr.clone());
             tx.send(VariableSizedWorkerCommand::SetDistr { distr })
                 .unwrap();
         }

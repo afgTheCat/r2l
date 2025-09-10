@@ -5,7 +5,7 @@ use candle_core::{Device, Error, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
-use r2l_core::distributions::Distribution;
+use r2l_core::distributions::Policy;
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 
@@ -77,7 +77,7 @@ impl CategoricalDistribution {
     }
 }
 
-impl Distribution for CategoricalDistribution {
+impl Policy for CategoricalDistribution {
     type Tensor = Tensor;
 
     fn get_action(&self, observation: Tensor) -> Result<Tensor> {

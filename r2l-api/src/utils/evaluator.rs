@@ -1,6 +1,6 @@
 use candle_core::{Device, Result};
 use r2l_core::{
-    distributions::Distribution, env::Env,
+    distributions::Policy, env::Env,
     sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
 };
 use std::sync::{Arc, Mutex};
@@ -37,11 +37,7 @@ impl<E: Env> Evaluator<E> {
         self.evaluations_results.clone()
     }
 
-    pub fn evaluate(
-        &mut self,
-        dist: &dyn Distribution<Tensor = E::Tensor>,
-        n_envs: usize,
-    ) -> Result<()> {
+    pub fn evaluate(&mut self, dist: &dyn Policy<Tensor = E::Tensor>, n_envs: usize) -> Result<()> {
         if self.eval_step < self.eval_freq {
             self.eval_step += n_envs;
             Ok(())

@@ -1,5 +1,5 @@
 use crate::{
-    distributions::Distribution,
+    distributions::Policy,
     env::{Env, SnapShot},
     rng::RNG,
     utils::rollout_buffer::RolloutBuffer,
@@ -80,7 +80,7 @@ pub struct VariableSizedTrajectoryBuffer<E: Env> {
     // TODO: maybe we could make this optional, signaling that the trajector whether the trajectory
     // buffer currently holds the buffer or not
     pub buffer: VariableSizedStateBuffer<E>,
-    pub distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>>,
+    pub distr: Option<Box<dyn Policy<Tensor = E::Tensor>>>,
     pub last_state: Option<E::Tensor>,
 }
 
@@ -124,7 +124,7 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
             .push(state, next_state, action, reward, terminated, trancuated);
     }
 
-    pub fn step<D: Distribution<Tensor = E::Tensor> + ?Sized>(&mut self, distr: &D) {
+    pub fn step<D: Policy<Tensor = E::Tensor> + ?Sized>(&mut self, distr: &D) {
         let buffer = &mut self.buffer;
         let state = if let Some(obs) = buffer.next_states.last() {
             obs.clone()
@@ -149,7 +149,7 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
         buffer.push(state, next_state, action, reward, terminated, trancuated);
     }
 
-    pub fn step_with_epiosde_bound<D: Distribution<Tensor = E::Tensor> + ?Sized>(
+    pub fn step_with_epiosde_bound<D: Policy<Tensor = E::Tensor> + ?Sized>(
         &mut self,
         distr: &D,
         n_steps: usize,
@@ -175,7 +175,7 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
         }
     }
 
-    pub fn run_episodes<D: Distribution<Tensor = E::Tensor> + ?Sized>(
+    pub fn run_episodes<D: Policy<Tensor = E::Tensor> + ?Sized>(
         &mut self,
         distr: &D,
         episodes: usize,
@@ -207,7 +207,7 @@ impl<E: Env> VariableSizedTrajectoryBuffer<E> {
         self.buffer.take_rollout_buffer()
     }
 
-    pub fn set_distr(&mut self, distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>>) {
+    pub fn set_distr(&mut self, distr: Option<Box<dyn Policy<Tensor = E::Tensor>>>) {
         self.distr = distr;
     }
 }

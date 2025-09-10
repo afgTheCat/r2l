@@ -1,5 +1,5 @@
 use crate::{
-    distributions::Distribution,
+    distributions::Policy,
     env::{Env, EnvironmentDescription},
     sampler::{
         env_pools::{FixedSizeEnvPool, VariableSizedEnvPool},
@@ -20,9 +20,9 @@ impl<E: Env> FixedSizeVecEnvPool<E> {
         self.buffers[0].env.env_description()
     }
 
-    pub fn set_distr<D: Distribution<Tensor = E::Tensor> + Clone>(&mut self, distr: D) {
+    pub fn set_distr<D: Policy<Tensor = E::Tensor> + Clone>(&mut self, distr: D) {
         for buffer in self.buffers.iter_mut() {
-            let distr: Box<dyn Distribution<Tensor = E::Tensor>> = Box::new(distr.clone());
+            let distr: Box<dyn Policy<Tensor = E::Tensor>> = Box::new(distr.clone());
             buffer.set_distr(Some(distr));
         }
     }
@@ -41,14 +41,13 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
         self.buffers.len()
     }
 
-    fn step_n<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+    fn step_n<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
         &mut self,
         distr: D,
         steps: usize,
     ) -> Vec<RolloutBuffer<<Self::Env as Env>::Tensor>> {
         for buffer in self.buffers.iter_mut() {
-            let distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>> =
-                Some(Box::new(distr.clone()));
+            let distr: Option<Box<dyn Policy<Tensor = E::Tensor>>> = Some(Box::new(distr.clone()));
             buffer.set_distr(distr);
             buffer.step_n2(steps);
         }
@@ -68,10 +67,7 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
             .collect()
     }
 
-    fn set_distr<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
-        &mut self,
-        distr: D,
-    ) {
+    fn set_distr<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(&mut self, distr: D) {
         for buffer in self.buffers.iter_mut() {
             buffer.set_distr(Some(Box::new(distr.clone())));
         }
@@ -102,14 +98,13 @@ impl<E: Env> VariableSizedEnvPool for VariableSizedVecEnvPool<E> {
         self.buffers.len()
     }
 
-    fn step_with_episode_bound<D: Distribution<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+    fn step_with_episode_bound<D: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
         &mut self,
         distr: D,
         steps: usize,
     ) -> Vec<RolloutBuffer<<Self::Env as Env>::Tensor>> {
         for buffer in self.buffers.iter_mut() {
-            let distr: Option<Box<dyn Distribution<Tensor = E::Tensor>>> =
-                Some(Box::new(distr.clone()));
+            let distr: Option<Box<dyn Policy<Tensor = E::Tensor>>> = Some(Box::new(distr.clone()));
             buffer.set_distr(distr);
             buffer.step_with_epiosde_bound2(steps);
         }

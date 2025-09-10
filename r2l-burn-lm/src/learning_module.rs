@@ -6,7 +6,7 @@ use burn::{
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_core::{
-    distributions::Distribution,
+    distributions::Policy,
     policies::{LearningModule, ValueFunction},
 };
 
@@ -31,7 +31,7 @@ impl<B: Backend, M: Module<B>> ParalellActorModel<B, M> {
 // TODO: this is messy, like mega messy.
 pub struct ParalellActorCriticLM<
     B: AutodiffBackend,
-    M: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>,
+    M: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>,
 > where
     <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
 {
@@ -39,7 +39,7 @@ pub struct ParalellActorCriticLM<
     pub optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
 }
 
-impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
+impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
     ParalellActorCriticLM<B, M>
 where
     <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
@@ -52,7 +52,7 @@ where
     }
 }
 
-impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
+impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
     LearningModule for ParalellActorCriticLM<B, M>
 where
     <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
@@ -69,7 +69,7 @@ where
     }
 }
 
-impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
+impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
     ValueFunction for ParalellActorCriticLM<B, M>
 where
     <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
@@ -79,6 +79,6 @@ where
     fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
         let observation: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
         let value = self.model.value_net.forward(observation);
-        Ok(value.squeeze(0))
+        Ok(value.squeeze(1))
     }
 }

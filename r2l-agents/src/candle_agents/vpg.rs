@@ -10,14 +10,14 @@ use r2l_candle_lm::{
 };
 use r2l_core::{
     agents::Agent,
-    distributions::Distribution,
+    distributions::Policy,
     policies::{LearningModule, ValueFunction},
     utils::rollout_buffer::{Logps, RolloutBuffer},
 };
 
 pub trait VPG3LearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
 
-pub struct VPG<D: Distribution, LM: PPOLearningModule> {
+pub struct VPG<D: Policy, LM: PPOLearningModule> {
     pub distribution: D,
     pub learning_module: LM,
     device: Device,
@@ -26,7 +26,7 @@ pub struct VPG<D: Distribution, LM: PPOLearningModule> {
     sample_size: usize,
 }
 
-impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> VPG<D, LM> {
+impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule> VPG<D, LM> {
     fn train_single_batch(&mut self, batch: RolloutBatch) -> Result<bool> {
         let policy_loss = PolicyLoss(batch.advantages.mul(&batch.logp_old)?.neg()?.mean_all()?);
         let values_pred = self.learning_module.calculate_values(&batch.observations)?;
@@ -39,7 +39,7 @@ impl<D: Distribution<Tensor = Tensor>, LM: PPOLearningModule> VPG<D, LM> {
     }
 }
 
-impl<D: Distribution<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for VPG<D, LM> {
+impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for VPG<D, LM> {
     type Dist = D;
 
     fn distribution(&self) -> Self::Dist {

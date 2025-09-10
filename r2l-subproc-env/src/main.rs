@@ -10,7 +10,7 @@ use interprocess::local_socket::{
 };
 use r2l_candle_lm::distributions::DistributionKind;
 use r2l_core::{
-    distributions::Distribution,
+    distributions::Policy,
     env::Env,
     // ipc::{PacketToReceive, PacketToSend, receive_packet, send_packet},
     sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
@@ -88,9 +88,7 @@ pub struct Rollout<E: Env> {
 }
 
 impl<E: Env> Rollout<E> {
-    fn handle_packet<D: Distribution<Tensor = Tensor> + Decode<()> + Encode>(
-        &mut self,
-    ) -> Result<bool> {
+    fn handle_packet<D: Policy<Tensor = Tensor> + Decode<()> + Encode>(&mut self) -> Result<bool> {
         Ok(false)
         // let packet: PacketToReceive<D> = receive_packet(&mut self.conn);
         // match packet {

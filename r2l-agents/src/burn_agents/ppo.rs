@@ -11,7 +11,7 @@ use r2l_burn_lm::{
 };
 use r2l_core::policies::ValueFunction;
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns, RolloutBuffer};
-use r2l_core::{agents::Agent, distributions::Distribution};
+use r2l_core::{agents::Agent, distributions::Policy};
 use r2l_core::{agents::TensorOfAgent, policies::LearningModule};
 
 macro_rules! process_hook_result {
@@ -30,7 +30,7 @@ pub enum HookResult {
 
 pub struct BurnPPOCore<
     B: AutodiffBackend,
-    D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>,
+    D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>,
 > where
     <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
 {
@@ -41,7 +41,7 @@ pub struct BurnPPOCore<
     pub lambda: f32,
 }
 
-impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
+impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
     BurnPPOCore<B, D>
 where
     <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
@@ -65,7 +65,7 @@ where
 
 pub trait BurnPPPHooksTrait<
     B: AutodiffBackend,
-    D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>,
+    D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>,
 > where
     <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
 {
@@ -101,7 +101,7 @@ pub trait BurnPPPHooksTrait<
 
 pub struct EmptyBurnPPOHooks;
 
-impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
+impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
     BurnPPPHooksTrait<B, D> for EmptyBurnPPOHooks
 where
     <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
@@ -110,7 +110,7 @@ where
 
 pub struct BurnPPO<
     B: AutodiffBackend,
-    D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>,
+    D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>,
 > where
     <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
 {
@@ -118,7 +118,7 @@ pub struct BurnPPO<
     pub hooks: Box<dyn BurnPPPHooksTrait<B, D>>,
 }
 
-impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
+impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
     BurnPPO<B, D>
 where
     <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
@@ -184,6 +184,7 @@ where
     }
 }
 
+// TODO: is there a better way?
 fn uplift_tensor<const N: usize, B: AutodiffBackend>(
     t: Tensor<B::InnerBackend, N>,
 ) -> Tensor<B, N> {
@@ -192,11 +193,11 @@ fn uplift_tensor<const N: usize, B: AutodiffBackend>(
     Tensor::from_data(data, &device)
 }
 
-impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Distribution<Tensor = Tensor<B, 1>>>
-    Agent for BurnPPO<B, D>
+impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>> Agent
+    for BurnPPO<B, D>
 where
     <D as AutodiffModule<B>>::InnerModule:
-        ModuleDisplay + Distribution<Tensor = Tensor<B::InnerBackend, 1>>,
+        ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>,
 {
     type Dist = D::InnerModule;
 
@@ -251,10 +252,7 @@ where
                     .model
                     .distr
                     .log_probs(states, actions)
-                    .map(|t| {
-                        let t: Tensor<B, 1> = t.squeeze(0);
-                        t.to_data().to_vec().unwrap()
-                    })
+                    .map(|t| t.to_data().to_vec().unwrap())
             })
             .collect::<Result<Vec<Vec<f32>>>>()?;
         self.learning_loop(&rollouts, &advantages, &returns, &Logps(logps))?;
