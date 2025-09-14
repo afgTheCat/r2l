@@ -111,7 +111,7 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
         self.distr = distr;
     }
 
-    pub fn step2(&mut self) {
+    pub fn step(&mut self) {
         let Some(buffer) = &mut self.buffer else {
             todo!()
         };
@@ -142,43 +142,9 @@ impl<E: Env> FixedSizeTrajectoryBuffer<E> {
         buffer.push(state, next_state, action, reward, terminated, trancuated);
     }
 
-    pub fn step<D: Policy<Tensor = E::Tensor> + ?Sized>(&mut self, distr: &D) {
-        let Some(buffer) = &mut self.buffer else {
-            todo!()
-        };
-        let state = if let Some(state) = buffer.next_states.back() {
-            state.clone()
-        // last state saved from previous rollout, so that we don't have to reset
-        } else if let Some(last_state) = self.last_state.take() {
-            last_state
-        } else {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            self.env.reset(seed).unwrap()
-        };
-        let action = distr.get_action(state.clone()).unwrap();
-        let SnapShot {
-            state: mut next_state,
-            reward,
-            terminated,
-            trancuated,
-        } = self.env.step(action.clone()).unwrap();
-        let done = terminated || trancuated;
-        if done {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            next_state = self.env.reset(seed).unwrap();
-        }
-        buffer.push(state, next_state, action, reward, terminated, trancuated);
-    }
-
-    pub fn step_n<D: Policy<Tensor = E::Tensor> + ?Sized>(&mut self, distr: &D, steps: usize) {
+    pub fn step_n(&mut self, steps: usize) {
         for _ in 0..steps {
-            self.step(distr);
-        }
-    }
-
-    pub fn step_n2(&mut self, steps: usize) {
-        for _ in 0..steps {
-            self.step2();
+            self.step();
         }
     }
 

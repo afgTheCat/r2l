@@ -12,14 +12,14 @@ use r2l_burn_lm::{
 use r2l_core::Algorithm;
 use r2l_core::{
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
-    sampler::NewSampler,
+    sampler::R2lSampler,
 };
 use r2l_gym::GymEnv;
 use std::sync::Arc;
 
 type MyAutoDiffBackend = Autodiff<NdArray>;
 
-fn build_sampler() -> NewSampler<GymEnv> {
+fn build_sampler() -> R2lSampler<GymEnv> {
     let sampler_type = SamplerType {
         capacity: 2048,
         hook_options: Default::default(),
@@ -32,7 +32,7 @@ fn build_sampler() -> NewSampler<GymEnv> {
 }
 
 fn build_algo() -> OnPolicyAlgorithm<
-    NewSampler<GymEnv>,
+    R2lSampler<GymEnv>,
     BurnPPO<MyAutoDiffBackend, CategoricalDistribution<MyAutoDiffBackend>>,
     DefaultOnPolicyAlgorightmsHooks,
 > {

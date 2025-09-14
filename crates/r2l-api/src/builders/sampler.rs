@@ -1,10 +1,9 @@
 use crate::builders::{env::EnvBuilderTrait, sampler_hooks2::EvaluatorNormalizerOptions};
-use candle_core::Device;
 use r2l_buffer::Buffer;
 use r2l_core::{
     env::Env,
     sampler::{
-        CollectionType, NewSampler,
+        CollectionType, R2lSampler,
         env_pools::{
             FixedSizeEnvPoolKind, VariableSizedEnvPoolKind,
             thread_env_pool::{
@@ -179,7 +178,7 @@ impl SamplerType {
     >(
         &self,
         builder_type: EnvBuilderType<EB>,
-    ) -> NewSampler<EB::Env> {
+    ) -> R2lSampler<EB::Env> {
         let n_envs = builder_type.num_envs();
         let collection_type = match self.env_pool_type {
             EnvPoolType::VecVariable => {
@@ -213,7 +212,7 @@ impl SamplerType {
                 CollectionType::StepBound { env_pool, hooks }
             }
         };
-        NewSampler {
+        R2lSampler {
             env_steps: self.capacity,
             collection_type,
         }

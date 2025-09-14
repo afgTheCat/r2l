@@ -18,22 +18,21 @@ use std::{fmt::Debug, marker::PhantomData};
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
 // Arc::RwLock for the underlying distribution.
 #[derive(Debug, Clone)]
-pub struct DistributionWrapper<D: Policy + Clone, T: Clone + Send + Sync + Debug + 'static> {
-    distribution: D,
+pub struct PolicyWrapper<P: Policy + Clone, T: Clone + Send + Sync + Debug + 'static> {
+    policy: P,
     env: PhantomData<T>,
 }
 
-impl<D: Policy + Clone, T: Clone + Send + Sync + Debug + 'static> DistributionWrapper<D, T> {
-    pub fn new(distribution: D) -> Self {
+impl<D: Policy + Clone, T: Clone + Send + Sync + Debug + 'static> PolicyWrapper<D, T> {
+    pub fn new(policy: D) -> Self {
         Self {
-            distribution,
+            policy,
             env: PhantomData,
         }
     }
 }
 
-impl<D: Policy + Clone, T: Send + Clone + Sync + Debug + 'static> Policy
-    for DistributionWrapper<D, T>
+impl<D: Policy + Clone, T: Send + Clone + Sync + Debug + 'static> Policy for PolicyWrapper<D, T>
 where
     T: From<D::Tensor>,
     T: Into<D::Tensor>,
@@ -41,11 +40,11 @@ where
     type Tensor = T;
 
     fn std(&self) -> Result<f32> {
-        self.distribution.std()
+        self.policy.std()
     }
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let action = self.distribution.get_action(observation.into())?;
+        let action = self.policy.get_action(observation.into())?;
         Ok(action.into())
     }
 
@@ -62,12 +61,12 @@ where
             .into_iter()
             .map(|a| a.clone().into())
             .collect::<Vec<_>>();
-        let log_probs = self.distribution.log_probs(&observations, &actions)?;
+        let log_probs = self.policy.log_probs(&observations, &actions)?;
         Ok(log_probs.into())
     }
 
     fn entropy(&self) -> Result<Self::Tensor> {
-        let entropy = self.distribution.entropy()?;
+        let entropy = self.policy.entropy()?;
         Ok(entropy.into())
     }
 
@@ -92,6 +91,7 @@ pub trait SequntialStepBoundHooks<E: Env> {
 pub enum CollectionType<E: Env> {
     StepBound {
         env_pool: FixedSizeEnvPoolKind<E>,
+        // TODO: this should be the preprocessor
         hooks: Option<Box<dyn SequntialStepBoundHooks<E>>>,
     },
     EpisodeBound {
@@ -99,12 +99,12 @@ pub enum CollectionType<E: Env> {
     },
 }
 
-pub struct NewSampler<E: Env> {
+pub struct R2lSampler<E: Env> {
     pub env_steps: usize,
     pub collection_type: CollectionType<E>,
 }
 
-impl<E: Env> NewSampler<E> {
+impl<E: Env> R2lSampler<E> {
     pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         match &self.collection_type {
             CollectionType::StepBound { env_pool, .. } => env_pool.env_description(),
@@ -113,36 +113,36 @@ impl<E: Env> NewSampler<E> {
     }
 }
 
-impl<E: Env> Sampler for NewSampler<E> {
+impl<E: Env> Sampler for R2lSampler<E> {
     type Env = E;
 
-    fn collect_rollouts<D: Policy + Clone>(
+    fn collect_rollouts<P: Policy + Clone>(
         &mut self,
-        distr: D,
-    ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
+        policy: P,
+    ) -> Result<Vec<RolloutBuffer<P::Tensor>>>
     where
-        E::Tensor: From<D::Tensor>,
-        E::Tensor: Into<D::Tensor>,
+        E::Tensor: From<P::Tensor>,
+        E::Tensor: Into<P::Tensor>,
     {
-        let distr: DistributionWrapper<D, E::Tensor> = DistributionWrapper::new(distr);
+        let policy: PolicyWrapper<P, E::Tensor> = PolicyWrapper::new(policy);
         let rb = match &mut self.collection_type {
             CollectionType::StepBound { env_pool, hooks } => {
                 if let Some(hooks) = hooks {
-                    env_pool.set_distr(distr.clone());
+                    env_pool.set_distr(policy.clone());
                     let mut steps_taken = 0;
                     while steps_taken < self.env_steps {
                         let mut buffers = env_pool.step_take_buffers();
-                        hooks.process_last_step(&distr, &mut buffers);
+                        hooks.process_last_step(&policy, &mut buffers);
                         env_pool.set_buffers(buffers);
                         steps_taken += 1;
                     }
                     env_pool.take_rollout_buffers()
                 } else {
-                    env_pool.step_n(distr, self.env_steps)
+                    env_pool.step_n(policy, self.env_steps)
                 }
             }
             CollectionType::EpisodeBound { env_pool } => {
-                env_pool.step_with_episode_bound(distr, self.env_steps)
+                env_pool.step_with_episode_bound(policy, self.env_steps)
             }
         };
         Ok(rb.into_iter().map(|rb| rb.convert()).collect())

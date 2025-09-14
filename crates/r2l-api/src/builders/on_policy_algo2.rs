@@ -11,7 +11,7 @@ use r2l_buffer::Buffer;
 use r2l_core::{
     env::Env,
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
-    sampler::NewSampler,
+    sampler::R2lSampler,
 };
 use std::sync::Arc;
 
@@ -50,7 +50,7 @@ impl OnPolicyAlgorithmBuilder {
         &self,
         env_builder: EB,
         n_envs: usize,
-    ) -> Result<OnPolicyAlgorithm<NewSampler<EB::Env>, AgentKind, DefaultOnPolicyAlgorightmsHooks>>
+    ) -> Result<OnPolicyAlgorithm<R2lSampler<EB::Env>, AgentKind, DefaultOnPolicyAlgorightmsHooks>>
     {
         let sampler = self
             .sampler_type

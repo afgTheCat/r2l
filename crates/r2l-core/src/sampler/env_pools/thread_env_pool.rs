@@ -29,13 +29,13 @@ pub enum FixedSizeWorkerCommand<E: Env> {
     // Get env description
     GetEnvDescription,
     // Set the distr
-    SetDistr {
-        distr: Box<dyn Policy<Tensor = E::Tensor>>,
+    SetPolicy {
+        policy: Box<dyn Policy<Tensor = E::Tensor>>,
     },
 }
 
 pub enum FixedSizeWorkerResult<E: Env> {
-    Step2 {
+    Step {
         buffer: Box<FixedSizeStateBuffer<E>>,
     },
     MultiStepOk,
@@ -91,21 +91,21 @@ impl<E: Env> FixedSizeWorkerThread<E> {
                         .send(FixedSizeWorkerResult::EnvDescription { env_description })
                         .unwrap();
                 }
-                FixedSizeWorkerCommand::SetDistr { distr } => {
-                    self.buffer.set_distr(Some(distr));
+                FixedSizeWorkerCommand::SetPolicy { policy } => {
+                    self.buffer.set_distr(Some(policy));
                     self.tx.send(FixedSizeWorkerResult::SetDistrOk).unwrap();
                 }
                 FixedSizeWorkerCommand::SingleStep => {
-                    self.buffer.step2();
+                    self.buffer.step();
                     let buffer = self.buffer.move_buffer();
                     self.tx
-                        .send(FixedSizeWorkerResult::Step2 {
+                        .send(FixedSizeWorkerResult::Step {
                             buffer: Box::new(buffer),
                         })
                         .unwrap();
                 }
                 FixedSizeWorkerCommand::MultiStep { num_steps } => {
-                    self.buffer.step_n2(num_steps);
+                    self.buffer.step_n(num_steps);
                     self.tx.send(FixedSizeWorkerResult::MultiStepOk {}).unwrap();
                 }
             }
@@ -159,7 +159,7 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
         let mut buffs = Vec::with_capacity(num_envs);
         for idx in 0..num_envs {
             let rx = &self.channels.get(&idx).unwrap().1;
-            let FixedSizeWorkerResult::Step2 { buffer } = rx.recv().unwrap() else {
+            let FixedSizeWorkerResult::Step { buffer } = rx.recv().unwrap() else {
                 panic!()
             };
             buffs.push(*buffer);
@@ -171,7 +171,8 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeThreadEnvPool<E> {
         for idx in 0..self.num_envs() {
             let distr: Box<dyn Policy<Tensor = E::Tensor>> = Box::new(distr.clone());
             let tx = &self.channels.get(&idx).unwrap().0;
-            tx.send(FixedSizeWorkerCommand::SetDistr { distr }).unwrap();
+            tx.send(FixedSizeWorkerCommand::SetPolicy { policy: distr })
+                .unwrap();
         }
         for idx in 0..self.channels.len() {
             let rx = &self.channels.get(&idx).unwrap().1;

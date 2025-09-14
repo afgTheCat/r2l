@@ -29,7 +29,7 @@ impl<E: Env> FixedSizeVecEnvPool<E> {
 
     pub fn step2(&mut self, steps: usize) {
         for buf in self.buffers.iter_mut() {
-            buf.step_n2(steps);
+            buf.step_n(steps);
         }
     }
 }
@@ -49,7 +49,7 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
         for buffer in self.buffers.iter_mut() {
             let distr: Option<Box<dyn Policy<Tensor = E::Tensor>>> = Some(Box::new(distr.clone()));
             buffer.set_distr(distr);
-            buffer.step_n2(steps);
+            buffer.step_n(steps);
         }
         self.buffers
             .iter_mut()
@@ -59,7 +59,7 @@ impl<E: Env> FixedSizeEnvPool for FixedSizeVecEnvPool<E> {
 
     fn step_take_buffers(&mut self) -> Vec<FixedSizeStateBuffer<Self::Env>> {
         for buffer in self.buffers.iter_mut() {
-            buffer.step_n2(1);
+            buffer.step_n(1);
         }
         self.buffers
             .iter_mut()

@@ -62,6 +62,15 @@ pub struct SnapShot<T> {
     pub trancuated: bool,
 }
 
+pub struct Memory<T> {
+    pub state: T,
+    pub next_state: T,
+    pub action: T,
+    pub reward: f32,
+    pub terminated: bool,
+    pub trancuated: bool,
+}
+
 pub trait Env {
     //  TODO: we might want to introduce more than just one kind of Tensors.
     type Tensor: Clone + Send + Sync + Debug + 'static;
