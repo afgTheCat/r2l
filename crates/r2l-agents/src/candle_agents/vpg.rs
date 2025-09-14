@@ -40,9 +40,9 @@ impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule> VPG<D, LM> {
 }
 
 impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for VPG<D, LM> {
-    type Dist = D;
+    type Policy = D;
 
-    fn distribution(&self) -> Self::Dist {
+    fn policy(&self) -> Self::Policy {
         self.distribution.clone()
     }
 
@@ -66,7 +66,7 @@ impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for VPG<D,
                     // let states =
                     //     Tensor::stack(&roll.0.states[0..roll.0.states.len() - 1], 0).unwrap();
                     // let actions = Tensor::stack(&roll.0.actions, 0).unwrap();
-                    self.distribution()
+                    self.policy()
                         .log_probs(states, actions)
                         .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
                 })

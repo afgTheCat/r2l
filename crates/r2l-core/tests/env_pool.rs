@@ -1,11 +1,11 @@
 use r2l_core::{
     env::Env,
-    sampler2::{Buffer, EmptyPreProcessor, R2lSampler2, env_pools::WorkerPool},
+    sampler2::{Buffer, EmptyPreProcessor, R2lSampler2, env_pools::ThreadEnvPool},
 };
 
-type Thing<E, B> = R2lSampler2<WorkerPool<E, B>, EmptyPreProcessor>;
+type SamplerWithThreads<E, B> = R2lSampler2<ThreadEnvPool<E, B>, EmptyPreProcessor>;
 
-fn thing<E: Env, B: Buffer<E = E> + Send + Clone>(t: Thing<E, B>) {}
+fn thing<E: Env, B: Buffer<E = E> + Send + Clone>(t: SamplerWithThreads<E, B>) {}
 
 #[test]
 fn do_the_thing() {}

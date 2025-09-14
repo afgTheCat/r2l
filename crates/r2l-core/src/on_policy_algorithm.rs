@@ -5,7 +5,6 @@ use crate::{
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
-use rand::distr::Distribution;
 
 macro_rules! break_on_hook_res {
     ($hook_res:expr) => {
@@ -122,7 +121,7 @@ impl<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks<TensorOfAgent<A>>> Algorith
 where
     TensorOfSampler<S>: From<TensorOfAgent<A>>,
     TensorOfSampler<S>: Into<TensorOfAgent<A>>,
-    <A as Agent>::Dist: Clone,
+    <A as Agent>::Policy: Clone,
 {
     fn train(&mut self) -> Result<()> {
         if self.hooks.init_hook() {
@@ -130,7 +129,7 @@ where
         }
         loop {
             // rollout phase
-            let distribution = self.agent.distribution();
+            let distribution = self.agent.policy();
             let mut rollouts = self.sampler.collect_rollouts(distribution)?;
             break_on_hook_res!(self.hooks.post_rollout_hook(&mut rollouts));
 

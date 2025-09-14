@@ -4,7 +4,7 @@ use pyo3::{
     types::{PyAnyMethods, PyDict},
 };
 use r2l_buffer::{Buffer, DType};
-use r2l_core::env::{Env, EnvironmentDescription, SnapShot, Space};
+use r2l_core::env::{Env, EnvBuilderTrait, EnvironmentDescription, SnapShot, Space};
 
 pub struct GymEnv {
     env: PyObject,
@@ -129,5 +129,33 @@ impl Env for GymEnv {
             observation_space: self.observation_space.clone(),
             action_space: self.action_space.clone(),
         }
+    }
+}
+
+pub struct GymEnvBuilder(String);
+
+impl GymEnvBuilder {
+    pub fn new(name: &str) -> Self {
+        Self(name.to_owned())
+    }
+}
+
+impl From<String> for GymEnvBuilder {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for GymEnvBuilder {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl EnvBuilderTrait for GymEnvBuilder {
+    type Env = GymEnv;
+
+    fn build_env(&self) -> Result<Self::Env> {
+        Ok(GymEnv::new(&self.0, None))
     }
 }

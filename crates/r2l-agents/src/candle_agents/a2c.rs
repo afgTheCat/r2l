@@ -87,9 +87,9 @@ impl<D: Policy<Tensor = Tensor>, LM: A2CLearningModule> A2C<D, LM> {
 }
 
 impl<D: Policy<Tensor = Tensor> + Clone, LM: A2CLearningModule> Agent for A2C<D, LM> {
-    type Dist = D;
+    type Policy = D;
 
-    fn distribution(&self) -> Self::Dist {
+    fn policy(&self) -> Self::Policy {
         self.distribution.clone()
     }
 
@@ -116,7 +116,7 @@ impl<D: Policy<Tensor = Tensor> + Clone, LM: A2CLearningModule> Agent for A2C<D,
                 .map(|roll| {
                     let states = &roll.0.states[0..roll.0.states.len() - 1];
                     let actions = &roll.0.actions;
-                    self.distribution()
+                    self.policy()
                         .log_probs(states, actions)
                         .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
                 })

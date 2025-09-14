@@ -9,6 +9,7 @@ use r2l_api::{
 };
 use r2l_core::agents::Agent;
 use r2l_core::{Algorithm, on_policy_algorithm::LearningSchedule};
+use r2l_gym::GymEnvBuilder;
 
 const NUM_ENVIRONMENTS: usize = 10;
 
@@ -26,10 +27,10 @@ fn ppo2_cart_pole() -> Result<()> {
         evaluator_opts,
         Device::Cpu,
     ));
-    let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
+    let mut ppo = ppo_builder.build(GymEnvBuilder::new("CartPole-v1"), NUM_ENVIRONMENTS)?;
     ppo.train()?;
     println!("eval res: {:?}", eval_res.lock().unwrap());
-    run_gym_episodes("CartPole-v1", 10, &ppo.agent.distribution())?;
+    run_gym_episodes("CartPole-v1", 10, &ppo.agent.policy())?;
     Ok(())
 }
 
@@ -45,10 +46,10 @@ fn ppo2_cart_pole_normalize() -> Result<()> {
     let eval_res = evaluator_options.results.clone();
     let eval_normalizer = EvaluatorNormalizerOptions::evaluator(evaluator_options, Device::Cpu);
     ppo_builder.set_hook_options(eval_normalizer);
-    let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
+    let mut ppo = ppo_builder.build(GymEnvBuilder::new("CartPole-v1"), NUM_ENVIRONMENTS)?;
     ppo.train()?;
     println!("eval res: {:?}", eval_res.lock().unwrap());
-    run_gym_episodes("CartPole-v1", 10, &ppo.agent.distribution())?;
+    run_gym_episodes("CartPole-v1", 10, &ppo.agent.policy())?;
     Ok(())
 }
 
@@ -56,8 +57,8 @@ fn ppo2_cart_pole_normalize() -> Result<()> {
 fn ppo2_cart_pole_seq_only() -> Result<()> {
     let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
     ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
-    let mut ppo = ppo_builder.build("CartPole-v1".to_owned(), NUM_ENVIRONMENTS)?;
+    let mut ppo = ppo_builder.build(GymEnvBuilder::new("CartPole-v1"), NUM_ENVIRONMENTS)?;
     ppo.train()?;
-    run_gym_episodes("CartPole-v1", 10, &ppo.agent.distribution())?;
+    run_gym_episodes("CartPole-v1", 10, &ppo.agent.policy())?;
     Ok(())
 }

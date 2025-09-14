@@ -1,6 +1,10 @@
 use std::fmt::Debug;
 
-use crate::{distributions::Policy, utils::rollout_buffer::RolloutBuffer};
+use crate::{
+    distributions::Policy,
+    sampler2::{EnvPool, Preprocessor},
+    utils::rollout_buffer::RolloutBuffer,
+};
 use anyhow::Result;
 use bincode::{Decode, Encode};
 
@@ -99,4 +103,31 @@ pub trait Sampler {
         <Self::Env as Env>::Tensor: Into<D::Tensor>;
 }
 
+pub trait Sampler2 {
+    type EP: EnvPool;
+    type P: Preprocessor<<Self::EP as EnvPool>::E, <Self::EP as EnvPool>::B>;
+
+    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> Vec<<Self::EP as EnvPool>::B>
+    where
+        <<Self::EP as EnvPool>::E as Env>::Tensor: From<P::Tensor>,
+        <<Self::EP as EnvPool>::E as Env>::Tensor: Into<P::Tensor>;
+}
+
 pub type TensorOfSampler<S> = <<S as Sampler>::Env as Env>::Tensor;
+
+pub trait EnvBuilderTrait: Sync + Send + 'static {
+    type Env: Env;
+
+    fn build_env(&self) -> Result<Self::Env>;
+}
+
+impl<E: Env, F: Sync + Send + 'static> EnvBuilderTrait for F
+where
+    F: Fn() -> Result<E>,
+{
+    type Env = E;
+
+    fn build_env(&self) -> Result<Self::Env> {
+        (self)()
+    }
+}

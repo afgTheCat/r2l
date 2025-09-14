@@ -1,10 +1,9 @@
 pub mod buffers;
 pub mod env_pools;
-// pub mod holders;
 
 use crate::{
     distributions::Policy,
-    env::{Env, Memory, SnapShot},
+    env::{Env, Memory, Sampler2, SnapShot},
     rng::RNG,
     sampler::PolicyWrapper,
 };
@@ -13,20 +12,41 @@ use std::fmt::Debug;
 
 // This version V3.
 pub trait Buffer {
-    type E: Env;
+    // type E: Env;
+    type Tensor: Clone + Send + Sync + Debug + 'static;
 
-    fn last_state(&self) -> Option<<Self::E as Env>::Tensor>;
+    fn all_states(&self) -> &[Self::Tensor] {
+        todo!()
+    }
 
-    fn push(&mut self, snapshot: Memory<<Self::E as Env>::Tensor>);
+    fn rewards(&self) -> &[f32] {
+        todo!()
+    }
+
+    fn dones(&self) -> &[bool] {
+        todo!()
+    }
+
+    fn total_steps(&self) -> usize {
+        todo!()
+    }
+
+    fn actions(&self) -> &[Self::Tensor] {
+        todo!()
+    }
+
+    fn last_state(&self) -> Option<Self::Tensor>;
+
+    fn push(&mut self, snapshot: Memory<Self::Tensor>);
 
     fn last_state_terminates(&self) -> bool;
 
     #[inline(always)]
-    fn step(
+    fn step<E: Env<Tensor = Self::Tensor>>(
         &mut self,
-        env: &mut Self::E,
-        distr: &Box<dyn Policy<Tensor = <Self::E as Env>::Tensor>>,
-        last_state: Option<<Self::E as Env>::Tensor>,
+        env: &mut E,
+        distr: &Box<dyn Policy<Tensor = Self::Tensor>>,
+        last_state: Option<Self::Tensor>,
     ) {
         let state = if let Some(state) = self.last_state() {
             state
@@ -59,9 +79,9 @@ pub trait Buffer {
     }
 }
 
-trait EnvPool {
+pub trait EnvPool {
     type E: Env;
-    type B: Buffer<E = Self::E>;
+    type B: Buffer<Tensor = <Self::E as Env>::Tensor>;
 
     fn collection_bound(&self) -> CollectionBound;
 
@@ -71,17 +91,17 @@ trait EnvPool {
 
     fn single_step(&mut self);
 
-    fn collect(&self) -> Vec<Self::B>;
+    fn collect(&mut self) -> Vec<Self::B>;
 }
 
-pub trait Preprocessor<E: Env, B: Buffer<E = E>> {
+pub trait Preprocessor<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> {
     fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = E::Tensor>, buffers: &mut Vec<B>) {
     }
 }
 
 pub struct EmptyPreProcessor;
 
-impl<E: Env, B: Buffer<E = E>> Preprocessor<E, B> for EmptyPreProcessor {}
+impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> Preprocessor<E, B> for EmptyPreProcessor {}
 
 // TODO: we need better names for this. StepBound is basically step n times, while episode bound
 // basically says step steps times at least until the last state is done
@@ -96,7 +116,10 @@ pub struct R2lSampler2<EP: EnvPool, P: Preprocessor<EP::E, EP::B>> {
     preprocessor: Option<P>,
 }
 
-impl<EP: EnvPool, PR: Preprocessor<EP::E, EP::B>> R2lSampler2<EP, PR> {
+impl<EP: EnvPool, PR: Preprocessor<EP::E, EP::B>> Sampler2 for R2lSampler2<EP, PR> {
+    type EP = EP;
+    type P = PR;
+
     fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> Vec<<EP as EnvPool>::B>
     where
         <<EP as EnvPool>::E as Env>::Tensor: From<P::Tensor>,

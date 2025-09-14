@@ -12,6 +12,7 @@ use r2l_core::{
     Algorithm,
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
 };
+use r2l_gym::GymEnvBuilder;
 
 fn r2l_verify(env_config: &EnvConfig) {
     let device = Device::Cpu;
@@ -43,7 +44,7 @@ fn r2l_verify(env_config: &EnvConfig) {
         ),
     }
     .build_with_builder_type(EnvBuilderType::EnvBuilder {
-        builder: Arc::new(env_name.clone()),
+        builder: Arc::new(GymEnvBuilder::new(env_name)),
         n_envs,
     });
     let learning_schedule = LearningSchedule::TotalStepBound {

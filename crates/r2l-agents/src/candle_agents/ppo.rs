@@ -8,9 +8,10 @@ use r2l_candle_lm::{
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
 };
 use r2l_core::{
-    agents::Agent,
+    agents::{Agent, Agent2},
     distributions::Policy,
     policies::{LearningModule, ValueFunction},
+    sampler2::Buffer,
     utils::rollout_buffer::{Advantages, Logps, Returns, RolloutBuffer},
 };
 use std::ops::Deref;
@@ -162,12 +163,24 @@ impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule> CandlePPO<D, LM> {
             process_hook_result!(rollout_hook_res);
         }
     }
+
+    fn learning_loop2<B: Buffer<Tensor = Tensor>>(
+        &mut self,
+        buffers: &[B],
+        advantages: Advantages,
+        returns: Returns,
+        logps: Logps,
+    ) {
+        loop {
+            // TODO: batch
+        }
+    }
 }
 
 impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for CandlePPO<D, LM> {
-    type Dist = D;
+    type Policy = D;
 
-    fn distribution(&self) -> Self::Dist {
+    fn policy(&self) -> Self::Policy {
         self.ppo.distribution.clone()
     }
 
@@ -196,13 +209,104 @@ impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for Candle
                 .map(|roll| {
                     let states = &roll.0.states[0..roll.0.states.len() - 1];
                     let actions = &roll.0.actions;
-                    self.distribution()
+                    self.policy()
                         .log_probs(states, actions)
                         .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
                 })
                 .collect::<Result<Vec<Vec<f32>>>>()?,
         );
         self.learning_loop(rollouts, advantages, returns, logps)?;
+        Ok(())
+    }
+}
+
+fn calculate_advantages_and_returns2<B: Buffer<Tensor = Tensor>>(
+    buffers: &[B],
+    value_func: &impl ValueFunction<Tensor = Tensor>,
+    gamma: f32,
+    lambda: f32,
+) -> Result<(Advantages, Returns)> {
+    let mut advantage_vec = vec![];
+    let mut returns_vec = vec![];
+    for buff in buffers {
+        let total_steps = buff.total_steps();
+        let values_stacked = value_func.calculate_values(buff.all_states())?;
+        let values: Vec<f32> = values_stacked.to_vec1()?;
+        let mut advantages: Vec<f32> = vec![0.; total_steps];
+        let mut returns: Vec<f32> = vec![0.; total_steps];
+        let mut last_gae_lam: f32 = 0.;
+        for i in (0..total_steps).rev() {
+            let next_non_terminal = if buff.dones()[i] {
+                last_gae_lam = 0.;
+                0f32
+            } else {
+                1.
+            };
+            let delta = buff.rewards()[i] + next_non_terminal * gamma * values[i + 1] - values[i];
+            last_gae_lam = delta + next_non_terminal * gamma * lambda * last_gae_lam;
+            advantages[i] = last_gae_lam;
+            returns[i] = last_gae_lam + values[i];
+        }
+        advantage_vec.push(advantages);
+        returns_vec.push(returns);
+    }
+    Ok((Advantages(advantage_vec), Returns(returns_vec)))
+}
+
+impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule, B: Buffer<Tensor = Tensor>>
+    Agent2<B> for CandlePPO<D, LM>
+{
+    type Policy = D;
+
+    fn policy2(&self) -> Self::Policy {
+        self.ppo.distribution.clone()
+    }
+
+    fn learn2(&mut self, buffers: Vec<B>) -> Result<()> {
+        let (mut advantages, mut returns) = calculate_advantages_and_returns2(
+            &buffers,
+            &self.ppo.learning_module,
+            self.ppo.gamma,
+            self.ppo.lambda,
+        )?;
+
+        // let before_learning_hook_res = self.hooks.before_learning_hook(
+        //     &mut self.ppo,
+        //     &mut rollouts,
+        //     &mut advantages,
+        //     &mut returns,
+        // );
+        // process_hook_result!(before_learning_hook_res);
+
+        let mut logps: Vec<Vec<f32>> = vec![];
+        for buff in buffers {
+            let total_steps = buff.total_steps();
+            let states = &buff.all_states()[0..total_steps - 1];
+            let actions = buff.actions();
+            logps.push(
+                self.policy()
+                    .log_probs(states, actions)
+                    .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
+                    .unwrap(),
+            );
+        }
+        let logps = Logps(logps);
+
+        // let logps = Logps(
+        //     rollouts
+        //         .iter()
+        //         .map(|roll| {
+        //             let states = &roll.0.states[0..roll.0.states.len() - 1];
+        //             let actions = &roll.0.actions;
+        //             self.policy()
+        //                 .log_probs(states, actions)
+        //                 .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
+        //         })
+        //         .collect::<Result<Vec<Vec<f32>>>>()?,
+        // );
+
+        // self.learning_loop(rollouts, advantages, returns, logps)?;
+
         Ok(())
     }
 }

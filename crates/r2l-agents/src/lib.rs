@@ -15,7 +15,7 @@ pub enum AgentKind {
 }
 
 impl Agent for AgentKind {
-    type Dist = DistributionKind;
+    type Policy = DistributionKind;
 
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
         match self {
@@ -25,11 +25,11 @@ impl Agent for AgentKind {
         }
     }
 
-    fn distribution(&self) -> Self::Dist {
+    fn policy(&self) -> Self::Policy {
         match self {
-            Self::A2C(a2c) => a2c.distribution(),
-            Self::PPO(ppo) => ppo.distribution(),
-            Self::VPG(vpg) => vpg.distribution(),
+            Self::A2C(a2c) => a2c.policy(),
+            Self::PPO(ppo) => ppo.policy(),
+            Self::VPG(vpg) => vpg.policy(),
         }
     }
 }

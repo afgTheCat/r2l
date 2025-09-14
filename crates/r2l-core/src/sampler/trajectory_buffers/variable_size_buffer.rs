@@ -7,12 +7,27 @@ use crate::{
 use rand::Rng;
 
 pub struct VariableSizedStateBuffer<E: Env> {
-    states: Vec<E::Tensor>,
-    next_states: Vec<E::Tensor>,
-    rewards: Vec<f32>,
-    action: Vec<E::Tensor>,
-    terminated: Vec<bool>,
-    trancuated: Vec<bool>,
+    pub states: Vec<E::Tensor>,
+    pub next_states: Vec<E::Tensor>,
+    pub rewards: Vec<f32>,
+    pub action: Vec<E::Tensor>,
+    pub terminated: Vec<bool>,
+    pub trancuated: Vec<bool>,
+}
+
+// TODO: for some reason the Default proc macro trips up the compiler. We should investigate this
+// in the future.
+impl<E: Env> Default for VariableSizedStateBuffer<E> {
+    fn default() -> Self {
+        Self {
+            states: vec![],
+            next_states: vec![],
+            rewards: vec![],
+            action: vec![],
+            terminated: vec![],
+            trancuated: vec![],
+        }
+    }
 }
 
 impl<E: Env> VariableSizedStateBuffer<E> {
@@ -35,24 +50,7 @@ impl<E: Env> VariableSizedStateBuffer<E> {
             dones,
         }
     }
-}
 
-// TODO: for some reason the Default proc macro trips up the compiler. We should investigate this
-// in the future.
-impl<E: Env> Default for VariableSizedStateBuffer<E> {
-    fn default() -> Self {
-        Self {
-            states: vec![],
-            next_states: vec![],
-            rewards: vec![],
-            action: vec![],
-            terminated: vec![],
-            trancuated: vec![],
-        }
-    }
-}
-
-impl<E: Env> VariableSizedStateBuffer<E> {
     pub fn push(
         &mut self,
         state: E::Tensor,

@@ -14,7 +14,7 @@ use r2l_core::{
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     sampler::R2lSampler,
 };
-use r2l_gym::GymEnv;
+use r2l_gym::{GymEnv, GymEnvBuilder};
 use std::sync::Arc;
 
 type MyAutoDiffBackend = Autodiff<NdArray>;
@@ -26,7 +26,7 @@ fn build_sampler() -> R2lSampler<GymEnv> {
         env_pool_type: Default::default(),
     };
     sampler_type.build_with_builder_type(EnvBuilderType::EnvBuilder {
-        builder: Arc::new("CartPole-v1".to_owned()),
+        builder: Arc::new(GymEnvBuilder::new("CartPole-v1")),
         n_envs: 1,
     })
 }

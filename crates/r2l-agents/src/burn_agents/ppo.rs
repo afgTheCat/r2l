@@ -199,9 +199,9 @@ where
     <D as AutodiffModule<B>>::InnerModule:
         ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>,
 {
-    type Dist = D::InnerModule;
+    type Policy = D::InnerModule;
 
-    fn distribution(&self) -> Self::Dist {
+    fn policy(&self) -> Self::Policy {
         self.core.lm.model.distr.valid()
     }
 

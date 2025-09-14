@@ -186,7 +186,7 @@ pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
         env_pool_type: EnvPoolType::VecVariable, // TODO: Change this to VecVariable
     }
     .build_with_builder_type(EnvBuilderType::EnvBuilder {
-        builder: Arc::new(ENV_NAME.to_owned()),
+        builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
         n_envs: 1,
     });
     let env_description = sampler.env_description();
