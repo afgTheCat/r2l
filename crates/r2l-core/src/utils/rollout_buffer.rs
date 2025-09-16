@@ -54,6 +54,10 @@ impl<T: Clone> RolloutBuffer<T> {
 pub struct Advantages(pub Vec<Vec<f32>>);
 
 impl Advantages {
+    pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
+        todo!()
+    }
+
     pub fn normalize(&mut self) {
         for advantage in self.0.iter_mut() {
             let mean = advantage.iter().sum::<f32>() / advantage.len() as f32;
@@ -70,5 +74,17 @@ impl Advantages {
 #[derive(Deref, Debug)]
 pub struct Returns(pub Vec<Vec<f32>>);
 
+impl Returns {
+    pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
+        todo!()
+    }
+}
+
 #[derive(Deref, Debug)]
 pub struct Logps(pub Vec<Vec<f32>>);
+
+impl Logps {
+    pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
+        todo!()
+    }
+}

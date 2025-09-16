@@ -26,6 +26,7 @@ impl DecoupledActorCriticLM {
     }
 }
 
+/// The policy and the value function has different optimizers
 impl LearningModule for DecoupledActorCriticLM {
     type Losses = PolicyValuesLosses;
 
@@ -49,6 +50,8 @@ impl ValueFunction for DecoupledActorCriticLM {
     }
 }
 
+/// The policy and the value fuction has the same optimizer
+/// TODO: value_net does not need to be here
 pub struct ParalellActorCriticLM {
     pub value_net: ThreadSafeSequential,
     pub optimizer_with_grad: OptimizerWithMaxGrad,

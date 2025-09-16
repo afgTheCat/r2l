@@ -16,4 +16,4 @@ candle-core = { workspace = true }
 candle-nn = { workspace = true }
 anyhow = { workspace = true }
 burn = { workspace = true }
-
+rand = { workspace = true }

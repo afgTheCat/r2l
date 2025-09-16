@@ -22,5 +22,5 @@ pub trait Agent2<B: Buffer> {
     fn policy2(&self) -> Self::Policy;
 
     /// Instruments learnging with the rollout buffers collected
-    fn learn2(&mut self, buffers: Vec<B>) -> Result<()>;
+    fn learn2(&mut self, buffers: &[B]) -> Result<()>;
 }

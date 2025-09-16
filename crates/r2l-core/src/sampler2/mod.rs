@@ -12,7 +12,6 @@ use std::fmt::Debug;
 
 // This version V3.
 pub trait Buffer {
-    // type E: Env;
     type Tensor: Clone + Send + Sync + Debug + 'static;
 
     fn all_states(&self) -> &[Self::Tensor] {

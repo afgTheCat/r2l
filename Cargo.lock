@@ -5241,6 +5241,7 @@ dependencies = [
  "r2l-candle-lm",
  "r2l-core",
  "r2l-macros",
+ "rand 0.9.2",
 ]
 
 [[package]]

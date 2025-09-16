@@ -58,7 +58,7 @@ impl PPOBuilder {
             device,
         )?;
         let core = CandlePPOCore {
-            distribution,
+            policy: distribution,
             learning_module,
             clip_range: self.clip_range,
             device: device.clone(),

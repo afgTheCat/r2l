@@ -104,7 +104,7 @@ impl PPOHooksTrait<CandlePPOCore<DistributionKind, LearningModuleKind>> for PPOH
         if should_stop {
             // snapshot the learned things, API can be much better
             self.current_rollout += 1;
-            self.progress.std = agent.distribution.std().unwrap();
+            self.progress.std = agent.policy.std().unwrap();
             self.progress.learning_rate = agent.learning_module.policy_learning_rate();
             let progress = self.progress.clear();
             self.tx.send(Box::new(progress)).map_err(Error::wrap)?;
@@ -122,7 +122,7 @@ impl PPOHooksTrait<CandlePPOCore<DistributionKind, LearningModuleKind>> for PPOH
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
-        let entropy = agent.distribution.entropy().unwrap();
+        let entropy = agent.policy.entropy().unwrap();
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.ent_coeff, (), &device)? * entropy.neg()?)?;
         self.progress
