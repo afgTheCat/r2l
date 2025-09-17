@@ -1,7 +1,9 @@
 use crate::{
     Algorithm,
-    agents::{Agent, TensorOfAgent},
-    env::{Sampler, TensorOfSampler},
+    agents::{Agent, Agent2, TensorOfAgent, TensorOfAgent2},
+    distributions::Policy,
+    env::{Sampler, Sampler2, TensorOfSampler, TensorOfSampler2},
+    sampler2::Buffer,
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
@@ -136,6 +138,58 @@ where
             // learning phase
             self.agent.learn(rollouts)?;
             break_on_hook_res!(self.hooks.post_training_hook());
+        }
+        self.hooks.shutdown_hook()
+    }
+}
+
+pub trait OnPolicyAlgorithmHooks2<B: Buffer, P: Policy> {
+    fn init_hook(&mut self) -> bool;
+
+    fn post_rollout_hook(&mut self, rollouts: &[B]) -> bool;
+
+    fn post_training_hook(&mut self, policy: P) -> bool;
+
+    fn shutdown_hook(&mut self) -> Result<()>;
+}
+
+pub struct OnPolicyAlgorithm2<
+    B: Buffer,
+    P: Policy,
+    S: Sampler2<Buffer = B>,
+    A: Agent2<Policy = P>,
+    H: OnPolicyAlgorithmHooks2<B, P>,
+> {
+    pub sampler: S,
+    pub agent: A,
+    pub hooks: H,
+}
+
+impl<
+    B: Buffer,
+    P: Policy,
+    S: Sampler2<Buffer = B>,
+    A: Agent2<Policy = P>,
+    H: OnPolicyAlgorithmHooks2<B, P>,
+> OnPolicyAlgorithm2<B, P, S, A, H>
+where
+    TensorOfSampler2<S>: From<TensorOfAgent2<A>>,
+    TensorOfSampler2<S>: Into<TensorOfAgent2<A>>,
+    <A as Agent2>::Policy: Clone,
+{
+    pub fn train(&mut self) -> Result<()> {
+        if self.hooks.init_hook() {
+            return Ok(());
+        }
+        loop {
+            let policy = self.agent.policy2();
+            let buffers = self.sampler.collect_rollouts(policy)?;
+            break_on_hook_res!(self.hooks.post_rollout_hook(&buffers));
+
+            // learning phase
+            self.agent.learn2(&buffers)?;
+            let policy = self.agent.policy2();
+            break_on_hook_res!(self.hooks.post_training_hook(policy));
         }
         self.hooks.shutdown_hook()
     }

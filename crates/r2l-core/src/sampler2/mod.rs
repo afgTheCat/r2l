@@ -6,21 +6,28 @@ use crate::{
     env::{Env, Memory, Sampler2, SnapShot},
     rng::RNG,
     sampler::PolicyWrapper,
+    sampler2::env_pools::builder::{BufferKind, EnvPoolType},
 };
+use anyhow::Result;
 use rand::Rng;
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 
-// This version V3.
-pub trait Buffer {
+pub trait Buffer: Sized {
     type Tensor: Clone + Send + Sync + Debug + 'static;
 
+    // TODO: depracate this
     fn all_states(&self) -> &[Self::Tensor] {
         todo!()
     }
 
-    fn rewards(&self) -> &[f32] {
-        todo!()
+    fn all_states_with_converter<'a, T: 'a>(
+        &'a self,
+        converter: impl Fn(&Self::Tensor) -> &T,
+    ) -> impl Iterator<Item = &'a T> {
+        self.all_states().iter().map(move |c| converter(c))
     }
+
+    fn rewards(&self) -> &[f32];
 
     fn dones(&self) -> &[bool] {
         todo!()
@@ -78,19 +85,52 @@ pub trait Buffer {
     }
 }
 
-pub trait EnvPool {
-    type E: Env;
-    type B: Buffer<Tensor = <Self::E as Env>::Tensor>;
+pub struct BufferConverter<'a, B: Buffer, T: Clone + Send + Sync + Debug + 'static> {
+    buffer: &'a B,
+    _tensor: PhantomData<T>,
+}
 
-    fn collection_bound(&self) -> CollectionBound;
+impl<'a, B: Buffer, T: Clone + Send + Sync + Debug + 'static> BufferConverter<'a, B, T> {
+    pub fn new(buffer: &'a B) -> Self
+    where
+        <B as Buffer>::Tensor: Into<T>,
+    {
+        Self {
+            buffer,
+            _tensor: PhantomData,
+        }
+    }
+}
 
-    fn set_policy<P: Policy<Tensor = <Self::E as Env>::Tensor> + Clone>(&mut self, policy: P);
+impl<'a, B: Buffer, T: Clone + Send + Sync + Debug + 'static> Buffer for BufferConverter<'a, B, T>
+where
+    <B as Buffer>::Tensor: Into<T>,
+{
+    type Tensor = T;
 
-    fn get_buffers(&self) -> Vec<Self::B>;
+    fn all_states(&self) -> &[Self::Tensor] {
+        todo!()
+    }
 
-    fn single_step(&mut self);
+    fn rewards(&self) -> &[f32] {
+        todo!()
+    }
 
-    fn collect(&mut self) -> Vec<Self::B>;
+    fn dones(&self) -> &[bool] {
+        todo!()
+    }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        todo!()
+    }
+
+    fn push(&mut self, snapshot: Memory<Self::Tensor>) {
+        todo!()
+    }
+
+    fn last_state_terminates(&self) -> bool {
+        todo!()
+    }
 }
 
 pub trait Preprocessor<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> {
@@ -110,22 +150,33 @@ pub enum CollectionBound {
     EpisodeBound { steps: usize },
 }
 
-pub struct R2lSampler2<EP: EnvPool, P: Preprocessor<EP::E, EP::B>> {
-    env_pool: EP,
-    preprocessor: Option<P>,
+pub struct R2lSampler2<E: Env> {
+    env_pool: EnvPoolType<E>,
+    preprocessor: Option<Box<dyn Preprocessor<E, BufferKind<E>>>>,
 }
 
-impl<EP: EnvPool, PR: Preprocessor<EP::E, EP::B>> Sampler2 for R2lSampler2<EP, PR> {
-    type EP = EP;
-    type P = PR;
+impl<E: Env> R2lSampler2<E> {
+    pub fn new(
+        env_pool: EnvPoolType<E>,
+        preprocessor: Option<Box<dyn Preprocessor<E, BufferKind<E>>>>,
+    ) -> Self {
+        Self {
+            env_pool,
+            preprocessor,
+        }
+    }
+}
 
-    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> Vec<<EP as EnvPool>::B>
+impl<E: Env> Sampler2 for R2lSampler2<E> {
+    type E = E;
+    type Buffer = BufferKind<E>;
+
+    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> Result<Vec<BufferKind<E>>>
     where
-        <<EP as EnvPool>::E as Env>::Tensor: From<P::Tensor>,
-        <<EP as EnvPool>::E as Env>::Tensor: Into<P::Tensor>,
+        <E as Env>::Tensor: From<P::Tensor>,
+        <E as Env>::Tensor: Into<P::Tensor>,
     {
-        let policy: PolicyWrapper<P, <<EP as EnvPool>::E as Env>::Tensor> =
-            PolicyWrapper::new(policy);
+        let policy = PolicyWrapper::new(policy);
         let collection_bound = self.env_pool.collection_bound();
         self.env_pool.set_policy(policy.clone());
         if let Some(pre_processor) = &mut self.preprocessor {
@@ -139,9 +190,9 @@ impl<EP: EnvPool, PR: Preprocessor<EP::E, EP::B>> Sampler2 for R2lSampler2<EP, P
                 self.env_pool.single_step();
                 current_step += 1;
             }
-            self.env_pool.get_buffers()
+            Ok(self.env_pool.get_buffers())
         } else {
-            self.env_pool.collect()
+            Ok(self.env_pool.collect())
         }
     }
 }

@@ -14,7 +14,7 @@ pub trait Agent {
 
 pub type TensorOfAgent<A> = <<A as Agent>::Policy as Policy>::Tensor;
 
-pub trait Agent2<B: Buffer> {
+pub trait Agent2 {
     /// The policy
     type Policy: Policy;
 
@@ -22,5 +22,9 @@ pub trait Agent2<B: Buffer> {
     fn policy2(&self) -> Self::Policy;
 
     /// Instruments learnging with the rollout buffers collected
-    fn learn2(&mut self, buffers: &[B]) -> Result<()>;
+    fn learn2<B: Buffer>(&mut self, buffers: &[B]) -> Result<()>
+    where
+        <B as Buffer>::Tensor: Into<<Self::Policy as Policy>::Tensor>;
 }
+
+pub type TensorOfAgent2<A> = <<A as Agent2>::Policy as Policy>::Tensor;

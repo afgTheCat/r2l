@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::fmt::Debug;
 
 pub trait Policy: Send + Debug + 'static {
-    type Tensor: Clone;
+    type Tensor: Clone + Send + Sync + Debug + 'static;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
 

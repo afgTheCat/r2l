@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::{
     distributions::Policy,
-    sampler2::{EnvPool, Preprocessor},
+    sampler2::{Buffer, Preprocessor},
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
@@ -103,17 +103,19 @@ pub trait Sampler {
         <Self::Env as Env>::Tensor: Into<D::Tensor>;
 }
 
-pub trait Sampler2 {
-    type EP: EnvPool;
-    type P: Preprocessor<<Self::EP as EnvPool>::E, <Self::EP as EnvPool>::B>;
+pub type TensorOfSampler<S> = <<S as Sampler>::Env as Env>::Tensor;
 
-    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> Vec<<Self::EP as EnvPool>::B>
+pub trait Sampler2 {
+    type E: Env;
+    type Buffer: Buffer<Tensor = <Self::E as Env>::Tensor>;
+
+    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> Result<Vec<Self::Buffer>>
     where
-        <<Self::EP as EnvPool>::E as Env>::Tensor: From<P::Tensor>,
-        <<Self::EP as EnvPool>::E as Env>::Tensor: Into<P::Tensor>;
+        <Self::Buffer as Buffer>::Tensor: From<P::Tensor>,
+        <Self::Buffer as Buffer>::Tensor: Into<P::Tensor>;
 }
 
-pub type TensorOfSampler<S> = <<S as Sampler>::Env as Env>::Tensor;
+pub type TensorOfSampler2<S> = <<S as Sampler2>::Buffer as Buffer>::Tensor;
 
 pub trait EnvBuilderTrait: Sync + Send + 'static {
     type Env: Env;

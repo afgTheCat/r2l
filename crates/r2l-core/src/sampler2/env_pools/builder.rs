@@ -179,6 +179,10 @@ impl<E: Env> Buffer for ArcBufferKind<E> {
             Self::VariableSized(rc_buf) => rc_buf.last_state_terminates(),
         }
     }
+
+    fn rewards(&self) -> &[f32] {
+        todo!()
+    }
 }
 
 pub enum RcBufferKind<E: Env> {
@@ -218,11 +222,68 @@ impl<E: Env> Buffer for RcBufferKind<E> {
             Self::VariableSized(rc_buf) => rc_buf.last_state_terminates(),
         }
     }
+
+    fn rewards(&self) -> &[f32] {
+        todo!()
+    }
+}
+
+pub enum BufferKind<E: Env> {
+    RcBuffer(RcBufferKind<E>),
+    ArcBufferKind(ArcBufferKind<E>),
+}
+
+impl<E: Env> Buffer for BufferKind<E> {
+    type Tensor = <E as Env>::Tensor;
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        todo!()
+    }
+
+    fn push(&mut self, snapshot: Memory<Self::Tensor>) {
+        todo!()
+    }
+
+    fn last_state_terminates(&self) -> bool {
+        todo!()
+    }
+
+    fn rewards(&self) -> &[f32] {
+        todo!()
+    }
 }
 
 pub enum EnvPoolType<E: Env> {
     Vec(VecEnvPool<E, RcBufferKind<E>>),
     Thread(ThreadEnvPool<E, ArcBufferKind<E>>),
+}
+
+impl<E: Env> EnvPoolType<E> {
+    pub fn single_step(&mut self) {
+        todo!()
+    }
+
+    pub fn collection_bound(&self) -> CollectionBound {
+        match self {
+            Self::Vec(env_pool) => env_pool.collection_bound.clone(),
+            Self::Thread(env_pool) => env_pool.collection_bound(),
+        }
+    }
+
+    pub fn set_policy<P: crate::distributions::Policy<Tensor = E::Tensor> + Clone>(
+        &mut self,
+        policy: P,
+    ) {
+        todo!()
+    }
+
+    pub fn get_buffers(&self) -> Vec<BufferKind<E>> {
+        todo!()
+    }
+
+    pub fn collect(&mut self) -> Vec<BufferKind<E>> {
+        todo!()
+    }
 }
 
 pub enum WorkerLocation {
@@ -232,13 +293,13 @@ pub enum WorkerLocation {
 
 pub struct EnvPoolBuilder<EB: EnvBuilderTrait> {
     // whether we want the workers to have their own threads or not
-    worker_location: WorkerLocation,
+    pub worker_location: WorkerLocation,
     // collection bound
-    collection_bound: CollectionBound,
+    pub collection_bound: CollectionBound,
     // environment builders
-    builder: EnvBuilderType<EB>,
+    pub builder: EnvBuilderType<EB>,
     // Fixed size or variable sized
-    buffer_type: BufferType,
+    pub buffer_type: BufferType,
 }
 
 impl<EB: EnvBuilderTrait> EnvPoolBuilder<EB> {

@@ -35,6 +35,10 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
     fn last_state_terminates(&self) -> bool {
         *self.terminated.back().unwrap() || *self.trancuated.back().unwrap()
     }
+
+    fn rewards(&self) -> &[f32] {
+        todo!()
+    }
 }
 
 impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
@@ -58,6 +62,10 @@ impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
 
     fn last_state_terminates(&self) -> bool {
         *self.terminated.last().unwrap() || *self.trancuated.last().unwrap()
+    }
+
+    fn rewards(&self) -> &[f32] {
+        todo!()
     }
 }
 
@@ -92,6 +100,10 @@ impl<B: Buffer> Buffer for RcBufferWrapper<B> {
         let buffer = self.0.borrow();
         buffer.last_state_terminates()
     }
+
+    fn rewards(&self) -> &[f32] {
+        todo!()
+    }
 }
 
 #[derive(Debug)]
@@ -125,5 +137,9 @@ impl<B: Buffer> Buffer for ArcBufferWrapper<B> {
     fn last_state_terminates(&self) -> bool {
         let buffer = self.0.lock().unwrap();
         buffer.last_state_terminates()
+    }
+
+    fn rewards(&self) -> &[f32] {
+        todo!()
     }
 }

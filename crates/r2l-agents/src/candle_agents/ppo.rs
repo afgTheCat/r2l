@@ -98,7 +98,6 @@ pub trait PPOHooksTrait2<B: Buffer<Tensor = Tensor>, A> {
     fn batch_hook(
         &mut self,
         agent: &mut A,
-        // rollout_batch: &RolloutBatch,
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
@@ -233,17 +232,25 @@ impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for Candle
     }
 }
 
-fn calculate_advantages_and_returns2<B: Buffer<Tensor = Tensor>>(
+fn calculate_advantages_and_returns2<B: Buffer>(
     buffers: &[B],
     value_func: &impl ValueFunction<Tensor = Tensor>,
     gamma: f32,
     lambda: f32,
-) -> Result<(Advantages, Returns)> {
+) -> Result<(Advantages, Returns)>
+where
+    Tensor: From<<B as Buffer>::Tensor>,
+{
     let mut advantage_vec = vec![];
     let mut returns_vec = vec![];
     for buff in buffers {
         let total_steps = buff.total_steps();
-        let values_stacked = value_func.calculate_values(buff.all_states())?;
+        let all_states = buff
+            .all_states()
+            .into_iter()
+            .map(|s| s.clone().into())
+            .collect::<Vec<_>>();
+        let values_stacked = value_func.calculate_values(&all_states)?;
         let values: Vec<f32> = values_stacked.to_vec1()?;
         let mut advantages: Vec<f32> = vec![0.; total_steps];
         let mut returns: Vec<f32> = vec![0.; total_steps];
@@ -268,9 +275,17 @@ fn calculate_advantages_and_returns2<B: Buffer<Tensor = Tensor>>(
 
 pub struct Buffers<'a, B: Buffer>(&'a [B]);
 
-impl<'a, B: Buffer> Buffers<'a, B> {
+impl<'a, B: Buffer<Tensor = Tensor>> Buffers<'a, B> {
     fn sample(&self, indicies: &[(usize, usize)]) -> (Vec<Tensor>, Vec<Tensor>) {
-        todo!()
+        let mut observations = vec![];
+        let mut actions = vec![];
+        for (buffer_idx, idx) in indicies {
+            let observation = &self.0[*buffer_idx].all_states()[*idx];
+            let action = &self.0[*buffer_idx].actions()[*idx];
+            observations.push(observation.clone());
+            actions.push(action.clone());
+        }
+        (observations, actions)
     }
 }
 
@@ -389,43 +404,48 @@ impl<D: Policy<Tensor = Tensor>, B: Buffer<Tensor = Tensor>, LM: PPOLearningModu
     }
 }
 
-impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule, B: Buffer<Tensor = Tensor>>
-    Agent2<B> for CandlePPO2<D, B, LM>
+impl<P: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule, B2: Buffer<Tensor = Tensor>> Agent2
+    for CandlePPO2<P, B2, LM>
 {
-    type Policy = D;
+    type Policy = P;
 
     fn policy2(&self) -> Self::Policy {
         self.ppo.policy.clone()
     }
 
-    fn learn2(&mut self, buffers: &[B]) -> Result<()> {
-        let (mut advantages, mut returns) = calculate_advantages_and_returns2(
-            buffers,
-            &self.ppo.learning_module,
-            self.ppo.gamma,
-            self.ppo.lambda,
-        )?;
-        let before_learning_hook_res =
-            self.hooks
-                .before_learning_hook(&mut self.ppo, buffers, &mut advantages, &mut returns);
-        process_hook_result!(before_learning_hook_res);
-
-        let mut logps: Vec<Vec<f32>> = vec![];
-        for buff in buffers {
-            let total_steps = buff.total_steps();
-            let states = &buff.all_states()[0..total_steps - 1];
-            let actions = buff.actions();
-            logps.push(
-                self.policy2()
-                    .log_probs(states, actions)
-                    .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
-                    .unwrap(),
-            );
-        }
-        let logps = Logps(logps);
-
-        self.learning_loop(buffers, advantages, returns, logps)?;
-
+    fn learn2<B: Buffer>(&mut self, buffers: &[B]) -> Result<()>
+    where
+        <B as Buffer>::Tensor: Into<<Self::Policy as Policy>::Tensor>,
+    {
+        // let (mut advantages, mut returns) = calculate_advantages_and_returns2(
+        //     buffers,
+        //     &self.ppo.learning_module,
+        //     self.ppo.gamma,
+        //     self.ppo.lambda,
+        // )?;
+        // let before_learning_hook_res =
+        //     self.hooks
+        //         .before_learning_hook(&mut self.ppo, buffers, &mut advantages, &mut returns);
+        // process_hook_result!(before_learning_hook_res);
+        //
+        // let mut logps: Vec<Vec<f32>> = vec![];
+        // for buff in buffers {
+        //     let total_steps = buff.total_steps();
+        //     let states: Vec<Tensor> = buff.all_states()[0..total_steps - 1]
+        //         .into_iter()
+        //         .map(|t| t.clone().into())
+        //         .collect();
+        //     let actions = buff.actions();
+        //     logps.push(
+        //         self.policy2()
+        //             .log_probs(&states, actions)
+        //             .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
+        //             .unwrap(),
+        //     );
+        // }
+        // let logps = Logps(logps);
+        //
+        // self.learning_loop(buffers, advantages, returns, logps)?;
         Ok(())
     }
 }

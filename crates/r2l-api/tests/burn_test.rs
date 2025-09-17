@@ -67,5 +67,5 @@ fn build_algo() -> OnPolicyAlgorithm<
 #[test]
 fn test_burn_rl() {
     let mut algo = build_algo();
-    algo.train();
+    algo.train().unwrap();
 }

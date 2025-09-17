@@ -3,7 +3,7 @@ pub mod builder;
 use crate::{
     distributions::Policy,
     env::Env,
-    sampler2::{Buffer, CollectionBound, EnvPool},
+    sampler2::{Buffer, CollectionBound, env_pools::builder::BufferKind},
 };
 use crossbeam::channel::{Receiver, Sender};
 use std::collections::HashMap;
@@ -105,19 +105,12 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> ThreadEnvPool<E, B> {
     pub fn num_envs(&self) -> usize {
         self.channels.len()
     }
-}
-
-impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send + Clone> EnvPool
-    for ThreadEnvPool<E, B>
-{
-    type E = E;
-    type B = B;
 
     fn collection_bound(&self) -> CollectionBound {
         self.collection_bound.clone()
     }
 
-    fn set_policy<P: Policy<Tensor = <Self::E as Env>::Tensor> + Clone>(&mut self, policy: P) {
+    fn set_policy<P: Policy<Tensor = E::Tensor> + Clone>(&mut self, policy: P) {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
@@ -130,7 +123,7 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send + Clone> EnvPool
         }
     }
 
-    fn get_buffers(&self) -> Vec<Self::B> {
+    fn get_buffers(&self) -> Vec<B> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
@@ -165,7 +158,7 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send + Clone> EnvPool
         }
     }
 
-    fn collect(&mut self) -> Vec<Self::B> {
+    fn collect(&mut self) -> Vec<B> {
         let num_envs = self.num_envs();
         for idx in 0..num_envs {
             let tx = &self.channels.get(&idx).unwrap().0;
@@ -244,25 +237,22 @@ pub struct VecEnvPool<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> {
     pub collection_bound: CollectionBound,
 }
 
-impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send + Clone> EnvPool for VecEnvPool<E, B> {
-    type E = E;
-    type B = B;
-
+impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> VecEnvPool<E, B> {
     fn collection_bound(&self) -> CollectionBound {
         self.collection_bound.clone()
     }
 
-    fn set_policy<P: Policy<Tensor = <Self::E as Env>::Tensor> + Clone>(&mut self, policy: P) {
+    fn set_policy<P: Policy<Tensor = E::Tensor> + Clone>(&mut self, policy: P) {
         for worker in self.workers.iter_mut() {
             worker.set_policy(policy.clone());
         }
     }
 
-    fn get_buffers(&self) -> Vec<Self::B> {
+    fn get_buffers(&self) -> Vec<B> {
         self.workers.iter().map(|w| w.get_buffer()).collect()
     }
 
-    fn collect(&mut self) -> Vec<Self::B> {
+    fn collect(&mut self) -> Vec<B> {
         self.workers
             .iter_mut()
             .map(|w| w.collect(self.collection_bound.clone()))
