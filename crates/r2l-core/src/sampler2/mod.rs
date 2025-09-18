@@ -3,7 +3,7 @@ pub mod env_pools;
 
 use crate::{
     distributions::Policy,
-    env::{Env, Memory, Sampler2, SnapShot},
+    env::{Env, EnvironmentDescription, Memory, Sampler2, SnapShot},
     rng::RNG,
     sampler::PolicyWrapper,
     sampler2::env_pools::builder::{BufferKind, EnvPoolType},
@@ -164,6 +164,10 @@ impl<E: Env> R2lSampler2<E> {
             env_pool,
             preprocessor,
         }
+    }
+
+    pub fn env_description(&self) -> EnvironmentDescription<E> {
+        todo!()
     }
 }
 

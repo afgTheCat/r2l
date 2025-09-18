@@ -291,30 +291,35 @@ pub enum WorkerLocation {
     Thread,
 }
 
-pub struct EnvPoolBuilder<EB: EnvBuilderTrait> {
+pub struct EnvPoolBuilder {
     // whether we want the workers to have their own threads or not
     pub worker_location: WorkerLocation,
     // collection bound
     pub collection_bound: CollectionBound,
-    // environment builders
-    pub builder: EnvBuilderType<EB>,
     // Fixed size or variable sized
     pub buffer_type: BufferType,
 }
 
-impl<EB: EnvBuilderTrait> EnvPoolBuilder<EB> {
-    pub fn build(&self) -> EnvPoolType<<EB as EnvBuilderTrait>::Env> {
+impl Default for EnvPoolBuilder {
+    fn default() -> Self {
+        todo!()
+    }
+}
+
+impl EnvPoolBuilder {
+    pub fn build<EB: EnvBuilderTrait>(
+        &self,
+        builder: EnvBuilderType<EB>,
+    ) -> EnvPoolType<<EB as EnvBuilderTrait>::Env> {
         match self.worker_location {
             WorkerLocation::Vec => {
-                let env_pool = self
-                    .builder
-                    .to_vec_pool(self.buffer_type.clone(), self.collection_bound.clone());
+                let env_pool =
+                    builder.to_vec_pool(self.buffer_type.clone(), self.collection_bound.clone());
                 EnvPoolType::Vec(env_pool)
             }
             WorkerLocation::Thread => {
-                let env_pool = self
-                    .builder
-                    .to_thread_pool(self.buffer_type.clone(), self.collection_bound.clone());
+                let env_pool =
+                    builder.to_thread_pool(self.buffer_type.clone(), self.collection_bound.clone());
                 EnvPoolType::Thread(env_pool)
             }
         }

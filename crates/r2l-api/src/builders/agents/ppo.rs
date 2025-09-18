@@ -5,8 +5,13 @@ use crate::builders::{
 use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_agents::candle_agents::ppo::{CandlePPO, CandlePPOCore, EmptyPPO3Hooks};
-use r2l_candle_lm::{distributions::DistributionKind, learning_module::LearningModuleKind};
+use r2l_agents::{
+    GenericLearningModuleWithValueFunction, LearningModuleKind,
+    candle_agents::{
+        ppo::{CandlePPO, CandlePPOCore, EmptyPPO3Hooks},
+        ppo2::{CandlePPO2, CandlePPOCore2, PPODefaultHooks, PPOHooksTrait2},
+    },
+};
 use r2l_core::env::EnvironmentDescription;
 
 pub struct PPOBuilder {
@@ -44,22 +49,26 @@ impl PPOBuilder {
         &self,
         device: &Device,
         env_description: &EnvironmentDescription<T>,
-    ) -> Result<CandlePPO<DistributionKind, LearningModuleKind>> {
+    ) -> Result<CandlePPO<LearningModuleKind>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
             VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
-        let distribution =
+        let policy =
             self.distribution_builder
                 .build(&distribution_var_builder, device, env_description)?;
-        let learning_module = self.learning_module_builder.build(
+        let (value_function, learning_module) = self.learning_module_builder.build(
             distribution_varmap,
             distribution_var_builder,
             env_description,
             device,
         )?;
-        let core = CandlePPOCore {
-            policy: distribution,
+        let module = GenericLearningModuleWithValueFunction {
+            policy,
             learning_module,
+            value_function,
+        };
+        let core = CandlePPOCore {
+            module,
             clip_range: self.clip_range,
             device: device.clone(),
             gamma: self.gamma,
@@ -70,5 +79,40 @@ impl PPOBuilder {
             ppo: core,
             hooks: Box::new(EmptyPPO3Hooks),
         })
+    }
+
+    pub fn build2<T, H: PPOHooksTrait2<LearningModuleKind>>(
+        &self,
+        device: &Device,
+        env_description: &EnvironmentDescription<T>,
+        hooks: H,
+    ) -> Result<CandlePPO2<LearningModuleKind, H>> {
+        let distribution_varmap = VarMap::new();
+        let distribution_var_builder =
+            VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
+        let policy =
+            self.distribution_builder
+                .build(&distribution_var_builder, device, env_description)?;
+        let (value_function, learning_module) = self.learning_module_builder.build(
+            distribution_varmap,
+            distribution_var_builder,
+            env_description,
+            device,
+        )?;
+        let module = GenericLearningModuleWithValueFunction {
+            policy,
+            learning_module,
+            value_function,
+        };
+        let core = CandlePPOCore2 {
+            module,
+            clip_range: self.clip_range,
+            device: device.clone(),
+            gamma: self.gamma,
+            lambda: self.lambda,
+            sample_size: self.sample_size,
+        };
+        let ppo2 = CandlePPO2 { ppo: core, hooks };
+        Ok(ppo2)
     }
 }

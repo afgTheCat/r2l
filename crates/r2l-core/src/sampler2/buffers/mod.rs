@@ -1,16 +1,15 @@
-use ringbuffer::RingBuffer;
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
-
 use crate::{
     env::{Env, Memory},
     sampler::trajectory_buffers::{
         fixed_size_buffer::FixedSizeStateBuffer, variable_size_buffer::VariableSizedStateBuffer,
     },
     sampler2::Buffer,
+};
+use ringbuffer::RingBuffer;
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 impl<E: Env> Buffer for FixedSizeStateBuffer<E> {

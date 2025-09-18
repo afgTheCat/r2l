@@ -157,7 +157,6 @@ impl EvaluatorNormalizerOptions {
         env_description: EnvironmentDescription<<EB::Env as Env>::Tensor>,
         env_builder: &EB,
         n_envs: usize,
-        // device: &Device,
     ) -> Option<Box<dyn SequntialStepBoundHooks<EB::Env>>> {
         match &self {
             EvaluatorNormalizerOptions {

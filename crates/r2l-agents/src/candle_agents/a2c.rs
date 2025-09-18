@@ -1,11 +1,11 @@
-use crate::candle_agents::ppo::HookResult;
+use crate::candle_agents::{ModuleWithValueFunction, ppo::HookResult};
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use r2l_candle_lm::{
     candle_rollout_buffer::{
         CandleRolloutBuffer, RolloutBatchIterator, calculate_advantages_and_returns,
     },
-    learning_module::{LearningModuleKind, PolicyValuesLosses},
+    learning_module2::PolicyValuesLosses,
     tensors::{PolicyLoss, ValueLoss},
 };
 use r2l_core::{
@@ -24,17 +24,10 @@ macro_rules! process_hook_result {
     };
 }
 
-pub trait A2CLearningModule:
-    LearningModule<Losses = PolicyValuesLosses> + ValueFunction<Tensor = Tensor>
-{
-}
-
-impl A2CLearningModule for LearningModuleKind {}
-
-pub trait A2CHooks<LM: A2CLearningModule> {
+pub trait A2CHooks<M: ModuleWithValueFunction> {
     fn before_learning_hook(
         &mut self,
-        learning_module: &mut LM,
+        learning_module: &mut A2CCore<M>,
         rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         advantages: &mut Advantages,
         returns: &mut Returns,
@@ -44,10 +37,10 @@ pub trait A2CHooks<LM: A2CLearningModule> {
 pub struct DefaultA2CHooks;
 
 // TODO: we have to rething this anyways
-impl<LM: A2CLearningModule> A2CHooks<LM> for DefaultA2CHooks {
+impl<M: ModuleWithValueFunction> A2CHooks<M> for DefaultA2CHooks {
     fn before_learning_hook(
         &mut self,
-        _learning_module: &mut LM,
+        _learning_module: &mut A2CCore<M>,
         _rollout_buffers: &mut Vec<CandleRolloutBuffer>,
         _advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -56,41 +49,53 @@ impl<LM: A2CLearningModule> A2CHooks<LM> for DefaultA2CHooks {
     }
 }
 
-pub struct A2C<D: Policy, LM: A2CLearningModule> {
-    pub distribution: D,
-    pub learning_module: LM,
-    pub hooks: Box<dyn A2CHooks<LM>>,
+pub struct A2CCore<M: ModuleWithValueFunction> {
+    pub module: M,
     pub device: Device,
     pub gamma: f32,
     pub lambda: f32,
     pub sample_size: usize,
 }
 
-impl<D: Policy<Tensor = Tensor>, LM: A2CLearningModule> A2C<D, LM> {
+pub struct A2C<M: ModuleWithValueFunction> {
+    pub a2c: A2CCore<M>,
+    pub hooks: Box<dyn A2CHooks<M>>,
+}
+
+impl<M: ModuleWithValueFunction> A2C<M> {
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         loop {
             let Some(batch) = batch_iter.next() else {
                 return Ok(());
             };
             let logps = self
-                .distribution
+                .a2c
+                .module
+                .get_policy_ref()
                 .log_probs(&batch.observations, &batch.actions)?;
-            let values_pred = self.learning_module.calculate_values(&batch.observations)?;
+            let values_pred = self
+                .a2c
+                .module
+                .value_func()
+                .calculate_values(&batch.observations)?;
             let value_loss = ValueLoss(batch.returns.sub(&values_pred)?.sqr()?.mean_all()?);
             let policy_loss = PolicyLoss(batch.advantages.mul(&logps)?.neg()?.mean_all()?);
-            self.learning_module.update(PolicyValuesLosses {
-                policy_loss,
-                value_loss,
-            })?;
+            self.a2c
+                .module
+                .learning_module()
+                .update(PolicyValuesLosses {
+                    policy_loss,
+                    value_loss,
+                })?;
         }
     }
 }
 
-impl<D: Policy<Tensor = Tensor> + Clone, LM: A2CLearningModule> Agent for A2C<D, LM> {
-    type Policy = D;
+impl<M: ModuleWithValueFunction> Agent for A2C<M> {
+    type Policy = <M as ModuleWithValueFunction>::P;
 
     fn policy(&self) -> Self::Policy {
-        self.distribution.clone()
+        self.a2c.module.get_inference_policy()
     }
 
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
@@ -100,12 +105,12 @@ impl<D: Policy<Tensor = Tensor> + Clone, LM: A2CLearningModule> Agent for A2C<D,
             .collect();
         let (mut advantages, mut returns) = calculate_advantages_and_returns(
             &rollouts,
-            &self.learning_module,
-            self.gamma,
-            self.lambda,
+            self.a2c.module.value_func(),
+            self.a2c.gamma,
+            self.a2c.lambda,
         );
         let before_learning_hook_res = self.hooks.before_learning_hook(
-            &mut self.learning_module,
+            &mut self.a2c,
             &mut rollouts,
             &mut advantages,
             &mut returns,
@@ -128,8 +133,8 @@ impl<D: Policy<Tensor = Tensor> + Clone, LM: A2CLearningModule> Agent for A2C<D,
             &advantages,
             &returns,
             &logps,
-            self.sample_size,
-            self.device.clone(),
+            self.a2c.sample_size,
+            self.a2c.device.clone(),
         );
         self.batching_loop(&mut batch_iter)?;
         Ok(())

@@ -153,6 +153,71 @@ pub trait OnPolicyAlgorithmHooks2<B: Buffer, P: Policy> {
     fn shutdown_hook(&mut self) -> Result<()>;
 }
 
+pub struct DefaultOnPolicyAlgorightmsHooks2 {
+    rollout_idx: usize,
+    learning_schedule: LearningSchedule,
+}
+
+impl DefaultOnPolicyAlgorightmsHooks2 {
+    pub fn new(learning_schedule: LearningSchedule) -> Self {
+        Self {
+            rollout_idx: 0,
+            learning_schedule,
+        }
+    }
+}
+
+impl<B: Buffer, P: Policy> OnPolicyAlgorithmHooks2<B, P> for DefaultOnPolicyAlgorightmsHooks2 {
+    fn init_hook(&mut self) -> bool {
+        false
+    }
+
+    fn post_rollout_hook(&mut self, rollouts: &[B]) -> bool {
+        let total_reward = rollouts
+            .iter()
+            .map(|s| s.rewards().iter().sum::<f32>())
+            .sum::<f32>();
+        let episodes: usize = rollouts
+            .iter()
+            .flat_map(|s| s.dones())
+            .filter(|d| **d)
+            .count();
+        println!(
+            "rollout: {:<3} episodes: {:<5} total reward: {:<5.2} avg reward per episode: {:.2}",
+            self.rollout_idx,
+            episodes,
+            total_reward,
+            total_reward / episodes as f32
+        );
+        self.rollout_idx += 1;
+        match &mut self.learning_schedule {
+            LearningSchedule::RolloutBound {
+                total_rollouts,
+                current_rollout,
+            } => {
+                *current_rollout += 1;
+                current_rollout >= total_rollouts
+            }
+            LearningSchedule::TotalStepBound {
+                total_steps,
+                current_step,
+            } => {
+                let rollout_steps: usize = rollouts.iter().map(|e| e.actions().len()).sum();
+                *current_step += rollout_steps;
+                current_step >= total_steps
+            }
+        }
+    }
+
+    fn post_training_hook(&mut self, policy: P) -> bool {
+        false
+    }
+
+    fn shutdown_hook(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
 pub struct OnPolicyAlgorithm2<
     B: Buffer,
     P: Policy,

@@ -1,11 +1,11 @@
-use crate::candle_agents::ppo::PPOLearningModule;
+use crate::candle_agents::ModuleWithValueFunction;
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use r2l_candle_lm::{
     candle_rollout_buffer::{
         CandleRolloutBuffer, RolloutBatch, RolloutBatchIterator, calculate_advantages_and_returns,
     },
-    learning_module::PolicyValuesLosses,
+    learning_module2::PolicyValuesLosses,
     tensors::{PolicyLoss, ValueLoss},
 };
 use r2l_core::{
@@ -17,21 +17,23 @@ use r2l_core::{
 
 pub trait VPG3LearningModule: LearningModule<Losses = PolicyValuesLosses> + ValueFunction {}
 
-pub struct VPG<D: Policy, LM: PPOLearningModule> {
-    pub distribution: D,
-    pub learning_module: LM,
+pub struct VPG<M: ModuleWithValueFunction> {
+    pub module: M,
     device: Device,
     gamma: f32,
     lambda: f32,
     sample_size: usize,
 }
 
-impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule> VPG<D, LM> {
+impl<M: ModuleWithValueFunction> VPG<M> {
     fn train_single_batch(&mut self, batch: RolloutBatch) -> Result<bool> {
         let policy_loss = PolicyLoss(batch.advantages.mul(&batch.logp_old)?.neg()?.mean_all()?);
-        let values_pred = self.learning_module.calculate_values(&batch.observations)?;
+        let values_pred = self
+            .module
+            .value_func()
+            .calculate_values(&batch.observations)?;
         let value_loss = ValueLoss(batch.returns.sub(&values_pred)?.sqr()?.mean_all()?);
-        self.learning_module.update(PolicyValuesLosses {
+        self.module.learning_module().update(PolicyValuesLosses {
             policy_loss,
             value_loss,
         })?;
@@ -39,11 +41,11 @@ impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule> VPG<D, LM> {
     }
 }
 
-impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for VPG<D, LM> {
-    type Policy = D;
+impl<M: ModuleWithValueFunction> Agent for VPG<M> {
+    type Policy = <M as ModuleWithValueFunction>::P;
 
     fn policy(&self) -> Self::Policy {
-        self.distribution.clone()
+        self.module.get_inference_policy()
     }
 
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
@@ -53,7 +55,7 @@ impl<D: Policy<Tensor = Tensor> + Clone, LM: PPOLearningModule> Agent for VPG<D,
             .collect();
         let (advantages, returns) = calculate_advantages_and_returns(
             &rollouts,
-            &self.learning_module,
+            self.module.value_func(),
             self.gamma,
             self.lambda,
         );

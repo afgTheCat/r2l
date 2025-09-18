@@ -1,10 +1,6 @@
 use std::fmt::Debug;
 
-use crate::{
-    distributions::Policy,
-    sampler2::{Buffer, Preprocessor},
-    utils::rollout_buffer::RolloutBuffer,
-};
+use crate::{distributions::Policy, sampler2::Buffer, utils::rollout_buffer::RolloutBuffer};
 use anyhow::Result;
 use bincode::{Decode, Encode};
 

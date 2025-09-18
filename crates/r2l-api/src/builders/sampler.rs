@@ -18,6 +18,7 @@ use r2l_core::{
             variable_size_buffer::VariableSizedTrajectoryBuffer,
         },
     },
+    sampler2::{R2lSampler2, env_pools::builder::EnvPoolBuilder},
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -217,5 +218,19 @@ impl SamplerType {
             env_steps: self.capacity,
             collection_type,
         }
+    }
+}
+
+pub struct SamplerType2 {
+    pub env_pool_builder: EnvPoolBuilder,
+    pub preprocessor_options: EvaluatorNormalizerOptions,
+}
+
+impl SamplerType2 {
+    pub fn build<EB: EnvBuilderTrait>(
+        &self,
+        env_builder_type: EnvBuilderType<EB>,
+    ) -> R2lSampler2<EB::Env> {
+        todo!()
     }
 }

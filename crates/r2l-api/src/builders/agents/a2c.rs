@@ -5,8 +5,10 @@ use crate::builders::{
 use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_agents::candle_agents::a2c::{A2C, DefaultA2CHooks};
-use r2l_candle_lm::{distributions::DistributionKind, learning_module::LearningModuleKind};
+use r2l_agents::{
+    GenericLearningModuleWithValueFunction, LearningModuleKind,
+    candle_agents::a2c::{A2C, A2CCore, DefaultA2CHooks},
+};
 use r2l_core::env::EnvironmentDescription;
 
 pub struct A2CBuilder {
@@ -44,27 +46,34 @@ impl A2CBuilder {
         &self,
         device: &Device,
         env_description: &EnvironmentDescription<T>,
-    ) -> Result<A2C<DistributionKind, LearningModuleKind>> {
+    ) -> Result<A2C<LearningModuleKind>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
             VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
-        let distribution =
+        let policy =
             self.distribution_builder
                 .build(&distribution_var_builder, device, env_description)?;
-        let learning_module = self.learning_module_builder.build(
+        let (value_function, learning_module) = self.learning_module_builder.build(
             distribution_varmap,
             distribution_var_builder,
             env_description,
             device,
         )?;
-        Ok(A2C {
-            distribution,
+        let module = GenericLearningModuleWithValueFunction {
+            policy,
             learning_module,
-            hooks: Box::new(DefaultA2CHooks),
+            value_function,
+        };
+        let a2c = A2CCore {
+            module,
             device: device.clone(),
             gamma: self.gamma,
             lambda: self.lambda,
             sample_size: self.sample_size,
+        };
+        Ok(A2C {
+            hooks: Box::new(DefaultA2CHooks),
+            a2c,
         })
     }
 }

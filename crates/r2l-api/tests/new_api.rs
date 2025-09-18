@@ -16,10 +16,9 @@ fn new_api() {
     let env_pool_builder = EnvPoolBuilder {
         worker_location: WorkerLocation::Thread,
         collection_bound: CollectionBound::StepBound { steps: 2048 },
-        builder,
         buffer_type: BufferType::FixedSize,
     };
 
-    let env_pool = env_pool_builder.build();
+    let env_pool = env_pool_builder.build(builder);
     let sampler = R2lSampler2::new(env_pool, None);
 }

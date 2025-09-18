@@ -1,43 +1,24 @@
-mod ppo_test;
-
-use candle_core::{DType, Device, Error, Tensor};
-use r2l_agents::LearningModuleKind;
-use r2l_agents::candle_agents::ModuleWithValueFunction;
-use r2l_agents::candle_agents::ppo::{CandlePPOCore, PPOHooksTrait};
-use r2l_agents::candle_agents::ppo::{HookResult, PPOBatchData};
-use r2l_api::builders::agents::ppo::PPOBuilder;
-use r2l_api::builders::sampler::{EnvBuilderType, EnvPoolType, SamplerType};
-use r2l_candle_lm::candle_rollout_buffer::{CandleRolloutBuffer, RolloutBatch};
-use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
-use r2l_core::on_policy_algorithm::{
-    DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
+use crate::{EventBox, PPOProgress};
+use candle_core::{Device, Tensor};
+use r2l_agents::{
+    LearningModuleKind,
+    candle_agents::{ModuleWithValueFunction, ppo::HookResult, ppo2::PPOHooksTrait2},
 };
-use r2l_core::{Algorithm, distributions::Policy, utils::rollout_buffer::Advantages};
-use std::sync::Arc;
-use std::sync::mpsc::Sender;
-use std::{any::Any, f64};
+use r2l_api::builders::{
+    agents::ppo::PPOBuilder,
+    sampler::{EnvBuilderType, EnvPoolType, SamplerType, SamplerType2},
+    sampler_hooks2::EvaluatorNormalizerOptions,
+};
+use r2l_core::{
+    distributions::Policy,
+    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks2, LearningSchedule, OnPolicyAlgorithm2},
+    sampler2::env_pools::builder::EnvPoolBuilder,
+};
+use std::sync::{Arc, mpsc::Sender};
 
 const ENV_NAME: &str = "Pendulum-v1";
 
-pub type EventBox = Box<dyn Any + Send + Sync>;
-
-#[derive(Debug, Default, Clone)]
-pub struct PPOProgress {
-    pub clip_fractions: Vec<f32>,
-    pub entropy_losses: Vec<f32>,
-    pub policy_losses: Vec<f32>,
-    pub value_losses: Vec<f32>,
-    pub clip_range: f32,
-    pub approx_kl: f32,
-    pub explained_variance: f32,
-    pub progress: f64,
-    pub std: f32,
-    pub avarage_reward: f32,
-    pub learning_rate: f64,
-}
-
-#[derive(Debug, Clone)]
-pub struct PPOHook {
+pub struct PPOHook2 {
     current_epoch: usize,   // track the current epoch
     total_epochs: usize,    // current epoch we are in
     current_rollout: usize, // track the current rollout
@@ -50,7 +31,7 @@ pub struct PPOHook {
     pub tx: Sender<EventBox>,
 }
 
-impl PPOHook {
+impl PPOHook2 {
     fn new(
         total_epochs: usize,
         total_rollouts: usize,
@@ -73,20 +54,20 @@ impl PPOHook {
     }
 }
 
-impl PPOHooksTrait<LearningModuleKind> for PPOHook {
-    fn before_learning_hook(
+impl PPOHooksTrait2<LearningModuleKind> for PPOHook2 {
+    fn before_learning_hook<B: r2l_core::sampler2::Buffer<Tensor = candle_core::Tensor>>(
         &mut self,
-        _agent: &mut CandlePPOCore<LearningModuleKind>,
-        rollout_buffers: &mut Vec<CandleRolloutBuffer>,
-        advantages: &mut Advantages,
+        _agent: &mut r2l_agents::candle_agents::ppo2::CandlePPOCore2<LearningModuleKind>,
+        buffers: &[B],
+        advantages: &mut r2l_core::utils::rollout_buffer::Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
-    ) -> candle_core::Result<HookResult> {
+    ) -> candle_core::Result<r2l_agents::candle_agents::ppo::HookResult> {
         self.current_epoch = 0;
         let mut total_rewards: f32 = 0.;
         let mut total_episodes: usize = 0;
-        for rb in rollout_buffers {
-            total_rewards += rb.0.rewards.iter().sum::<f32>();
-            total_episodes += rb.0.dones.iter().filter(|x| **x).count();
+        for rb in buffers {
+            total_rewards += rb.rewards().iter().sum::<f32>();
+            total_episodes += rb.dones().iter().filter(|x| **x).count();
         }
         advantages.normalize();
         let avarage_reward = total_rewards / total_episodes as f32;
@@ -96,10 +77,10 @@ impl PPOHooksTrait<LearningModuleKind> for PPOHook {
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook(
+    fn rollout_hook<B: r2l_core::sampler2::Buffer<Tensor = candle_core::Tensor>>(
         &mut self,
-        agent: &mut CandlePPOCore<LearningModuleKind>,
-        _rollout_buffers: &Vec<CandleRolloutBuffer>,
+        buffers: &[B],
+        agent: &mut r2l_agents::candle_agents::ppo2::CandlePPOCore2<LearningModuleKind>,
     ) -> candle_core::Result<HookResult> {
         self.current_epoch += 1;
         let should_stop = self.current_epoch == self.total_epochs;
@@ -109,7 +90,7 @@ impl PPOHooksTrait<LearningModuleKind> for PPOHook {
             self.progress.std = agent.module.get_policy_ref().std().unwrap();
             self.progress.learning_rate = agent.module.learning_module().policy_learning_rate();
             let progress = self.progress.clear();
-            self.tx.send(Box::new(progress)).map_err(Error::wrap)?;
+            self.tx.send(Box::new(progress)).unwrap();
             Ok(HookResult::Break)
         } else {
             Ok(HookResult::Continue)
@@ -118,11 +99,10 @@ impl PPOHooksTrait<LearningModuleKind> for PPOHook {
 
     fn batch_hook(
         &mut self,
-        agent: &mut CandlePPOCore<LearningModuleKind>,
-        _rollout_batch: &RolloutBatch,
-        policy_loss: &mut PolicyLoss,
-        value_loss: &mut ValueLoss,
-        data: &PPOBatchData,
+        agent: &mut r2l_agents::candle_agents::ppo2::CandlePPOCore2<LearningModuleKind>,
+        policy_loss: &mut r2l_candle_lm::tensors::PolicyLoss,
+        value_loss: &mut r2l_candle_lm::tensors::ValueLoss,
+        data: &r2l_agents::candle_agents::ppo::PPOBatchData,
     ) -> candle_core::Result<HookResult> {
         let entropy = agent.module.get_policy_ref().entropy().unwrap();
         let device = entropy.device();
@@ -152,55 +132,41 @@ impl PPOHooksTrait<LearningModuleKind> for PPOHook {
     }
 }
 
-impl PPOProgress {
-    pub fn clear(&mut self) -> Self {
-        std::mem::take(self)
-    }
-
-    pub fn collect_batch_data(
-        &mut self,
-        ratio: &Tensor,
-        entropy_loss: &Tensor,
-        value_loss: &Tensor,
-        policy_loss: &Tensor,
-    ) -> candle_core::Result<()> {
-        let clip_fraction = (ratio - 1.)?
-            .abs()?
-            .gt(self.clip_range)?
-            .to_dtype(DType::F32)?
-            .mean_all()?
-            .to_scalar::<f32>()?;
-        self.clip_fractions.push(clip_fraction);
-        self.entropy_losses.push(entropy_loss.to_scalar()?);
-        self.value_losses.push(value_loss.to_scalar()?);
-        self.policy_losses.push(policy_loss.to_scalar()?);
-        Ok(())
-    }
-}
-
-pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
+pub fn train_ppo2(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let total_rollouts = 300;
-    let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
+    let ppo_hook = PPOHook2::new(10, total_rollouts, 0., 0., 0.01, tx);
     let device = Device::Cpu;
-    let sampler = SamplerType {
-        capacity: 2048,
-        hook_options: Default::default(),
-        env_pool_type: EnvPoolType::VecVariable, // TODO: Change this to VecVariable
+    let sampler = SamplerType2 {
+        env_pool_builder: EnvPoolBuilder::default(),
+        preprocessor_options: EvaluatorNormalizerOptions::default(),
     }
-    .build_with_builder_type(EnvBuilderType::EnvBuilder {
+    .build(EnvBuilderType::EnvBuilder {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
         n_envs: 1,
     });
     let env_description = sampler.env_description();
-    let mut agent = PPOBuilder::default().build(&device, &env_description)?;
-    agent.hooks = Box::new(ppo_hook);
-    let mut algo = OnPolicyAlgorithm {
+    let agent = PPOBuilder::default().build2(&device, &env_description, ppo_hook)?;
+    let mut algo = OnPolicyAlgorithm2 {
         sampler,
         agent,
-        hooks: DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::RolloutBound {
+        hooks: DefaultOnPolicyAlgorightmsHooks2::new(LearningSchedule::RolloutBound {
             total_rollouts,
             current_rollout: 0,
         }),
     };
     algo.train()
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::mpsc;
+    use std::sync::mpsc::{Receiver, Sender};
+
+    use crate::{EventBox, ppo_test::train_ppo2};
+
+    #[test]
+    fn train_ppo_complicated() {
+        let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
+        train_ppo2(event_tx).unwrap();
+    }
 }

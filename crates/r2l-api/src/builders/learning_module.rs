@@ -1,7 +1,8 @@
 use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
+use r2l_agents::ActorCriticKind;
 use r2l_candle_lm::{
-    learning_module::{DecoupledActorCriticLM, LearningModuleKind, ParalellActorCriticLM},
+    learning_module2::{DecoupledActorCriticLM2, ParalellActorCriticLM2, SequentialValueFunction},
     optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::build_sequential,
 };
@@ -31,7 +32,7 @@ impl LearningModuleBuilder {
         distr_var_builder: VarBuilder,
         env_description: &EnvironmentDescription<T>,
         device: &Device,
-    ) -> Result<LearningModuleKind> {
+    ) -> Result<(SequentialValueFunction, ActorCriticKind)> {
         let input_size = env_description.observation_size();
         let optimizer_params = ParamsAdamW {
             lr: 3e-4,
@@ -50,10 +51,12 @@ impl LearningModuleBuilder {
                     AdamW::new(distribution_varmap.all_vars(), optimizer_params.clone())?;
                 let optimizer_with_grad =
                     OptimizerWithMaxGrad::new(optimizer, *max_grad_norm, distribution_varmap);
-                Ok(LearningModuleKind::Paralell(ParalellActorCriticLM {
-                    value_net,
-                    optimizer_with_grad,
-                }))
+                Ok((
+                    SequentialValueFunction { value_net },
+                    ActorCriticKind::Paralell(ParalellActorCriticLM2 {
+                        optimizer_with_grad,
+                    }),
+                ))
             }
             LearningModuleType::Decoupled {
                 value_layers,
@@ -74,11 +77,13 @@ impl LearningModuleBuilder {
                 );
                 let value_optimizer_with_grad =
                     OptimizerWithMaxGrad::new(value_optimizer, *value_max_grad_norm, critic_varmap);
-                Ok(LearningModuleKind::Decoupled(DecoupledActorCriticLM {
-                    value_net,
-                    policy_optimizer_with_grad,
-                    value_optimizer_with_grad,
-                }))
+                Ok((
+                    SequentialValueFunction { value_net },
+                    ActorCriticKind::Decoupled(DecoupledActorCriticLM2 {
+                        policy_optimizer_with_grad,
+                        value_optimizer_with_grad,
+                    }),
+                ))
             }
         }
     }

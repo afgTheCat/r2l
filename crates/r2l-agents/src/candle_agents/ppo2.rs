@@ -1,8 +1,9 @@
+use crate::candle_agents::ModuleWithValueFunction;
 use crate::candle_agents::ppo::{HookResult, PPOBatchData};
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use r2l_candle_lm::{
-    learning_module::PolicyValuesLosses,
+    learning_module2::PolicyValuesLosses,
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
 };
 use r2l_core::{
@@ -14,6 +15,7 @@ use r2l_core::{
     utils::rollout_buffer::{Advantages, Logps, Returns},
 };
 use rand::seq::SliceRandom;
+use std::marker::PhantomData;
 use std::ops::Deref;
 
 macro_rules! process_hook_result {
@@ -25,12 +27,10 @@ macro_rules! process_hook_result {
     };
 }
 
-// pub trait CandleBufferTrait: Buffer<Tensor = Tensor> {}
-
-pub trait PPOHooksTrait2<A> {
+pub trait PPOHooksTrait2<M: ModuleWithValueFunction> {
     fn before_learning_hook<B: Buffer<Tensor = Tensor>>(
         &mut self,
-        agent: &mut A,
+        agent: &mut CandlePPOCore2<M>,
         buffers: &[B],
         advantages: &mut Advantages,
         returns: &mut Returns,
@@ -41,14 +41,14 @@ pub trait PPOHooksTrait2<A> {
     fn rollout_hook<B: Buffer<Tensor = Tensor>>(
         &mut self,
         buffers: &[B],
-        agent: &mut A,
+        agent: &mut CandlePPOCore2<M>,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Break)
     }
 
     fn batch_hook(
         &mut self,
-        agent: &mut A,
+        agent: &mut CandlePPOCore2<M>,
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
@@ -57,10 +57,17 @@ pub trait PPOHooksTrait2<A> {
     }
 }
 
-pub trait PPOLearningModule:
-    LearningModule<Losses = PolicyValuesLosses> + ValueFunction<Tensor = Tensor>
-{
+pub struct PPODefaultHooks<M: ModuleWithValueFunction> {
+    _lm: PhantomData<M>,
 }
+
+impl<M: ModuleWithValueFunction> PPODefaultHooks<M> {
+    pub fn new() -> Self {
+        Self { _lm: PhantomData }
+    }
+}
+
+impl<M: ModuleWithValueFunction> PPOHooksTrait2<M> for PPODefaultHooks<M> {}
 
 fn calculate_advantages_and_returns2<B: Buffer<Tensor = Tensor>>(
     buffers: &[B],
@@ -70,6 +77,7 @@ fn calculate_advantages_and_returns2<B: Buffer<Tensor = Tensor>>(
 ) -> Result<(Advantages, Returns)> {
     let mut advantage_vec = vec![];
     let mut returns_vec = vec![];
+
     for buff in buffers {
         let total_steps = buff.total_steps();
         let all_states = buff.all_states();
@@ -78,6 +86,7 @@ fn calculate_advantages_and_returns2<B: Buffer<Tensor = Tensor>>(
         let mut advantages: Vec<f32> = vec![0.; total_steps];
         let mut returns: Vec<f32> = vec![0.; total_steps];
         let mut last_gae_lam: f32 = 0.;
+
         for i in (0..total_steps).rev() {
             let next_non_terminal = if buff.dones()[i] {
                 last_gae_lam = 0.;
@@ -93,6 +102,7 @@ fn calculate_advantages_and_returns2<B: Buffer<Tensor = Tensor>>(
         advantage_vec.push(advantages);
         returns_vec.push(returns);
     }
+
     Ok((Advantages(advantage_vec), Returns(returns_vec)))
 }
 
@@ -112,9 +122,8 @@ impl<'a, B: Buffer<Tensor = Tensor>> Buffers<'a, B> {
     }
 }
 
-pub struct CandlePPOCore<P: Policy, LM: PPOLearningModule> {
-    pub policy: P,
-    pub learning_module: LM,
+pub struct CandlePPOCore2<M: ModuleWithValueFunction> {
+    pub module: M,
     pub clip_range: f32,
     pub gamma: f32,
     pub lambda: f32,
@@ -154,14 +163,12 @@ impl BatchIndexIterator {
     }
 }
 
-pub struct CandlePPO2<P: Policy, LM: PPOLearningModule, H: PPOHooksTrait2<CandlePPOCore<P, LM>>> {
-    pub ppo: CandlePPOCore<P, LM>,
+pub struct CandlePPO2<M: ModuleWithValueFunction, H: PPOHooksTrait2<M>> {
+    pub ppo: CandlePPOCore2<M>,
     pub hooks: H,
 }
 
-impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule, H: PPOHooksTrait2<CandlePPOCore<D, LM>>>
-    CandlePPO2<D, LM, H>
-{
+impl<M: ModuleWithValueFunction, H: PPOHooksTrait2<M>> CandlePPO2<M, H> {
     fn batching_loop<B: Buffer<Tensor = Tensor>>(
         &mut self,
         buffers: Buffers<B>,
@@ -183,8 +190,12 @@ impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule, H: PPOHooksTrait2<Candle
             let returns = returns.sample(&indicies);
             let returns = Tensor::from_slice(&returns, returns.len(), &ppo.device)?;
 
-            let logp = Logp(ppo.policy.log_probs(&observations, &actions)?);
-            let values_pred = ValuesPred(ppo.learning_module.calculate_values(&observations)?);
+            let logp = Logp(
+                ppo.module
+                    .get_policy_ref()
+                    .log_probs(&observations, &actions)?,
+            );
+            let values_pred = ValuesPred(ppo.module.value_func().calculate_values(&observations)?);
             let mut value_loss = ValueLoss(returns.sub(&values_pred)?.sqr()?.mean_all()?);
             let logp_diff = LogpDiff((logp.deref() - &logp_old)?);
             let ratio = logp_diff.exp()?;
@@ -204,7 +215,7 @@ impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule, H: PPOHooksTrait2<Candle
             let hook_result =
                 self.hooks
                     .batch_hook(ppo, &mut policy_loss, &mut value_loss, &ppo_data)?;
-            ppo.learning_module.update(PolicyValuesLosses {
+            ppo.module.learning_module().update(PolicyValuesLosses {
                 policy_loss,
                 value_loss,
             })?;
@@ -237,16 +248,11 @@ impl<D: Policy<Tensor = Tensor>, LM: PPOLearningModule, H: PPOHooksTrait2<Candle
     }
 }
 
-impl<
-    P: Policy<Tensor = Tensor> + Clone,
-    LM: PPOLearningModule,
-    H: PPOHooksTrait2<CandlePPOCore<P, LM>>,
-> Agent2 for CandlePPO2<P, LM, H>
-{
-    type Policy = P;
+impl<M: ModuleWithValueFunction, H: PPOHooksTrait2<M>> Agent2 for CandlePPO2<M, H> {
+    type Policy = <M as ModuleWithValueFunction>::P;
 
     fn policy2(&self) -> Self::Policy {
-        self.ppo.policy.clone()
+        self.ppo.module.get_inference_policy()
     }
 
     fn learn2<B: Buffer>(&mut self, buffers: &[B]) -> Result<()>
@@ -259,7 +265,7 @@ impl<
             .collect::<Vec<_>>();
         let (mut advantages, mut returns) = calculate_advantages_and_returns2(
             &buffers,
-            &self.ppo.learning_module,
+            self.ppo.module.value_func(),
             self.ppo.gamma,
             self.ppo.lambda,
         )?;
@@ -267,7 +273,6 @@ impl<
             self.hooks
                 .before_learning_hook(&mut self.ppo, &buffers, &mut advantages, &mut returns);
         process_hook_result!(before_learning_hook_res);
-
         let mut logps: Vec<Vec<f32>> = vec![];
         for buff in &buffers {
             let total_steps = buff.total_steps();
