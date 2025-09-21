@@ -1,0 +1,18 @@
+[package]
+name = "r2l-candle-lm"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+r2l-core = { workspace = true }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+bincode = { workspace = true }
+either = { workspace = true }
+rand = { workspace = true }
+safetensors = "0.4.1"
+derive_more = { version = "2.0.1", features = ["full"] }
+anyhow = { workspace = true }

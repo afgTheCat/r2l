@@ -1,0 +1,30 @@
+[package]
+name = "r2l-api"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+readme = "README.md"
+
+[dependencies]
+r2l-core = { workspace = true }
+r2l-gym = { workspace = true }
+r2l-agents = { workspace = true }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+burn = { workspace = true }
+r2l-candle-lm = { workspace = true }
+r2l-burn-lm = { workspace = true }
+crossbeam = { workspace = true }
+r2l-buffer = { workspace = true }
+ringbuffer = "0.16.0"
+rand = "0.9.0"
+anyhow = { workspace = true }
+
+[features]
+test-utils = []
+
+[dev-dependencies]
+r2l-api = { path = ".", features = ["test-utils"] }
+once_cell = "1.21.3"
