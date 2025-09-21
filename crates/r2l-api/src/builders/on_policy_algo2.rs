@@ -5,7 +5,11 @@ use crate::builders::{
 };
 use anyhow::Result;
 use candle_core::Device;
-use r2l_agents::AgentKind;
+use derive_more::{Deref, DerefMut};
+use r2l_agents::{
+    LearningModuleKind,
+    candle_agents::{a2c::A2C, ppo::CandlePPO},
+};
 use r2l_buffer::Buffer;
 use r2l_core::{
     env::{Env, EnvBuilderTrait},
@@ -14,15 +18,10 @@ use r2l_core::{
 };
 use std::sync::Arc;
 
-pub enum AgentType {
-    PPO(PPOBuilder),
-    A2C(A2CBuilder),
-}
-
+// TODO: this is pretty much a sampler builder at this point
 pub struct OnPolicyAlgorithmBuilder {
     pub device: Device,
     pub sampler_type: SamplerType,
-    pub agent_type: AgentType,
     pub learning_schedule: LearningSchedule,
 }
 
@@ -39,73 +38,125 @@ impl Default for OnPolicyAlgorithmBuilder {
                 total_steps: 0,
                 current_step: 0,
             },
-            agent_type: AgentType::PPO(PPOBuilder::default()),
         }
     }
 }
 
-impl OnPolicyAlgorithmBuilder {
+#[derive(Deref, DerefMut)]
+pub struct A2CAlgoBuilder {
+    #[deref]
+    #[deref_mut]
+    on_policy_builder: OnPolicyAlgorithmBuilder,
+    a2c_builder: A2CBuilder,
+}
+
+impl Default for A2CAlgoBuilder {
+    fn default() -> Self {
+        let sampler_type = SamplerType {
+            capacity: 5, // Default value in SB3
+            hook_options: EvaluatorNormalizerOptions::default(),
+            env_pool_type: EnvPoolType::VecStep,
+        };
+        Self {
+            on_policy_builder: OnPolicyAlgorithmBuilder {
+                sampler_type,
+                ..Default::default()
+            },
+            a2c_builder: Default::default(),
+        }
+    }
+}
+
+impl A2CAlgoBuilder {
     pub fn build<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
         &self,
         env_builder: EB,
         n_envs: usize,
-    ) -> Result<OnPolicyAlgorithm<R2lSampler<EB::Env>, AgentKind, DefaultOnPolicyAlgorightmsHooks>>
-    {
-        let sampler = self
-            .sampler_type
-            .build_with_builder_type(EnvBuilderType::EnvBuilder {
+    ) -> Result<
+        OnPolicyAlgorithm<
+            R2lSampler<EB::Env>,
+            A2C<LearningModuleKind>,
+            DefaultOnPolicyAlgorightmsHooks,
+        >,
+    > {
+        let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
+            EnvBuilderType::EnvBuilder {
                 builder: Arc::new(env_builder),
                 n_envs,
-            });
+            },
+        );
         let env_description = sampler.env_description();
-        let agent = match &self.agent_type {
-            AgentType::PPO(builder) => {
-                let ppo = builder.build(&self.device, &env_description)?;
-                AgentKind::PPO(ppo)
-            }
-            AgentType::A2C(builder) => {
-                let a2c = builder.build(&self.device, &env_description)?;
-                AgentKind::A2C(a2c)
-            }
-        };
-        let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.learning_schedule);
+        let agent = self
+            .a2c_builder
+            .build(&self.on_policy_builder.device, &env_description)?;
+        let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.on_policy_builder.learning_schedule);
         Ok(OnPolicyAlgorithm {
             sampler,
             agent,
             hooks,
         })
     }
+}
 
+#[derive(Deref, DerefMut)]
+pub struct PPOAlgoBuilder {
+    #[deref]
+    #[deref_mut]
+    on_policy_builder: OnPolicyAlgorithmBuilder,
+    ppo_builder: PPOBuilder,
+}
+
+impl PPOAlgoBuilder {
+    pub fn build<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
+        &self,
+        env_builder: EB,
+        n_envs: usize,
+    ) -> Result<
+        OnPolicyAlgorithm<
+            R2lSampler<EB::Env>,
+            CandlePPO<LearningModuleKind>,
+            DefaultOnPolicyAlgorightmsHooks,
+        >,
+    > {
+        let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
+            EnvBuilderType::EnvBuilder {
+                builder: Arc::new(env_builder),
+                n_envs,
+            },
+        );
+        let env_description = sampler.env_description();
+        let agent = self
+            .ppo_builder
+            .build(&self.on_policy_builder.device, &env_description)?;
+        let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.on_policy_builder.learning_schedule);
+        Ok(OnPolicyAlgorithm {
+            sampler,
+            agent,
+            hooks,
+        })
+    }
+}
+
+impl Default for PPOAlgoBuilder {
+    fn default() -> Self {
+        let sampler_type = SamplerType {
+            capacity: 2048, // Default value in SB3
+            hook_options: EvaluatorNormalizerOptions::default(),
+            env_pool_type: EnvPoolType::VecStep,
+        };
+        Self {
+            on_policy_builder: OnPolicyAlgorithmBuilder {
+                sampler_type,
+                ..Default::default()
+            },
+            ppo_builder: PPOBuilder::default(),
+        }
+    }
+}
+
+impl OnPolicyAlgorithmBuilder {
     pub fn set_learning_schedule(&mut self, learning_schedule: LearningSchedule) {
         self.learning_schedule = learning_schedule;
-    }
-
-    pub fn ppo() -> Self {
-        let agent_type = AgentType::PPO(PPOBuilder::default());
-        let sampler_type = SamplerType {
-            capacity: 2048,
-            hook_options: EvaluatorNormalizerOptions::default(),
-            env_pool_type: EnvPoolType::VecStep,
-        };
-        Self {
-            agent_type,
-            sampler_type,
-            ..Default::default()
-        }
-    }
-
-    pub fn a2c() -> Self {
-        let agent_type = AgentType::A2C(A2CBuilder::default());
-        let sampler_type = SamplerType {
-            capacity: 5,
-            hook_options: EvaluatorNormalizerOptions::default(),
-            env_pool_type: EnvPoolType::VecStep,
-        };
-        Self {
-            agent_type,
-            sampler_type,
-            ..Default::default()
-        }
     }
 
     pub fn set_env_pool_type(&mut self, env_pool_type: EnvPoolType) {

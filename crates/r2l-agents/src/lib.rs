@@ -1,18 +1,14 @@
 pub mod burn_agents;
 pub mod candle_agents;
 
-use crate::candle_agents::{ModuleWithValueFunction, a2c::A2C, ppo::CandlePPO, vpg::VPG};
-use anyhow::Result;
+use crate::candle_agents::ModuleWithValueFunction;
 use candle_core::Tensor;
 use r2l_candle_lm::{
     distributions::DistributionKind,
     learning_module2::PolicyValuesLosses,
     learning_module2::{DecoupledActorCriticLM2, ParalellActorCriticLM2, SequentialValueFunction},
 };
-use r2l_core::{
-    agents::Agent, distributions::Policy, policies::LearningModule,
-    utils::rollout_buffer::RolloutBuffer,
-};
+use r2l_core::{distributions::Policy, policies::LearningModule};
 
 pub struct GenericLearningModuleWithValueFunction<
     P: Policy<Tensor = Tensor> + Clone,
@@ -74,29 +70,3 @@ impl LearningModule for ActorCriticKind {
 
 pub type LearningModuleKind =
     GenericLearningModuleWithValueFunction<DistributionKind, ActorCriticKind>;
-
-pub enum AgentKind {
-    A2C(A2C<LearningModuleKind>),
-    PPO(CandlePPO<LearningModuleKind>),
-    VPG(VPG<LearningModuleKind>),
-}
-
-impl Agent for AgentKind {
-    type Policy = DistributionKind;
-
-    fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
-        match self {
-            Self::A2C(a2c) => a2c.learn(rollouts),
-            Self::PPO(ppo) => ppo.learn(rollouts),
-            Self::VPG(vpg) => vpg.learn(rollouts),
-        }
-    }
-
-    fn policy(&self) -> Self::Policy {
-        match self {
-            Self::A2C(a2c) => a2c.policy(),
-            Self::PPO(ppo) => ppo.policy(),
-            Self::VPG(vpg) => vpg.policy(),
-        }
-    }
-}

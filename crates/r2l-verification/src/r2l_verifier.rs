@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::{parse_config::EnvConfig, python_verifier::PythonResult};
 use candle_core::Device;
-use r2l_agents::AgentKind;
 use r2l_api::builders::{
     agents::{a2c::A2CBuilder, ppo::PPOBuilder},
     sampler::{EnvBuilderType, EnvPoolType, SamplerType},
@@ -51,29 +50,31 @@ fn r2l_verify(env_config: &EnvConfig) {
         total_steps: n_timesteps as usize,
         current_step: 0,
     };
-    let agent = match algo.as_str() {
+    match algo.as_str() {
         "ppo" => {
             let ppo = PPOBuilder::default()
                 .build(&device, &sampler.env_description())
                 .unwrap();
-            let agent = AgentKind::PPO(ppo);
-            agent
+            let mut algo = OnPolicyAlgorithm {
+                sampler,
+                agent: ppo,
+                hooks: DefaultOnPolicyAlgorightmsHooks::new(learning_schedule),
+            };
+            algo.train().unwrap();
         }
         "a2c" => {
             let a2c = A2CBuilder::default()
                 .build(&device, &sampler.env_description())
                 .unwrap();
-            let agent = AgentKind::A2C(a2c);
-            agent
+            let mut algo = OnPolicyAlgorithm {
+                sampler,
+                agent: a2c,
+                hooks: DefaultOnPolicyAlgorightmsHooks::new(learning_schedule),
+            };
+            algo.train().unwrap();
         }
         _ => unreachable!(),
-    };
-    let mut algo = OnPolicyAlgorithm {
-        sampler,
-        agent,
-        hooks: DefaultOnPolicyAlgorightmsHooks::new(learning_schedule),
-    };
-    algo.train().unwrap();
+    }
 }
 
 pub fn r2l_verify_results(py_res: &[PythonResult]) {

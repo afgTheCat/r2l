@@ -5253,6 +5253,7 @@ dependencies = [
  "candle-core 0.9.1",
  "candle-nn",
  "crossbeam",
+ "derive_more",
  "once_cell",
  "r2l-agents",
  "r2l-api",
