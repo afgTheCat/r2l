@@ -80,7 +80,9 @@ fn calculate_advantages_and_returns2<B: Buffer<Tensor = Tensor>>(
 
     for buff in buffers {
         let total_steps = buff.total_steps();
-        let all_states = buff.all_states();
+        let all_states: Vec<Tensor> = vec![];
+        // TODO: readd this
+        // let all_states = buff.all_states();
         let values_stacked = value_func.calculate_values(&all_states)?;
         let values: Vec<f32> = values_stacked.to_vec1()?;
         let mut advantages: Vec<f32> = vec![0.; total_steps];
@@ -112,12 +114,13 @@ impl<'a, B: Buffer<Tensor = Tensor>> Buffers<'a, B> {
     fn sample(&self, indicies: &[(usize, usize)]) -> (Vec<Tensor>, Vec<Tensor>) {
         let mut observations = vec![];
         let mut actions = vec![];
-        for (buffer_idx, idx) in indicies {
-            let observation = &self.0[*buffer_idx].all_states()[*idx];
-            let action = &self.0[*buffer_idx].actions()[*idx];
-            observations.push(observation.clone());
-            actions.push(action.clone());
-        }
+        // TODO: readd this
+        // for (buffer_idx, idx) in indicies {
+        //     let observation = &self.0[*buffer_idx].all_states()[*idx];
+        //     let action = &self.0[*buffer_idx].actions()[*idx];
+        //     observations.push(observation.clone());
+        //     actions.push(action.clone());
+        // }
         (observations, actions)
     }
 }
@@ -276,14 +279,16 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait2<M>> Agent2 for CandlePPO2<M, 
         let mut logps: Vec<Vec<f32>> = vec![];
         for buff in &buffers {
             let total_steps = buff.total_steps();
-            let states: Vec<Tensor> = buff.all_states()[0..total_steps - 1]
-                .into_iter()
-                .map(|t| t.clone().into())
-                .collect();
+            let states: Vec<Tensor> = vec![];
+            // TODO: readd something similar
+            // let states: Vec<Tensor> = buff.all_states()[0..total_steps - 1]
+            //     .into_iter()
+            //     .map(|t| t.clone().into())
+            //     .collect();
             let actions = buff.actions();
             logps.push(
                 self.policy2()
-                    .log_probs(&states, actions)
+                    .log_probs(&states, &actions)
                     .map(|t| t.squeeze(0).unwrap().to_vec1().unwrap())
                     .unwrap(),
             );

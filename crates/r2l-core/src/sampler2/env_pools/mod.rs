@@ -3,7 +3,7 @@ pub mod builder;
 use crate::{
     distributions::Policy,
     env::Env,
-    sampler2::{Buffer, CollectionBound, env_pools::builder::BufferKind},
+    sampler2::{Buffer, CollectionBound},
 };
 use crossbeam::channel::{Receiver, Sender};
 use std::collections::HashMap;

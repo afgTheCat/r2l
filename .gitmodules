@@ -1,3 +1,0 @@
-[submodule "r2l-verification/rl-trained-agents"]
-	path = crates/r2l-verification/rl-trained-agents
-	url = git@github.com:DLR-RM/rl-trained-agents.git

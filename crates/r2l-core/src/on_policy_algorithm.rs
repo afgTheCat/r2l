@@ -180,7 +180,7 @@ impl<B: Buffer, P: Policy> OnPolicyAlgorithmHooks2<B, P> for DefaultOnPolicyAlgo
         let episodes: usize = rollouts
             .iter()
             .flat_map(|s| s.dones())
-            .filter(|d| **d)
+            .filter(|d| *d)
             .count();
         println!(
             "rollout: {:<3} episodes: {:<5} total reward: {:<5.2} avg reward per episode: {:.2}",

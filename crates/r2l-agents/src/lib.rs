@@ -70,3 +70,9 @@ impl LearningModule for ActorCriticKind {
 
 pub type LearningModuleKind =
     GenericLearningModuleWithValueFunction<DistributionKind, ActorCriticKind>;
+
+pub struct GenericLearningModuleWithValueFunction2 {
+    pub policy: Box<dyn Policy<Tensor = Tensor>>,
+    pub learning_module: Box<dyn LearningModule<Losses = PolicyValuesLosses>>,
+    pub value_function: SequentialValueFunction,
+}

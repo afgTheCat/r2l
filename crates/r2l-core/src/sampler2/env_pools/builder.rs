@@ -159,11 +159,28 @@ impl<E: Env> Clone for ArcBufferKind<E> {
 impl<E: Env> Buffer for ArcBufferKind<E> {
     type Tensor = <E as Env>::Tensor;
 
-    fn last_state(&self) -> Option<Self::Tensor> {
-        match self {
-            Self::FixedSize(rc_buf) => rc_buf.last_state(),
-            Self::VariableSized(rc_buf) => rc_buf.last_state(),
-        }
+    fn states(&self) -> Vec<Self::Tensor> {
+        todo!()
+    }
+
+    fn next_states(&self) -> Vec<Self::Tensor> {
+        todo!()
+    }
+
+    fn actions(&self) -> Vec<Self::Tensor> {
+        todo!()
+    }
+
+    fn rewards(&self) -> Vec<f32> {
+        todo!()
+    }
+
+    fn terminated(&self) -> Vec<bool> {
+        todo!()
+    }
+
+    fn trancuated(&self) -> Vec<bool> {
+        todo!()
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
@@ -178,10 +195,6 @@ impl<E: Env> Buffer for ArcBufferKind<E> {
             Self::FixedSize(rc_buf) => rc_buf.last_state_terminates(),
             Self::VariableSized(rc_buf) => rc_buf.last_state_terminates(),
         }
-    }
-
-    fn rewards(&self) -> &[f32] {
-        todo!()
     }
 }
 
@@ -202,11 +215,28 @@ impl<E: Env> Clone for RcBufferKind<E> {
 impl<E: Env> Buffer for RcBufferKind<E> {
     type Tensor = <E as Env>::Tensor;
 
-    fn last_state(&self) -> Option<Self::Tensor> {
-        match self {
-            Self::FixedSize(rc_buf) => rc_buf.last_state(),
-            Self::VariableSized(rc_buf) => rc_buf.last_state(),
-        }
+    fn states(&self) -> Vec<Self::Tensor> {
+        todo!()
+    }
+
+    fn next_states(&self) -> Vec<Self::Tensor> {
+        todo!()
+    }
+
+    fn actions(&self) -> Vec<Self::Tensor> {
+        todo!()
+    }
+
+    fn rewards(&self) -> Vec<f32> {
+        todo!()
+    }
+
+    fn terminated(&self) -> Vec<bool> {
+        todo!()
+    }
+
+    fn trancuated(&self) -> Vec<bool> {
+        todo!()
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
@@ -222,10 +252,6 @@ impl<E: Env> Buffer for RcBufferKind<E> {
             Self::VariableSized(rc_buf) => rc_buf.last_state_terminates(),
         }
     }
-
-    fn rewards(&self) -> &[f32] {
-        todo!()
-    }
 }
 
 pub enum BufferKind<E: Env> {
@@ -236,7 +262,27 @@ pub enum BufferKind<E: Env> {
 impl<E: Env> Buffer for BufferKind<E> {
     type Tensor = <E as Env>::Tensor;
 
-    fn last_state(&self) -> Option<Self::Tensor> {
+    fn states(&self) -> Vec<Self::Tensor> {
+        todo!()
+    }
+
+    fn next_states(&self) -> Vec<Self::Tensor> {
+        todo!()
+    }
+
+    fn actions(&self) -> Vec<Self::Tensor> {
+        todo!()
+    }
+
+    fn rewards(&self) -> Vec<f32> {
+        todo!()
+    }
+
+    fn terminated(&self) -> Vec<bool> {
+        todo!()
+    }
+
+    fn trancuated(&self) -> Vec<bool> {
         todo!()
     }
 
@@ -245,10 +291,6 @@ impl<E: Env> Buffer for BufferKind<E> {
     }
 
     fn last_state_terminates(&self) -> bool {
-        todo!()
-    }
-
-    fn rewards(&self) -> &[f32] {
         todo!()
     }
 }
@@ -260,7 +302,10 @@ pub enum EnvPoolType<E: Env> {
 
 impl<E: Env> EnvPoolType<E> {
     pub fn single_step(&mut self) {
-        todo!()
+        match self {
+            Self::Vec(env_pool) => env_pool.single_step(),
+            Self::Thread(env_pool) => env_pool.single_step(),
+        }
     }
 
     pub fn collection_bound(&self) -> CollectionBound {
@@ -274,15 +319,40 @@ impl<E: Env> EnvPoolType<E> {
         &mut self,
         policy: P,
     ) {
-        todo!()
+        match self {
+            Self::Vec(env_pool) => env_pool.set_policy(policy),
+            Self::Thread(env_pool) => env_pool.set_policy(policy),
+        }
     }
 
     pub fn get_buffers(&self) -> Vec<BufferKind<E>> {
-        todo!()
+        match self {
+            Self::Vec(env_pool) => env_pool
+                .get_buffers()
+                .into_iter()
+                .map(|b| BufferKind::RcBuffer(b))
+                .collect(),
+            Self::Thread(env_pool) => env_pool
+                .get_buffers()
+                .into_iter()
+                .map(|b| BufferKind::ArcBufferKind(b))
+                .collect(),
+        }
     }
 
     pub fn collect(&mut self) -> Vec<BufferKind<E>> {
-        todo!()
+        match self {
+            Self::Vec(env_pool) => env_pool
+                .collect()
+                .into_iter()
+                .map(|b| BufferKind::RcBuffer(b))
+                .collect(),
+            Self::Thread(env_pool) => env_pool
+                .collect()
+                .into_iter()
+                .map(|b| BufferKind::ArcBufferKind(b))
+                .collect(),
+        }
     }
 }
 
@@ -300,9 +370,14 @@ pub struct EnvPoolBuilder {
     pub buffer_type: BufferType,
 }
 
+// TODO: do we really need this?
 impl Default for EnvPoolBuilder {
     fn default() -> Self {
-        todo!()
+        Self {
+            worker_location: WorkerLocation::Vec,
+            collection_bound: CollectionBound::StepBound { steps: 1024 },
+            buffer_type: BufferType::FixedSize,
+        }
     }
 }
 

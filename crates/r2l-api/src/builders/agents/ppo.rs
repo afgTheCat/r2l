@@ -9,7 +9,7 @@ use r2l_agents::{
     GenericLearningModuleWithValueFunction, LearningModuleKind,
     candle_agents::{
         ppo::{CandlePPO, CandlePPOCore, EmptyPPO3Hooks},
-        ppo2::{CandlePPO2, CandlePPOCore2, PPODefaultHooks, PPOHooksTrait2},
+        ppo2::{CandlePPO2, CandlePPOCore2, PPOHooksTrait2},
     },
 };
 use r2l_core::env::EnvironmentDescription;

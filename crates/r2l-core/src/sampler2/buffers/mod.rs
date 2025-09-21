@@ -15,8 +15,28 @@ use std::{
 impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
     type Tensor = <E as Env>::Tensor;
 
-    fn last_state(&self) -> Option<Self::Tensor> {
-        self.next_states.back().cloned()
+    fn states(&self) -> Vec<Self::Tensor> {
+        self.states.iter().cloned().collect()
+    }
+
+    fn next_states(&self) -> Vec<Self::Tensor> {
+        self.next_states.iter().cloned().collect()
+    }
+
+    fn actions(&self) -> Vec<Self::Tensor> {
+        self.action.iter().cloned().collect()
+    }
+
+    fn rewards(&self) -> Vec<f32> {
+        todo!()
+    }
+
+    fn terminated(&self) -> Vec<bool> {
+        todo!()
+    }
+
+    fn trancuated(&self) -> Vec<bool> {
+        todo!()
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
@@ -34,17 +54,33 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
     fn last_state_terminates(&self) -> bool {
         *self.terminated.back().unwrap() || *self.trancuated.back().unwrap()
     }
-
-    fn rewards(&self) -> &[f32] {
-        todo!()
-    }
 }
 
 impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
     type Tensor = <E as Env>::Tensor;
 
-    fn last_state(&self) -> Option<Self::Tensor> {
-        self.next_states.last().cloned()
+    fn states(&self) -> Vec<Self::Tensor> {
+        self.states.iter().cloned().collect()
+    }
+
+    fn next_states(&self) -> Vec<Self::Tensor> {
+        self.next_states.iter().cloned().collect()
+    }
+
+    fn actions(&self) -> Vec<Self::Tensor> {
+        self.action.iter().cloned().collect()
+    }
+
+    fn rewards(&self) -> Vec<f32> {
+        self.rewards.clone()
+    }
+
+    fn terminated(&self) -> Vec<bool> {
+        todo!()
+    }
+
+    fn trancuated(&self) -> Vec<bool> {
+        todo!()
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
@@ -61,10 +97,6 @@ impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
 
     fn last_state_terminates(&self) -> bool {
         *self.terminated.last().unwrap() || *self.trancuated.last().unwrap()
-    }
-
-    fn rewards(&self) -> &[f32] {
-        todo!()
     }
 }
 
@@ -85,9 +117,31 @@ impl<B: Buffer> Clone for RcBufferWrapper<B> {
 impl<B: Buffer> Buffer for RcBufferWrapper<B> {
     type Tensor = <B as Buffer>::Tensor;
 
-    fn last_state(&self) -> Option<Self::Tensor> {
+    fn states(&self) -> Vec<Self::Tensor> {
         let buffer = self.0.borrow();
-        buffer.last_state()
+        buffer.states()
+    }
+
+    fn next_states(&self) -> Vec<Self::Tensor> {
+        let buffer = self.0.borrow();
+        buffer.next_states()
+    }
+
+    fn actions(&self) -> Vec<Self::Tensor> {
+        let buffer = self.0.borrow();
+        buffer.actions()
+    }
+
+    fn rewards(&self) -> Vec<f32> {
+        todo!()
+    }
+
+    fn terminated(&self) -> Vec<bool> {
+        todo!()
+    }
+
+    fn trancuated(&self) -> Vec<bool> {
+        todo!()
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
@@ -98,10 +152,6 @@ impl<B: Buffer> Buffer for RcBufferWrapper<B> {
     fn last_state_terminates(&self) -> bool {
         let buffer = self.0.borrow();
         buffer.last_state_terminates()
-    }
-
-    fn rewards(&self) -> &[f32] {
-        todo!()
     }
 }
 
@@ -123,9 +173,32 @@ impl<B: Buffer> Clone for ArcBufferWrapper<B> {
 impl<B: Buffer> Buffer for ArcBufferWrapper<B> {
     type Tensor = <B as Buffer>::Tensor;
 
-    fn last_state(&self) -> Option<Self::Tensor> {
+    fn states(&self) -> Vec<Self::Tensor> {
         let buffer = self.0.lock().unwrap();
-        buffer.last_state()
+        buffer.states()
+    }
+
+    fn next_states(&self) -> Vec<Self::Tensor> {
+        let buffer = self.0.lock().unwrap();
+        buffer.next_states()
+    }
+
+    fn actions(&self) -> Vec<Self::Tensor> {
+        let buffer = self.0.lock().unwrap();
+        buffer.actions()
+    }
+
+    fn rewards(&self) -> Vec<f32> {
+        let buffer = self.0.lock().unwrap();
+        buffer.rewards()
+    }
+
+    fn terminated(&self) -> Vec<bool> {
+        todo!()
+    }
+
+    fn trancuated(&self) -> Vec<bool> {
+        todo!()
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
@@ -136,9 +209,5 @@ impl<B: Buffer> Buffer for ArcBufferWrapper<B> {
     fn last_state_terminates(&self) -> bool {
         let buffer = self.0.lock().unwrap();
         buffer.last_state_terminates()
-    }
-
-    fn rewards(&self) -> &[f32] {
-        todo!()
     }
 }

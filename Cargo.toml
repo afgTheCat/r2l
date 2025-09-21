@@ -4,8 +4,6 @@ members = [
   "crates/r2l-gym",
   "crates/r2l-macros",
   "crates/r2l-examples",
-  # "crates/r2l-subproc-env",
-  "crates/r2l-verification",
   "crates/r2l-agents",
   "crates/r2l-candle-lm",
   "crates/r2l-buffer",
