@@ -1,13 +1,8 @@
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 use anyhow::Result;
-use bincode::{
-    Decode, Encode,
-    error::{DecodeError, EncodeError},
-};
-use candle_core::{Device, Tensor, safetensors::BufferedSafetensors};
+use candle_core::Tensor;
 use candle_nn::{Module, VarBuilder};
 use r2l_core::distributions::Policy;
-use safetensors::serialize;
 use std::f32;
 
 // TODO: we may want to resample the noise better than it is now
@@ -16,44 +11,6 @@ pub struct DiagGaussianDistribution {
     noise: Tensor,
     mu_net: ThreadSafeSequential,
     log_std: Tensor,
-}
-
-impl Encode for DiagGaussianDistribution {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> std::result::Result<(), bincode::error::EncodeError> {
-        let writer_config = bincode::config::standard();
-        self.mu_net.encode(encoder)?;
-        let data = [("noise", &self.noise), ("log_std", &self.log_std)];
-        bincode::encode_into_writer(
-            serialize(data, &None).map_err(|err| EncodeError::OtherString(err.to_string()))?,
-            encoder.writer(),
-            writer_config,
-        )
-    }
-}
-
-impl Decode<()> for DiagGaussianDistribution {
-    fn decode<D: bincode::de::Decoder<Context = ()>>(
-        decoder: &mut D,
-    ) -> std::result::Result<Self, bincode::error::DecodeError> {
-        let mu_net: ThreadSafeSequential = ThreadSafeSequential::decode(decoder)?;
-        let encoded_data: Vec<u8> = Vec::decode(decoder)?;
-        let buffered_safetensors = BufferedSafetensors::new(encoded_data)
-            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
-        let noise = buffered_safetensors
-            .load("noise", &Device::Cpu)
-            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
-        let log_std = buffered_safetensors
-            .load("log_std", &Device::Cpu)
-            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
-        Ok(Self {
-            noise,
-            mu_net,
-            log_std,
-        })
-    }
 }
 
 impl DiagGaussianDistribution {

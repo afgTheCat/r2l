@@ -1,6 +1,5 @@
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 use anyhow::Result;
-use bincode::{Decode, Encode};
 use candle_core::{Device, Error, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
@@ -14,41 +13,6 @@ pub struct CategoricalDistribution {
     action_size: usize,
     logits: ThreadSafeSequential,
     device: Device,
-}
-
-impl Decode<()> for CategoricalDistribution {
-    fn decode<D: bincode::de::Decoder<Context = ()>>(
-        decoder: &mut D,
-    ) -> std::result::Result<Self, bincode::error::DecodeError> {
-        // TODO: We need to implement this
-        let action_size = usize::decode(decoder)?;
-        let logits: ThreadSafeSequential = ThreadSafeSequential::decode(decoder)?;
-        let device_type = u32::decode(decoder)?;
-        let device = match device_type {
-            0 => Device::Cpu,
-            _ => todo!(),
-        };
-        Ok(Self {
-            logits,
-            action_size,
-            device,
-        })
-    }
-}
-
-impl Encode for CategoricalDistribution {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> std::result::Result<(), bincode::error::EncodeError> {
-        self.action_size.encode(encoder)?;
-        self.logits.encode(encoder)?;
-        match &self.device {
-            Device::Cpu => 0u32.encode(encoder),
-            Device::Cuda(_) => 1u32.encode(encoder),
-            _ => todo!(),
-        }
-    }
 }
 
 impl CategoricalDistribution {

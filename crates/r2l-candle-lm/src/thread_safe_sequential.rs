@@ -36,47 +36,6 @@ impl LinearLayer {
     }
 }
 
-impl Encode for LinearLayer {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> std::result::Result<(), bincode::error::EncodeError> {
-        let writer_config = bincode::config::standard();
-        bincode::encode_into_writer(
-            self.serialize()
-                .map_err(|err| EncodeError::OtherString(err.to_string()))?,
-            encoder.writer(),
-            writer_config,
-        )?;
-        self.weight_name.encode(encoder)?;
-        self.bias_name.encode(encoder)
-    }
-}
-
-impl Decode<()> for LinearLayer {
-    fn decode<D: bincode::de::Decoder<Context = ()>>(
-        decoder: &mut D,
-    ) -> std::result::Result<Self, bincode::error::DecodeError> {
-        let encoded_layer: Vec<u8> = Vec::decode(decoder)?;
-        let weight_name: String = String::decode(decoder)?;
-        let bias_name = String::decode(decoder)?;
-        let buffered_safetensors = BufferedSafetensors::new(encoded_layer)
-            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
-        let weight_tensor = buffered_safetensors
-            .load(&weight_name, &Device::Cpu)
-            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
-        let bias_tensor = buffered_safetensors
-            .load(&bias_name, &Device::Cpu)
-            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
-        let layer = Linear::new(weight_tensor, Some(bias_tensor));
-        Ok(Self {
-            layer,
-            weight_name,
-            bias_name,
-        })
-    }
-}
-
 impl Module for LinearLayer {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         self.layer.forward(xs)
@@ -86,34 +45,6 @@ impl Module for LinearLayer {
 #[derive(Debug, Clone)]
 pub struct ActivationLayer(pub Activation);
 
-impl Encode for ActivationLayer {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> std::result::Result<(), bincode::error::EncodeError> {
-        let writer_config = bincode::config::standard();
-        bincode::encode_into_writer(
-            bincode::serde::encode_to_vec(self.0, writer_config)?,
-            encoder.writer(),
-            writer_config,
-        )
-    }
-}
-
-impl Decode<()> for ActivationLayer {
-    fn decode<D: bincode::de::Decoder<Context = ()>>(
-        decoder: &mut D,
-    ) -> std::result::Result<Self, DecodeError> {
-        let reader_config = bincode::config::standard();
-        let acvitavtion_vec: Vec<u8> = Vec::decode(decoder)?;
-        let (activation, _) = bincode::serde::decode_from_slice(&acvitavtion_vec, reader_config)?;
-        // TODO: for some reason the one below does not work
-        // let activation: Activation =
-        //     bincode::serde::decode_from_reader(&mut decoder.reader(), reader_config).unwrap();
-        Ok(ActivationLayer(activation))
-    }
-}
-
 impl Module for ActivationLayer {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         self.0.forward(xs)
@@ -122,43 +53,6 @@ impl Module for ActivationLayer {
 
 #[derive(Debug, Clone)]
 pub struct ThreadSafeLayer(pub Either<LinearLayer, ActivationLayer>);
-
-impl Encode for ThreadSafeLayer {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> std::result::Result<(), bincode::error::EncodeError> {
-        match &self.0 {
-            Either::Left(l) => {
-                0u32.encode(encoder)?;
-                l.encode(encoder)
-            }
-            Either::Right(r) => {
-                1u32.encode(encoder)?;
-                r.encode(encoder)
-            }
-        }
-    }
-}
-
-impl Decode<()> for ThreadSafeLayer {
-    fn decode<D: bincode::de::Decoder<Context = ()>>(
-        decoder: &mut D,
-    ) -> std::result::Result<Self, DecodeError> {
-        let enum_type = u32::decode(decoder)?;
-        match enum_type {
-            0 => {
-                let layer = LinearLayer::decode(decoder)?;
-                Ok(Self(Either::Left(layer)))
-            }
-            1 => {
-                let activation: ActivationLayer = ActivationLayer::decode(decoder)?;
-                Ok(Self(Either::Right(activation)))
-            }
-            _ => unreachable!(),
-        }
-    }
-}
 
 impl ThreadSafeLayer {
     pub fn linear(linear: LinearLayer) -> Self {
@@ -223,67 +117,5 @@ impl ThreadSafeSequential {
     pub fn add_layer(mut self, layer: ThreadSafeLayer) -> Self {
         self.layers.push(layer);
         self
-    }
-}
-
-impl Encode for ThreadSafeSequential {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> std::result::Result<(), EncodeError> {
-        self.layers.encode(encoder)
-    }
-}
-
-impl Decode<()> for ThreadSafeSequential {
-    fn decode<D: de::Decoder<Context = ()>>(
-        decoder: &mut D,
-    ) -> std::result::Result<Self, DecodeError> {
-        let layers = Vec::decode(decoder)?;
-        Ok(Self { layers })
-    }
-}
-
-// TODO: we need to make sure that all serializations work always as intended. This needs to be
-// turned into a complete package at one point
-#[cfg(test)]
-mod test {
-    use super::{LinearLayer, ThreadSafeLayer, ThreadSafeSequential};
-    use crate::thread_safe_sequential::{ActivationLayer, build_sequential};
-    use candle_core::{DType, Device, Error, Result};
-    use candle_nn::{Activation, VarBuilder, VarMap};
-
-    #[test]
-    fn serialize_tss() -> Result<()> {
-        let varmap = VarMap::new();
-        let vb = VarBuilder::from_varmap(&varmap, DType::F32, &Device::Cpu);
-        let tss = build_sequential(10, &vec![10, 10], &vb, "value")?;
-        let config = bincode::config::standard();
-        let bin_thing = bincode::encode_to_vec(tss, config).map_err(Error::wrap)?;
-        let (decoded, _): (ThreadSafeSequential, usize) =
-            bincode::decode_from_slice(&bin_thing, config).map_err(Error::wrap)?;
-        println!("{decoded:#?}");
-        Ok(())
-    }
-
-    #[test]
-    fn serialize_tsl() -> Result<()> {
-        let varmap = VarMap::new();
-        let vb = VarBuilder::from_varmap(&varmap, DType::F32, &Device::Cpu);
-        let layer = LinearLayer::new(10, 10, &vb, "value")?;
-        let l1 = ThreadSafeLayer::linear(layer);
-        let config = bincode::config::standard();
-        let bin_thing = bincode::encode_to_vec(l1, config).map_err(Error::wrap)?;
-        let (decoded, _): (ThreadSafeLayer, usize) =
-            bincode::decode_from_slice(&bin_thing, config).map_err(Error::wrap)?;
-        println!("{decoded:#?}");
-
-        let activation = ActivationLayer(Activation::Relu);
-        let l2 = ThreadSafeLayer::activation(activation);
-        let bin_thing = bincode::encode_to_vec(l2, config).map_err(Error::wrap)?;
-        let (decoded, _): (ThreadSafeLayer, usize) =
-            bincode::decode_from_slice(&bin_thing, config).map_err(Error::wrap)?;
-        println!("{decoded:#?}");
-        Ok(())
     }
 }

@@ -3,7 +3,6 @@ pub mod categorical_distribution;
 pub mod diagonal_distribution;
 
 use anyhow::Result;
-use bincode::{Decode, Encode};
 use candle_core::Tensor;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
@@ -51,43 +50,6 @@ impl Policy for DistributionKind {
         match self {
             Self::Categorical(cat) => cat.resample_noise(),
             Self::DiagGaussian(diag) => diag.resample_noise(),
-        }
-    }
-}
-
-impl Encode for DistributionKind {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> std::result::Result<(), bincode::error::EncodeError> {
-        match self {
-            Self::Categorical(distr) => {
-                0u32.encode(encoder)?;
-                distr.encode(encoder)
-            }
-            Self::DiagGaussian(distr) => {
-                1u32.encode(encoder)?;
-                distr.encode(encoder)
-            }
-        }
-    }
-}
-
-impl Decode<()> for DistributionKind {
-    fn decode<D: bincode::de::Decoder<Context = ()>>(
-        decoder: &mut D,
-    ) -> std::result::Result<Self, bincode::error::DecodeError> {
-        let enum_type = u32::decode(decoder)?;
-        match enum_type {
-            0 => {
-                let distr: CategoricalDistribution = CategoricalDistribution::decode(decoder)?;
-                Ok(Self::Categorical(distr))
-            }
-            1 => {
-                let distr: DiagGaussianDistribution = DiagGaussianDistribution::decode(decoder)?;
-                Ok(Self::DiagGaussian(distr))
-            }
-            _ => unreachable!(),
         }
     }
 }
