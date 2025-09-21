@@ -1,5 +1,5 @@
 use crate::{EventBox, PPOProgress};
-use candle_core::{Device, Tensor};
+use candle_core::{Device, Tensor as CandleTensor};
 use r2l_agents::{
     LearningModuleKind,
     candle_agents::{ModuleWithValueFunction, ppo::HookResult, ppo2::PPOHooksTrait2},
@@ -55,7 +55,7 @@ impl PPOHook2 {
 }
 
 impl PPOHooksTrait2<LearningModuleKind> for PPOHook2 {
-    fn before_learning_hook<B: r2l_core::sampler2::Buffer<Tensor = candle_core::Tensor>>(
+    fn before_learning_hook<B: r2l_core::sampler2::Buffer<Tensor = CandleTensor>>(
         &mut self,
         _agent: &mut r2l_agents::candle_agents::ppo2::CandlePPOCore2<LearningModuleKind>,
         buffers: &[B],
@@ -77,7 +77,7 @@ impl PPOHooksTrait2<LearningModuleKind> for PPOHook2 {
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<B: r2l_core::sampler2::Buffer<Tensor = candle_core::Tensor>>(
+    fn rollout_hook<B: r2l_core::sampler2::Buffer<Tensor = CandleTensor>>(
         &mut self,
         buffers: &[B],
         agent: &mut r2l_agents::candle_agents::ppo2::CandlePPOCore2<LearningModuleKind>,
@@ -106,7 +106,7 @@ impl PPOHooksTrait2<LearningModuleKind> for PPOHook2 {
     ) -> candle_core::Result<HookResult> {
         let entropy = agent.module.get_policy_ref().entropy().unwrap();
         let device = entropy.device();
-        let entropy_loss = (Tensor::full(self.ent_coeff, (), &device)? * entropy.neg()?)?;
+        let entropy_loss = (CandleTensor::full(self.ent_coeff, (), &device)? * entropy.neg()?)?;
         self.progress
             .collect_batch_data(&data.ratio, &entropy_loss, value_loss, policy_loss)?;
         // TODO: this breaks the computation graph. We need to explore our options here. The most

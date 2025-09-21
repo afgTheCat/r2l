@@ -2,16 +2,18 @@ pub mod burn_agents;
 pub mod candle_agents;
 
 use crate::candle_agents::ModuleWithValueFunction;
-use candle_core::Tensor;
+use candle_core::Tensor as CandleTensor;
 use r2l_candle_lm::{
     distributions::DistributionKind,
-    learning_module2::PolicyValuesLosses,
-    learning_module2::{DecoupledActorCriticLM2, ParalellActorCriticLM2, SequentialValueFunction},
+    learning_module2::{
+        DecoupledActorCriticLM2, ParalellActorCriticLM2, PolicyValuesLosses,
+        SequentialValueFunction,
+    },
 };
 use r2l_core::{distributions::Policy, policies::LearningModule};
 
 pub struct GenericLearningModuleWithValueFunction<
-    P: Policy<Tensor = Tensor> + Clone,
+    P: Policy<Tensor = CandleTensor> + Clone,
     L: LearningModule<Losses = PolicyValuesLosses>,
 > {
     pub policy: P,
@@ -19,7 +21,7 @@ pub struct GenericLearningModuleWithValueFunction<
     pub value_function: SequentialValueFunction,
 }
 
-impl<P: Policy<Tensor = Tensor> + Clone, L: LearningModule<Losses = PolicyValuesLosses>>
+impl<P: Policy<Tensor = CandleTensor> + Clone, L: LearningModule<Losses = PolicyValuesLosses>>
     ModuleWithValueFunction for GenericLearningModuleWithValueFunction<P, L>
 {
     type P = P;
@@ -72,7 +74,7 @@ pub type LearningModuleKind =
     GenericLearningModuleWithValueFunction<DistributionKind, ActorCriticKind>;
 
 pub struct GenericLearningModuleWithValueFunction2 {
-    pub policy: Box<dyn Policy<Tensor = Tensor>>,
+    pub policy: Box<dyn Policy<Tensor = CandleTensor>>,
     pub learning_module: Box<dyn LearningModule<Losses = PolicyValuesLosses>>,
     pub value_function: SequentialValueFunction,
 }

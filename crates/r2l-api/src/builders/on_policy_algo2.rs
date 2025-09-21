@@ -10,11 +10,11 @@ use r2l_agents::{
     LearningModuleKind,
     candle_agents::{a2c::A2C, ppo::CandlePPO},
 };
-use r2l_buffer::Buffer;
 use r2l_core::{
     env::{Env, EnvBuilderTrait},
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     sampler::R2lSampler,
+    tensor::R2lBuffer,
 };
 use std::sync::Arc;
 
@@ -68,7 +68,7 @@ impl Default for A2CAlgoBuilder {
 }
 
 impl A2CAlgoBuilder {
-    pub fn build<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
+    pub fn build<E: Env<Tensor = R2lBuffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
         &self,
         env_builder: EB,
         n_envs: usize,
@@ -107,7 +107,7 @@ pub struct PPOAlgoBuilder {
 }
 
 impl PPOAlgoBuilder {
-    pub fn build<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
+    pub fn build<E: Env<Tensor = R2lBuffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
         &self,
         env_builder: EB,
         n_envs: usize,

@@ -21,8 +21,15 @@ smol = "2.0.2"
 crossbeam = { workspace = true }
 ringbuffer = "0.16.0"
 anyhow = { workspace = true }
+candle-core = { workspace = true, optional = true }
+burn = { workspace = true, optional = true }
 
 [dev-dependencies]
 r2l-api = { workspace = true }
-r2l-buffer = { workspace = true }
+# r2l-buffer = { workspace = true }
 candle-core = { workspace = true }
+
+[features]
+candle = ["dep:candle-core"]
+burn = ["dep:burn"]
+default = ["candle", "burn"]

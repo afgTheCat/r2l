@@ -1,6 +1,6 @@
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 use anyhow::Result;
-use candle_core::{Device, Error, Tensor};
+use candle_core::{Device, Error, Tensor as CandleTensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
@@ -42,9 +42,9 @@ impl CategoricalDistribution {
 }
 
 impl Policy for CategoricalDistribution {
-    type Tensor = Tensor;
+    type Tensor = CandleTensor;
 
-    fn get_action(&self, observation: Tensor) -> Result<Tensor> {
+    fn get_action(&self, observation: CandleTensor) -> Result<CandleTensor> {
         assert!(
             observation.rank() == 1,
             "Observation should be a flattened tensor"
@@ -57,13 +57,13 @@ impl Policy for CategoricalDistribution {
         // TODO: there is a one_hot function in candle. Should we use it?
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
-        let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
+        let action = CandleTensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
         Ok(action)
     }
 
-    fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
-        let states = Tensor::stack(&states, 0)?;
-        let actions = Tensor::stack(&actions, 0)?;
+    fn log_probs(&self, states: &[CandleTensor], actions: &[CandleTensor]) -> Result<CandleTensor> {
+        let states = CandleTensor::stack(&states, 0)?;
+        let actions = CandleTensor::stack(&actions, 0)?;
         let logits = self.logits.forward(&states)?;
         let log_probs = log_softmax(&logits, 1)?;
         let log_probs = actions.mul(&log_probs)?.sum(1)?;
@@ -74,7 +74,7 @@ impl Policy for CategoricalDistribution {
         todo!()
     }
 
-    fn entropy(&self) -> Result<Tensor> {
+    fn entropy(&self) -> Result<CandleTensor> {
         todo!()
     }
 }

@@ -1,6 +1,9 @@
 use std::fmt::Debug;
 
-use crate::{distributions::Policy, sampler2::Buffer, utils::rollout_buffer::RolloutBuffer};
+use crate::{
+    distributions::Policy, sampler2::Buffer, tensor::R2lTensor,
+    utils::rollout_buffer::RolloutBuffer,
+};
 use anyhow::Result;
 use bincode::{Decode, Encode};
 
@@ -73,7 +76,7 @@ pub struct Memory<T> {
 
 pub trait Env {
     //  TODO: we might want to introduce more than just one kind of Tensors.
-    type Tensor: Clone + Send + Sync + Debug + 'static;
+    type Tensor: R2lTensor;
 
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
     fn step(&mut self, action: Self::Tensor) -> Result<SnapShot<Self::Tensor>>;

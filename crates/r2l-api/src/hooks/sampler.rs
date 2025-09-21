@@ -1,12 +1,12 @@
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 use candle_core::{Device, Result, Tensor};
-use r2l_buffer::Buffer;
 use r2l_core::{
     distributions::Policy,
     env::Env,
     sampler::{
         SequntialStepBoundHooks, trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer,
     },
+    tensor::R2lBuffer,
 };
 
 pub struct EnvNormalizer {
@@ -54,22 +54,22 @@ impl EnvNormalizer {
         normalized_rew.clamp(-self.clip_rew, self.clip_rew)
     }
 
-    fn normalize_buffers<E: Env<Tensor = Buffer>>(
+    fn normalize_buffers<E: Env<Tensor = R2lBuffer>>(
         &mut self,
         states: &mut Vec<FixedSizeStateBuffer<E>>,
         device: &Device,
     ) -> Result<()> {
         let n_envs = states.len();
-        let obs: Vec<_> = states
+        let obs: Vec<Tensor> = states
             .iter_mut()
-            .map(|buff| buff.pop_last_state().to_candle_tensor(device))
+            .map(|buff| buff.pop_last_state().into())
             .collect();
         let obs = Tensor::stack(&obs, 0)?;
         self.obs_rms.update(&obs)?;
         let obs = self.normalize_obs(obs)?;
         for (state_idx, obs) in obs.chunk(n_envs, 0)?.into_iter().enumerate() {
             let obs = obs.squeeze(0)?;
-            states[state_idx].set_last_state(Buffer::from_candle_tensor(&obs));
+            states[state_idx].set_last_state(R2lBuffer::from_candle_tensor(&obs));
         }
         let rewards: Vec<_> = states.iter_mut().map(|buf| buf.pop_last_reward()).collect();
         let rewards = Tensor::from_slice(&rewards, rewards.len(), device)?;
@@ -97,7 +97,7 @@ impl<E: Env> SequntialStepBoundHooks<E> for Evaluator<E> {
     fn post_process_hook(&self) {}
 }
 
-impl<E: Env<Tensor = Buffer>> SequntialStepBoundHooks<E> for EnvNormalizer {
+impl<E: Env<Tensor = R2lBuffer>> SequntialStepBoundHooks<E> for EnvNormalizer {
     fn process_last_step(
         &mut self,
         _distr: &dyn Policy<Tensor = E::Tensor>,
@@ -125,7 +125,7 @@ impl<E: Env> EvaluatorNormalizer<E> {
     }
 }
 
-impl<E: Env<Tensor = Buffer>> SequntialStepBoundHooks<E> for EvaluatorNormalizer<E> {
+impl<E: Env<Tensor = R2lBuffer>> SequntialStepBoundHooks<E> for EvaluatorNormalizer<E> {
     fn process_last_step(
         &mut self,
         distr: &dyn Policy<Tensor = E::Tensor>,

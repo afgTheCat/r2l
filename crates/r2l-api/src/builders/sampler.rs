@@ -1,5 +1,4 @@
 use crate::builders::sampler_hooks2::EvaluatorNormalizerOptions;
-use r2l_buffer::Buffer;
 use r2l_core::{
     env::{Env, EnvBuilderTrait},
     sampler::{
@@ -19,6 +18,7 @@ use r2l_core::{
         },
     },
     sampler2::{R2lSampler2, env_pools::builder::EnvPoolBuilder},
+    tensor::R2lBuffer,
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -175,7 +175,7 @@ pub struct SamplerType {
 impl SamplerType {
     // TODO: do we need the static bound here?
     pub fn build_with_builder_type<
-        E: Env<Tensor = Buffer> + 'static,
+        E: Env<Tensor = R2lBuffer> + 'static,
         EB: EnvBuilderTrait<Env = E>,
     >(
         &self,

@@ -1,6 +1,6 @@
 use crate::candle_agents::ModuleWithValueFunction;
 use anyhow::Result;
-use candle_core::{Device, Tensor};
+use candle_core::{Device, Tensor as CandleTensor};
 use r2l_candle_lm::{
     candle_rollout_buffer::{
         CandleRolloutBuffer, RolloutBatch, RolloutBatchIterator, calculate_advantages_and_returns,
@@ -48,7 +48,7 @@ impl<M: ModuleWithValueFunction> Agent for VPG<M> {
         self.module.get_inference_policy()
     }
 
-    fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer<CandleTensor>>) -> Result<()> {
         let rollouts: Vec<CandleRolloutBuffer> = rollouts
             .into_iter()
             .map(|rb| CandleRolloutBuffer::from(rb))

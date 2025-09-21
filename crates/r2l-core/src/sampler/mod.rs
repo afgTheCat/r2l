@@ -10,6 +10,7 @@ use crate::{
         },
         trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer,
     },
+    tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
@@ -32,7 +33,7 @@ impl<D: Policy + Clone, T: Clone + Send + Sync + Debug + 'static> PolicyWrapper<
     }
 }
 
-impl<D: Policy + Clone, T: Send + Clone + Sync + Debug + 'static> Policy for PolicyWrapper<D, T>
+impl<D: Policy + Clone, T: R2lTensor> Policy for PolicyWrapper<D, T>
 where
     T: From<D::Tensor>,
     T: Into<D::Tensor>,

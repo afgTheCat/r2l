@@ -3,10 +3,10 @@ use crate::{
     utils::{evaluator::Evaluator, running_mean::RunningMeanStd},
 };
 use candle_core::{DType, Device, Tensor};
-use r2l_buffer::Buffer;
 use r2l_core::{
     env::{Env, EnvBuilderTrait, EnvironmentDescription},
     sampler::SequntialStepBoundHooks,
+    tensor::R2lBuffer,
 };
 use std::sync::{Arc, Mutex};
 
@@ -152,7 +152,7 @@ impl EvaluatorNormalizerOptions {
 }
 
 impl EvaluatorNormalizerOptions {
-    pub fn build<E: Env<Tensor = Buffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
+    pub fn build<E: Env<Tensor = R2lBuffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
         &self,
         env_description: EnvironmentDescription<<EB::Env as Env>::Tensor>,
         env_builder: &EB,

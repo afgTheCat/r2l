@@ -2,7 +2,7 @@ use crate::sequential::Sequential;
 use burn::{
     module::Module,
     prelude::Backend,
-    tensor::{Tensor, TensorData, activation::softmax},
+    tensor::{Tensor as BurnTensor, TensorData, activation::softmax},
 };
 use r2l_core::distributions::Policy;
 use rand::distr::Distribution as RandDistributiion;
@@ -26,18 +26,18 @@ impl<B: Backend> CategoricalDistribution<B> {
 }
 
 impl<B: Backend> Policy for CategoricalDistribution<B> {
-    type Tensor = Tensor<B, 1>;
+    type Tensor = BurnTensor<B, 1>;
 
     fn get_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
         let device: <B as Backend>::Device = Default::default();
-        let observation: Tensor<B, 2> = observation.unsqueeze();
+        let observation: BurnTensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation);
         let action_probs: Vec<f32> = softmax(logits, 1).to_data().to_vec().unwrap();
         let distribution = WeightedIndex::new(&action_probs).unwrap();
         let action = distribution.sample(&mut rand::rng());
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
-        Ok(Tensor::from_data(
+        Ok(BurnTensor::from_data(
             TensorData::new(action_mask, vec![self.action_size]),
             &device,
         ))
@@ -49,8 +49,8 @@ impl<B: Backend> Policy for CategoricalDistribution<B> {
         states: &[Self::Tensor],
         actions: &[Self::Tensor],
     ) -> anyhow::Result<Self::Tensor> {
-        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
-        let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
+        let states: BurnTensor<B, 2> = BurnTensor::stack(states.to_vec(), 0);
+        let actions: BurnTensor<B, 2> = BurnTensor::stack(actions.to_vec(), 0);
         let logits = self.logits.forward(states);
         let log_probs = softmax(logits, 1);
         let log_probs = (actions * log_probs).sum_dim(1);

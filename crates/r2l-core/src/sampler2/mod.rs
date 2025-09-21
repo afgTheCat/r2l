@@ -4,16 +4,18 @@ pub mod env_pools;
 use crate::{
     distributions::Policy,
     env::{Env, EnvironmentDescription, Memory, Sampler2, SnapShot},
+    policies::ValueFunction,
     rng::RNG,
     sampler::PolicyWrapper,
     sampler2::env_pools::builder::{BufferKind, EnvPoolType},
+    tensor::R2lTensor,
 };
 use anyhow::Result;
 use rand::Rng;
 use std::{fmt::Debug, marker::PhantomData};
 
 pub trait Buffer: Sized {
-    type Tensor: Clone + Send + Sync + Debug + 'static;
+    type Tensor: R2lTensor;
 
     fn states(&self) -> Vec<Self::Tensor>;
 
@@ -85,6 +87,17 @@ pub trait Buffer: Sized {
             trancuated,
         });
     }
+
+    // can we or nah? probably want a tensor trait
+    fn gae_output(
+        &self,
+        value_func: &impl ValueFunction<Tensor = Self::Tensor>,
+        gamma: f32,
+        lambda: f32,
+    ) -> (Vec<f32>, Vec<f32>) {
+        for i in (0..self.total_steps()).rev() {}
+        todo!()
+    }
 }
 
 pub struct BufferConverter<'a, B: Buffer, T: Clone + Send + Sync + Debug + 'static> {
@@ -104,7 +117,7 @@ impl<'a, B: Buffer, T: Clone + Send + Sync + Debug + 'static> BufferConverter<'a
     }
 }
 
-impl<'a, T: Clone + Send + Sync + Debug + 'static, B: Buffer> Buffer for BufferConverter<'a, B, T>
+impl<'a, T: R2lTensor, B: Buffer> Buffer for BufferConverter<'a, B, T>
 where
     <B as Buffer>::Tensor: Into<T>,
 {

@@ -1,8 +1,9 @@
+use crate::tensor::R2lTensor;
 use anyhow::Result;
 use std::fmt::Debug;
 
 pub trait Policy: Send + Debug + 'static {
-    type Tensor: Clone + Send + Sync + Debug + 'static;
+    type Tensor: R2lTensor;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
 

@@ -4,7 +4,7 @@ use crate::{
     thread_safe_sequential::ThreadSafeSequential,
 };
 use anyhow::{Ok, Result};
-use candle_core::Tensor;
+use candle_core::Tensor as CandleTensor;
 use candle_nn::{Module, Optimizer};
 use r2l_core::policies::{LearningModule, ValueFunction};
 
@@ -65,10 +65,10 @@ pub struct SequentialValueFunction {
 
 // TODO: maybe value function could be a subtrait on LearningModule?
 impl ValueFunction for SequentialValueFunction {
-    type Tensor = Tensor;
+    type Tensor = CandleTensor;
 
-    fn calculate_values(&self, observations: &[Tensor]) -> Result<Tensor> {
-        let observations = Tensor::stack(observations, 0)?;
+    fn calculate_values(&self, observations: &[CandleTensor]) -> Result<CandleTensor> {
+        let observations = CandleTensor::stack(observations, 0)?;
         let value = self.value_net.forward(&observations)?.squeeze(1)?;
         Ok(value)
     }

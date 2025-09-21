@@ -17,7 +17,7 @@ burn = { workspace = true }
 r2l-candle-lm = { workspace = true }
 r2l-burn-lm = { workspace = true }
 crossbeam = { workspace = true }
-r2l-buffer = { workspace = true }
+# r2l-buffer = { workspace = true }
 ringbuffer = "0.16.0"
 rand = "0.9.0"
 anyhow = { workspace = true }

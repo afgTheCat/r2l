@@ -1,6 +1,6 @@
 use crate::candle_agents::ModuleWithValueFunction;
 use anyhow::Result;
-use candle_core::{Device, Tensor};
+use candle_core::{Device, Tensor as CandleTensor};
 use r2l_candle_lm::{
     candle_rollout_buffer::{
         CandleRolloutBuffer, RolloutBatch, RolloutBatchIterator, calculate_advantages_and_returns,
@@ -25,7 +25,7 @@ pub struct PPOBatchData {
     pub logp: Logp,
     pub values_pred: ValuesPred,
     pub logp_diff: LogpDiff,
-    pub ratio: Tensor,
+    pub ratio: CandleTensor,
 }
 
 macro_rules! process_hook_result {
@@ -113,7 +113,7 @@ impl<M: ModuleWithValueFunction> CandlePPO<M> {
             let clip_adv = (ratio.clamp(1. - ppo.clip_range, 1. + ppo.clip_range)?
                 * batch.advantages.clone())?;
             let mut policy_loss = PolicyLoss(
-                Tensor::minimum(&(&ratio * &batch.advantages)?, &clip_adv)?
+                CandleTensor::minimum(&(&ratio * &batch.advantages)?, &clip_adv)?
                     .neg()?
                     .mean_all()?,
             );
@@ -168,7 +168,7 @@ impl<M: ModuleWithValueFunction> Agent for CandlePPO<M> {
         self.ppo.module.get_inference_policy()
     }
 
-    fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer<CandleTensor>>) -> Result<()> {
         let mut rollouts: Vec<CandleRolloutBuffer> = rollouts
             .into_iter()
             .map(CandleRolloutBuffer::from)

@@ -1,6 +1,6 @@
 use crate::candle_agents::{ModuleWithValueFunction, ppo::HookResult};
 use anyhow::Result;
-use candle_core::{Device, Tensor};
+use candle_core::{Device, Tensor as CandleTensor};
 use r2l_candle_lm::{
     candle_rollout_buffer::{
         CandleRolloutBuffer, RolloutBatchIterator, calculate_advantages_and_returns,
@@ -98,7 +98,7 @@ impl<M: ModuleWithValueFunction> Agent for A2C<M> {
         self.a2c.module.get_inference_policy()
     }
 
-    fn learn(&mut self, rollouts: Vec<RolloutBuffer<Tensor>>) -> Result<()> {
+    fn learn(&mut self, rollouts: Vec<RolloutBuffer<CandleTensor>>) -> Result<()> {
         let mut rollouts: Vec<CandleRolloutBuffer> = rollouts
             .into_iter()
             .map(|rb| CandleRolloutBuffer::from(rb))

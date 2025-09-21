@@ -3,7 +3,7 @@ pub mod categorical_distribution;
 pub mod diagonal_distribution;
 
 use anyhow::Result;
-use candle_core::Tensor;
+use candle_core::Tensor as CandleTensor;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
 use r2l_core::distributions::Policy;
@@ -16,7 +16,7 @@ pub enum DistributionKind {
 }
 
 impl Policy for DistributionKind {
-    type Tensor = Tensor;
+    type Tensor = CandleTensor;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         match self {
@@ -25,7 +25,7 @@ impl Policy for DistributionKind {
         }
     }
 
-    fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Tensor> {
+    fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.log_probs(states, actions),
             Self::DiagGaussian(diag) => diag.log_probs(states, actions),

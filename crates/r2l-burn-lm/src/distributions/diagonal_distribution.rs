@@ -3,18 +3,18 @@ use anyhow::Result;
 use burn::module::Module;
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape};
-use burn::{prelude::Backend, tensor::Tensor};
+use burn::{prelude::Backend, tensor::Tensor as BurnTensor};
 use r2l_core::distributions::Policy;
 
 #[derive(Debug, Module)]
 pub struct DiagGaussianDistribution<B: Backend> {
     pub mu_net: Sequential<B>,
     pub value_net: Sequential<B>,
-    pub log_std: Tensor<B, 2>,
+    pub log_std: BurnTensor<B, 2>,
 }
 
 impl<B: Backend> DiagGaussianDistribution<B> {
-    pub fn new(mu_net: Sequential<B>, value_net: Sequential<B>, log_std: Tensor<B, 2>) -> Self {
+    pub fn new(mu_net: Sequential<B>, value_net: Sequential<B>, log_std: BurnTensor<B, 2>) -> Self {
         Self {
             mu_net,
             value_net,
@@ -27,7 +27,7 @@ impl<B: Backend> DiagGaussianDistribution<B> {
         let action_size = *mu_layers.last().unwrap();
         let mu_net: Sequential<B> = Sequential::build(mu_layers);
         let value_net: Sequential<B> = Sequential::build(value_layers);
-        let log_std: Tensor<B, 2> = Tensor::random(
+        let log_std: BurnTensor<B, 2> = BurnTensor::random(
             Shape::new([action_size]),
             burn::tensor::Distribution::Normal(0., 1.),
             &device,
@@ -41,14 +41,14 @@ impl<B: Backend> DiagGaussianDistribution<B> {
 }
 
 impl<B: Backend> Policy for DiagGaussianDistribution<B> {
-    type Tensor = Tensor<B, 1>;
+    type Tensor = BurnTensor<B, 1>;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device: <B as Backend>::Device = Default::default();
-        let observation: Tensor<B, 2> = observation.unsqueeze();
+        let observation: BurnTensor<B, 2> = observation.unsqueeze();
         let mu = self.mu_net.forward(observation);
         let std = self.log_std.clone().exp();
-        let noise = Tensor::random(mu.shape(), BurnDistribution::Normal(0., 1.), &device);
+        let noise = BurnTensor::random(mu.shape(), BurnDistribution::Normal(0., 1.), &device);
         let action = mu + noise * std;
         Ok(action.squeeze(0))
     }

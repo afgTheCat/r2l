@@ -1,7 +1,4 @@
-use bincode::{
-    Decode, Encode,
-    error::{DecodeError, EncodeError},
-};
+use candle_core::Tensor as CandleTensor;
 use candle_core::{Device, Result, Tensor};
 use r2l_core::{
     policies::ValueFunction,
@@ -10,88 +7,25 @@ use r2l_core::{
 };
 use rand::seq::SliceRandom;
 
-pub struct CandleRolloutBuffer(pub RolloutBuffer<Tensor>);
+pub struct CandleRolloutBuffer(pub RolloutBuffer<CandleTensor>);
 
-impl From<RolloutBuffer<Tensor>> for CandleRolloutBuffer {
-    fn from(value: RolloutBuffer<Tensor>) -> Self {
+impl From<RolloutBuffer<CandleTensor>> for CandleRolloutBuffer {
+    fn from(value: RolloutBuffer<CandleTensor>) -> Self {
         Self(value)
     }
 }
-
-impl Encode for CandleRolloutBuffer {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> std::result::Result<(), bincode::error::EncodeError> {
-        let writer_config = bincode::config::standard();
-        let states = self
-            .0
-            .states
-            .iter()
-            .map(|t| t.to_vec1::<f32>())
-            .collect::<Result<Vec<_>>>()
-            .map_err(|err| EncodeError::OtherString(err.to_string()))?;
-        bincode::encode_into_writer(&states, encoder.writer(), writer_config)?;
-        let actions = self
-            .0
-            .actions
-            .iter()
-            .map(|t| t.to_vec1::<f32>())
-            .collect::<Result<Vec<_>>>()
-            .map_err(|err| EncodeError::OtherString(err.to_string()))?;
-        bincode::encode_into_writer(&actions, encoder.writer(), writer_config)?;
-        bincode::encode_into_writer(&self.0.rewards, encoder.writer(), writer_config)?;
-        bincode::encode_into_writer(&self.0.dones, encoder.writer(), writer_config)?;
-        Ok(())
-    }
-}
-
-// TODO: we need to add the device into the context here to be able to use Tensors on the GPU
-impl<C> Decode<C> for CandleRolloutBuffer {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> std::result::Result<Self, bincode::error::DecodeError> {
-        let states_raw: Vec<Vec<f32>> = Vec::decode(decoder)?;
-        let states = states_raw
-            .into_iter()
-            .map(|v| Tensor::from_slice(&v, v.len(), &Device::Cpu))
-            .collect::<Result<Vec<_>>>()
-            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
-        let actions_raw: Vec<Vec<f32>> = Vec::decode(decoder)?;
-        let actions = actions_raw
-            .into_iter()
-            .map(|v| Tensor::from_slice(&v, v.len(), &Device::Cpu))
-            .collect::<Result<Vec<_>>>()
-            .map_err(|err| DecodeError::OtherString(err.to_string()))?;
-        let rewards: Vec<f32> = Vec::decode(decoder)?;
-        let dones: Vec<bool> = Vec::decode(decoder)?;
-        Ok(Self(RolloutBuffer {
-            states,
-            actions,
-            rewards,
-            dones,
-        }))
-    }
-}
-
-// TODO: readd this
-// impl<'de, C> BorrowDecode<'de, C> for CandleRolloutBuffer {
-//     fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = C>>(
-//         decoder: &mut D,
-//     ) -> std::result::Result<Self, bincode::error::DecodeError> {
-//         RolloutBuffer::decode(decoder)
-//     }
-// }
 
 impl CandleRolloutBuffer {
     // These methods should be a function of the trajectory buffer
     pub fn calculate_advantages_and_returns(
         &self,
-        value_func: &impl ValueFunction<Tensor = Tensor>,
+        value_func: &impl ValueFunction<Tensor = CandleTensor>,
         gamma: f32,
         lambda: f32,
     ) -> Result<(Vec<f32>, Vec<f32>)> {
-        let values_stacked = value_func.calculate_values(&self.0.states).unwrap();
+        let values_stacked = value_func
+            .calculate_values(&self.0.states.iter().map(|t| t.clone()).collect::<Vec<_>>())
+            .unwrap();
         let values: Vec<f32> = values_stacked.to_vec1()?;
         let total_steps = self.0.rewards.len();
         let mut advantages: Vec<f32> = vec![0.; total_steps];
@@ -114,8 +48,8 @@ impl CandleRolloutBuffer {
 }
 
 pub struct RolloutBatch {
-    pub observations: Vec<Tensor>,
-    pub actions: Vec<Tensor>,
+    pub observations: Vec<CandleTensor>,
+    pub actions: Vec<CandleTensor>,
     pub returns: Tensor,
     pub advantages: Tensor,
     pub logp_old: Tensor,
@@ -123,7 +57,7 @@ pub struct RolloutBatch {
 
 pub fn calculate_advantages_and_returns(
     rollouts: &[CandleRolloutBuffer],
-    value_func: &impl ValueFunction<Tensor = Tensor>,
+    value_func: &impl ValueFunction<Tensor = CandleTensor>,
     gamma: f32,
     lambda: f32,
 ) -> (Advantages, Returns) {
