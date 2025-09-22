@@ -17,7 +17,10 @@ use r2l_core::{
             variable_size_buffer::VariableSizedTrajectoryBuffer,
         },
     },
-    sampler2::{R2lSampler2, env_pools::builder::EnvPoolBuilder},
+    sampler2::{
+        Preprocessor, R2lSampler2,
+        env_pools::builder::{BufferKind, EnvBuilderType2, EnvPoolBuilder},
+    },
     tensor::R2lBuffer,
 };
 use std::{collections::HashMap, sync::Arc};
@@ -229,8 +232,18 @@ pub struct SamplerType2 {
 impl SamplerType2 {
     pub fn build<EB: EnvBuilderTrait>(
         &self,
-        env_builder_type: EnvBuilderType<EB>,
+        env_builder_type: EnvBuilderType2<EB>,
     ) -> R2lSampler2<EB::Env> {
-        todo!()
+        let env_builder = env_builder_type.env_builder();
+        let n_envs = env_builder_type.num_envs();
+        let env_pool = self.env_pool_builder.build(env_builder_type);
+        let env_description = env_pool.env_description();
+        let preprocessor =
+            self.preprocessor_options
+                .build2(env_description, env_builder.as_ref(), n_envs);
+        R2lSampler2 {
+            env_pool,
+            preprocessor,
+        }
     }
 }

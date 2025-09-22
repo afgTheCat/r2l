@@ -55,7 +55,10 @@ pub struct Advantages(pub Vec<Vec<f32>>);
 
 impl Advantages {
     pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
-        todo!()
+        indicies
+            .iter()
+            .map(|(buff_idx, idx)| self.0[*buff_idx][*idx])
+            .collect()
     }
 
     pub fn normalize(&mut self) {
@@ -76,7 +79,10 @@ pub struct Returns(pub Vec<Vec<f32>>);
 
 impl Returns {
     pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
-        todo!()
+        indicies
+            .iter()
+            .map(|(buff_idx, idx)| self.0[*buff_idx][*idx])
+            .collect()
     }
 }
 
@@ -85,6 +91,9 @@ pub struct Logps(pub Vec<Vec<f32>>);
 
 impl Logps {
     pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
-        todo!()
+        indicies
+            .iter()
+            .map(|(buff_idx, idx)| self.0[*buff_idx][*idx])
+            .collect()
     }
 }

@@ -5,14 +5,12 @@ use r2l_agents::{
     candle_agents::{ModuleWithValueFunction, ppo::HookResult, ppo2::PPOHooksTrait2},
 };
 use r2l_api::builders::{
-    agents::ppo::PPOBuilder,
-    sampler::{EnvBuilderType, EnvPoolType, SamplerType, SamplerType2},
-    sampler_hooks2::EvaluatorNormalizerOptions,
+    agents::ppo::PPOBuilder, sampler::SamplerType2, sampler_hooks2::EvaluatorNormalizerOptions,
 };
 use r2l_core::{
     distributions::Policy,
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks2, LearningSchedule, OnPolicyAlgorithm2},
-    sampler2::env_pools::builder::EnvPoolBuilder,
+    sampler2::env_pools::builder::{EnvBuilderType2, EnvPoolBuilder},
 };
 use std::sync::{Arc, mpsc::Sender};
 
@@ -140,7 +138,7 @@ pub fn train_ppo2(tx: Sender<EventBox>) -> anyhow::Result<()> {
         env_pool_builder: EnvPoolBuilder::default(),
         preprocessor_options: EvaluatorNormalizerOptions::default(),
     }
-    .build(EnvBuilderType::EnvBuilder {
+    .build(EnvBuilderType2::EnvBuilder {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
         n_envs: 1,
     });

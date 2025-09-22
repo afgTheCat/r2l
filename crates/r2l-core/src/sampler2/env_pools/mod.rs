@@ -2,7 +2,7 @@ pub mod builder;
 
 use crate::{
     distributions::Policy,
-    env::Env,
+    env::{Env, EnvironmentDescription},
     sampler2::{Buffer, CollectionBound},
 };
 use crossbeam::channel::{Receiver, Sender};
@@ -230,6 +230,10 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> VecEnvWorker<E, B> 
         }
         self.buffer.clone()
     }
+
+    pub fn environment_description(&self) -> EnvironmentDescription<E::Tensor> {
+        self.env.env_description()
+    }
 }
 
 pub struct VecEnvPool<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> {
@@ -238,6 +242,10 @@ pub struct VecEnvPool<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> {
 }
 
 impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> VecEnvPool<E, B> {
+    fn environment_description(&self) -> EnvironmentDescription<E::Tensor> {
+        self.workers[0].environment_description()
+    }
+
     fn collection_bound(&self) -> CollectionBound {
         self.collection_bound.clone()
     }

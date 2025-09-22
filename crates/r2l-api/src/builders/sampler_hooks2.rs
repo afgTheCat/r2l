@@ -6,6 +6,7 @@ use candle_core::{DType, Device, Tensor};
 use r2l_core::{
     env::{Env, EnvBuilderTrait, EnvironmentDescription},
     sampler::SequntialStepBoundHooks,
+    sampler2::{Preprocessor, env_pools::builder::BufferKind},
     tensor::R2lBuffer,
 };
 use std::sync::{Arc, Mutex};
@@ -158,6 +159,53 @@ impl EvaluatorNormalizerOptions {
         env_builder: &EB,
         n_envs: usize,
     ) -> Option<Box<dyn SequntialStepBoundHooks<EB::Env>>> {
+        match &self {
+            EvaluatorNormalizerOptions {
+                evaluator_options: None,
+                normalizer_options: None,
+                device,
+            } => None,
+            EvaluatorNormalizerOptions {
+                evaluator_options: Some(eval_options),
+                normalizer_options: None,
+                device,
+            } => {
+                let device = device.as_ref().unwrap().clone();
+                let evaluator = eval_options.build(env_builder, n_envs, device);
+                Some(Box::new(evaluator))
+            }
+            EvaluatorNormalizerOptions {
+                evaluator_options: None,
+                normalizer_options: Some(norm_options),
+                device,
+            } => {
+                let device = device.as_ref().unwrap().clone();
+                let normalizer = norm_options.build(env_description, n_envs, &device);
+                Some(Box::new(normalizer))
+            }
+            EvaluatorNormalizerOptions {
+                evaluator_options: Some(eval_options),
+                normalizer_options: Some(norm_options),
+                device,
+            } => {
+                let device = device.as_ref().unwrap().clone();
+                let evaluator = eval_options.build(env_builder, n_envs, device.clone());
+                let normalizer = norm_options.build(env_description, n_envs, &device);
+                Some(Box::new(EvaluatorNormalizer {
+                    evaluator,
+                    normalizer,
+                    device,
+                }))
+            }
+        }
+    }
+
+    pub fn build2<E: Env + 'static, EB: EnvBuilderTrait<Env = E>>(
+        &self,
+        env_description: EnvironmentDescription<<EB::Env as Env>::Tensor>,
+        env_builder: &EB,
+        n_envs: usize,
+    ) -> Option<Box<dyn Preprocessor<E, BufferKind<E>>>> {
         match &self {
             EvaluatorNormalizerOptions {
                 evaluator_options: None,

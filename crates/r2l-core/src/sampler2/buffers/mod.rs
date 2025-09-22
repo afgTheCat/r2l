@@ -28,15 +28,15 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
     }
 
     fn rewards(&self) -> Vec<f32> {
-        todo!()
+        self.rewards.iter().cloned().collect()
     }
 
     fn terminated(&self) -> Vec<bool> {
-        todo!()
+        self.terminated.iter().cloned().collect()
     }
 
     fn trancuated(&self) -> Vec<bool> {
-        todo!()
+        self.trancuated.iter().cloned().collect()
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
@@ -133,15 +133,18 @@ impl<B: Buffer> Buffer for RcBufferWrapper<B> {
     }
 
     fn rewards(&self) -> Vec<f32> {
-        todo!()
+        let buffer = self.0.borrow();
+        buffer.rewards()
     }
 
     fn terminated(&self) -> Vec<bool> {
-        todo!()
+        let buffer = self.0.borrow();
+        buffer.terminated()
     }
 
     fn trancuated(&self) -> Vec<bool> {
-        todo!()
+        let buffer = self.0.borrow();
+        buffer.trancuated()
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {

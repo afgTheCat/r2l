@@ -170,13 +170,8 @@ where
 }
 
 pub trait Preprocessor<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> {
-    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = E::Tensor>, buffers: &mut Vec<B>) {
-    }
+    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = E::Tensor>, buffers: &mut Vec<B>);
 }
-
-pub struct EmptyPreProcessor;
-
-impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> Preprocessor<E, B> for EmptyPreProcessor {}
 
 // TODO: we need better names for this. StepBound is basically step n times, while episode bound
 // basically says step steps times at least until the last state is done
@@ -187,8 +182,8 @@ pub enum CollectionBound {
 }
 
 pub struct R2lSampler2<E: Env> {
-    env_pool: EnvPoolType<E>,
-    preprocessor: Option<Box<dyn Preprocessor<E, BufferKind<E>>>>,
+    pub env_pool: EnvPoolType<E>,
+    pub preprocessor: Option<Box<dyn Preprocessor<E, BufferKind<E>>>>,
 }
 
 impl<E: Env> R2lSampler2<E> {
@@ -202,8 +197,8 @@ impl<E: Env> R2lSampler2<E> {
         }
     }
 
-    pub fn env_description(&self) -> EnvironmentDescription<E> {
-        todo!()
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
+        self.env_pool.env_description()
     }
 }
 

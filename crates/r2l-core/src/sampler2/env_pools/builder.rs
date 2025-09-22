@@ -1,5 +1,5 @@
 use crate::{
-    env::{Env, EnvBuilderTrait, Memory},
+    env::{Env, EnvBuilderTrait, EnvironmentDescription, Memory},
     sampler::trajectory_buffers::{
         fixed_size_buffer::FixedSizeStateBuffer, variable_size_buffer::VariableSizedStateBuffer,
     },
@@ -17,12 +17,19 @@ use std::{
 };
 
 // how the environment builders should be injected to to the holder
-pub enum EnvBuilderType<EB: EnvBuilderTrait> {
+pub enum EnvBuilderType2<EB: EnvBuilderTrait> {
     EnvBuilder { builder: Arc<EB>, n_envs: usize },
     EnvBuilderVec { builders: Vec<Arc<EB>> },
 }
 
-impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
+impl<EB: EnvBuilderTrait> EnvBuilderType2<EB> {
+    pub fn env_builder(&self) -> Arc<EB> {
+        match &self {
+            Self::EnvBuilder { builder, .. } => builder.clone(),
+            Self::EnvBuilderVec { builders } => builders[0].clone(),
+        }
+    }
+
     fn to_thread_pool(
         &self,
         buffer_type: BufferType,
@@ -31,7 +38,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
     {
         let mut channels = HashMap::new();
         match self {
-            EnvBuilderType::EnvBuilder { builder, n_envs } => {
+            EnvBuilderType2::EnvBuilder { builder, n_envs } => {
                 for id in 0..*n_envs {
                     let (command_tx, command_rx) = crossbeam::channel::unbounded();
                     let (result_tx, result_rx) = crossbeam::channel::unbounded();
@@ -47,7 +54,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
                     });
                 }
             }
-            EnvBuilderType::EnvBuilderVec { builders } => {
+            EnvBuilderType2::EnvBuilderVec { builders } => {
                 for (id, builder) in builders.iter().enumerate() {
                     let (command_tx, command_rx) = crossbeam::channel::unbounded();
                     let (result_tx, result_rx) = crossbeam::channel::unbounded();
@@ -76,7 +83,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
         collection_bound: CollectionBound,
     ) -> VecEnvPool<<EB as EnvBuilderTrait>::Env, RcBufferKind<<EB as EnvBuilderTrait>::Env>> {
         let workers = match self {
-            EnvBuilderType::EnvBuilder { builder, n_envs } => {
+            EnvBuilderType2::EnvBuilder { builder, n_envs } => {
                 let mut workers = vec![];
                 for _ in 0..*n_envs {
                     let buffer = buffer_type.build_rc(collection_bound.clone());
@@ -85,7 +92,7 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
                 }
                 workers
             }
-            EnvBuilderType::EnvBuilderVec { builders } => {
+            EnvBuilderType2::EnvBuilderVec { builders } => {
                 let mut workers = vec![];
                 for builder in builders {
                     let buffer = buffer_type.build_rc(collection_bound.clone());
@@ -98,6 +105,13 @@ impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
         VecEnvPool {
             workers,
             collection_bound,
+        }
+    }
+
+    pub fn num_envs(&self) -> usize {
+        match self {
+            Self::EnvBuilder { n_envs, .. } => *n_envs,
+            Self::EnvBuilderVec { builders } => builders.len(),
         }
     }
 }
@@ -216,27 +230,45 @@ impl<E: Env> Buffer for RcBufferKind<E> {
     type Tensor = <E as Env>::Tensor;
 
     fn states(&self) -> Vec<Self::Tensor> {
-        todo!()
+        match self {
+            Self::FixedSize(rc_buf) => rc_buf.states(),
+            Self::VariableSized(rc_buf) => rc_buf.states(),
+        }
     }
 
     fn next_states(&self) -> Vec<Self::Tensor> {
-        todo!()
+        match self {
+            Self::FixedSize(rc_buf) => rc_buf.next_states(),
+            Self::VariableSized(rc_buf) => rc_buf.next_states(),
+        }
     }
 
     fn actions(&self) -> Vec<Self::Tensor> {
-        todo!()
+        match self {
+            Self::FixedSize(rc_buf) => rc_buf.actions(),
+            Self::VariableSized(rc_buf) => rc_buf.actions(),
+        }
     }
 
     fn rewards(&self) -> Vec<f32> {
-        todo!()
+        match self {
+            Self::FixedSize(rc_buf) => rc_buf.rewards(),
+            Self::VariableSized(rc_buf) => rc_buf.rewards(),
+        }
     }
 
     fn terminated(&self) -> Vec<bool> {
-        todo!()
+        match self {
+            Self::FixedSize(rc_buf) => rc_buf.terminated(),
+            Self::VariableSized(rc_buf) => rc_buf.terminated(),
+        }
     }
 
     fn trancuated(&self) -> Vec<bool> {
-        todo!()
+        match self {
+            Self::FixedSize(rc_buf) => rc_buf.trancuated(),
+            Self::VariableSized(rc_buf) => rc_buf.trancuated(),
+        }
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
@@ -263,35 +295,59 @@ impl<E: Env> Buffer for BufferKind<E> {
     type Tensor = <E as Env>::Tensor;
 
     fn states(&self) -> Vec<Self::Tensor> {
-        todo!()
+        match self {
+            Self::RcBuffer(buff) => buff.states(),
+            Self::ArcBufferKind(buff) => buff.states(),
+        }
     }
 
     fn next_states(&self) -> Vec<Self::Tensor> {
-        todo!()
+        match self {
+            Self::RcBuffer(buff) => buff.next_states(),
+            Self::ArcBufferKind(buff) => buff.next_states(),
+        }
     }
 
     fn actions(&self) -> Vec<Self::Tensor> {
-        todo!()
+        match self {
+            Self::RcBuffer(buff) => buff.actions(),
+            Self::ArcBufferKind(buff) => buff.actions(),
+        }
     }
 
     fn rewards(&self) -> Vec<f32> {
-        todo!()
+        match self {
+            Self::RcBuffer(buff) => buff.rewards(),
+            Self::ArcBufferKind(buff) => buff.rewards(),
+        }
     }
 
     fn terminated(&self) -> Vec<bool> {
-        todo!()
+        match self {
+            Self::RcBuffer(buff) => buff.terminated(),
+            Self::ArcBufferKind(buff) => buff.terminated(),
+        }
     }
 
     fn trancuated(&self) -> Vec<bool> {
-        todo!()
+        match self {
+            Self::RcBuffer(buff) => buff.trancuated(),
+            Self::ArcBufferKind(buff) => buff.trancuated(),
+        }
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
-        todo!()
+        match self {
+            Self::RcBuffer(buff) => buff.push(snapshot),
+            Self::ArcBufferKind(buff) => buff.push(snapshot),
+        }
     }
 
     fn last_state_terminates(&self) -> bool {
-        todo!()
+        match self {
+            Self::RcBuffer(buff) => buff.last_state_terminates(),
+            Self::ArcBufferKind(buff) => buff.last_state_terminates(),
+        }
     }
 }
 
@@ -354,6 +410,13 @@ impl<E: Env> EnvPoolType<E> {
                 .collect(),
         }
     }
+
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
+        match &self {
+            Self::Vec(vec_env) => vec_env.environment_description(),
+            _ => todo!(),
+        }
+    }
 }
 
 pub enum WorkerLocation {
@@ -384,7 +447,7 @@ impl Default for EnvPoolBuilder {
 impl EnvPoolBuilder {
     pub fn build<EB: EnvBuilderTrait>(
         &self,
-        builder: EnvBuilderType<EB>,
+        builder: EnvBuilderType2<EB>,
     ) -> EnvPoolType<<EB as EnvBuilderTrait>::Env> {
         match self.worker_location {
             WorkerLocation::Vec => {

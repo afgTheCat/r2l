@@ -169,6 +169,7 @@ impl BatchIndexIterator {
             return None;
         }
         let batch_indicies = &self.indicies[self.current..self.current + self.sample_size];
+        self.current += self.sample_size;
         Some(batch_indicies.to_owned())
     }
 }
@@ -285,11 +286,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait2<M>> Agent2 for CandlePPO2<M, 
         process_hook_result!(before_learning_hook_res);
         let mut logps: Vec<Vec<f32>> = vec![];
         for buff in &buffers {
-            let total_steps = buff.total_steps();
-            let states: Vec<CandleTensor> = buff.states()[0..total_steps - 1]
-                .into_iter()
-                .map(|t| t.clone())
-                .collect();
+            let states: Vec<CandleTensor> = buff.states();
             let actions = buff.actions();
             logps.push(
                 self.policy2()
@@ -299,7 +296,6 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait2<M>> Agent2 for CandlePPO2<M, 
             );
         }
         let logps = Logps(logps);
-
         self.learning_loop(&buffers, advantages, returns, logps)?;
         Ok(())
     }

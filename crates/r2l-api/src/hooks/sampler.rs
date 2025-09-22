@@ -6,6 +6,7 @@ use r2l_core::{
     sampler::{
         SequntialStepBoundHooks, trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer,
     },
+    sampler2::{Preprocessor, env_pools::builder::BufferKind},
     tensor::R2lBuffer,
 };
 
@@ -84,6 +85,16 @@ impl EnvNormalizer {
     }
 }
 
+impl<E: Env> Preprocessor<E, BufferKind<E>> for EnvNormalizer {
+    fn preprocess_states(
+        &mut self,
+        policy: &dyn Policy<Tensor = <E as Env>::Tensor>,
+        buffers: &mut Vec<BufferKind<E>>,
+    ) {
+        // TODO: implement normalizer
+    }
+}
+
 impl<E: Env> SequntialStepBoundHooks<E> for Evaluator<E> {
     fn process_last_step(
         &mut self,
@@ -140,4 +151,14 @@ impl<E: Env<Tensor = R2lBuffer>> SequntialStepBoundHooks<E> for EvaluatorNormali
 
     // TODO: we might not even need this!
     fn post_process_hook(&self) {}
+}
+
+impl<E: Env> Preprocessor<E, BufferKind<E>> for EvaluatorNormalizer<E> {
+    fn preprocess_states(
+        &mut self,
+        policy: &dyn Policy<Tensor = <E as Env>::Tensor>,
+        buffers: &mut Vec<BufferKind<E>>,
+    ) {
+        // TODO: evaluator normalizer should not exists
+    }
 }

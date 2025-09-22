@@ -1,7 +1,9 @@
 use candle_core::{Device, Result};
 use r2l_core::{
-    distributions::Policy, env::Env,
+    distributions::Policy,
+    env::Env,
     sampler::trajectory_buffers::variable_size_buffer::VariableSizedTrajectoryBuffer,
+    sampler2::{Preprocessor, env_pools::builder::BufferKind},
 };
 use std::sync::{Arc, Mutex};
 
@@ -66,5 +68,15 @@ impl<E: Env> Evaluator<E> {
             self.eval_step = 0;
             Ok(())
         }
+    }
+}
+
+impl<E: Env> Preprocessor<E, BufferKind<E>> for Evaluator<E> {
+    fn preprocess_states(
+        &mut self,
+        policy: &dyn Policy<Tensor = <E as Env>::Tensor>,
+        buffers: &mut Vec<BufferKind<E>>,
+    ) {
+        // TODO: evalution should not happen here
     }
 }

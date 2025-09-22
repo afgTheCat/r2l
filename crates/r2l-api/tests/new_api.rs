@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use r2l_core::sampler2::{
     CollectionBound, R2lSampler2,
-    env_pools::builder::{BufferType, EnvBuilderType, EnvPoolBuilder, WorkerLocation},
+    env_pools::builder::{BufferType, EnvBuilderType2, EnvPoolBuilder, WorkerLocation},
 };
 use r2l_gym::GymEnvBuilder;
 
 #[test]
 fn new_api() {
-    let builder = EnvBuilderType::EnvBuilder {
+    let builder = EnvBuilderType2::EnvBuilder {
         builder: Arc::new(GymEnvBuilder::new("CartPole-v1")),
         n_envs: 10,
     };

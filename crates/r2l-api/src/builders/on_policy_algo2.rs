@@ -7,15 +7,25 @@ use anyhow::Result;
 use candle_core::Device;
 use derive_more::{Deref, DerefMut};
 use r2l_agents::{
-    LearningModuleKind,
-    candle_agents::{a2c::A2C, ppo::CandlePPO},
+    ActorCriticKind, GenericLearningModuleWithValueFunction,
+    GenericLearningModuleWithValueFunction2, LearningModuleKind,
+    candle_agents::{
+        a2c::A2C,
+        ppo::CandlePPO,
+        ppo2::{CandlePPO2, PPOHooksTrait2},
+    },
 };
+use r2l_candle_lm::distributions::DistributionKind;
 use r2l_core::{
     env::{Env, EnvBuilderTrait},
-    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
+    on_policy_algorithm::{
+        DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm, OnPolicyAlgorithm2,
+    },
     sampler::R2lSampler,
+    sampler2::{R2lSampler2, env_pools::builder::BufferKind},
     tensor::R2lBuffer,
 };
+use r2l_gym::GymEnv;
 use std::sync::Arc;
 
 // TODO: this is pretty much a sampler builder at this point
@@ -97,6 +107,31 @@ impl A2CAlgoBuilder {
         })
     }
 }
+
+#[derive(Deref, DerefMut)]
+pub struct PPOAlgoBuilder2 {
+    #[deref]
+    #[deref_mut]
+    on_policy_builder: OnPolicyAlgorithmBuilder,
+    ppo_builder: PPOBuilder,
+}
+
+// impl PPOAlgoBuilder2 {
+//     pub fn build<E: Env<Tensor = R2lBuffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
+//         &self,
+//     ) -> OnPolicyAlgorithm2<
+//         BufferKind<GymEnv>,
+//         DistributionKind,
+//         R2lSampler2<GymEnv>,
+//         CandlePPO2<
+//             GenericLearningModuleWithValueFunction<DistributionKind, ActorCriticKind>,
+//             PPOHook2,
+//         >,
+//         DefaultOnPolicyAlgorightmsHooks,
+//     > {
+//         todo!()
+//     }
+// }
 
 #[derive(Deref, DerefMut)]
 pub struct PPOAlgoBuilder {
