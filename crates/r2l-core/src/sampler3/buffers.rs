@@ -1,16 +1,42 @@
 use crate::{
     env::{Env, Memory},
-    sampler::trajectory_buffers::{
-        fixed_size_buffer::FixedSizeStateBuffer, variable_size_buffer::VariableSizedStateBuffer,
-    },
     sampler2::{Buffer, CollectionBound},
 };
-use ringbuffer::RingBuffer;
+use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::{
-    cell::RefCell,
+    cell::{Ref, RefCell, RefMut},
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
+
+pub struct FixedSizeStateBuffer<E: Env> {
+    capacity: usize,
+    pub states: AllocRingBuffer<E::Tensor>,
+    pub next_states: AllocRingBuffer<E::Tensor>,
+    pub rewards: AllocRingBuffer<f32>,
+    pub action: AllocRingBuffer<E::Tensor>,
+    pub terminated: AllocRingBuffer<bool>,
+    pub trancuated: AllocRingBuffer<bool>,
+}
+
+impl<E: Env> FixedSizeStateBuffer<E> {
+    pub fn push(
+        &mut self,
+        state: E::Tensor,
+        next_state: E::Tensor,
+        action: E::Tensor,
+        reward: f32,
+        terminated: bool,
+        trancuated: bool,
+    ) {
+        self.states.enqueue(state);
+        self.next_states.enqueue(next_state);
+        self.action.enqueue(action);
+        self.rewards.enqueue(reward);
+        self.terminated.enqueue(terminated);
+        self.trancuated.enqueue(trancuated);
+    }
+}
 
 impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
     type Tensor = <E as Env>::Tensor;
@@ -57,6 +83,49 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
 
     fn build(collection_bound: CollectionBound) -> Self {
         todo!()
+    }
+}
+
+pub struct VariableSizedStateBuffer<E: Env> {
+    pub states: Vec<E::Tensor>,
+    pub next_states: Vec<E::Tensor>,
+    pub rewards: Vec<f32>,
+    pub action: Vec<E::Tensor>,
+    pub terminated: Vec<bool>,
+    pub trancuated: Vec<bool>,
+}
+
+// TODO: for some reason the Default proc macro trips up the compiler. We should investigate this
+// in the future.
+impl<E: Env> Default for VariableSizedStateBuffer<E> {
+    fn default() -> Self {
+        Self {
+            states: vec![],
+            next_states: vec![],
+            rewards: vec![],
+            action: vec![],
+            terminated: vec![],
+            trancuated: vec![],
+        }
+    }
+}
+
+impl<E: Env> VariableSizedStateBuffer<E> {
+    pub fn push(
+        &mut self,
+        state: E::Tensor,
+        next_state: E::Tensor,
+        action: E::Tensor,
+        reward: f32,
+        terminated: bool,
+        trancuated: bool,
+    ) {
+        self.states.push(state);
+        self.next_states.push(next_state);
+        self.action.push(action);
+        self.rewards.push(reward);
+        self.terminated.push(terminated);
+        self.trancuated.push(trancuated);
     }
 }
 
@@ -110,13 +179,21 @@ impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
 
 pub struct RcBufferWrapper<B: Buffer>(pub Rc<RefCell<B>>);
 
-impl<B: Buffer> RcBufferWrapper<B> {
+impl<'a, B: Buffer> RcBufferWrapper<B> {
     pub fn new(buffer: B) -> Self {
         Self(Rc::new(RefCell::new(buffer)))
     }
 
     pub fn build(collection_bound: CollectionBound) -> Self {
         Self(Rc::new(RefCell::new(B::build(collection_bound))))
+    }
+
+    pub fn buffer(&'a self) -> Ref<'a, B> {
+        self.0.borrow()
+    }
+
+    pub fn buffer_mut(&'a self) -> RefMut<'a, B> {
+        self.0.borrow_mut()
     }
 }
 
@@ -126,60 +203,16 @@ impl<B: Buffer> Clone for RcBufferWrapper<B> {
     }
 }
 
-impl<B: Buffer> Buffer for RcBufferWrapper<B> {
-    type Tensor = <B as Buffer>::Tensor;
-
-    fn states(&self) -> Vec<Self::Tensor> {
-        let buffer = self.0.borrow();
-        buffer.states()
-    }
-
-    fn next_states(&self) -> Vec<Self::Tensor> {
-        let buffer = self.0.borrow();
-        buffer.next_states()
-    }
-
-    fn actions(&self) -> Vec<Self::Tensor> {
-        let buffer = self.0.borrow();
-        buffer.actions()
-    }
-
-    fn rewards(&self) -> Vec<f32> {
-        let buffer = self.0.borrow();
-        buffer.rewards()
-    }
-
-    fn terminated(&self) -> Vec<bool> {
-        let buffer = self.0.borrow();
-        buffer.terminated()
-    }
-
-    fn trancuated(&self) -> Vec<bool> {
-        let buffer = self.0.borrow();
-        buffer.trancuated()
-    }
-
-    fn push(&mut self, snapshot: Memory<Self::Tensor>) {
-        let mut buffer = self.0.borrow_mut();
-        buffer.push(snapshot);
-    }
-
-    fn last_state_terminates(&self) -> bool {
-        let buffer = self.0.borrow();
-        buffer.last_state_terminates()
-    }
-
-    fn build(collection_bound: CollectionBound) -> Self {
-        todo!()
-    }
-}
-
 #[derive(Debug)]
 pub struct ArcBufferWrapper<B: Buffer>(pub Arc<Mutex<B>>);
 
-impl<B: Buffer> ArcBufferWrapper<B> {
+impl<'a, B: Buffer> ArcBufferWrapper<B> {
     pub fn new(buffer: Arc<Mutex<B>>) -> Self {
         Self(buffer)
+    }
+
+    pub fn buffer(&'a self) -> MutexGuard<'a, B> {
+        self.0.lock().unwrap()
     }
 }
 
@@ -189,48 +222,8 @@ impl<B: Buffer> Clone for ArcBufferWrapper<B> {
     }
 }
 
-impl<B: Buffer> Buffer for ArcBufferWrapper<B> {
-    type Tensor = <B as Buffer>::Tensor;
-
-    fn states(&self) -> Vec<Self::Tensor> {
-        let buffer = self.0.lock().unwrap();
-        buffer.states()
-    }
-
-    fn next_states(&self) -> Vec<Self::Tensor> {
-        let buffer = self.0.lock().unwrap();
-        buffer.next_states()
-    }
-
-    fn actions(&self) -> Vec<Self::Tensor> {
-        let buffer = self.0.lock().unwrap();
-        buffer.actions()
-    }
-
-    fn rewards(&self) -> Vec<f32> {
-        let buffer = self.0.lock().unwrap();
-        buffer.rewards()
-    }
-
-    fn terminated(&self) -> Vec<bool> {
-        todo!()
-    }
-
-    fn trancuated(&self) -> Vec<bool> {
-        todo!()
-    }
-
-    fn push(&mut self, snapshot: Memory<Self::Tensor>) {
-        let mut buffer = self.0.lock().unwrap();
-        buffer.push(snapshot);
-    }
-
-    fn last_state_terminates(&self) -> bool {
-        let buffer = self.0.lock().unwrap();
-        buffer.last_state_terminates()
-    }
-
-    fn build(collection_bound: CollectionBound) -> Self {
-        todo!()
-    }
+// TODO: whether this is the right construct or not remains to be seen
+pub enum BufferStack<B: Buffer> {
+    RefCounted(Vec<RcBufferWrapper<B>>),
+    AtomicRefCounted(Vec<ArcBufferWrapper<B>>),
 }

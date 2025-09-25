@@ -10,9 +10,7 @@ use crate::{
     },
 };
 use std::{
-    cell::RefCell,
     collections::HashMap,
-    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -145,13 +143,11 @@ impl BufferType {
                 let CollectionBound::StepBound { steps } = collection_bound else {
                     panic!("Cannot build a fixed size buffer with episode bound");
                 };
-                RcBufferKind::FixedSize(RcBufferWrapper::new(Rc::new(RefCell::new(
-                    FixedSizeStateBuffer::new(steps),
-                ))))
+                RcBufferKind::FixedSize(RcBufferWrapper::new(FixedSizeStateBuffer::new(steps)))
             }
-            Self::VariableSized => RcBufferKind::VariableSized(RcBufferWrapper::new(Rc::new(
-                RefCell::new(VariableSizedStateBuffer::default()),
-            ))),
+            Self::VariableSized => RcBufferKind::VariableSized(RcBufferWrapper::new(
+                VariableSizedStateBuffer::default(),
+            )),
         }
     }
 }
@@ -209,6 +205,10 @@ impl<E: Env> Buffer for ArcBufferKind<E> {
             Self::FixedSize(rc_buf) => rc_buf.last_state_terminates(),
             Self::VariableSized(rc_buf) => rc_buf.last_state_terminates(),
         }
+    }
+
+    fn build(collection_bound: CollectionBound) -> Self {
+        todo!()
     }
 }
 
@@ -284,6 +284,10 @@ impl<E: Env> Buffer for RcBufferKind<E> {
             Self::VariableSized(rc_buf) => rc_buf.last_state_terminates(),
         }
     }
+
+    fn build(collection_bound: CollectionBound) -> Self {
+        todo!()
+    }
 }
 
 pub enum BufferKind<E: Env> {
@@ -349,8 +353,13 @@ impl<E: Env> Buffer for BufferKind<E> {
             Self::ArcBufferKind(buff) => buff.last_state_terminates(),
         }
     }
+
+    fn build(collection_bound: CollectionBound) -> Self {
+        todo!()
+    }
 }
 
+// The idea is that this should be a trait?
 pub enum EnvPoolType<E: Env> {
     Vec(VecEnvPool<E, RcBufferKind<E>>),
     Thread(ThreadEnvPool<E, ArcBufferKind<E>>),
@@ -360,14 +369,14 @@ impl<E: Env> EnvPoolType<E> {
     pub fn single_step(&mut self) {
         match self {
             Self::Vec(env_pool) => env_pool.single_step(),
-            Self::Thread(env_pool) => env_pool.single_step(),
+            Self::Thread(env_pool) => todo!(),
         }
     }
 
     pub fn collection_bound(&self) -> CollectionBound {
         match self {
             Self::Vec(env_pool) => env_pool.collection_bound.clone(),
-            Self::Thread(env_pool) => env_pool.collection_bound(),
+            Self::Thread(env_pool) => todo!(),
         }
     }
 
@@ -377,7 +386,7 @@ impl<E: Env> EnvPoolType<E> {
     ) {
         match self {
             Self::Vec(env_pool) => env_pool.set_policy(policy),
-            Self::Thread(env_pool) => env_pool.set_policy(policy),
+            Self::Thread(env_pool) => todo!(),
         }
     }
 
@@ -388,11 +397,7 @@ impl<E: Env> EnvPoolType<E> {
                 .into_iter()
                 .map(|b| BufferKind::RcBuffer(b))
                 .collect(),
-            Self::Thread(env_pool) => env_pool
-                .get_buffers()
-                .into_iter()
-                .map(|b| BufferKind::ArcBufferKind(b))
-                .collect(),
+            Self::Thread(env_pool) => todo!(),
         }
     }
 
@@ -403,11 +408,7 @@ impl<E: Env> EnvPoolType<E> {
                 .into_iter()
                 .map(|b| BufferKind::RcBuffer(b))
                 .collect(),
-            Self::Thread(env_pool) => env_pool
-                .collect()
-                .into_iter()
-                .map(|b| BufferKind::ArcBufferKind(b))
-                .collect(),
+            Self::Thread(env_pool) => todo!(),
         }
     }
 

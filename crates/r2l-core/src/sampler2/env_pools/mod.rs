@@ -2,8 +2,10 @@ pub mod builder;
 
 use crate::{
     distributions::Policy,
-    env::{Env, EnvironmentDescription},
-    sampler2::{Buffer, CollectionBound},
+    env::{Env, EnvBuilderTrait, EnvironmentDescription},
+    sampler2::{
+        Buffer, CollectionBound, buffers::RcBufferWrapper, env_pools::builder::EnvBuilderType2,
+    },
 };
 use crossbeam::channel::{Receiver, Sender};
 use std::collections::HashMap;
@@ -27,6 +29,15 @@ pub struct ThreadEnvWorker<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send
     env: E,
     policy: Option<Box<dyn Policy<Tensor = E::Tensor>>>,
     last_state: Option<E::Tensor>,
+}
+
+impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send + Clone> ThreadEnvWorker<E, B> {
+    pub fn build<EB: EnvBuilderTrait<Env = E>>(
+        env_builder: EnvBuilderType2<EB>,
+        collection_bound: CollectionBound,
+    ) -> Self {
+        todo!()
+    }
 }
 
 impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send + Clone> ThreadEnvWorker<E, B> {
@@ -101,7 +112,54 @@ pub struct ThreadEnvPool<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> {
     pub channels: ChannelHashMap<E, B>,
 }
 
-impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> ThreadEnvPool<E, B> {
+impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + 'static> ThreadEnvPool<E, B> {
+    fn build<EB: EnvBuilderTrait<Env = E>>(
+        env_builder: EnvBuilderType2<EB>,
+        collection_bound: CollectionBound,
+    ) -> Self
+    where
+        B: Clone + Send,
+        E: 'static,
+    {
+        let mut channels = HashMap::new();
+        match env_builder {
+            EnvBuilderType2::EnvBuilder { builder, n_envs } => {
+                for id in 0..n_envs {
+                    let (command_tx, command_rx) = crossbeam::channel::unbounded();
+                    let (result_tx, result_rx) = crossbeam::channel::unbounded();
+                    channels.insert(id, (command_tx, result_rx));
+                    let eb_cloned = builder.clone();
+                    let collection_bound = collection_bound.clone();
+                    std::thread::spawn(move || {
+                        let buffer = B::build(collection_bound);
+                        let env = eb_cloned.build_env().unwrap();
+                        let mut worker = ThreadEnvWorker::new(result_tx, command_rx, buffer, env);
+                        worker.work();
+                    });
+                }
+            }
+            EnvBuilderType2::EnvBuilderVec { builders } => {
+                for (id, builder) in builders.iter().enumerate() {
+                    let (command_tx, command_rx) = crossbeam::channel::unbounded();
+                    let (result_tx, result_rx) = crossbeam::channel::unbounded();
+                    channels.insert(id, (command_tx, result_rx));
+                    let eb_cloned = builder.clone();
+                    let collection_bound = collection_bound.clone();
+                    std::thread::spawn(move || {
+                        let buffer = B::build(collection_bound);
+                        let env = eb_cloned.build_env().unwrap();
+                        let mut worker = ThreadEnvWorker::new(result_tx, command_rx, buffer, env);
+                        worker.work();
+                    });
+                }
+            }
+        }
+        Self {
+            channels,
+            collection_bound,
+        }
+    }
+
     pub fn num_envs(&self) -> usize {
         self.channels.len()
     }
@@ -239,6 +297,38 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> VecEnvWorker<E, B> 
 pub struct VecEnvPool<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> {
     pub workers: Vec<VecEnvWorker<E, B>>,
     pub collection_bound: CollectionBound,
+}
+
+impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> VecEnvPool<E, B> {
+    pub fn build<EB: EnvBuilderTrait<Env = E>>(
+        env_builder: EnvBuilderType2<EB>,
+        collection_bound: CollectionBound,
+    ) -> Self {
+        let workers = match env_builder {
+            EnvBuilderType2::EnvBuilder { builder, n_envs } => {
+                let mut workers = vec![];
+                for _ in 0..n_envs {
+                    let buffer = B::build(collection_bound.clone());
+                    let env = builder.build_env().unwrap();
+                    workers.push(VecEnvWorker::new(buffer, env));
+                }
+                workers
+            }
+            EnvBuilderType2::EnvBuilderVec { builders } => {
+                let mut workers = vec![];
+                for builder in builders {
+                    let buffer = B::build(collection_bound.clone());
+                    let env = builder.build_env().unwrap();
+                    workers.push(VecEnvWorker::new(buffer, env));
+                }
+                workers
+            }
+        };
+        VecEnvPool {
+            workers,
+            collection_bound,
+        }
+    }
 }
 
 impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> VecEnvPool<E, B> {

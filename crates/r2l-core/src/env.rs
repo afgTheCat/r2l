@@ -104,6 +104,10 @@ pub trait Sampler {
 
 pub type TensorOfSampler<S> = <<S as Sampler>::Env as Env>::Tensor;
 
+// TODO: we don't really want a Vec of buffers exposed. In the grand scheme of things, the agent
+// should not really care for how the Buffer is collected. It should only care about the. What we
+// want is basically a MemorySampler that has the same Tensor type what the agent has. That means
+// that a new trait should probably be exposed. Some built in features would be nice as well.
 pub trait Sampler2 {
     type E: Env;
     type Buffer: Buffer<Tensor = <Self::E as Env>::Tensor>;

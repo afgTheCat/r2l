@@ -22,8 +22,8 @@ use r2l_core::{
         DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm, OnPolicyAlgorithm2,
     },
     sampler::R2lSampler,
-    sampler2::{R2lSampler2, env_pools::builder::BufferKind},
-    tensor::R2lBuffer,
+    sampler2::{Buffer, R2lSampler2, env_pools::builder::BufferKind},
+    tensor::{R2lBuffer, R2lTensor},
 };
 use r2l_gym::GymEnv;
 use std::sync::Arc;
@@ -114,6 +114,12 @@ pub struct PPOAlgoBuilder2 {
     #[deref_mut]
     on_policy_builder: OnPolicyAlgorithmBuilder,
     ppo_builder: PPOBuilder,
+}
+
+impl PPOAlgoBuilder2 {
+    pub fn build<B: Buffer, T: R2lTensor, E: Env<Tensor = T>, EB: EnvBuilderTrait<Env = E>>(&self) {
+        // let sampler = R2lSampler2::new(env_pool, None);
+    }
 }
 
 // impl PPOAlgoBuilder2 {

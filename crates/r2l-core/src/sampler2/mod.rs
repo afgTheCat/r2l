@@ -98,6 +98,8 @@ pub trait Buffer: Sized {
         for i in (0..self.total_steps()).rev() {}
         todo!()
     }
+
+    fn build(collection_bound: CollectionBound) -> Self;
 }
 
 pub struct BufferConverter<'a, B: Buffer, T: Clone + Send + Sync + Debug + 'static> {
@@ -159,13 +161,18 @@ where
         self.buffer.trancuated()
     }
 
-    // TODO: should we even have this?
+    // TODO: should we even have this? probably not
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
         todo!()
     }
 
     fn last_state_terminates(&self) -> bool {
         self.buffer.last_state_terminates()
+    }
+
+    // TODO: I am guessing this also is not possible like this? Maybe a wrapper needs it's own type
+    fn build(collection_bound: CollectionBound) -> Self {
+        unreachable!()
     }
 }
 
@@ -182,6 +189,7 @@ pub enum CollectionBound {
 }
 
 pub struct R2lSampler2<E: Env> {
+    // TODO: this is the issue here, that env pool type will explode here
     pub env_pool: EnvPoolType<E>,
     pub preprocessor: Option<Box<dyn Preprocessor<E, BufferKind<E>>>>,
 }
@@ -229,5 +237,48 @@ impl<E: Env> Sampler2 for R2lSampler2<E> {
         } else {
             Ok(self.env_pool.collect())
         }
+    }
+}
+
+trait EnvPoolTrait {
+    type Env: Env;
+    type Buffer: Buffer<Tensor = <Self::Env as Env>::Tensor>;
+}
+
+pub struct R2lSampler3<EP: EnvPoolTrait> {
+    env_pool: EP,
+    // pub preprocessor: Option<Box<dyn Preprocessor<E, BufferKind<E>>>>,
+}
+
+impl<B: Buffer, E: Env<Tensor = B::Tensor>, EP: EnvPoolTrait<Env = E, Buffer = B>> Sampler2
+    for R2lSampler3<EP>
+{
+    type E = E;
+    type Buffer = B;
+
+    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> Result<Vec<Self::Buffer>>
+    where
+        <E as Env>::Tensor: From<P::Tensor>,
+        <E as Env>::Tensor: Into<P::Tensor>,
+    {
+        todo!()
+        // let policy = PolicyWrapper::new(policy);
+        // let collection_bound = self.env_pool.collection_bound();
+        // self.env_pool.set_policy(policy.clone());
+        // if let Some(pre_processor) = &mut self.preprocessor {
+        //     let mut current_step = 0;
+        //     let CollectionBound::StepBound { steps } = collection_bound else {
+        //         panic!("pre processors currently only support rollout bounds");
+        //     };
+        //     while current_step < steps {
+        //         let mut buffers = self.env_pool.get_buffers();
+        //         pre_processor.preprocess_states(&policy, &mut buffers);
+        //         self.env_pool.single_step();
+        //         current_step += 1;
+        //     }
+        //     Ok(self.env_pool.get_buffers())
+        // } else {
+        //     Ok(self.env_pool.collect())
+        // }
     }
 }

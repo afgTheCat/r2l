@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::{
     Algorithm,
     agents::{Agent, Agent2, TensorOfAgent, TensorOfAgent2},
@@ -143,31 +145,41 @@ where
     }
 }
 
-pub trait OnPolicyAlgorithmHooks2<B: Buffer, P: Policy> {
+pub trait OnPolicyAlgorithmHooks2 {
+    type B: Buffer;
+    type P: Policy;
+
     fn init_hook(&mut self) -> bool;
 
-    fn post_rollout_hook(&mut self, rollouts: &[B]) -> bool;
+    fn post_rollout_hook(&mut self, rollouts: &[Self::B]) -> bool;
 
-    fn post_training_hook(&mut self, policy: P) -> bool;
+    fn post_training_hook(&mut self, policy: Self::P) -> bool;
 
     fn shutdown_hook(&mut self) -> Result<()>;
 }
 
-pub struct DefaultOnPolicyAlgorightmsHooks2 {
+pub struct DefaultOnPolicyAlgorightmsHooks2<B: Buffer, P: Policy> {
     rollout_idx: usize,
     learning_schedule: LearningSchedule,
+    _buffer: PhantomData<B>,
+    _policy: PhantomData<P>,
 }
 
-impl DefaultOnPolicyAlgorightmsHooks2 {
+impl<B: Buffer, P: Policy> DefaultOnPolicyAlgorightmsHooks2<B, P> {
     pub fn new(learning_schedule: LearningSchedule) -> Self {
         Self {
             rollout_idx: 0,
             learning_schedule,
+            _buffer: PhantomData,
+            _policy: PhantomData,
         }
     }
 }
 
-impl<B: Buffer, P: Policy> OnPolicyAlgorithmHooks2<B, P> for DefaultOnPolicyAlgorightmsHooks2 {
+impl<B: Buffer, P: Policy> OnPolicyAlgorithmHooks2 for DefaultOnPolicyAlgorightmsHooks2<B, P> {
+    type B = B;
+    type P = P;
+
     fn init_hook(&mut self) -> bool {
         false
     }
@@ -218,25 +230,14 @@ impl<B: Buffer, P: Policy> OnPolicyAlgorithmHooks2<B, P> for DefaultOnPolicyAlgo
     }
 }
 
-pub struct OnPolicyAlgorithm2<
-    B: Buffer,
-    P: Policy,
-    S: Sampler2<Buffer = B>,
-    A: Agent2<Policy = P>,
-    H: OnPolicyAlgorithmHooks2<B, P>,
-> {
+pub struct OnPolicyAlgorithm2<S: Sampler2, A: Agent2, H: OnPolicyAlgorithmHooks2> {
     pub sampler: S,
     pub agent: A,
     pub hooks: H,
 }
 
-impl<
-    B: Buffer,
-    P: Policy,
-    S: Sampler2<Buffer = B>,
-    A: Agent2<Policy = P>,
-    H: OnPolicyAlgorithmHooks2<B, P>,
-> OnPolicyAlgorithm2<B, P, S, A, H>
+impl<H: OnPolicyAlgorithmHooks2, S: Sampler2<Buffer = H::B>, A: Agent2<Policy = H::P>>
+    OnPolicyAlgorithm2<S, A, H>
 where
     TensorOfSampler2<S>: From<TensorOfAgent2<A>>,
     TensorOfSampler2<S>: Into<TensorOfAgent2<A>>,
