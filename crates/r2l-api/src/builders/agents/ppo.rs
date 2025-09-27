@@ -10,6 +10,7 @@ use r2l_agents::{
     candle_agents::{
         ppo::{CandlePPO, CandlePPOCore, EmptyPPO3Hooks},
         ppo2::{CandlePPO2, CandlePPOCore2, PPOHooksTrait2},
+        ppo3::{CandlePPO3, CandlePPOCore3, PPOHooksTrait3},
     },
 };
 use r2l_core::env::EnvironmentDescription;
@@ -113,6 +114,41 @@ impl PPOBuilder {
             sample_size: self.sample_size,
         };
         let ppo2 = CandlePPO2 { ppo: core, hooks };
+        Ok(ppo2)
+    }
+
+    pub fn build3<T, H: PPOHooksTrait3<LearningModuleKind>>(
+        &self,
+        device: &Device,
+        env_description: &EnvironmentDescription<T>,
+        hooks: H,
+    ) -> Result<CandlePPO3<LearningModuleKind, H>> {
+        let distribution_varmap = VarMap::new();
+        let distribution_var_builder =
+            VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
+        let policy =
+            self.distribution_builder
+                .build(&distribution_var_builder, device, env_description)?;
+        let (value_function, learning_module) = self.learning_module_builder.build(
+            distribution_varmap,
+            distribution_var_builder,
+            env_description,
+            device,
+        )?;
+        let module = GenericLearningModuleWithValueFunction {
+            policy,
+            learning_module,
+            value_function,
+        };
+        let core = CandlePPOCore3 {
+            module,
+            clip_range: self.clip_range,
+            device: device.clone(),
+            gamma: self.gamma,
+            lambda: self.lambda,
+            sample_size: self.sample_size,
+        };
+        let ppo2 = CandlePPO3 { ppo: core, hooks };
         Ok(ppo2)
     }
 }

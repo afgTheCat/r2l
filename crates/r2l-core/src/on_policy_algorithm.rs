@@ -2,10 +2,11 @@ use std::marker::PhantomData;
 
 use crate::{
     Algorithm,
-    agents::{Agent, Agent2, TensorOfAgent, TensorOfAgent2},
+    agents::{Agent, Agent2, Agent3, TensorOfAgent, TensorOfAgent2},
     distributions::Policy,
-    env::{Sampler, Sampler2, TensorOfSampler, TensorOfSampler2},
+    env::{Sampler, Sampler2, Sampler3, TensorOfSampler, TensorOfSampler2},
     sampler2::Buffer,
+    sampler3::buffers::BufferStack,
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
@@ -230,6 +231,94 @@ impl<B: Buffer, P: Policy> OnPolicyAlgorithmHooks2 for DefaultOnPolicyAlgorightm
     }
 }
 
+pub trait OnPolicyAlgorithmHooks3
+where
+    Self::P: Clone,
+    <Self::P as Policy>::Tensor: From<<Self::B as Buffer>::Tensor>,
+    <Self::B as Buffer>::Tensor: From<<Self::P as Policy>::Tensor>,
+{
+    type B: Buffer;
+    type P: Policy;
+
+    fn init_hook(&mut self) -> bool;
+
+    fn post_rollout_hook(&mut self, rollouts: &BufferStack<Self::B>) -> bool;
+
+    fn post_training_hook(&mut self, policy: Self::P) -> bool;
+
+    fn shutdown_hook(&mut self) -> Result<()>;
+}
+
+pub struct DefaultOnPolicyAlgorightmsHooks3<B: Buffer, P: Policy> {
+    rollout_idx: usize,
+    learning_schedule: LearningSchedule,
+    _buffer: PhantomData<B>,
+    _policy: PhantomData<P>,
+}
+
+impl<B: Buffer, P: Policy> DefaultOnPolicyAlgorightmsHooks3<B, P> {
+    pub fn new(learning_schedule: LearningSchedule) -> Self {
+        Self {
+            rollout_idx: 0,
+            learning_schedule,
+            _buffer: PhantomData,
+            _policy: PhantomData,
+        }
+    }
+}
+
+impl<B: Buffer, P: Policy + Clone> OnPolicyAlgorithmHooks3
+    for DefaultOnPolicyAlgorightmsHooks3<B, P>
+where
+    P::Tensor: From<B::Tensor>,
+    B::Tensor: From<P::Tensor>,
+{
+    type B = B;
+    type P = P;
+
+    fn init_hook(&mut self) -> bool {
+        false
+    }
+
+    fn post_rollout_hook(&mut self, rollouts: &BufferStack<B>) -> bool {
+        let total_reward = rollouts.total_rewards();
+        let episodes = rollouts.total_episodes();
+        println!(
+            "rollout: {:<3} episodes: {:<5} total reward: {:<5.2} avg reward per episode: {:.2}",
+            self.rollout_idx,
+            episodes,
+            total_reward,
+            total_reward / episodes as f32
+        );
+        self.rollout_idx += 1;
+        match &mut self.learning_schedule {
+            LearningSchedule::RolloutBound {
+                total_rollouts,
+                current_rollout,
+            } => {
+                *current_rollout += 1;
+                current_rollout >= total_rollouts
+            }
+            LearningSchedule::TotalStepBound {
+                total_steps,
+                current_step,
+            } => {
+                let rollout_steps: usize = rollouts.total_steps();
+                *current_step += rollout_steps;
+                current_step >= total_steps
+            }
+        }
+    }
+
+    fn post_training_hook(&mut self, policy: P) -> bool {
+        false
+    }
+
+    fn shutdown_hook(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
 pub struct OnPolicyAlgorithm2<S: Sampler2, A: Agent2, H: OnPolicyAlgorithmHooks2> {
     pub sampler: S,
     pub agent: A,
@@ -255,6 +344,37 @@ where
             // learning phase
             self.agent.learn2(&buffers)?;
             let policy = self.agent.policy2();
+            break_on_hook_res!(self.hooks.post_training_hook(policy));
+        }
+        self.hooks.shutdown_hook()
+    }
+}
+
+pub struct OnPolicyAlgorithm3<
+    H: OnPolicyAlgorithmHooks3,
+    S: Sampler3<Buffer = H::B>,
+    A: Agent3<Policy = H::P>,
+> {
+    pub sampler: S,
+    pub agent: A,
+    pub hooks: H,
+}
+
+impl<H: OnPolicyAlgorithmHooks3, S: Sampler3<Buffer = H::B>, A: Agent3<Policy = H::P>>
+    OnPolicyAlgorithm3<H, S, A>
+{
+    pub fn train(&mut self) -> Result<()> {
+        if self.hooks.init_hook() {
+            return Ok(());
+        }
+        loop {
+            let policy = self.agent.policy3();
+            let buffers = self.sampler.collect_rollouts(policy);
+            break_on_hook_res!(self.hooks.post_rollout_hook(&buffers));
+
+            // learning phase
+            self.agent.learn3(buffers)?;
+            let policy = self.agent.policy3();
             break_on_hook_res!(self.hooks.post_training_hook(policy));
         }
         self.hooks.shutdown_hook()

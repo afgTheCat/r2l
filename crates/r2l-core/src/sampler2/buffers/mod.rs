@@ -56,7 +56,8 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
     }
 
     fn build(collection_bound: CollectionBound) -> Self {
-        todo!()
+        let capacity = collection_bound.min_steps();
+        Self::new(capacity)
     }
 }
 

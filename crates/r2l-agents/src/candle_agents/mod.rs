@@ -1,6 +1,7 @@
 pub mod a2c;
 pub mod ppo;
 pub mod ppo2;
+pub mod ppo3;
 pub mod vpg;
 
 use candle_core::Tensor as CandleTensor;

@@ -9,7 +9,7 @@ use rand::Rng;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 
 pub struct FixedSizeStateBuffer<E: Env> {
-    capacity: usize,
+    pub capacity: usize,
     pub states: AllocRingBuffer<E::Tensor>,
     pub next_states: AllocRingBuffer<E::Tensor>,
     pub rewards: AllocRingBuffer<f32>,

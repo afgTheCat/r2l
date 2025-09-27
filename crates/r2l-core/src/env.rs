@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::{
-    distributions::Policy, sampler2::Buffer, tensor::R2lTensor,
+    distributions::Policy, sampler2::Buffer, sampler3::buffers::BufferStack, tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
@@ -136,3 +136,15 @@ where
         (self)()
     }
 }
+
+pub trait Sampler3 {
+    type E: Env;
+    type Buffer: Buffer<Tensor = <Self::E as Env>::Tensor>;
+
+    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> BufferStack<Self::Buffer>
+    where
+        <Self::Buffer as Buffer>::Tensor: From<P::Tensor>,
+        <Self::Buffer as Buffer>::Tensor: Into<P::Tensor>;
+}
+
+pub type TensorOfSampler3<S> = <<S as Sampler3>::Buffer as Buffer>::Tensor;

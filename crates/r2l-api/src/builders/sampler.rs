@@ -18,8 +18,8 @@ use r2l_core::{
         },
     },
     sampler2::{
-        Preprocessor, R2lSampler2,
-        env_pools::builder::{BufferKind, EnvBuilderType2, EnvPoolBuilder},
+        R2lSampler2,
+        env_pools::builder::{EnvBuilderType2, EnvPoolBuilder},
     },
     tensor::R2lBuffer,
 };

@@ -168,6 +168,15 @@ pub struct CoordinatorS<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> {
 }
 
 impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
+        match &self.coordinator_type {
+            CoordinatorType::ThreadEnvWorker { channels, buffers } => {
+                todo!()
+            }
+            CoordinatorType::Vec(workers) => workers[0].environment_description(),
+        }
+    }
+
     pub fn set_policy<P: crate::distributions::Policy<Tensor = E::Tensor> + Clone>(
         &mut self,
         policy: P,

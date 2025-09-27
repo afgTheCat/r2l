@@ -1,10 +1,10 @@
-mod buffers;
-mod coordinator;
+pub mod buffers;
+pub mod coordinator;
 
 use crate::{
     distributions::Policy,
-    env::{Env, EnvBuilderTrait},
-    sampler::PolicyWrapper,
+    env::{Env, EnvBuilderTrait, EnvironmentDescription, Sampler3},
+    sampler::{PolicyWrapper, trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer},
     sampler2::{Buffer, CollectionBound, env_pools::builder::EnvBuilderType2},
     sampler3::{
         buffers::BufferStack,
@@ -17,13 +17,13 @@ pub trait PreprocessorX<B: Buffer> {
 }
 
 // How do I build this shit?
-struct R2lSamplerX<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone> {
+pub struct R2lSamplerX<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> = FixedSizeStateBuffer<E>> {
     // something like this, maybe we
     preprocessor: Option<Box<dyn PreprocessorX<B>>>,
     coordinator: CoordinatorS<E, B>,
 }
 
-impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone + Send + 'static> R2lSamplerX<E, B> {
+impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send + 'static> R2lSamplerX<E, B> {
     pub fn build_arc<EB: EnvBuilderTrait<Env = E>>(
         env_builder: EnvBuilderType2<EB>,
         collection_bound: CollectionBound,
@@ -58,10 +58,19 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Clone + Send + 'static> R2
         }
     }
 
-    fn collect<P: Policy + Clone>(&mut self, policy: P) -> BufferStack<B>
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
+        self.coordinator.env_description()
+    }
+}
+
+impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> Sampler3 for R2lSamplerX<E, B> {
+    type E = E;
+    type Buffer = B;
+
+    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> BufferStack<Self::Buffer>
     where
-        <E as Env>::Tensor: From<P::Tensor>,
-        <E as Env>::Tensor: Into<P::Tensor>,
+        <Self::Buffer as Buffer>::Tensor: From<P::Tensor>,
+        <Self::Buffer as Buffer>::Tensor: Into<P::Tensor>,
     {
         let policy = PolicyWrapper::new(policy);
         self.coordinator.set_policy(policy);
