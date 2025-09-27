@@ -6,12 +6,13 @@ use r2l_agents::candle_agents::ModuleWithValueFunction;
 use r2l_agents::candle_agents::ppo::{CandlePPOCore, PPOHooksTrait};
 use r2l_agents::candle_agents::ppo::{HookResult, PPOBatchData};
 use r2l_api::builders::agents::ppo::PPOBuilder;
-use r2l_api::builders::sampler::{EnvBuilderType, EnvPoolType, SamplerType};
+use r2l_api::builders::sampler::{EnvPoolType, SamplerType};
 use r2l_candle_lm::candle_rollout_buffer::{CandleRolloutBuffer, RolloutBatch};
 use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
 use r2l_core::on_policy_algorithm::{
     DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
 };
+use r2l_core::sampler2::env_pools::builder::EnvBuilderType2;
 use r2l_core::{Algorithm, distributions::Policy, utils::rollout_buffer::Advantages};
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
@@ -187,7 +188,7 @@ pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
         hook_options: Default::default(),
         env_pool_type: EnvPoolType::VecVariable, // TODO: Change this to VecVariable
     }
-    .build_with_builder_type(EnvBuilderType::EnvBuilder {
+    .build_with_builder_type(EnvBuilderType2::EnvBuilder {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
         n_envs: 1,
     });

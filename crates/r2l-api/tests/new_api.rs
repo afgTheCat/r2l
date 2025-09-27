@@ -2,31 +2,45 @@ use candle_core::Device;
 use r2l_agents::candle_agents::ppo3::PPO3DefaultHooks;
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_core::{
-    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks3, LearningSchedule, OnPolicyAlgorithm3},
-    sampler2::{
-        CollectionBound, R2lSampler2,
-        env_pools::builder::{BufferType, EnvBuilderType2, EnvPoolBuilder, WorkerLocation},
+    Algorithm,
+    on_policy_algorithm::{
+        DefaultOnPolicyAlgorightmsHooks, DefaultOnPolicyAlgorightmsHooks3, LearningSchedule,
+        OnPolicyAlgorithm, OnPolicyAlgorithm3,
     },
+    sampler::{CollectionType, R2lSampler, env_pools::FixedSizeEnvPoolKind},
+    sampler2::{CollectionBound, env_pools::builder::EnvBuilderType2},
     sampler3::{R2lSamplerX, coordinator::Location},
 };
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use std::sync::Arc;
 
 #[test]
-fn new_api() {
+fn old_api() {
     let builder = EnvBuilderType2::EnvBuilder {
         builder: Arc::new(GymEnvBuilder::new("CartPole-v1")),
         n_envs: 10,
     };
-    // now this is something
-    let env_pool_builder = EnvPoolBuilder {
-        worker_location: WorkerLocation::Thread,
-        collection_bound: CollectionBound::StepBound { steps: 2048 },
-        buffer_type: BufferType::FixedSize,
+    let env_pool = builder.build_fixed_sized_vec(2048);
+    let env_description = env_pool.env_description();
+    let env_pool = FixedSizeEnvPoolKind::FixedSizeVecEnvPool(env_pool);
+    let sampler = R2lSampler {
+        env_steps: 2048,
+        collection_type: CollectionType::StepBound {
+            env_pool,
+            hooks: None,
+        },
     };
+    let agent = PPOBuilder::default()
+        .build(&Device::Cpu, &env_description)
+        .unwrap();
 
-    let env_pool = env_pool_builder.build(builder);
-    let sampler = R2lSampler2::new(env_pool, None);
+    let hooks = DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::total_step_bound(5000000));
+    let mut op = OnPolicyAlgorithm {
+        sampler,
+        agent,
+        hooks,
+    };
+    op.train().unwrap()
 }
 
 #[test]
@@ -35,7 +49,6 @@ fn new_new_api() {
         builder: Arc::new(GymEnvBuilder::new("CartPole-v1")),
         n_envs: 10,
     };
-
     let sampler: R2lSamplerX<GymEnv> = R2lSamplerX::build(
         builder,
         CollectionBound::StepBound { steps: 2048 },

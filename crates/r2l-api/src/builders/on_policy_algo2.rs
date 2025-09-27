@@ -1,31 +1,22 @@
 use crate::builders::{
     agents::{a2c::A2CBuilder, ppo::PPOBuilder},
-    sampler::{EnvBuilderType, EnvPoolType, SamplerType},
+    sampler::{EnvPoolType, SamplerType},
     sampler_hooks2::EvaluatorNormalizerOptions,
 };
 use anyhow::Result;
 use candle_core::Device;
 use derive_more::{Deref, DerefMut};
 use r2l_agents::{
-    ActorCriticKind, GenericLearningModuleWithValueFunction,
-    GenericLearningModuleWithValueFunction2, LearningModuleKind,
-    candle_agents::{
-        a2c::A2C,
-        ppo::CandlePPO,
-        ppo2::{CandlePPO2, PPOHooksTrait2},
-    },
+    LearningModuleKind,
+    candle_agents::{a2c::A2C, ppo::CandlePPO},
 };
-use r2l_candle_lm::distributions::DistributionKind;
 use r2l_core::{
     env::{Env, EnvBuilderTrait},
-    on_policy_algorithm::{
-        DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm, OnPolicyAlgorithm2,
-    },
+    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     sampler::R2lSampler,
-    sampler2::{Buffer, R2lSampler2, env_pools::builder::BufferKind},
+    sampler2::{Buffer, env_pools::builder::EnvBuilderType2},
     tensor::{R2lBuffer, R2lTensor},
 };
-use r2l_gym::GymEnv;
 use std::sync::Arc;
 
 // TODO: this is pretty much a sampler builder at this point
@@ -90,7 +81,7 @@ impl A2CAlgoBuilder {
         >,
     > {
         let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
-            EnvBuilderType::EnvBuilder {
+            EnvBuilderType2::EnvBuilder {
                 builder: Arc::new(env_builder),
                 n_envs,
             },
@@ -122,23 +113,6 @@ impl PPOAlgoBuilder2 {
     }
 }
 
-// impl PPOAlgoBuilder2 {
-//     pub fn build<E: Env<Tensor = R2lBuffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
-//         &self,
-//     ) -> OnPolicyAlgorithm2<
-//         BufferKind<GymEnv>,
-//         DistributionKind,
-//         R2lSampler2<GymEnv>,
-//         CandlePPO2<
-//             GenericLearningModuleWithValueFunction<DistributionKind, ActorCriticKind>,
-//             PPOHook2,
-//         >,
-//         DefaultOnPolicyAlgorightmsHooks,
-//     > {
-//         todo!()
-//     }
-// }
-
 #[derive(Deref, DerefMut)]
 pub struct PPOAlgoBuilder {
     #[deref]
@@ -160,7 +134,7 @@ impl PPOAlgoBuilder {
         >,
     > {
         let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
-            EnvBuilderType::EnvBuilder {
+            EnvBuilderType2::EnvBuilder {
                 builder: Arc::new(env_builder),
                 n_envs,
             },
