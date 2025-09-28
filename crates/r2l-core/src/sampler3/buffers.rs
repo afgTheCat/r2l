@@ -91,6 +91,10 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
     fn build(collection_bound: CollectionBound) -> Self {
         todo!()
     }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        self.next_states.back().cloned()
+    }
 }
 
 pub struct VariableSizedStateBuffer<E: Env> {
@@ -181,6 +185,10 @@ impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
 
     fn build(collection_bound: CollectionBound) -> Self {
         todo!()
+    }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        self.next_states.last().cloned()
     }
 }
 

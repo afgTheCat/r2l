@@ -334,6 +334,13 @@ impl<E: Env> Buffer for ArcBufferKind<E> {
     fn build(collection_bound: CollectionBound) -> Self {
         todo!()
     }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        match self {
+            Self::FixedSize(buff) => buff.last_state(),
+            Self::VariableSized(buff) => buff.last_state(),
+        }
+    }
 }
 
 pub enum RcBufferKind<E: Env> {
@@ -412,6 +419,13 @@ impl<E: Env> Buffer for RcBufferKind<E> {
     fn build(collection_bound: CollectionBound) -> Self {
         todo!()
     }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        match self {
+            Self::FixedSize(buff) => buff.last_state(),
+            Self::VariableSized(buff) => buff.last_state(),
+        }
+    }
 }
 
 pub enum BufferKind<E: Env> {
@@ -480,6 +494,13 @@ impl<E: Env> Buffer for BufferKind<E> {
 
     fn build(collection_bound: CollectionBound) -> Self {
         todo!()
+    }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        match self {
+            Self::RcBuffer(buff) => buff.last_state(),
+            Self::ArcBufferKind(buff) => buff.last_state(),
+        }
     }
 }
 

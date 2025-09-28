@@ -59,6 +59,10 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
         let capacity = collection_bound.min_steps();
         Self::new(capacity)
     }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        self.next_states.back().cloned()
+    }
 }
 
 impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
@@ -106,6 +110,10 @@ impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
 
     fn build(collection_bound: CollectionBound) -> Self {
         todo!()
+    }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        self.next_states.last().cloned()
     }
 }
 
@@ -173,6 +181,11 @@ impl<B: Buffer> Buffer for RcBufferWrapper<B> {
     fn build(collection_bound: CollectionBound) -> Self {
         todo!()
     }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        let buffer = self.0.borrow();
+        buffer.last_state()
+    }
 }
 
 #[derive(Debug)]
@@ -233,5 +246,10 @@ impl<B: Buffer> Buffer for ArcBufferWrapper<B> {
 
     fn build(collection_bound: CollectionBound) -> Self {
         todo!()
+    }
+
+    fn last_state(&self) -> Option<Self::Tensor> {
+        let buffer = self.0.lock().unwrap();
+        buffer.last_state()
     }
 }

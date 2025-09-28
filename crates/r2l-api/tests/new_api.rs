@@ -12,7 +12,7 @@ use r2l_core::{
     sampler3::{R2lSamplerX, coordinator::Location},
 };
 use r2l_gym::{GymEnv, GymEnvBuilder};
-use std::sync::Arc;
+use std::{fs::File, sync::Arc};
 
 #[test]
 fn old_api() {
@@ -45,8 +45,7 @@ fn old_api() {
     op.train().unwrap()
 }
 
-#[test]
-fn new_new_api() {
+fn run_test() {
     let builder = EnvBuilderType2::EnvBuilder {
         builder: Arc::new(GymEnvBuilder::new("CartPole-v1")),
         n_envs: 10,
@@ -71,4 +70,20 @@ fn new_new_api() {
         hooks,
     };
     op3.train().unwrap();
+}
+
+#[test]
+fn new_new_api() {
+    let guard = pprof::ProfilerGuardBuilder::default()
+        .frequency(1000)
+        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+        .build()
+        .unwrap();
+
+    run_test();
+
+    // if let Ok(report) = guard.report().build() {
+    //     let file = File::create("flamegraph.svg").unwrap();
+    //     report.flamegraph(file).unwrap();
+    // };
 }

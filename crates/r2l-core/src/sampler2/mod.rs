@@ -55,9 +55,7 @@ pub trait Buffer: Sized {
         self.states().len()
     }
 
-    fn last_state(&self) -> Option<Self::Tensor> {
-        self.next_states().last().cloned()
-    }
+    fn last_state(&self) -> Option<Self::Tensor>;
 
     fn last_state_terminates(&self) -> bool {
         todo!()
