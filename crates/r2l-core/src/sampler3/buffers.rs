@@ -229,6 +229,7 @@ impl<B: Buffer> Clone for ArcBufferWrapper<B> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BatchIndexIterator {
     indicies: Vec<(usize, usize)>,
     sample_size: usize,
@@ -311,6 +312,23 @@ pub enum BufferStack<B: Buffer> {
     AtomicRefCounted(Vec<ArcBufferWrapper<B>>),
 }
 
+pub struct BufferStackSampler<T: R2lTensor> {
+    observations: Vec<Vec<T>>,
+    actions: Vec<Vec<T>>,
+}
+
+impl<T: R2lTensor> BufferStackSampler<T> {
+    pub fn sample(&self, indicies: &[(usize, usize)]) -> (Vec<T>, Vec<T>) {
+        let mut observations = vec![];
+        let mut actions = vec![];
+        for (buf_idx, idx) in indicies {
+            observations.push(self.observations[*buf_idx][*idx].clone());
+            actions.push(self.actions[*buf_idx][*idx].clone());
+        }
+        (observations, actions)
+    }
+}
+
 // TODO: we may want to not repeat ourselfs so much here!
 impl<B: Buffer> BufferStack<B> {
     pub fn advantages_and_returns<VT: R2lTensor + From<B::Tensor>>(
@@ -359,6 +377,42 @@ impl<B: Buffer> BufferStack<B> {
                     actions.push(action.clone());
                 }
                 (observations, actions)
+            }
+        }
+    }
+
+    pub fn sampler<T: R2lTensor + From<B::Tensor>>(&self) -> BufferStackSampler<T> {
+        match self {
+            Self::RefCounted(buffers) => {
+                let buffers = buffers.iter().map(|b| b.buffer()).collect::<Vec<_>>();
+                let states = buffers
+                    .iter()
+                    .map(|buffers| buffers.convert_states().clone())
+                    .collect();
+                let actions = buffers
+                    .iter()
+                    .map(|buffers| buffers.convert_actions().clone())
+                    .collect();
+                BufferStackSampler {
+                    observations: states,
+                    actions,
+                }
+            }
+            Self::AtomicRefCounted(buffers) => {
+                let buffers = buffers.iter().map(|b| b.buffer()).collect::<Vec<_>>();
+                let states = buffers
+                    .iter()
+                    .map(|buffers| buffers.convert_states().clone())
+                    .collect();
+                let actions = buffers
+                    .iter()
+                    .map(|buffers| buffers.convert_actions().clone())
+                    .collect();
+
+                BufferStackSampler {
+                    observations: states,
+                    actions,
+                }
             }
         }
     }

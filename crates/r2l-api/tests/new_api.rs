@@ -33,8 +33,10 @@ fn old_api() {
     let agent = PPOBuilder::default()
         .build(&Device::Cpu, &env_description)
         .unwrap();
-
-    let hooks = DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::total_step_bound(5000000));
+    let hooks = DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::RolloutBound {
+        total_rollouts: 10,
+        current_rollout: 0,
+    });
     let mut op = OnPolicyAlgorithm {
         sampler,
         agent,
@@ -60,7 +62,7 @@ fn new_new_api() {
         .build3(&Device::Cpu, &env_description, PPO3DefaultHooks::new())
         .unwrap();
     let hooks = DefaultOnPolicyAlgorightmsHooks3::new(LearningSchedule::RolloutBound {
-        total_rollouts: 100,
+        total_rollouts: 10,
         current_rollout: 0,
     });
     let mut op3 = OnPolicyAlgorithm3 {

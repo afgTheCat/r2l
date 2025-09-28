@@ -94,6 +94,7 @@ impl<M: ModuleWithValueFunction> CandlePPO<M> {
     fn batching_loop(&mut self, batch_iter: &mut RolloutBatchIterator) -> Result<()> {
         let ppo = &mut self.ppo;
         loop {
+            // println!("batching loop");
             let Some(batch) = batch_iter.next() else {
                 return Ok(());
             };

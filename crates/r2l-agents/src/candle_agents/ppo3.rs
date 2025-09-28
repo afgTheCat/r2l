@@ -7,7 +7,7 @@ use r2l_candle_lm::{
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
 };
 use r2l_core::agents::Agent3;
-use r2l_core::sampler3::buffers::{BatchIndexIterator, BufferStack};
+use r2l_core::sampler3::buffers::BufferStack;
 use r2l_core::tensor::R2lTensor;
 use r2l_core::{
     distributions::Policy,
@@ -93,7 +93,6 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait3<M>> CandlePPO3<M, H> {
     fn batching_loop<B: Buffer>(
         &mut self,
         buffers: &BufferStack<B>,
-        mut index_iterator: BatchIndexIterator,
         advantages: &Advantages,
         logps: &Logps,
         returns: &Returns,
@@ -101,19 +100,21 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait3<M>> CandlePPO3<M, H> {
     where
         CandleTensor: From<<B as Buffer>::Tensor>,
     {
+        let mut index_iterator = buffers.index_iterator(self.ppo.sample_size);
+        let sampler = buffers.sampler();
         let ppo = &mut self.ppo;
         loop {
+            // println!("batching loop");
             let Some(indicies) = index_iterator.iter() else {
                 return Ok(());
             };
-            let (observations, actions) = buffers.sample(&indicies);
+            let (observations, actions) = sampler.sample(&indicies);
             let advantages = advantages.sample(&indicies);
             let advantages = CandleTensor::from_slice(&advantages, advantages.len(), &ppo.device)?;
             let logp_old = logps.sample(&indicies);
             let logp_old = CandleTensor::from_slice(&logp_old, logp_old.len(), &ppo.device)?;
             let returns = returns.sample(&indicies);
             let returns = CandleTensor::from_slice(&returns, returns.len(), &ppo.device)?;
-
             let logp = Logp(
                 ppo.module
                     .get_policy_ref()
@@ -161,8 +162,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait3<M>> CandlePPO3<M, H> {
         CandleTensor: From<<B as Buffer>::Tensor>,
     {
         loop {
-            let index_iterator = buffers.index_iterator(self.ppo.sample_size);
-            self.batching_loop(&buffers, index_iterator, &advantages, &logps, &returns)?;
+            self.batching_loop(&buffers, &advantages, &logps, &returns)?;
             let rollout_hook_res = self.hooks.rollout_hook(&buffers, &mut self.ppo);
             process_hook_result!(rollout_hook_res);
         }

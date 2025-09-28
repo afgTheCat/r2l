@@ -43,18 +43,24 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> VecEnvWorker<E, B> {
     }
 
     fn collect(&mut self, bound: CollectionBound) {
+        let Some(distr) = &mut self.policy else {
+            todo!()
+        };
+        let mut buffer = self.buffer.buffer_mut();
         match bound {
             CollectionBound::StepBound { steps } => {
                 for _ in 0..steps {
-                    self.step();
+                    let last_state = self.last_state.take();
+                    buffer.step(&mut self.env, distr, last_state);
                 }
             }
             CollectionBound::EpisodeBound { steps } => {
                 let mut steps_taken = 0;
                 loop {
-                    self.step();
+                    let last_state = self.last_state.take();
+                    buffer.step(&mut self.env, distr, last_state);
                     steps_taken += 1;
-                    if steps_taken >= steps && self.buffer.buffer().last_state_terminates() {
+                    if steps_taken >= steps && buffer.last_state_terminates() {
                         break;
                     }
                 }
@@ -67,12 +73,12 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> VecEnvWorker<E, B> {
     }
 }
 
-enum WorkerCommand2<T: R2lTensor> {
+pub enum WorkerCommand2<T: R2lTensor> {
     SetPolicy(Box<dyn Policy<Tensor = T>>),
     Collect(CollectionBound),
 }
 
-enum WorkerResult2 {
+pub enum WorkerResult2 {
     PolicySet,
     Collected,
 }
@@ -126,18 +132,24 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> ThreadEnvWorker2<E, B> {
     }
 
     pub fn collect(&mut self, bound: CollectionBound) {
+        let Some(distr) = &mut self.policy else {
+            todo!()
+        };
+        let mut buffer = self.buffer.buffer();
         match bound {
             CollectionBound::StepBound { steps } => {
                 for _ in 0..steps {
-                    self.step();
+                    let last_state = self.last_state.take();
+                    buffer.step(&mut self.env, distr, last_state);
                 }
             }
             CollectionBound::EpisodeBound { steps } => {
                 let mut steps_taken = 0;
                 loop {
-                    self.step();
+                    let last_state = self.last_state.take();
+                    buffer.step(&mut self.env, distr, last_state);
                     steps_taken += 1;
-                    if steps_taken >= steps && self.buffer.buffer().last_state_terminates() {
+                    if steps_taken >= steps && buffer.last_state_terminates() {
                         break;
                     }
                 }
@@ -257,6 +269,7 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
                 }
             }
             CoordinatorType::Vec(workers) => {
+                // NOTE: OLD WAY
                 for worker in workers.iter_mut() {
                     worker.collect(self.collection_bound.clone());
                 }
