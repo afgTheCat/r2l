@@ -6,9 +6,8 @@ use r2l_candle_lm::{
     learning_module2::PolicyValuesLosses,
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
 };
-use r2l_core::agents::Agent3;
-use r2l_core::sampler3::buffers::{Buffer, BufferStack};
-use r2l_core::tensor::R2lTensor;
+use r2l_core::agents::Agent4;
+use r2l_core::sampler3::buffer_stack::BufferStack3;
 use r2l_core::{
     distributions::Policy,
     policies::{LearningModule, ValueFunction},
@@ -26,34 +25,28 @@ macro_rules! process_hook_result {
     };
 }
 
-pub trait PPOHooksTrait3<M: ModuleWithValueFunction> {
-    fn before_learning_hook<BT: R2lTensor, B: Buffer<Tensor = BT>>(
+pub trait PPOHooksTrait4<M: ModuleWithValueFunction> {
+    fn before_learning_hook(
         &mut self,
-        agent: &mut CandlePPOCore3<M>,
-        buffers: &BufferStack<B>,
+        agent: &mut CandlePPOCore4<M>,
+        buffers: &BufferStack3<CandleTensor>,
         advantages: &mut Advantages,
         returns: &mut Returns,
-    ) -> candle_core::Result<HookResult>
-    where
-        CandleTensor: From<BT>,
-    {
+    ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<BT: R2lTensor, B: Buffer<Tensor = BT>>(
+    fn rollout_hook(
         &mut self,
-        buffers: &BufferStack<B>,
-        agent: &mut CandlePPOCore3<M>,
-    ) -> candle_core::Result<HookResult>
-    where
-        CandleTensor: From<BT>,
-    {
+        buffers: &BufferStack3<CandleTensor>,
+        agent: &mut CandlePPOCore4<M>,
+    ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Break)
     }
 
     fn batch_hook(
         &mut self,
-        agent: &mut CandlePPOCore3<M>,
+        agent: &mut CandlePPOCore4<M>,
         policy_loss: &mut PolicyLoss,
         value_loss: &mut ValueLoss,
         data: &PPOBatchData,
@@ -62,19 +55,19 @@ pub trait PPOHooksTrait3<M: ModuleWithValueFunction> {
     }
 }
 
-pub struct PPO3DefaultHooks<M: ModuleWithValueFunction> {
+pub struct PPO4DefaultHooks<M: ModuleWithValueFunction> {
     _lm: PhantomData<M>,
 }
 
-impl<M: ModuleWithValueFunction> PPO3DefaultHooks<M> {
+impl<M: ModuleWithValueFunction> PPO4DefaultHooks<M> {
     pub fn new() -> Self {
         Self { _lm: PhantomData }
     }
 }
 
-impl<M: ModuleWithValueFunction> PPOHooksTrait3<M> for PPO3DefaultHooks<M> {}
+impl<M: ModuleWithValueFunction> PPOHooksTrait4<M> for PPO4DefaultHooks<M> {}
 
-pub struct CandlePPOCore3<M: ModuleWithValueFunction> {
+pub struct CandlePPOCore4<M: ModuleWithValueFunction> {
     pub module: M,
     pub clip_range: f32,
     pub gamma: f32,
@@ -83,31 +76,26 @@ pub struct CandlePPOCore3<M: ModuleWithValueFunction> {
     pub device: Device,
 }
 
-pub struct CandlePPO3<M: ModuleWithValueFunction, H: PPOHooksTrait3<M>> {
-    pub ppo: CandlePPOCore3<M>,
+pub struct CandlePPO4<M: ModuleWithValueFunction, H: PPOHooksTrait4<M>> {
+    pub ppo: CandlePPOCore4<M>,
     pub hooks: H,
 }
 
-impl<M: ModuleWithValueFunction, H: PPOHooksTrait3<M>> CandlePPO3<M, H> {
-    fn batching_loop<B: Buffer>(
+impl<M: ModuleWithValueFunction, H: PPOHooksTrait4<M>> CandlePPO4<M, H> {
+    fn batching_loop(
         &mut self,
-        buffers: &BufferStack<B>,
+        buffers: &BufferStack3<CandleTensor>,
         advantages: &Advantages,
         logps: &Logps,
         returns: &Returns,
-    ) -> Result<()>
-    where
-        CandleTensor: From<<B as Buffer>::Tensor>,
-    {
+    ) -> Result<()> {
         let mut index_iterator = buffers.index_iterator(self.ppo.sample_size);
-        let sampler = buffers.sampler();
         let ppo = &mut self.ppo;
         loop {
-            // println!("batching loop");
             let Some(indicies) = index_iterator.iter() else {
                 return Ok(());
             };
-            let (observations, actions) = sampler.sample(&indicies);
+            let (observations, actions) = buffers.sample(&indicies);
             let advantages = advantages.sample(&indicies);
             let advantages = CandleTensor::from_slice(&advantages, advantages.len(), &ppo.device)?;
             let logp_old = logps.sample(&indicies);
@@ -150,16 +138,13 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait3<M>> CandlePPO3<M, H> {
         }
     }
 
-    fn learning_loop<B: Buffer>(
+    fn learning_loop(
         &mut self,
-        buffers: BufferStack<B>,
+        buffers: BufferStack3<CandleTensor>,
         advantages: Advantages,
         returns: Returns,
         logps: Logps,
-    ) -> Result<()>
-    where
-        CandleTensor: From<<B as Buffer>::Tensor>,
-    {
+    ) -> Result<()> {
         loop {
             self.batching_loop(&buffers, &advantages, &logps, &returns)?;
             let rollout_hook_res = self.hooks.rollout_hook(&buffers, &mut self.ppo);
@@ -168,17 +153,14 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait3<M>> CandlePPO3<M, H> {
     }
 }
 
-impl<M: ModuleWithValueFunction, H: PPOHooksTrait3<M>> Agent3 for CandlePPO3<M, H> {
+impl<M: ModuleWithValueFunction, H: PPOHooksTrait4<M>> Agent4 for CandlePPO4<M, H> {
     type Policy = <M as ModuleWithValueFunction>::P;
 
     fn policy3(&self) -> Self::Policy {
         self.ppo.module.get_inference_policy()
     }
 
-    fn learn3<B: Buffer>(&mut self, buffers: BufferStack<B>) -> Result<()>
-    where
-        CandleTensor: From<<B as Buffer>::Tensor>,
-    {
+    fn learn3(&mut self, buffers: BufferStack3<<Self::Policy as Policy>::Tensor>) -> Result<()> {
         let (mut advantages, mut returns) = buffers.advantages_and_returns(
             self.ppo.module.value_func(),
             self.ppo.gamma,

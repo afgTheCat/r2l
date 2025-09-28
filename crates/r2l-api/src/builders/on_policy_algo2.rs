@@ -11,10 +11,11 @@ use r2l_agents::{
     candle_agents::{a2c::A2C, ppo::CandlePPO},
 };
 use r2l_core::{
-    env::{Env, EnvBuilderTrait},
+    env::Env,
+    env_builder::{EnvBuilderTrait, EnvBuilderType},
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     sampler::R2lSampler,
-    sampler2::{Buffer, env_pools::builder::EnvBuilderType2},
+    sampler3::buffers::Buffer,
     tensor::{R2lBuffer, R2lTensor},
 };
 use std::sync::Arc;
@@ -81,7 +82,7 @@ impl A2CAlgoBuilder {
         >,
     > {
         let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
-            EnvBuilderType2::EnvBuilder {
+            EnvBuilderType::EnvBuilder {
                 builder: Arc::new(env_builder),
                 n_envs,
             },
@@ -134,7 +135,7 @@ impl PPOAlgoBuilder {
         >,
     > {
         let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
-            EnvBuilderType2::EnvBuilder {
+            EnvBuilderType::EnvBuilder {
                 builder: Arc::new(env_builder),
                 n_envs,
             },

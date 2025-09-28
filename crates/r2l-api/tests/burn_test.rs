@@ -9,7 +9,7 @@ use r2l_burn_lm::{
     learning_module::{ParalellActorCriticLM, ParalellActorModel},
     sequential::Sequential,
 };
-use r2l_core::{Algorithm, sampler2::env_pools::builder::EnvBuilderType2};
+use r2l_core::{Algorithm, env_builder::EnvBuilderType};
 use r2l_core::{
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     sampler::R2lSampler,
@@ -25,7 +25,7 @@ fn build_sampler() -> R2lSampler<GymEnv> {
         hook_options: Default::default(),
         env_pool_type: Default::default(),
     };
-    sampler_type.build_with_builder_type(EnvBuilderType2::EnvBuilder {
+    sampler_type.build_with_builder_type(EnvBuilderType::EnvBuilder {
         builder: Arc::new(GymEnvBuilder::new("CartPole-v1")),
         n_envs: 1,
     })

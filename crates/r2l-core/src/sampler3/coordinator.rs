@@ -1,8 +1,14 @@
 use crate::{
     distributions::Policy,
-    env::{Env, EnvBuilderTrait, EnvironmentDescription},
-    sampler2::{Buffer, CollectionBound, env_pools::builder::EnvBuilderType2},
-    sampler3::buffers::{ArcBufferWrapper, BufferStack, RcBufferWrapper},
+    env::{Env, EnvironmentDescription},
+    env_builder::{EnvBuilderTrait, EnvBuilderType},
+    sampler3::{
+        CollectionBound,
+        buffer_stack::BufferStack3,
+        buffers::{
+            ArcBufferWrapper, Buffer, BufferStack, RcBufferWrapper, VariableSizedStateBuffer,
+        },
+    },
     tensor::R2lTensor,
 };
 use crossbeam::channel::{Receiver, Sender};
@@ -189,10 +195,7 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
         }
     }
 
-    pub fn set_policy<P: crate::distributions::Policy<Tensor = E::Tensor> + Clone>(
-        &mut self,
-        policy: P,
-    ) {
+    pub fn set_policy<P: Policy<Tensor = E::Tensor> + Clone>(&mut self, policy: P) {
         match &mut self.coordinator_type {
             CoordinatorType::ThreadEnvWorker { channels, .. } => {
                 let num_envs = channels.len();
@@ -227,6 +230,39 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
             CoordinatorType::Vec(workers) => BufferStack::RefCounted(
                 workers.iter().map(|w| w.buffer.clone()).collect::<Vec<_>>(),
             ),
+        }
+    }
+
+    pub fn get_buffers2<T: R2lTensor + From<E::Tensor>>(&self) -> BufferStack3<T> {
+        match &self.coordinator_type {
+            CoordinatorType::Vec(workers) => {
+                let mut buffers = vec![VariableSizedStateBuffer::default(); workers.len()];
+                for (buff, worker) in buffers.iter_mut().zip(workers) {
+                    let inner_buffer = worker.buffer.buffer();
+                    buff.states = inner_buffer.convert_states();
+                    buff.next_states = inner_buffer.convert_next_states();
+                    buff.actions = inner_buffer.convert_actions();
+                    buff.rewards = inner_buffer.rewards();
+                    buff.terminated = inner_buffer.terminated();
+                    buff.trancuated = inner_buffer.trancuated();
+                }
+                BufferStack3::new(buffers)
+            }
+            CoordinatorType::ThreadEnvWorker {
+                buffers: workers, ..
+            } => {
+                let mut buffers = vec![VariableSizedStateBuffer::default(); workers.len()];
+                for (buff, worker) in buffers.iter_mut().zip(workers) {
+                    let inner_buffer = worker.buffer();
+                    buff.states = inner_buffer.convert_states();
+                    buff.next_states = inner_buffer.convert_next_states();
+                    buff.actions = inner_buffer.convert_actions();
+                    buff.rewards = inner_buffer.rewards();
+                    buff.terminated = inner_buffer.terminated();
+                    buff.trancuated = inner_buffer.trancuated();
+                }
+                BufferStack3::new(buffers)
+            }
         }
     }
 
@@ -280,11 +316,11 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
 
 impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
     pub fn build_rc<EB: EnvBuilderTrait<Env = E>>(
-        env_builder: EnvBuilderType2<EB>,
+        env_builder: EnvBuilderType<EB>,
         collection_bound: CollectionBound,
     ) -> Self {
         let workers = match env_builder {
-            EnvBuilderType2::EnvBuilder { builder, n_envs } => {
+            EnvBuilderType::EnvBuilder { builder, n_envs } => {
                 let mut workers = vec![];
                 for _ in 0..n_envs {
                     let buffer = B::build(collection_bound.clone());
@@ -294,7 +330,7 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
                 }
                 workers
             }
-            EnvBuilderType2::EnvBuilderVec { builders } => {
+            EnvBuilderType::EnvBuilderVec { builders } => {
                 let mut workers = vec![];
                 for builder in builders {
                     let buffer = B::build(collection_bound.clone());
@@ -314,13 +350,13 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
 
 impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send + 'static> CoordinatorS<E, B> {
     pub fn build_arc<EB: EnvBuilderTrait<Env = E>>(
-        env_builder: EnvBuilderType2<EB>,
+        env_builder: EnvBuilderType<EB>,
         collection_bound: CollectionBound,
     ) -> Self {
         let mut channels = HashMap::new();
         let mut buffers = vec![];
         match env_builder {
-            EnvBuilderType2::EnvBuilder { builder, n_envs } => {
+            EnvBuilderType::EnvBuilder { builder, n_envs } => {
                 for id in 0..n_envs {
                     let (command_tx, command_rx) = crossbeam::channel::unbounded();
                     let (result_tx, result_rx) = crossbeam::channel::unbounded();
@@ -338,7 +374,7 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor> + Send + 'static> Coordinato
                     buffers.push(buffer)
                 }
             }
-            EnvBuilderType2::EnvBuilderVec { builders } => {
+            EnvBuilderType::EnvBuilderVec { builders } => {
                 for (id, builder) in builders.iter().enumerate() {
                     let (command_tx, command_rx) = crossbeam::channel::unbounded();
                     let (result_tx, result_rx) = crossbeam::channel::unbounded();

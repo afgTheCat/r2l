@@ -4,7 +4,8 @@ use pyo3::{
     types::{PyAnyMethods, PyDict},
 };
 use r2l_core::{
-    env::{Env, EnvBuilderTrait, EnvironmentDescription, SnapShot, Space},
+    env::{Env, EnvironmentDescription, SnapShot, Space},
+    env_builder::EnvBuilderTrait,
     tensor::R2lBuffer,
 };
 

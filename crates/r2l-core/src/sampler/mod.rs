@@ -19,12 +19,12 @@ use std::{fmt::Debug, marker::PhantomData};
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
 // Arc::RwLock for the underlying distribution.
 #[derive(Debug, Clone)]
-pub struct PolicyWrapper<P: Policy + Clone, T: Clone + Send + Sync + Debug + 'static> {
+pub struct PolicyWrapper<P: Policy + Clone, T: R2lTensor> {
     policy: P,
     env: PhantomData<T>,
 }
 
-impl<D: Policy + Clone, T: Clone + Send + Sync + Debug + 'static> PolicyWrapper<D, T> {
+impl<D: Policy + Clone, T: R2lTensor> PolicyWrapper<D, T> {
     pub fn new(policy: D) -> Self {
         Self {
             policy,

@@ -1,15 +1,17 @@
-use std::marker::PhantomData;
-
 use crate::{
     Algorithm,
-    agents::{Agent, Agent2, Agent3, TensorOfAgent, TensorOfAgent2},
+    agents::{Agent, Agent3, Agent4, TensorOfAgent},
     distributions::Policy,
-    env::{Sampler, Sampler2, Sampler3, TensorOfSampler, TensorOfSampler2},
-    sampler2::Buffer,
-    sampler3::buffers::BufferStack,
+    env::{Env, Sampler, Sampler3, Sampler4, TensorOfSampler},
+    sampler::PolicyWrapper,
+    sampler3::{
+        buffer_stack::BufferStack3,
+        buffers::{Buffer, BufferStack},
+    },
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
+use std::marker::PhantomData;
 
 macro_rules! break_on_hook_res {
     ($hook_res:expr) => {
@@ -222,7 +224,7 @@ impl<B: Buffer, P: Policy> OnPolicyAlgorithmHooks2 for DefaultOnPolicyAlgorightm
         }
     }
 
-    fn post_training_hook(&mut self, policy: P) -> bool {
+    fn post_training_hook(&mut self, _policy: P) -> bool {
         false
     }
 
@@ -310,43 +312,12 @@ where
         }
     }
 
-    fn post_training_hook(&mut self, policy: P) -> bool {
+    fn post_training_hook(&mut self, _policy: P) -> bool {
         false
     }
 
     fn shutdown_hook(&mut self) -> Result<()> {
         Ok(())
-    }
-}
-
-pub struct OnPolicyAlgorithm2<S: Sampler2, A: Agent2, H: OnPolicyAlgorithmHooks2> {
-    pub sampler: S,
-    pub agent: A,
-    pub hooks: H,
-}
-
-impl<H: OnPolicyAlgorithmHooks2, S: Sampler2<Buffer = H::B>, A: Agent2<Policy = H::P>>
-    OnPolicyAlgorithm2<S, A, H>
-where
-    TensorOfSampler2<S>: From<TensorOfAgent2<A>>,
-    TensorOfSampler2<S>: Into<TensorOfAgent2<A>>,
-    <A as Agent2>::Policy: Clone,
-{
-    pub fn train(&mut self) -> Result<()> {
-        if self.hooks.init_hook() {
-            return Ok(());
-        }
-        loop {
-            let policy = self.agent.policy2();
-            let buffers = self.sampler.collect_rollouts(policy)?;
-            break_on_hook_res!(self.hooks.post_rollout_hook(&buffers));
-
-            // learning phase
-            self.agent.learn2(&buffers)?;
-            let policy = self.agent.policy2();
-            break_on_hook_res!(self.hooks.post_training_hook(policy));
-        }
-        self.hooks.shutdown_hook()
     }
 }
 
@@ -370,6 +341,127 @@ impl<H: OnPolicyAlgorithmHooks3, S: Sampler3<Buffer = H::B>, A: Agent3<Policy = 
         loop {
             let policy = self.agent.policy3();
             let buffers = self.sampler.collect_rollouts(policy);
+            break_on_hook_res!(self.hooks.post_rollout_hook(&buffers));
+
+            // learning phase
+            self.agent.learn3(buffers)?;
+            let policy = self.agent.policy3();
+            break_on_hook_res!(self.hooks.post_training_hook(policy));
+        }
+        self.hooks.shutdown_hook()
+    }
+}
+
+pub trait OnPolicyAlgorithmHooks4
+where
+    Self::P: Clone,
+    <Self::P as Policy>::Tensor: From<<Self::E as Env>::Tensor>,
+    <Self::E as Env>::Tensor: From<<Self::P as Policy>::Tensor>,
+{
+    type P: Policy;
+    type E: Env;
+
+    fn init_hook(&mut self) -> bool;
+
+    fn post_rollout_hook(&mut self, rollouts: &BufferStack3<<Self::P as Policy>::Tensor>) -> bool;
+
+    fn post_training_hook(&mut self, policy: Self::P) -> bool;
+
+    fn shutdown_hook(&mut self) -> Result<()>;
+}
+
+pub struct DefaultOnPolicyAlgorightmsHooks4<E: Env, P: Policy> {
+    rollout_idx: usize,
+    learning_schedule: LearningSchedule,
+    _buffer: PhantomData<E>,
+    _policy: PhantomData<P>,
+}
+
+impl<E: Env, P: Policy> DefaultOnPolicyAlgorightmsHooks4<E, P> {
+    pub fn new(learning_schedule: LearningSchedule) -> Self {
+        Self {
+            rollout_idx: 0,
+            learning_schedule,
+            _buffer: PhantomData,
+            _policy: PhantomData,
+        }
+    }
+}
+
+impl<E: Env, P: Policy + Clone> OnPolicyAlgorithmHooks4 for DefaultOnPolicyAlgorightmsHooks4<E, P>
+where
+    P::Tensor: From<E::Tensor>,
+    E::Tensor: From<P::Tensor>,
+    P: Clone,
+{
+    type E = E;
+    type P = P;
+
+    fn init_hook(&mut self) -> bool {
+        false
+    }
+
+    fn post_rollout_hook(&mut self, rollouts: &BufferStack3<<Self::P as Policy>::Tensor>) -> bool {
+        let total_reward = rollouts.total_rewards();
+        let episodes = rollouts.total_episodes();
+        println!(
+            "rollout: {:<3} episodes: {:<5} total reward: {:<5.2} avg reward per episode: {:.2}",
+            self.rollout_idx,
+            episodes,
+            total_reward,
+            total_reward / episodes as f32
+        );
+        self.rollout_idx += 1;
+        match &mut self.learning_schedule {
+            LearningSchedule::RolloutBound {
+                total_rollouts,
+                current_rollout,
+            } => {
+                *current_rollout += 1;
+                current_rollout >= total_rollouts
+            }
+            LearningSchedule::TotalStepBound {
+                total_steps,
+                current_step,
+            } => {
+                let rollout_steps: usize = rollouts.total_steps();
+                *current_step += rollout_steps;
+                current_step >= total_steps
+            }
+        }
+    }
+
+    fn post_training_hook(&mut self, _policy: P) -> bool {
+        false
+    }
+
+    fn shutdown_hook(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+pub struct OnPolicyAlgorithm4<
+    H: OnPolicyAlgorithmHooks4,
+    A: Agent4<Policy = H::P>,
+    S: Sampler4<Env = H::E>,
+> {
+    pub sampler: S,
+    pub agent: A,
+    pub hooks: H,
+}
+
+impl<H: OnPolicyAlgorithmHooks4, A: Agent4<Policy = H::P>, S: Sampler4<Env = H::E>>
+    OnPolicyAlgorithm4<H, A, S>
+{
+    pub fn train(&mut self) -> Result<()> {
+        if self.hooks.init_hook() {
+            return Ok(());
+        }
+        loop {
+            let policy = self.agent.policy3();
+            let policy = PolicyWrapper::new(policy);
+            self.sampler.collect_rollouts(policy);
+            let buffers = self.sampler.get_buffer_stack();
             break_on_hook_res!(self.hooks.post_rollout_hook(&buffers));
 
             // learning phase

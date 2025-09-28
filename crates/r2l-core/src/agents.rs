@@ -1,5 +1,6 @@
-use crate::sampler3::buffers::BufferStack;
-use crate::{distributions::Policy, sampler2::Buffer, utils::rollout_buffer::RolloutBuffer};
+use crate::sampler3::buffer_stack::BufferStack3;
+use crate::sampler3::buffers::{Buffer, BufferStack};
+use crate::{distributions::Policy, utils::rollout_buffer::RolloutBuffer};
 use anyhow::Result;
 
 pub trait Agent {
@@ -15,21 +16,6 @@ pub trait Agent {
 
 pub type TensorOfAgent<A> = <<A as Agent>::Policy as Policy>::Tensor;
 
-pub trait Agent2 {
-    /// The policy
-    type Policy: Policy;
-
-    /// Retriesve the underlying distribution. This should be inference tbh.
-    fn policy2(&self) -> Self::Policy;
-
-    /// Instruments learnging with the rollout buffers collected
-    fn learn2<B: Buffer>(&mut self, buffers: &[B]) -> Result<()>
-    where
-        <B as Buffer>::Tensor: Into<<Self::Policy as Policy>::Tensor>;
-}
-
-pub type TensorOfAgent2<A> = <<A as Agent2>::Policy as Policy>::Tensor;
-
 pub trait Agent3 {
     /// The policy
     type Policy: Policy;
@@ -44,3 +30,16 @@ pub trait Agent3 {
 }
 
 pub type TensorOfAgent3<A> = <<A as Agent3>::Policy as Policy>::Tensor;
+
+pub trait Agent4 {
+    /// The policy
+    type Policy: Policy;
+
+    /// Retriesve the underlying distribution. This should be inference tbh.
+    fn policy3(&self) -> Self::Policy;
+
+    /// Instruments learnging with the rollout buffers collected
+    fn learn3(&mut self, buffers: BufferStack3<<Self::Policy as Policy>::Tensor>) -> Result<()>;
+}
+
+pub type TensorOfAgent4<A> = <<A as Agent3>::Policy as Policy>::Tensor;

@@ -1,7 +1,12 @@
 use std::fmt::Debug;
 
 use crate::{
-    distributions::Policy, sampler2::Buffer, sampler3::buffers::BufferStack, tensor::R2lTensor,
+    distributions::Policy,
+    sampler3::{
+        buffer_stack::BufferStack3,
+        buffers::{Buffer, BufferStack},
+    },
+    tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
@@ -104,43 +109,11 @@ pub trait Sampler {
 
 pub type TensorOfSampler<S> = <<S as Sampler>::Env as Env>::Tensor;
 
-// TODO: we don't really want a Vec of buffers exposed. In the grand scheme of things, the agent
-// should not really care for how the Buffer is collected. It should only care about the. What we
-// want is basically a MemorySampler that has the same Tensor type what the agent has. That means
-// that a new trait should probably be exposed. Some built in features would be nice as well.
-pub trait Sampler2 {
-    type E: Env;
-    type Buffer: Buffer<Tensor = <Self::E as Env>::Tensor>;
-
-    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> Result<Vec<Self::Buffer>>
-    where
-        <Self::Buffer as Buffer>::Tensor: From<P::Tensor>,
-        <Self::Buffer as Buffer>::Tensor: Into<P::Tensor>;
-}
-
-pub type TensorOfSampler2<S> = <<S as Sampler2>::Buffer as Buffer>::Tensor;
-
-pub trait EnvBuilderTrait: Sync + Send + 'static {
-    type Env: Env;
-
-    fn build_env(&self) -> Result<Self::Env>;
-}
-
-impl<E: Env, F: Sync + Send + 'static> EnvBuilderTrait for F
-where
-    F: Fn() -> Result<E>,
-{
-    type Env = E;
-
-    fn build_env(&self) -> Result<Self::Env> {
-        (self)()
-    }
-}
-
 pub trait Sampler3 {
     type E: Env;
     type Buffer: Buffer<Tensor = <Self::E as Env>::Tensor>;
 
+    // TODO: what if we return the BufferStack according to the policies state vec?
     fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> BufferStack<Self::Buffer>
     where
         <Self::Buffer as Buffer>::Tensor: From<P::Tensor>,
@@ -148,3 +121,18 @@ pub trait Sampler3 {
 }
 
 pub type TensorOfSampler3<S> = <<S as Sampler3>::Buffer as Buffer>::Tensor;
+
+// TODO: I think this is the final form! Also this is the best of the best. What we need is
+// basically a structure that converts things! This way we can also get rid of the Buffer trait
+// but we can have the BufferStack exposed. Tbh BufferStack is the innovation here, not the
+// buffers. Also we might want the Buffer trait kept.
+pub trait Sampler4 {
+    type Env: Env;
+
+    fn collect_rollouts<P: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+        &mut self,
+        policy: P,
+    );
+
+    fn get_buffer_stack<T: R2lTensor + From<<Self::Env as Env>::Tensor>>(&self) -> BufferStack3<T>;
+}

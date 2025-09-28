@@ -6,6 +6,7 @@ use crate::{
 };
 use rand::Rng;
 
+#[derive(Clone)]
 pub struct VariableSizedStateBuffer<E: Env> {
     pub states: Vec<E::Tensor>,
     pub next_states: Vec<E::Tensor>,

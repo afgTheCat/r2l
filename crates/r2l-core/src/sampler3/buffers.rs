@@ -1,12 +1,14 @@
 use crate::distributions::Policy;
+use crate::env::SnapShot;
+use crate::sampler3::CollectionBound;
 use crate::tensor::R2lTensor;
 use crate::utils::rollout_buffer::{Advantages, Logps, Returns};
 use crate::{
     env::{Env, Memory},
     policies::ValueFunction,
     rng::RNG,
-    sampler2::{Buffer, CollectionBound},
 };
+use rand::Rng;
 use rand::seq::SliceRandom;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::{
@@ -16,17 +18,112 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
+pub trait Buffer: Sized {
+    type Tensor: R2lTensor;
+
+    fn states(&self) -> Vec<Self::Tensor>;
+
+    fn convert_states<T: From<Self::Tensor>>(&self) -> Vec<T> {
+        self.states().into_iter().map(|t| t.into()).collect()
+    }
+
+    fn next_states(&self) -> Vec<Self::Tensor>;
+
+    fn convert_next_states<T: From<Self::Tensor>>(&self) -> Vec<T> {
+        self.next_states().into_iter().map(|t| t.into()).collect()
+    }
+
+    fn actions(&self) -> Vec<Self::Tensor>;
+
+    fn convert_actions<T: From<Self::Tensor>>(&self) -> Vec<T> {
+        self.actions().into_iter().map(|t| t.into()).collect()
+    }
+
+    fn rewards(&self) -> Vec<f32>;
+
+    fn terminated(&self) -> Vec<bool>;
+
+    fn trancuated(&self) -> Vec<bool>;
+
+    fn push(&mut self, snapshot: Memory<Self::Tensor>);
+
+    fn dones(&self) -> Vec<bool> {
+        self.terminated()
+            .into_iter()
+            .zip(self.trancuated().into_iter())
+            .map(|(terminated, trancuated)| terminated || trancuated)
+            .collect()
+    }
+
+    fn total_steps(&self) -> usize;
+
+    fn last_state(&self) -> Option<Self::Tensor>;
+
+    fn last_state_terminates(&self) -> bool;
+
+    #[inline(always)]
+    fn step<E: Env<Tensor = Self::Tensor>>(
+        &mut self,
+        env: &mut E,
+        distr: &Box<dyn Policy<Tensor = Self::Tensor>>,
+        last_state: Option<Self::Tensor>,
+    ) {
+        let state = if let Some(state) = self.last_state() {
+            state
+        } else if let Some(last_state) = last_state {
+            last_state
+        } else {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            env.reset(seed).unwrap()
+        };
+        let action = distr.get_action(state.clone()).unwrap();
+        let SnapShot {
+            state: mut next_state,
+            reward,
+            terminated,
+            trancuated,
+        } = env.step(action.clone()).unwrap();
+        let done = terminated || trancuated;
+        if done {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            next_state = env.reset(seed).unwrap();
+        }
+        self.push(Memory {
+            state,
+            next_state,
+            action,
+            reward,
+            terminated,
+            trancuated,
+        });
+    }
+
+    fn build(collection_bound: CollectionBound) -> Self;
+}
+
 pub struct FixedSizeStateBuffer<E: Env> {
-    capacity: usize,
+    pub capacity: usize,
     pub states: AllocRingBuffer<E::Tensor>,
     pub next_states: AllocRingBuffer<E::Tensor>,
-    pub rewards: AllocRingBuffer<f32>,
     pub action: AllocRingBuffer<E::Tensor>,
+    pub rewards: AllocRingBuffer<f32>,
     pub terminated: AllocRingBuffer<bool>,
     pub trancuated: AllocRingBuffer<bool>,
 }
 
 impl<E: Env> FixedSizeStateBuffer<E> {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            states: AllocRingBuffer::new(capacity),
+            next_states: AllocRingBuffer::new(capacity),
+            rewards: AllocRingBuffer::new(capacity),
+            action: AllocRingBuffer::new(capacity),
+            terminated: AllocRingBuffer::new(capacity),
+            trancuated: AllocRingBuffer::new(capacity),
+        }
+    }
+
     pub fn push(
         &mut self,
         state: E::Tensor,
@@ -50,6 +147,10 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
 
     fn states(&self) -> Vec<Self::Tensor> {
         self.states.iter().cloned().collect()
+    }
+
+    fn total_steps(&self) -> usize {
+        self.states.len()
     }
 
     fn next_states(&self) -> Vec<Self::Tensor> {
@@ -89,7 +190,8 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
     }
 
     fn build(collection_bound: CollectionBound) -> Self {
-        todo!()
+        let capacity = collection_bound.min_steps();
+        Self::new(capacity)
     }
 
     fn last_state(&self) -> Option<Self::Tensor> {
@@ -97,54 +199,57 @@ impl<E: Env> Buffer for FixedSizeStateBuffer<E> {
     }
 }
 
-pub struct VariableSizedStateBuffer<E: Env> {
-    pub states: Vec<E::Tensor>,
-    pub next_states: Vec<E::Tensor>,
+#[derive(Clone)]
+pub struct VariableSizedStateBuffer<T: R2lTensor> {
+    pub states: Vec<T>,
+    pub next_states: Vec<T>,
     pub rewards: Vec<f32>,
-    pub action: Vec<E::Tensor>,
+    pub actions: Vec<T>,
     pub terminated: Vec<bool>,
     pub trancuated: Vec<bool>,
 }
 
-// TODO: for some reason the Default proc macro trips up the compiler. We should investigate this
-// in the future.
-impl<E: Env> Default for VariableSizedStateBuffer<E> {
+impl<T: R2lTensor> Default for VariableSizedStateBuffer<T> {
     fn default() -> Self {
         Self {
             states: vec![],
             next_states: vec![],
             rewards: vec![],
-            action: vec![],
+            actions: vec![],
             terminated: vec![],
             trancuated: vec![],
         }
     }
 }
 
-impl<E: Env> VariableSizedStateBuffer<E> {
+impl<T: R2lTensor> VariableSizedStateBuffer<T> {
     pub fn push(
         &mut self,
-        state: E::Tensor,
-        next_state: E::Tensor,
-        action: E::Tensor,
+        state: T,
+        next_state: T,
+        action: T,
         reward: f32,
         terminated: bool,
         trancuated: bool,
     ) {
         self.states.push(state);
         self.next_states.push(next_state);
-        self.action.push(action);
+        self.actions.push(action);
         self.rewards.push(reward);
         self.terminated.push(terminated);
         self.trancuated.push(trancuated);
     }
 }
 
-impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
-    type Tensor = <E as Env>::Tensor;
+impl<T: R2lTensor> Buffer for VariableSizedStateBuffer<T> {
+    type Tensor = T;
 
     fn states(&self) -> Vec<Self::Tensor> {
         self.states.iter().cloned().collect()
+    }
+
+    fn total_steps(&self) -> usize {
+        self.states.len()
     }
 
     fn next_states(&self) -> Vec<Self::Tensor> {
@@ -152,7 +257,7 @@ impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
     }
 
     fn actions(&self) -> Vec<Self::Tensor> {
-        self.action.iter().cloned().collect()
+        self.actions.iter().cloned().collect()
     }
 
     fn rewards(&self) -> Vec<f32> {
@@ -160,11 +265,11 @@ impl<E: Env> Buffer for VariableSizedStateBuffer<E> {
     }
 
     fn terminated(&self) -> Vec<bool> {
-        todo!()
+        self.terminated.clone()
     }
 
     fn trancuated(&self) -> Vec<bool> {
-        todo!()
+        self.trancuated.clone()
     }
 
     fn push(&mut self, snapshot: Memory<Self::Tensor>) {
@@ -271,7 +376,7 @@ impl BatchIndexIterator {
     }
 }
 
-fn calculate_advantages_and_returns<
+pub fn calculate_advantages_and_returns<
     B: Buffer,
     VT: R2lTensor + From<B::Tensor>,
     BT: Deref<Target = B>,

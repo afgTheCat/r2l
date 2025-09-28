@@ -1,13 +1,14 @@
 pub mod agents;
 pub mod distributions;
 pub mod env;
+pub mod env_builder;
 pub mod error;
 // TODO: readd this
 pub mod on_policy_algorithm;
 pub mod policies;
 pub mod rng;
 pub mod sampler;
-pub mod sampler2;
+// pub mod sampler2;
 pub mod sampler3;
 pub mod tensor;
 pub mod utils;

@@ -1,13 +1,10 @@
 use crate::builders::sampler_hooks2::EvaluatorNormalizerOptions;
 use r2l_core::{
-    env::{Env, EnvBuilderTrait},
+    env::Env,
+    env_builder::{EnvBuilderTrait, EnvBuilderType},
     sampler::{
         CollectionType, R2lSampler,
         env_pools::{FixedSizeEnvPoolKind, VariableSizedEnvPoolKind},
-    },
-    sampler2::{
-        R2lSampler2,
-        env_pools::builder::{EnvBuilderType2, EnvPoolBuilder},
     },
     tensor::R2lBuffer,
 };
@@ -35,7 +32,7 @@ impl SamplerType {
         EB: EnvBuilderTrait<Env = E>,
     >(
         &self,
-        builder_type: EnvBuilderType2<EB>,
+        builder_type: EnvBuilderType<EB>,
     ) -> R2lSampler<EB::Env> {
         let n_envs = builder_type.num_envs();
         let collection_type = match self.env_pool_type {
@@ -73,30 +70,6 @@ impl SamplerType {
         R2lSampler {
             env_steps: self.capacity,
             collection_type,
-        }
-    }
-}
-
-pub struct SamplerType2 {
-    pub env_pool_builder: EnvPoolBuilder,
-    pub preprocessor_options: EvaluatorNormalizerOptions,
-}
-
-impl SamplerType2 {
-    pub fn build<EB: EnvBuilderTrait>(
-        &self,
-        env_builder_type: EnvBuilderType2<EB>,
-    ) -> R2lSampler2<EB::Env> {
-        let env_builder = env_builder_type.env_builder();
-        let n_envs = env_builder_type.num_envs();
-        let env_pool = self.env_pool_builder.build(env_builder_type);
-        let env_description = env_pool.env_description();
-        let preprocessor =
-            self.preprocessor_options
-                .build2(env_description, env_builder.as_ref(), n_envs);
-        R2lSampler2 {
-            env_pool,
-            preprocessor,
         }
     }
 }
