@@ -13,6 +13,7 @@ use crate::{
 };
 use crossbeam::channel::{Receiver, Sender};
 use std::{
+    cell::Ref,
     collections::HashMap,
     sync::{Arc, Mutex},
 };
@@ -309,6 +310,24 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
                 for worker in workers.iter_mut() {
                     worker.collect(self.collection_bound.clone());
                 }
+            }
+        }
+    }
+
+    pub fn all_buffers(&self) -> impl Iterator<Item = &B> {
+        match &self.coordinator_type {
+            CoordinatorType::Vec(workers) => {
+                //
+                // workers
+                //     .iter()
+                //     .map(|w| Ref::leak(w.buffer.buffer()))
+                //     .collect::<Vec<_>>()
+                std::iter::once(workers[0].buffer.buffer())
+                // todo!()
+            }
+            CoordinatorType::ThreadEnvWorker { channels, buffers } => {
+                //
+                todo!()
             }
         }
     }

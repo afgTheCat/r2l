@@ -136,3 +136,13 @@ pub trait Sampler4 {
 
     fn get_buffer_stack<T: R2lTensor + From<<Self::Env as Env>::Tensor>>(&self) -> BufferStack3<T>;
 }
+
+pub trait Sampler5 {
+    type Tensor: R2lTensor;
+    type Env: Env<Tensor = Self::Tensor>;
+    type Buffer: Buffer<Tensor = Self::Tensor>;
+
+    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(&mut self, policy: P);
+
+    fn get_buffers(&self) -> &[Self::Buffer];
+}

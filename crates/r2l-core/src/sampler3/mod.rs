@@ -5,7 +5,7 @@ pub mod preprocessor;
 
 use crate::{
     distributions::Policy,
-    env::{Env, EnvironmentDescription, Sampler3, Sampler4},
+    env::{Env, EnvironmentDescription, Sampler3, Sampler4, Sampler5},
     env_builder::{EnvBuilderTrait, EnvBuilderType},
     sampler::PolicyWrapper,
     sampler3::{
@@ -13,6 +13,7 @@ use crate::{
         buffers::{Buffer, BufferStack, FixedSizeStateBuffer},
         coordinator::{CoordinatorS, Location},
     },
+    tensor::R2lTensor,
 };
 
 // TODO: we need better names for this. StepBound is basically step n times, while episode bound
@@ -146,5 +147,19 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> Sampler4 for R2lSamplerX<E,
         &self,
     ) -> BufferStack3<T> {
         self.coordinator.get_buffers2()
+    }
+}
+
+impl<T: R2lTensor, E: Env<Tensor = T>, B: Buffer<Tensor = T>> Sampler5 for R2lSamplerX<E, B> {
+    type Tensor = T;
+    type Env = E;
+    type Buffer = B;
+
+    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(&mut self, policy: P) {
+        todo!()
+    }
+
+    fn get_buffers(&self) -> &[Self::Buffer] {
+        self.coordinator.all_buffers()
     }
 }
