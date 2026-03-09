@@ -314,23 +314,19 @@ impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {
         }
     }
 
-    pub fn all_buffers(&self) -> impl Iterator<Item = &B> {
-        match &self.coordinator_type {
-            CoordinatorType::Vec(workers) => {
-                //
-                // workers
-                //     .iter()
-                //     .map(|w| Ref::leak(w.buffer.buffer()))
-                //     .collect::<Vec<_>>()
-                std::iter::once(workers[0].buffer.buffer())
-                // todo!()
-            }
-            CoordinatorType::ThreadEnvWorker { channels, buffers } => {
-                //
-                todo!()
-            }
-        }
-    }
+    // pub fn all_buffers(&self) -> impl Iterator<Item = &B> {
+    //     match &self.coordinator_type {
+    //         CoordinatorType::Vec(workers) => {
+    //             // workers.iter().map(|w| Ref::leak(w.buffer.buffer()))
+    //             //     .collect::<Vec<_>>()
+    //             // std::iter::once(workers[0].buffer.buffer())
+    //         }
+    //         CoordinatorType::ThreadEnvWorker { channels, buffers } => {
+    //             //
+    //             todo!()
+    //         }
+    //     }
+    // }
 }
 
 impl<E: Env, B: Buffer<Tensor = <E as Env>::Tensor>> CoordinatorS<E, B> {

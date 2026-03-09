@@ -160,6 +160,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>, B: Buffer<Tensor = T>> Sampler5 for R2lSa
     }
 
     fn get_buffers(&self) -> &[Self::Buffer] {
-        self.coordinator.all_buffers()
+        todo!()
+        // self.coordinator.all_buffers()
     }
 }

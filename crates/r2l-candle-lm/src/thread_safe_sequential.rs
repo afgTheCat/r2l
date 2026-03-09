@@ -1,9 +1,4 @@
-use bincode::{
-    Decode, Encode,
-    de::{self},
-    error::{DecodeError, EncodeError},
-};
-use candle_core::{Device, Error, Result, Tensor, safetensors::BufferedSafetensors};
+use candle_core::{Error, Result, Tensor, safetensors::BufferedSafetensors};
 use candle_nn::{Activation, Linear, Module, VarBuilder, linear};
 use either::Either;
 use safetensors::serialize;
@@ -32,7 +27,8 @@ impl LinearLayer {
             (&self.weight_name, self.layer.weight()),
             (&self.bias_name, self.layer.bias().unwrap()), // TODO: maybe error handle here?
         ];
-        serialize(data, &None).map_err(Error::wrap)
+        todo!()
+        // serialize(data, &None).map_err(Error::wrap)
     }
 }
 

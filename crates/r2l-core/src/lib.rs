@@ -8,8 +8,8 @@ pub mod on_policy_algorithm;
 pub mod policies;
 pub mod rng;
 pub mod sampler;
-// pub mod sampler2;
-pub mod sampler3;
+// pub mod sampler3;
+pub mod sampler4;
 pub mod tensor;
 pub mod utils;
 

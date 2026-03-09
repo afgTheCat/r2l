@@ -42,6 +42,13 @@ pub enum EnvBuilderType<EB: EnvBuilderTrait> {
 }
 
 impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
+    pub fn build_idx(&self, idx: usize) -> Result<EB::Env> {
+        match &self {
+            Self::EnvBuilder { builder, .. } => builder.build_env(),
+            Self::EnvBuilderVec { builders } => builders[idx].build_env(),
+        }
+    }
+
     pub fn num_envs(&self) -> usize {
         match self {
             Self::EnvBuilder { n_envs, .. } => *n_envs,

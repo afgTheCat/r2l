@@ -55,13 +55,10 @@ where
         actions: &[Self::Tensor],
     ) -> Result<Self::Tensor> {
         let observations = observations
-            .into_iter()
+            .iter()
             .map(|o| o.clone().into())
             .collect::<Vec<_>>();
-        let actions = actions
-            .into_iter()
-            .map(|a| a.clone().into())
-            .collect::<Vec<_>>();
+        let actions = actions.iter().map(|a| a.clone().into()).collect::<Vec<_>>();
         let log_probs = self.policy.log_probs(&observations, &actions)?;
         Ok(log_probs.into())
     }

@@ -2,10 +2,10 @@ use std::fmt::Debug;
 
 use crate::{
     distributions::Policy,
-    sampler3::{
-        buffer_stack::BufferStack3,
-        buffers::{Buffer, BufferStack},
-    },
+    // sampler3::{
+    //     buffer_stack::BufferStack3,
+    //     buffers::{Buffer, BufferStack},
+    // },
     tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };
@@ -88,6 +88,8 @@ pub trait Env {
     fn env_description(&self) -> EnvironmentDescription<Self::Tensor>;
 }
 
+pub type EnvTensor<E> = <E as Env>::Tensor;
+
 #[derive(Debug, Clone, Copy, Encode, Decode)]
 pub enum RolloutMode {
     EpisodeBound { n_episodes: usize },
@@ -109,40 +111,40 @@ pub trait Sampler {
 
 pub type TensorOfSampler<S> = <<S as Sampler>::Env as Env>::Tensor;
 
-pub trait Sampler3 {
-    type E: Env;
-    type Buffer: Buffer<Tensor = <Self::E as Env>::Tensor>;
-
-    // TODO: what if we return the BufferStack according to the policies state vec?
-    fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> BufferStack<Self::Buffer>
-    where
-        <Self::Buffer as Buffer>::Tensor: From<P::Tensor>,
-        <Self::Buffer as Buffer>::Tensor: Into<P::Tensor>;
-}
-
-pub type TensorOfSampler3<S> = <<S as Sampler3>::Buffer as Buffer>::Tensor;
+// pub trait Sampler3 {
+//     type E: Env;
+//     type Buffer: Buffer<Tensor = <Self::E as Env>::Tensor>;
+//
+//     // TODO: what if we return the BufferStack according to the policies state vec?
+//     fn collect_rollouts<P: Policy + Clone>(&mut self, policy: P) -> BufferStack<Self::Buffer>
+//     where
+//         <Self::Buffer as Buffer>::Tensor: From<P::Tensor>,
+//         <Self::Buffer as Buffer>::Tensor: Into<P::Tensor>;
+// }
+//
+// pub type TensorOfSampler3<S> = <<S as Sampler3>::Buffer as Buffer>::Tensor;
 
 // TODO: I think this is the final form! Also this is the best of the best. What we need is
 // basically a structure that converts things! This way we can also get rid of the Buffer trait
 // but we can have the BufferStack exposed. Tbh BufferStack is the innovation here, not the
 // buffers. Also we might want the Buffer trait kept.
-pub trait Sampler4 {
-    type Env: Env;
+// pub trait Sampler4 {
+//     type Env: Env;
+//
+//     fn collect_rollouts<P: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
+//         &mut self,
+//         policy: P,
+//     );
+//
+//     fn get_buffer_stack<T: R2lTensor + From<<Self::Env as Env>::Tensor>>(&self) -> BufferStack3<T>;
+// }
 
-    fn collect_rollouts<P: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
-        &mut self,
-        policy: P,
-    );
-
-    fn get_buffer_stack<T: R2lTensor + From<<Self::Env as Env>::Tensor>>(&self) -> BufferStack3<T>;
-}
-
-pub trait Sampler5 {
-    type Tensor: R2lTensor;
-    type Env: Env<Tensor = Self::Tensor>;
-    type Buffer: Buffer<Tensor = Self::Tensor>;
-
-    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(&mut self, policy: P);
-
-    fn get_buffers(&self) -> &[Self::Buffer];
-}
+// pub trait Sampler5 {
+//     type Tensor: R2lTensor;
+//     type Env: Env<Tensor = Self::Tensor>;
+//     type Buffer: Buffer<Tensor = Self::Tensor>;
+//
+//     fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(&mut self, policy: P);
+//
+//     fn get_buffers(&self) -> &[Self::Buffer];
+// }

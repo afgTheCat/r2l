@@ -15,7 +15,7 @@ use r2l_core::{
     env_builder::{EnvBuilderTrait, EnvBuilderType},
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     sampler::R2lSampler,
-    sampler3::buffers::Buffer,
+    // sampler3::buffers::Buffer,
     tensor::{R2lBuffer, R2lTensor},
 };
 use std::sync::Arc;
@@ -100,90 +100,90 @@ impl A2CAlgoBuilder {
     }
 }
 
-#[derive(Deref, DerefMut)]
-pub struct PPOAlgoBuilder2 {
-    #[deref]
-    #[deref_mut]
-    on_policy_builder: OnPolicyAlgorithmBuilder,
-    ppo_builder: PPOBuilder,
-}
-
-impl PPOAlgoBuilder2 {
-    pub fn build<B: Buffer, T: R2lTensor, E: Env<Tensor = T>, EB: EnvBuilderTrait<Env = E>>(&self) {
-        // let sampler = R2lSampler2::new(env_pool, None);
-    }
-}
-
-#[derive(Deref, DerefMut)]
-pub struct PPOAlgoBuilder {
-    #[deref]
-    #[deref_mut]
-    on_policy_builder: OnPolicyAlgorithmBuilder,
-    ppo_builder: PPOBuilder,
-}
-
-impl PPOAlgoBuilder {
-    pub fn build<E: Env<Tensor = R2lBuffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
-        &self,
-        env_builder: EB,
-        n_envs: usize,
-    ) -> Result<
-        OnPolicyAlgorithm<
-            R2lSampler<EB::Env>,
-            CandlePPO<LearningModuleKind>,
-            DefaultOnPolicyAlgorightmsHooks,
-        >,
-    > {
-        let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
-            EnvBuilderType::EnvBuilder {
-                builder: Arc::new(env_builder),
-                n_envs,
-            },
-        );
-        let env_description = sampler.env_description();
-        let agent = self
-            .ppo_builder
-            .build(&self.on_policy_builder.device, &env_description)?;
-        let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.on_policy_builder.learning_schedule);
-        Ok(OnPolicyAlgorithm {
-            sampler,
-            agent,
-            hooks,
-        })
-    }
-}
-
-impl Default for PPOAlgoBuilder {
-    fn default() -> Self {
-        let sampler_type = SamplerType {
-            capacity: 2048, // Default value in SB3
-            hook_options: EvaluatorNormalizerOptions::default(),
-            env_pool_type: EnvPoolType::VecStep,
-        };
-        Self {
-            on_policy_builder: OnPolicyAlgorithmBuilder {
-                sampler_type,
-                ..Default::default()
-            },
-            ppo_builder: PPOBuilder::default(),
-        }
-    }
-}
-
-impl OnPolicyAlgorithmBuilder {
-    pub fn set_learning_schedule(&mut self, learning_schedule: LearningSchedule) {
-        self.learning_schedule = learning_schedule;
-    }
-
-    pub fn set_env_pool_type(&mut self, env_pool_type: EnvPoolType) {
-        self.sampler_type.env_pool_type = env_pool_type;
-    }
-
-    pub fn set_n_step(&mut self, n_step: usize) {
-        self.sampler_type.capacity = n_step;
-    }
-
-    pub fn set_hook_options(&mut self, hook_options: EvaluatorNormalizerOptions) {
-        self.sampler_type.hook_options = hook_options;
-    }
-}
+// #[derive(Deref, DerefMut)]
+// pub struct PPOAlgoBuilder2 {
+//     #[deref]
+//     #[deref_mut]
+//     on_policy_builder: OnPolicyAlgorithmBuilder,
+//     ppo_builder: PPOBuilder,
+// }
+//
+// impl PPOAlgoBuilder2 {
+//     pub fn build<B: Buffer, T: R2lTensor, E: Env<Tensor = T>, EB: EnvBuilderTrait<Env = E>>(&self) {
+//         // let sampler = R2lSampler2::new(env_pool, None);
+//     }
+// }
+//
+// #[derive(Deref, DerefMut)]
+// pub struct PPOAlgoBuilder {
+//     #[deref]
+//     #[deref_mut]
+//     on_policy_builder: OnPolicyAlgorithmBuilder,
+//     ppo_builder: PPOBuilder,
+// }
+//
+// impl PPOAlgoBuilder {
+//     pub fn build<E: Env<Tensor = R2lBuffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
+//         &self,
+//         env_builder: EB,
+//         n_envs: usize,
+//     ) -> Result<
+//         OnPolicyAlgorithm<
+//             R2lSampler<EB::Env>,
+//             CandlePPO<LearningModuleKind>,
+//             DefaultOnPolicyAlgorightmsHooks,
+//         >,
+//     > {
+//         let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
+//             EnvBuilderType::EnvBuilder {
+//                 builder: Arc::new(env_builder),
+//                 n_envs,
+//             },
+//         );
+//         let env_description = sampler.env_description();
+//         let agent = self
+//             .ppo_builder
+//             .build(&self.on_policy_builder.device, &env_description)?;
+//         let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.on_policy_builder.learning_schedule);
+//         Ok(OnPolicyAlgorithm {
+//             sampler,
+//             agent,
+//             hooks,
+//         })
+//     }
+// }
+//
+// impl Default for PPOAlgoBuilder {
+//     fn default() -> Self {
+//         let sampler_type = SamplerType {
+//             capacity: 2048, // Default value in SB3
+//             hook_options: EvaluatorNormalizerOptions::default(),
+//             env_pool_type: EnvPoolType::VecStep,
+//         };
+//         Self {
+//             on_policy_builder: OnPolicyAlgorithmBuilder {
+//                 sampler_type,
+//                 ..Default::default()
+//             },
+//             ppo_builder: PPOBuilder::default(),
+//         }
+//     }
+// }
+//
+// impl OnPolicyAlgorithmBuilder {
+//     pub fn set_learning_schedule(&mut self, learning_schedule: LearningSchedule) {
+//         self.learning_schedule = learning_schedule;
+//     }
+//
+//     pub fn set_env_pool_type(&mut self, env_pool_type: EnvPoolType) {
+//         self.sampler_type.env_pool_type = env_pool_type;
+//     }
+//
+//     pub fn set_n_step(&mut self, n_step: usize) {
+//         self.sampler_type.capacity = n_step;
+//     }
+//
+//     pub fn set_hook_options(&mut self, hook_options: EvaluatorNormalizerOptions) {
+//         self.sampler_type.hook_options = hook_options;
+//     }
+// }
