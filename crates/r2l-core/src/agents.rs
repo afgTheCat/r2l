@@ -4,7 +4,7 @@ use std::borrow::Cow;
 // use crate::sampler3::buffers::{Buffer, BufferStack};
 use crate::{
     distributions::Policy,
-    sampler4::buffer::{BufferS, TrajectoryContainer},
+    sampler4::buffer::{BufferS, BufferS2, TrajectoryContainer},
     tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };
@@ -76,8 +76,5 @@ pub trait Agent6 {
     fn policy3(&self) -> Self::Policy;
 
     /// Instruments learnging with the rollout buffers collected
-    fn learn4<C: TrajectoryContainer<Tensor = Self::Tensor>>(
-        &self,
-        buffers: &[BufferS<C>],
-    ) -> Result<()>;
+    fn learn4(&self, buffers: &[BufferS2<Self::Tensor>]) -> Result<()>;
 }

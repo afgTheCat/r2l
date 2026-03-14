@@ -6,7 +6,7 @@ use crate::{
     env::{Env, RolloutMode},
     env_builder::{EnvBuilderTrait, EnvBuilderType},
     sampler4::{
-        buffer::{BufferS, TrajectoryBound, TrajectoryContainer},
+        buffer::{BufferS, BufferS2, TrajectoryBound, TrajectoryContainer},
         workers::{ThreadWorker, ThreadWorkers, Worker, WorkerPool},
     },
     tensor::R2lTensor,
@@ -191,10 +191,9 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler4 for NewSampler<E,
 
 pub trait Sampler5 {
     type Tensor: R2lTensor;
-    type Buffer: TrajectoryContainer<Tensor = Self::Tensor>;
 
     fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
         &mut self,
         policy: P,
-    ) -> impl AsRef<[BufferS<Self::Buffer>]>;
+    ) -> impl AsRef<[BufferS2<Self::Tensor>]>;
 }
