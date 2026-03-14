@@ -5,12 +5,13 @@ use crate::{
     env::{Env, Sampler, TensorOfSampler},
     sampler::PolicyWrapper,
     sampler4::{
-        Sampler4,
-        buffer::{BufferS, TrajectoryContainer},
+        Sampler4, Sampler5,
+        buffer::{BufferS, BufferS2, TrajectoryContainer},
     },
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
+use burn::tensor::T;
 use std::marker::PhantomData;
 
 macro_rules! break_on_hook_res {
@@ -510,12 +511,81 @@ impl<H: OnPolicyAlgorithmHooks5, A: Agent5<Policy = H::P>, S: Sampler4<Env = H::
         }
         loop {
             let policy = self.agent.policy3();
-            let policy = PolicyWrapper::new(policy);
-            self.sampler.collect_rollouts(policy);
-            let buffers = self.sampler.get_buffers();
+            let buffers = self.sampler.collect_rollouts(PolicyWrapper::new(policy));
             break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
 
             // learning phase
+            self.agent.learn4(buffers.as_ref())?;
+            let policy = self.agent.policy3();
+            break_on_hook_res!(self.hooks.post_training_hook(policy));
+        }
+        self.hooks.shutdown_hook()
+    }
+}
+
+pub trait OnPolicyAlgorithmHooks6
+where
+    Self::P: Clone,
+    <Self::P as Policy>::Tensor: From<<Self::C as TrajectoryContainer>::Tensor>,
+    <Self::C as TrajectoryContainer>::Tensor: From<<Self::P as Policy>::Tensor>,
+{
+    type P: Policy;
+    type C: TrajectoryContainer;
+
+    fn init_hook(&mut self) -> bool;
+
+    fn post_rollout_hook(&mut self, rollouts: &[BufferS2<<Self::P as Policy>::Tensor>]) -> bool;
+
+    fn post_training_hook(&mut self, policy: Self::P) -> bool;
+
+    fn shutdown_hook(&mut self) -> Result<()>;
+}
+
+pub struct OnPolicyAlgorithm6<
+    H: OnPolicyAlgorithmHooks6,
+    A: Agent5<Policy = H::P>,
+    S: Sampler5<Buffer = H::C>,
+> {
+    pub sampler: S,
+    pub agent: A,
+    pub hooks: H,
+}
+
+enum BufferWrapper<'a, T> {
+    Borrowed(&'a [T]),
+    Owned(Vec<T>),
+}
+
+impl<'a, T> AsRef<[T]> for BufferWrapper<'a, T> {
+    fn as_ref(&self) -> &[T] {
+        todo!()
+    }
+}
+
+pub fn buffer_wrapper<'a, T, U: From<T>>(buffers: &'a impl AsRef<[T]>) -> BufferWrapper<'a, T> {
+    todo!()
+}
+
+// That is the final version! This is kinda ok
+impl<H: OnPolicyAlgorithmHooks6, A: Agent5<Policy = H::P>, S: Sampler5<Buffer = H::C>>
+    OnPolicyAlgorithm6<H, A, S>
+where
+    <S as Sampler5>::Tensor: From<<<H as OnPolicyAlgorithmHooks6>::P as Policy>::Tensor>,
+    <<H as OnPolicyAlgorithmHooks6>::P as Policy>::Tensor: From<<S as Sampler5>::Tensor>,
+{
+    pub fn train(&mut self) -> Result<()> {
+        if self.hooks.init_hook() {
+            return Ok(());
+        }
+        loop {
+            let policy = self.agent.policy3();
+            let policy = PolicyWrapper::new(policy);
+            let buffers = self.sampler.collect_rollouts(policy);
+            let buffers = buffer_wrapper(&buffers);
+            break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
+
+            // learning phase
+
             self.agent.learn4(buffers.as_ref())?;
             let policy = self.agent.policy3();
             break_on_hook_res!(self.hooks.post_training_hook(policy));

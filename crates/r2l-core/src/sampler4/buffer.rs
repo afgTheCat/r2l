@@ -179,3 +179,7 @@ impl<T: R2lTensor, D: TrajectoryContainer<Tensor = T>> BufferS<D> {
         });
     }
 }
+
+pub struct BufferS2<T: R2lTensor> {
+    data: Box<dyn TrajectoryContainer<Tensor = T>>,
+}

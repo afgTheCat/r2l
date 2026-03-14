@@ -23,9 +23,7 @@ pub trait Sampler4 {
     fn collect_rollouts<P: Policy<Tensor = <Self::Env as Env>::Tensor> + Clone>(
         &mut self,
         policy: P,
-    );
-
-    fn get_buffers(&mut self) -> impl AsRef<[BufferS<Self::Buffer>]>;
+    ) -> impl AsRef<[BufferS<Self::Buffer>]>;
 }
 
 #[derive(Debug, Clone)]
@@ -164,7 +162,10 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler4 for NewSampler<E,
     type Env = E;
     type Buffer = BD::Container;
 
-    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(&mut self, policy: P) {
+    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        policy: P,
+    ) -> impl AsRef<[BufferS<Self::Buffer>]> {
         let policy = PolicyWrapper::new(policy);
         self.worker_pool.set_policy(policy);
         let bound = self.collection_method.method();
@@ -174,7 +175,6 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler4 for NewSampler<E,
             let RolloutMode::StepBound { n_steps: steps } = bound else {
                 panic!("pre processors currently only support rollout bounds");
             };
-
             while current_step < steps {
                 let buffers = self.all_buffers.lock().unwrap();
                 pre_processor.preprocess_states(buffers.as_ref());
@@ -185,9 +185,16 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler4 for NewSampler<E,
         } else {
             self.worker_pool.collect(bound);
         }
-    }
-
-    fn get_buffers(&mut self) -> impl AsRef<[BufferS<Self::Buffer>]> {
         self.all_buffers.lock().unwrap()
     }
+}
+
+pub trait Sampler5 {
+    type Tensor: R2lTensor;
+    type Buffer: TrajectoryContainer<Tensor = Self::Tensor>;
+
+    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        policy: P,
+    ) -> impl AsRef<[BufferS<Self::Buffer>]>;
 }

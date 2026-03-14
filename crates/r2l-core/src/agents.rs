@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 // use crate::sampler3::buffer_stack::BufferStack3;
 // use crate::sampler3::buffers::{Buffer, BufferStack};
 use crate::{
@@ -58,6 +60,23 @@ pub trait Agent5 {
 
     /// Instruments learnging with the rollout buffers collected
     fn learn4<T: R2lTensor, C: TrajectoryContainer<Tensor = T>>(
+        &self,
+        buffers: &[BufferS<C>],
+    ) -> Result<()>;
+}
+
+pub trait Agent6 {
+    /// The tensor
+    type Tensor: R2lTensor;
+
+    /// The policy
+    type Policy: Policy<Tensor = Self::Tensor>;
+
+    /// Retriesve the underlying distribution. This should be inference tbh.
+    fn policy3(&self) -> Self::Policy;
+
+    /// Instruments learnging with the rollout buffers collected
+    fn learn4<C: TrajectoryContainer<Tensor = Self::Tensor>>(
         &self,
         buffers: &[BufferS<C>],
     ) -> Result<()>;

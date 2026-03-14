@@ -17,7 +17,8 @@ use anyhow::Result;
 use std::{fmt::Debug, marker::PhantomData};
 
 // TODO: this is not a bad idea. However in the future we do not want a reference here, but an
-// Arc::RwLock for the underlying distribution.
+// Arc::RwLock for the underlying distribution. Another thing is that for this we might be overkill
+// since for the log_probs method it does a lot of clones
 #[derive(Debug, Clone)]
 pub struct PolicyWrapper<P: Policy + Clone, T: R2lTensor> {
     policy: P,
@@ -56,6 +57,7 @@ where
     ) -> Result<Self::Tensor> {
         let observations = observations
             .iter()
+            // TODO: this clone will be expensive
             .map(|o| o.clone().into())
             .collect::<Vec<_>>();
         let actions = actions.iter().map(|a| a.clone().into()).collect::<Vec<_>>();
