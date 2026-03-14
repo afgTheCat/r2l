@@ -6,6 +6,9 @@ description.workspace = true
 repository.workspace = true
 license.workspace = true
 
+[features]
+cuda = ["r2l-core/cuda"]
+
 [dependencies]
 burn = { workspace = true }
 r2l-core = { workspace = true }

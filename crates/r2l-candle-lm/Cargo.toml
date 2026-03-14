@@ -6,6 +6,13 @@ description.workspace = true
 repository.workspace = true
 license.workspace = true
 
+[features]
+cuda = [
+  "r2l-core/cuda",
+  "candle-core/cuda",
+  "candle-nn/cuda",
+]
+
 [dependencies]
 r2l-core = { workspace = true }
 # r2l-buffer = { workspace = true }

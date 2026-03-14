@@ -25,6 +25,13 @@ derive_more = "2.0.1"
 
 [features]
 test-utils = []
+cuda = [
+  "r2l-core/cuda",
+  "r2l-agents/cuda",
+  "r2l-candle-lm/cuda",
+  "candle-core/cuda",
+  "candle-nn/cuda",
+]
 
 [dev-dependencies]
 r2l-api = { path = ".", features = ["test-utils"] }

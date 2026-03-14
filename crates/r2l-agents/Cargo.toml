@@ -7,6 +7,14 @@ repository.workspace = true
 license.workspace = true
 readme = "README.md"
 
+[features]
+cuda = [
+  "r2l-core/cuda",
+  "r2l-candle-lm/cuda",
+  "candle-core/cuda",
+  "candle-nn/cuda",
+]
+
 [dependencies]
 r2l-core = { workspace = true }
 r2l-candle-lm = { workspace = true }
