@@ -6,7 +6,7 @@ use crate::{
     sampler::PolicyWrapper,
     sampler4::{
         Sampler4, Sampler5,
-        buffer::{BufferS, BufferS2, TrajectoryContainer},
+        buffer::{BufferS, BufferS2, TrajectoryContainer, buffer_wrapper},
     },
     tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
@@ -231,23 +231,6 @@ pub struct OnPolicyAlgorithm6<H: OnPolicyAlgorithmHooks6, A: Agent6, S: Sampler5
     pub sampler: S,
     pub agent: A,
     pub hooks: H,
-}
-
-enum BufferWrapper<'a, T> {
-    Borrowed(&'a [T]),
-    Owned(Vec<T>),
-}
-
-impl<'a, T> AsRef<[T]> for BufferWrapper<'a, T> {
-    fn as_ref(&self) -> &[T] {
-        todo!()
-    }
-}
-
-pub fn buffer_wrapper<'a, T: R2lTensor, U: R2lTensor + From<T>>(
-    buffers: &'a impl AsRef<[BufferS2<T>]>,
-) -> BufferWrapper<'a, BufferS2<U>> {
-    todo!()
 }
 
 // That is the final version! This is kinda ok

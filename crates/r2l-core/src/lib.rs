@@ -9,6 +9,7 @@ pub mod policies;
 pub mod rng;
 pub mod sampler;
 pub mod sampler4;
+pub mod sampler5;
 pub mod tensor;
 pub mod utils;
 
