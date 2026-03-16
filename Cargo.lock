@@ -5662,6 +5662,7 @@ dependencies = [
  "either",
  "enum_dispatch",
  "interprocess",
+ "itertools 0.14.0",
  "r2l-api",
  "r2l-macros",
  "rand 0.9.2",

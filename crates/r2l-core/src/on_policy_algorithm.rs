@@ -5,7 +5,7 @@ use crate::{
     env::{Env, Sampler, TensorOfSampler},
     sampler::PolicyWrapper,
     sampler4::{
-        Sampler4, Sampler5,
+        Sampler3, Sampler4,
         buffer::{BufferS, BufferS2, TrajectoryContainer, buffer_wrapper},
     },
     tensor::R2lTensor,
@@ -189,14 +189,14 @@ where
 pub struct OnPolicyAlgorithm5<
     H: OnPolicyAlgorithmHooks5,
     A: Agent5<Policy = H::P>,
-    S: Sampler4<Env = H::E>,
+    S: Sampler3<Env = H::E>,
 > {
     pub sampler: S,
     pub agent: A,
     pub hooks: H,
 }
 
-impl<H: OnPolicyAlgorithmHooks5, A: Agent5<Policy = H::P>, S: Sampler4<Env = H::E>>
+impl<H: OnPolicyAlgorithmHooks5, A: Agent5<Policy = H::P>, S: Sampler3<Env = H::E>>
     OnPolicyAlgorithm5<H, A, S>
 {
     pub fn train(&mut self) -> Result<()> {
@@ -227,14 +227,14 @@ pub trait OnPolicyAlgorithmHooks6 {
     fn shutdown_hook(&mut self) -> Result<()>;
 }
 
-pub struct OnPolicyAlgorithm6<H: OnPolicyAlgorithmHooks6, A: Agent6, S: Sampler5> {
+pub struct OnPolicyAlgorithm6<H: OnPolicyAlgorithmHooks6, A: Agent6, S: Sampler4> {
     pub sampler: S,
     pub agent: A,
     pub hooks: H,
 }
 
 // That is the final version! This is kinda ok
-impl<H: OnPolicyAlgorithmHooks6, A: Agent6, S: Sampler5> OnPolicyAlgorithm6<H, A, S>
+impl<H: OnPolicyAlgorithmHooks6, A: Agent6, S: Sampler4> OnPolicyAlgorithm6<H, A, S>
 where
     S::Tensor: From<A::Tensor>,
     A::Tensor: From<S::Tensor>,

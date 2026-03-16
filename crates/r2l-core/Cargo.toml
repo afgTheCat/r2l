@@ -24,6 +24,7 @@ anyhow = { workspace = true }
 candle-core = { workspace = true, optional = true }
 burn = { workspace = true, optional = true }
 bimodal-array = { version = "0.1.1" }
+itertools = "0.14.0"
 
 [dev-dependencies]
 r2l-api = { workspace = true }

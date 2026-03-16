@@ -15,7 +15,7 @@ use anyhow::Result;
 use bimodal_array::{ArrayHandle, bimodal_array};
 use std::{marker::PhantomData, sync::Arc};
 
-pub trait Sampler4 {
+pub trait Sampler3 {
     type Tensor: R2lTensor;
     type Env: Env<Tensor = Self::Tensor>;
     type Buffer: TrajectoryContainer<Tensor = Self::Tensor>;
@@ -157,7 +157,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> NewSampler<E, BD> {
     }
 }
 
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler4 for NewSampler<E, BD> {
+impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler3 for NewSampler<E, BD> {
     type Tensor = E::Tensor;
     type Env = E;
     type Buffer = BD::Container;
@@ -189,7 +189,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler4 for NewSampler<E,
     }
 }
 
-pub trait Sampler5 {
+pub trait Sampler4 {
     type Tensor: R2lTensor;
 
     fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
