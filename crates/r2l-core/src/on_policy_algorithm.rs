@@ -1,13 +1,13 @@
 use crate::{
     Algorithm,
-    agents::{Agent, Agent5, Agent6, TensorOfAgent},
+    agents::{Agent, TensorOfAgent},
     distributions::Policy,
     env::{Env, Sampler, TensorOfSampler},
     sampler::PolicyWrapper,
-    sampler4::{
-        Sampler3, Sampler4,
-        buffer::{BufferS, BufferS2, TrajectoryContainer, buffer_wrapper},
-    },
+    // sampler4::{
+    //     Sampler3, Sampler4,
+    //     buffer::{BufferS, BufferS2, TrajectoryContainer, buffer_wrapper},
+    // },
     tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };
@@ -168,93 +168,93 @@ impl<E: Env, P: Policy> DefaultOnPolicyAlgorightmsHooks4<E, P> {
     }
 }
 
-pub trait OnPolicyAlgorithmHooks5
-where
-    Self::P: Clone,
-    <Self::P as Policy>::Tensor: From<<Self::E as Env>::Tensor>,
-    <Self::E as Env>::Tensor: From<<Self::P as Policy>::Tensor>,
-{
-    type P: Policy;
-    type E: Env;
+// pub trait OnPolicyAlgorithmHooks5
+// where
+//     Self::P: Clone,
+//     <Self::P as Policy>::Tensor: From<<Self::E as Env>::Tensor>,
+//     <Self::E as Env>::Tensor: From<<Self::P as Policy>::Tensor>,
+// {
+//     type P: Policy;
+//     type E: Env;
+//
+//     fn init_hook(&mut self) -> bool;
+//
+//     fn post_rollout_hook<C: TrajectoryContainer>(&mut self, rollouts: &[BufferS<C>]) -> bool;
+//
+//     fn post_training_hook(&mut self, policy: Self::P) -> bool;
+//
+//     fn shutdown_hook(&mut self) -> Result<()>;
+// }
+//
+// pub struct OnPolicyAlgorithm5<
+//     H: OnPolicyAlgorithmHooks5,
+//     A: Agent5<Policy = H::P>,
+//     S: Sampler3<Env = H::E>,
+// > {
+//     pub sampler: S,
+//     pub agent: A,
+//     pub hooks: H,
+// }
+//
+// impl<H: OnPolicyAlgorithmHooks5, A: Agent5<Policy = H::P>, S: Sampler3<Env = H::E>>
+//     OnPolicyAlgorithm5<H, A, S>
+// {
+//     pub fn train(&mut self) -> Result<()> {
+//         if self.hooks.init_hook() {
+//             return Ok(());
+//         }
+//         loop {
+//             let policy = self.agent.policy3();
+//             let buffers = self.sampler.collect_rollouts(PolicyWrapper::new(policy));
+//             break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
+//
+//             // learning phase
+//             self.agent.learn4(buffers.as_ref())?;
+//             let policy = self.agent.policy3();
+//             break_on_hook_res!(self.hooks.post_training_hook(policy));
+//         }
+//         self.hooks.shutdown_hook()
+//     }
+// }
+//
+// pub trait OnPolicyAlgorithmHooks6 {
+//     fn init_hook(&mut self) -> bool;
+//
+//     fn post_rollout_hook<T: R2lTensor>(&mut self, rollouts: &[BufferS2<T>]) -> bool;
+//
+//     fn post_training_hook(&mut self, policy: impl Policy) -> bool;
+//
+//     fn shutdown_hook(&mut self) -> Result<()>;
+// }
 
-    fn init_hook(&mut self) -> bool;
+// pub struct OnPolicyAlgorithm6<H: OnPolicyAlgorithmHooks6, A: Agent6, S: Sampler4> {
+//     pub sampler: S,
+//     pub agent: A,
+//     pub hooks: H,
+// }
 
-    fn post_rollout_hook<C: TrajectoryContainer>(&mut self, rollouts: &[BufferS<C>]) -> bool;
-
-    fn post_training_hook(&mut self, policy: Self::P) -> bool;
-
-    fn shutdown_hook(&mut self) -> Result<()>;
-}
-
-pub struct OnPolicyAlgorithm5<
-    H: OnPolicyAlgorithmHooks5,
-    A: Agent5<Policy = H::P>,
-    S: Sampler3<Env = H::E>,
-> {
-    pub sampler: S,
-    pub agent: A,
-    pub hooks: H,
-}
-
-impl<H: OnPolicyAlgorithmHooks5, A: Agent5<Policy = H::P>, S: Sampler3<Env = H::E>>
-    OnPolicyAlgorithm5<H, A, S>
-{
-    pub fn train(&mut self) -> Result<()> {
-        if self.hooks.init_hook() {
-            return Ok(());
-        }
-        loop {
-            let policy = self.agent.policy3();
-            let buffers = self.sampler.collect_rollouts(PolicyWrapper::new(policy));
-            break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
-
-            // learning phase
-            self.agent.learn4(buffers.as_ref())?;
-            let policy = self.agent.policy3();
-            break_on_hook_res!(self.hooks.post_training_hook(policy));
-        }
-        self.hooks.shutdown_hook()
-    }
-}
-
-pub trait OnPolicyAlgorithmHooks6 {
-    fn init_hook(&mut self) -> bool;
-
-    fn post_rollout_hook<T: R2lTensor>(&mut self, rollouts: &[BufferS2<T>]) -> bool;
-
-    fn post_training_hook(&mut self, policy: impl Policy) -> bool;
-
-    fn shutdown_hook(&mut self) -> Result<()>;
-}
-
-pub struct OnPolicyAlgorithm6<H: OnPolicyAlgorithmHooks6, A: Agent6, S: Sampler4> {
-    pub sampler: S,
-    pub agent: A,
-    pub hooks: H,
-}
-
-// That is the final version! This is kinda ok
-impl<H: OnPolicyAlgorithmHooks6, A: Agent6, S: Sampler4> OnPolicyAlgorithm6<H, A, S>
-where
-    S::Tensor: From<A::Tensor>,
-    A::Tensor: From<S::Tensor>,
-    A::Policy: Clone,
-{
-    pub fn train(&mut self) -> Result<()> {
-        if self.hooks.init_hook() {
-            return Ok(());
-        }
-        loop {
-            let policy = self.agent.policy3();
-            let policy = PolicyWrapper::new(policy);
-            let buffers = self.sampler.collect_rollouts(policy);
-            let buffers = buffer_wrapper(&buffers);
-            break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
-
-            self.agent.learn4(buffers.as_ref())?;
-            let policy = self.agent.policy3();
-            break_on_hook_res!(self.hooks.post_training_hook(policy));
-        }
-        self.hooks.shutdown_hook()
-    }
-}
+// // That is the final version! This is kinda ok
+// impl<H: OnPolicyAlgorithmHooks6, A: Agent6, S: Sampler4> OnPolicyAlgorithm6<H, A, S>
+// where
+//     S::Tensor: From<A::Tensor>,
+//     A::Tensor: From<S::Tensor>,
+//     A::Policy: Clone,
+// {
+//     pub fn train(&mut self) -> Result<()> {
+//         if self.hooks.init_hook() {
+//             return Ok(());
+//         }
+//         loop {
+//             let policy = self.agent.policy3();
+//             let policy = PolicyWrapper::new(policy);
+//             let buffers = self.sampler.collect_rollouts(policy);
+//             let buffers = buffer_wrapper(&buffers);
+//             break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
+//
+//             self.agent.learn4(buffers.as_ref())?;
+//             let policy = self.agent.policy3();
+//             break_on_hook_res!(self.hooks.post_training_hook(policy));
+//         }
+//         self.hooks.shutdown_hook()
+//     }
+// }

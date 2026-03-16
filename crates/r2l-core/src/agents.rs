@@ -4,7 +4,7 @@ use std::borrow::Cow;
 // use crate::sampler3::buffers::{Buffer, BufferStack};
 use crate::{
     distributions::Policy,
-    sampler4::buffer::{BufferS, BufferS2, TrajectoryContainer},
+    // sampler4::buffer::{BufferS, BufferS2, TrajectoryContainer},
     tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };
@@ -51,30 +51,30 @@ pub type TensorOfAgent<A> = <<A as Agent>::Policy as Policy>::Tensor;
 //
 // pub type TensorOfAgent4<A> = <<A as Agent3>::Policy as Policy>::Tensor;
 
-pub trait Agent5 {
-    /// The policy
-    type Policy: Policy;
+// pub trait Agent5 {
+//     /// The policy
+//     type Policy: Policy;
+//
+//     /// Retriesve the underlying distribution. This should be inference tbh.
+//     fn policy3(&self) -> Self::Policy;
+//
+//     /// Instruments learnging with the rollout buffers collected
+//     fn learn4<T: R2lTensor, C: TrajectoryContainer<Tensor = T>>(
+//         &self,
+//         buffers: &[BufferS<C>],
+//     ) -> Result<()>;
+// }
 
-    /// Retriesve the underlying distribution. This should be inference tbh.
-    fn policy3(&self) -> Self::Policy;
-
-    /// Instruments learnging with the rollout buffers collected
-    fn learn4<T: R2lTensor, C: TrajectoryContainer<Tensor = T>>(
-        &self,
-        buffers: &[BufferS<C>],
-    ) -> Result<()>;
-}
-
-pub trait Agent6 {
-    /// The tensor
-    type Tensor: R2lTensor;
-
-    /// The policy
-    type Policy: Policy<Tensor = Self::Tensor>;
-
-    /// Retriesve the underlying distribution. This should be inference tbh.
-    fn policy3(&self) -> Self::Policy;
-
-    /// Instruments learnging with the rollout buffers collected
-    fn learn4(&self, buffers: &[BufferS2<Self::Tensor>]) -> Result<()>;
-}
+// pub trait Agent6 {
+//     /// The tensor
+//     type Tensor: R2lTensor;
+//
+//     /// The policy
+//     type Policy: Policy<Tensor = Self::Tensor>;
+//
+//     /// Retriesve the underlying distribution. This should be inference tbh.
+//     fn policy3(&self) -> Self::Policy;
+//
+//     /// Instruments learnging with the rollout buffers collected
+//     fn learn4(&self, buffers: &[BufferS2<Self::Tensor>]) -> Result<()>;
+// }

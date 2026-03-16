@@ -59,7 +59,10 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
         collection_method: BD,
         preprocessor: Option<Box<dyn PreprocessorY<BD::Container>>>,
         location: Location,
-    ) -> Self {
+    ) -> Self
+    where
+        <BD as TrajectoryBound>::Container: 'static,
+    {
         let num_envs = env_builder.num_envs();
         let buffers = (0..num_envs)
             .map(|_| {
