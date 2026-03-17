@@ -112,3 +112,32 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
         }
     }
 }
+
+impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler5 for FinalSampler<E, BD> {
+    type Tensor = E::Tensor;
+    type TrajectoryContainer = BD::Container;
+
+    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        policy: P,
+    ) -> impl AsRef<[Self::TrajectoryContainer]> {
+        let bound = self.collection_method.method();
+        if let Some(pre_processor) = &mut self.preprocessor {
+            let mut current_step = 0;
+            // TODO: with the new implementation, this might became trivial
+            let RolloutMode::StepBound { n_steps: steps } = bound else {
+                panic!("pre processors currently only support rollout bounds");
+            };
+            while current_step < steps {
+                let buffers = self.all_buffers.lock().unwrap();
+                pre_processor.preprocess_states(buffers.as_ref());
+                drop(buffers);
+                self.worker_pool.single_step();
+                current_step += 1;
+            }
+        } else {
+            self.worker_pool.collect(bound);
+        }
+        self.all_buffers.lock().unwrap()
+    }
+}

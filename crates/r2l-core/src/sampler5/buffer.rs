@@ -219,7 +219,7 @@ struct Borrowed<'a, T: R2lTensor> {
     trancuated: BoolIter<'a>,
 }
 
-struct BorrowedWrapper<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = T>>
+struct BorrowedWrapper<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S>>
 {
     data: &'a B,
     _phantom: PhantomData<(S, T)>,
@@ -230,7 +230,7 @@ fn cast_ref<Src: 'static, Dst: 'static>(x: &Src) -> &Dst {
     unsafe { &*(x as *const Src as *const Dst) }
 }
 
-impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = T>>
+impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S>>
     BorrowedWrapper<'a, S, T, B>
 {
     fn try_new(data: &'a B) -> Option<Self> {
@@ -269,21 +269,23 @@ impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = T
     }
 }
 
-enum BufferWrapper2<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = T>> {
+pub enum BufferWrapper<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S>>
+{
     Borrowed(BorrowedWrapper<'a, S, T, B>),
     Cloned(FixedSizeStateBuffer<T>),
 }
 
-impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = T>>
-    BufferWrapper2<'a, S, T, B>
+impl<'a, S: R2lTensor, T: R2lTensor + From<S>, B: TrajectoryContainer<Tensor = S>>
+    BufferWrapper<'a, S, T, B>
 {
-    fn new(buffer: &'a B) -> Self {
+    pub fn new(buffer: &'a B) -> Self {
         let len = buffer.len();
         if std::any::TypeId::of::<S>() == std::any::TypeId::of::<T>() {
             let borrowed = BorrowedWrapper::try_new(buffer).unwrap();
             Self::Borrowed(borrowed)
         } else {
             let mut out = FixedSizeStateBuffer::new(len);
+            // let state = T::from(buffer.states().next().unwrap().clone());
             for memory in buffer.memories() {
                 out.push(Memory {
                     state: T::from(memory.state),
@@ -294,13 +296,13 @@ impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = T
                     trancuated: memory.trancuated,
                 });
             }
-            BufferWrapper2::Cloned(out)
+            BufferWrapper::Cloned(out)
         }
     }
 }
 
-impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = T>>
-    TrajectoryContainer for BufferWrapper2<'a, S, T, B>
+impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S>>
+    TrajectoryContainer for BufferWrapper<'a, S, T, B>
 {
     type Tensor = T;
 
@@ -358,66 +360,6 @@ impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = T
         unreachable!()
     }
 }
-
-// impl<'a, T: R2lTensor, B: TrajectoryContainer<Tensor = T>> TrajectoryContainer
-//     for BufferWrapper2<'a, T, B>
-// {
-//     type Tensor = T;
-//
-//     fn len(&self) -> usize {
-//         match self {
-//             Self::Borrowed(b) => b.len(),
-//             Self::Cloned(b) => b.len(),
-//         }
-//     }
-//
-//     fn states(&self) -> impl Iterator<Item = &Self::Tensor> {
-//         match self {
-//             Self::Borrowed(b) => TensorIter::new((*b).states()),
-//             Self::Cloned(b) => TensorIter::new(b.states()),
-//         }
-//     }
-//
-//     fn next_states(&self) -> impl Iterator<Item = &Self::Tensor> {
-//         match self {
-//             Self::Borrowed(b) => TensorIter::new((*b).next_states()),
-//             Self::Cloned(b) => TensorIter::new(b.next_states()),
-//         }
-//     }
-//
-//     fn actions(&self) -> impl Iterator<Item = &Self::Tensor> {
-//         match self {
-//             Self::Borrowed(b) => TensorIter::new((*b).actions()),
-//             Self::Cloned(b) => TensorIter::new(b.actions()),
-//         }
-//     }
-//
-//     fn rewards(&self) -> impl Iterator<Item = f32> {
-//         match self {
-//             Self::Borrowed(b) => Box::new((*b).rewards()) as Box<dyn Iterator<Item = f32>>,
-//             Self::Cloned(b) => Box::new(b.rewards()),
-//         }
-//     }
-//
-//     fn terminated(&self) -> impl Iterator<Item = bool> {
-//         match self {
-//             Self::Borrowed(b) => Box::new((*b).terminated()) as Box<dyn Iterator<Item = bool>>,
-//             Self::Cloned(b) => Box::new(b.terminated()),
-//         }
-//     }
-//
-//     fn trancuated(&self) -> impl Iterator<Item = bool> {
-//         match self {
-//             Self::Borrowed(b) => Box::new((*b).trancuated()) as Box<dyn Iterator<Item = bool>>,
-//             Self::Cloned(b) => Box::new(b.trancuated()),
-//         }
-//     }
-//
-//     // TODO: the buffer we
-//     fn push(&mut self, memory: Memory<Self::Tensor>) {
-//         unreachable!()
-//     }
-// }
 
 pub trait TrajectoryBound: Send + Sync {
     type Tensor: R2lTensor;

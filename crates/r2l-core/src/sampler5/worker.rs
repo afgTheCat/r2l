@@ -2,9 +2,12 @@ use std::collections::HashMap;
 
 use crate::{
     distributions::Policy,
-    env::{Env, RolloutMode, SnapShot},
+    env::{Env, SnapShot},
     rng::RNG,
-    sampler5::buffer::{Memory, TrajectoryContainer},
+    sampler5::{
+        RolloutMode,
+        buffer::{Memory, TrajectoryContainer},
+    },
     tensor::R2lTensor,
 };
 use bimodal_array::ElementHandle;
