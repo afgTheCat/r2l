@@ -61,7 +61,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
         location: Location,
     ) -> Self
     where
-        <BD as TrajectoryBound>::Container: 'static,
+        <BD as TrajectoryBound>::Container: Send + 'static,
     {
         let num_envs = env_builder.num_envs();
         let buffers = (0..num_envs)
