@@ -1,13 +1,10 @@
-use std::borrow::Cow;
-
-// use crate::sampler3::buffer_stack::BufferStack3;
-// use crate::sampler3::buffers::{Buffer, BufferStack};
 use crate::{
     distributions::Policy, sampler5::buffer::TrajectoryContainer, tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
 use candle_core::Tensor;
+use std::borrow::Cow;
 
 pub trait Agent {
     /// The policy
@@ -29,5 +26,6 @@ pub trait Agent5 {
 
     fn policy(&self) -> Self::Policy;
 
-    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(&self, buffers: &[C]) -> Result<()>;
+    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(&mut self, buffers: &[C])
+    -> Result<()>;
 }

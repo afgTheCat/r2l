@@ -44,6 +44,7 @@ pub trait TrajectoryContainer: Sync {
     fn trancuated(&self) -> impl Iterator<Item = bool>;
 
     // TODO: warning, this clones the states, probably not good for perf
+    // use it only if cloning is neccesarry!
     fn memories(&self) -> impl Iterator<Item = Memory<Self::Tensor>> {
         izip!(
             self.states(),
