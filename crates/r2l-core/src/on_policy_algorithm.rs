@@ -1,14 +1,12 @@
 use crate::agents::TensorOfAgent;
+use crate::sampler5::buffer::wrapper::BufferWrapper;
 use crate::{
     Algorithm,
     agents::{Agent, Agent5},
     distributions::Policy,
     env::{Env, Sampler, TensorOfSampler},
     sampler::PolicyWrapper,
-    sampler5::{
-        Sampler5,
-        buffer::{BufferWrapper, TrajectoryContainer},
-    },
+    sampler5::{Sampler5, buffer::TrajectoryContainer},
     tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };

@@ -6,7 +6,7 @@ use crate::{
     rng::RNG,
     sampler5::{
         RolloutMode,
-        buffer::{Memory, TrajectoryContainer},
+        buffer::{ExpandableTrajectoryContainer, Memory},
     },
     tensor::R2lTensor,
 };
@@ -15,7 +15,7 @@ use burn::tensor::Tensor;
 use crossbeam::channel::{Receiver, Sender};
 use rand::Rng;
 
-pub struct Worker<E: Env, D: TrajectoryContainer<Tensor = E::Tensor>> {
+pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
     pub env: E,
     pub buffer: ElementHandle<D>,
     // TODO: this is a bit archaic, we might want somethings else
@@ -59,7 +59,7 @@ fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     }
 }
 
-impl<E: Env, D: TrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> {
+impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> {
     pub fn new(env: E, buffer: ElementHandle<D>) -> Self {
         Self {
             env,
@@ -109,13 +109,13 @@ pub enum WorkerResult {
     Collected,
 }
 
-pub struct ThreadWorker<E: Env, D: TrajectoryContainer<Tensor = E::Tensor>> {
+pub struct ThreadWorker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
     worker: Worker<E, D>,
     rx: Receiver<WorkerCommand<E::Tensor>>,
     tx: Sender<WorkerResult>,
 }
 
-impl<E: Env, D: TrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<E, D> {
+impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<E, D> {
     pub fn new(
         worker: Worker<E, D>,
         rx: Receiver<WorkerCommand<E::Tensor>>,
@@ -173,12 +173,12 @@ impl<T: R2lTensor> ThreadWorkers<T> {
     }
 }
 
-pub enum WorkerPool<E: Env, B: TrajectoryContainer<Tensor = <E as Env>::Tensor>> {
+pub enum WorkerPool<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> {
     Vec(Vec<Worker<E, B>>),
     Thread(ThreadWorkers<E::Tensor>),
 }
 
-impl<E: Env, B: TrajectoryContainer<Tensor = <E as Env>::Tensor>> WorkerPool<E, B> {
+impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> WorkerPool<E, B> {
     pub fn set_policy<P: Policy<Tensor = E::Tensor> + Clone>(&mut self, policy: P) {
         match self {
             WorkerPool::Vec(workers) => {
