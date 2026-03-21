@@ -82,13 +82,6 @@ impl<T: Clone> OnPolicyAlgorithmHooks<T> for DefaultOnPolicyAlgorightmsHooks {
             .flat_map(|s| &s.dones)
             .filter(|d| **d)
             .count();
-        println!(
-            "rollout: {:<3} episodes: {:<5} total reward: {:<5.2} avg reward per episode: {:.2}",
-            self.rollout_idx,
-            episodes,
-            total_reward,
-            total_reward / episodes as f32
-        );
         self.rollout_idx += 1;
         match &mut self.learning_schedule {
             LearningSchedule::RolloutBound {

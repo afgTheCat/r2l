@@ -1,5 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_examples::{EventBox, PPOProgress, train_ppo};
+use r2l_examples::{EventBox, PPOProgress, old::train_ppo};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -224,7 +224,6 @@ fn main() -> io::Result<()> {
     std::thread::spawn(move || {
         handle_input_events(tx_to_input_events);
     });
-
     std::thread::spawn(move || match train_ppo(event_tx) {
         Ok(()) => {
             println!("ppo trainted normally")
