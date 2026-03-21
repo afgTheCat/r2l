@@ -1,21 +1,6 @@
-use crate::candle_agents::ModuleWithValueFunction;
-use crate::candle_agents::ppo::{HookResult, PPOBatchData};
-use anyhow::Result;
-use candle_core::{Device, Tensor as CandleTensor};
-use r2l_candle_lm::{
-    learning_module2::PolicyValuesLosses,
-    tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
-};
 // use r2l_core::agents::Agent3;
 // use r2l_core::sampler3::buffers::{Buffer, BufferStack};
 // use r2l_core::tensor::R2lTensor;
-use r2l_core::{
-    distributions::Policy,
-    policies::{LearningModule, ValueFunction},
-    utils::rollout_buffer::{Advantages, Logps, Returns},
-};
-use std::marker::PhantomData;
-use std::ops::Deref;
 
 macro_rules! process_hook_result {
     ($hook_res:expr) => {

@@ -1,13 +1,12 @@
 pub mod fixed_size;
 pub mod wrapper;
 
-use itertools::izip;
-use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::marker::PhantomData;
 
+use itertools::izip;
+
 use crate::{
-    env::{Env, SnapShot},
-    sampler5::RolloutMode,
+    sampler5::{RolloutMode, buffer::fixed_size::FixedSizeStateBuffer},
     tensor::R2lTensor,
 };
 
@@ -42,6 +41,12 @@ pub trait TrajectoryContainer: Sync {
     fn terminated(&self) -> impl Iterator<Item = bool>;
 
     fn trancuated(&self) -> impl Iterator<Item = bool>;
+
+    fn dones(&self) -> impl Iterator<Item = bool> {
+        self.terminated()
+            .zip(self.trancuated())
+            .map(|(terminated, trancuated)| terminated || trancuated)
+    }
 
     // TODO: warning, this clones the states, probably not good for perf
     // use it only if cloning is neccesarry!
@@ -78,4 +83,33 @@ pub trait TrajectoryBound: Send + Sync {
 
     fn to_container(&self) -> Self::Container;
     fn method(&self) -> RolloutMode;
+}
+
+pub struct StepTrajectoryBound<T: R2lTensor> {
+    steps: usize,
+    _phantom: PhantomData<T>,
+}
+
+impl<T: R2lTensor> StepTrajectoryBound<T> {
+    pub fn new(steps: usize) -> Self {
+        Self {
+            steps,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: R2lTensor> TrajectoryBound for StepTrajectoryBound<T> {
+    type Tensor = T;
+    type Container = FixedSizeStateBuffer<T>;
+
+    fn to_container(&self) -> Self::Container {
+        todo!()
+    }
+
+    fn method(&self) -> RolloutMode {
+        RolloutMode::StepBound {
+            n_steps: self.steps,
+        }
+    }
 }

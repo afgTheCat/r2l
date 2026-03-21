@@ -50,15 +50,15 @@ impl<T: R2lTensor> TrajectoryContainer for FixedSizeStateBuffer<T> {
     }
 
     fn rewards(&self) -> impl Iterator<Item = f32> {
-        self.rewards.iter().map(|x| *x)
+        self.rewards.iter().copied()
     }
 
     fn terminated(&self) -> impl Iterator<Item = bool> {
-        self.terminated.iter().map(|x| *x)
+        self.terminated.iter().copied()
     }
 
     fn trancuated(&self) -> impl Iterator<Item = bool> {
-        self.trancuated.iter().map(|x| *x)
+        self.trancuated.iter().copied()
     }
 }
 

@@ -101,7 +101,7 @@ impl<M: ModuleWithValueFunction> Agent for A2C<M> {
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<CandleTensor>>) -> Result<()> {
         let mut rollouts: Vec<CandleRolloutBuffer> = rollouts
             .into_iter()
-            .map(|rb| CandleRolloutBuffer::from(rb))
+            .map(CandleRolloutBuffer::from)
             .collect();
         let (mut advantages, mut returns) = calculate_advantages_and_returns(
             &rollouts,

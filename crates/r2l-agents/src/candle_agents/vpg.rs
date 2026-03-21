@@ -51,7 +51,7 @@ impl<M: ModuleWithValueFunction> Agent for VPG<M> {
     fn learn(&mut self, rollouts: Vec<RolloutBuffer<CandleTensor>>) -> Result<()> {
         let rollouts: Vec<CandleRolloutBuffer> = rollouts
             .into_iter()
-            .map(|rb| CandleRolloutBuffer::from(rb))
+            .map(CandleRolloutBuffer::from)
             .collect();
         let (advantages, returns) = calculate_advantages_and_returns(
             &rollouts,

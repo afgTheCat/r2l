@@ -11,7 +11,7 @@ pub fn run_gym_episodes(
     dist: &impl Policy<Tensor = Tensor>,
 ) -> Result<()> {
     for _ in 0..ep_count {
-        let device = Device::Cpu;
+        let _device = Device::Cpu;
         let mut env = GymEnv::new(env, Some("human".into()));
         let seed = rand::random();
         let mut state: Tensor = env.reset(seed)?.into();

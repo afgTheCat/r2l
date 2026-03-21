@@ -9,6 +9,7 @@ use r2l_agents::{
     GenericLearningModuleWithValueFunction, LearningModuleKind,
     candle_agents::{
         ppo::{CandlePPO, CandlePPOCore, EmptyPPO3Hooks},
+        ppo5::{CandlePPO5, CandlePPOCore5, PPOHooksTrait5},
         // ppo2::{CandlePPO2, CandlePPOCore2, PPOHooksTrait2},
         // ppo3::{CandlePPO3, CandlePPOCore3, PPOHooksTrait3},
         // ppo4::{CandlePPO4, CandlePPOCore4, PPOHooksTrait4},
@@ -54,7 +55,7 @@ impl PPOBuilder {
     ) -> Result<CandlePPO<LearningModuleKind>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
-            VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
+            VarBuilder::from_varmap(&distribution_varmap, DType::F32, device);
         let policy =
             self.distribution_builder
                 .build(&distribution_var_builder, device, env_description)?;
@@ -187,4 +188,39 @@ impl PPOBuilder {
     //     let ppo2 = CandlePPO4 { ppo: core, hooks };
     //     Ok(ppo2)
     // }
+
+    pub fn build5<T, H: PPOHooksTrait5<LearningModuleKind>>(
+        &self,
+        device: &Device,
+        env_description: &EnvironmentDescription<T>,
+        hooks: H,
+    ) -> Result<CandlePPO5<LearningModuleKind, H>> {
+        let distribution_varmap = VarMap::new();
+        let distribution_var_builder =
+            VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
+        let policy =
+            self.distribution_builder
+                .build(&distribution_var_builder, device, env_description)?;
+        let (value_function, learning_module) = self.learning_module_builder.build(
+            distribution_varmap,
+            distribution_var_builder,
+            env_description,
+            device,
+        )?;
+        let module = GenericLearningModuleWithValueFunction {
+            policy,
+            learning_module,
+            value_function,
+        };
+        let core = CandlePPOCore5 {
+            module,
+            clip_range: self.clip_range,
+            device: device.clone(),
+            gamma: self.gamma,
+            lambda: self.lambda,
+            sample_size: self.sample_size,
+        };
+        let ppo2 = CandlePPO5 { ppo: core, hooks };
+        Ok(ppo2)
+    }
 }

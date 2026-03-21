@@ -7,11 +7,9 @@ use crate::{
     env::{Env, Sampler, TensorOfSampler},
     sampler::PolicyWrapper,
     sampler5::{Sampler5, buffer::TrajectoryContainer},
-    tensor::R2lTensor,
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
-use burn::tensor::T;
 use std::marker::PhantomData;
 
 macro_rules! break_on_hook_res {
@@ -73,11 +71,11 @@ impl<T: Clone> OnPolicyAlgorithmHooks<T> for DefaultOnPolicyAlgorightmsHooks {
     }
 
     fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer<T>]) -> bool {
-        let total_reward = rollouts
+        let _total_reward = rollouts
             .iter()
             .map(|s| s.rewards.iter().sum::<f32>())
             .sum::<f32>();
-        let episodes: usize = rollouts
+        let _episodes: usize = rollouts
             .iter()
             .flat_map(|s| &s.dones)
             .filter(|d| **d)
@@ -180,6 +178,63 @@ pub struct OnPolicyAlgorithm5<A: Agent5, S: Sampler5, H: OnPolicyAlgorithmHooks5
     pub sampler: S,
     pub agent: A,
     pub hooks: H,
+}
+
+pub struct DefaultOnPolicyAlgorightmsHooks5<A: Agent5, S: Sampler5> {
+    rollout_idx: usize,
+    learning_schedule: LearningSchedule,
+    _phantom: PhantomData<(A, S)>,
+}
+
+impl<A: Agent5, S: Sampler5> DefaultOnPolicyAlgorightmsHooks5<A, S> {
+    pub fn new(learning_schedule: LearningSchedule) -> Self {
+        Self {
+            rollout_idx: 0,
+            learning_schedule,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<A: Agent5, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgorightmsHooks5<A, S> {
+    type A = A;
+    type S = S;
+
+    fn init_hook(&mut self) -> bool {
+        false
+    }
+
+    fn post_rollout_hook(
+        &mut self,
+        rollouts: &[<Self::S as Sampler5>::TrajectoryContainer],
+    ) -> bool {
+        self.rollout_idx += 1;
+        match &mut self.learning_schedule {
+            LearningSchedule::RolloutBound {
+                total_rollouts,
+                current_rollout,
+            } => {
+                *current_rollout += 1;
+                current_rollout >= total_rollouts
+            }
+            LearningSchedule::TotalStepBound {
+                total_steps,
+                current_step,
+            } => {
+                let rollout_steps: usize = rollouts.iter().map(|e| e.actions().count()).sum();
+                *current_step += rollout_steps;
+                current_step >= total_steps
+            }
+        }
+    }
+
+    fn post_training_hook(&mut self, policy: <Self::A as Agent5>::Policy) -> bool {
+        false
+    }
+
+    fn shutdown_hook(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl<

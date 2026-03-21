@@ -163,7 +163,7 @@ impl EvaluatorNormalizerOptions {
             EvaluatorNormalizerOptions {
                 evaluator_options: None,
                 normalizer_options: None,
-                device,
+                device: _,
             } => None,
             EvaluatorNormalizerOptions {
                 evaluator_options: Some(eval_options),

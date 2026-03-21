@@ -64,7 +64,7 @@ impl LearningModuleBuilder {
                 value_max_grad_norm,
             } => {
                 let critic_varmap = VarMap::new();
-                let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, &device);
+                let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, device);
                 let value_layers = &[&value_layers[..], &[1]].concat();
                 let value_net = build_sequential(input_size, value_layers, &critic_vb, "value")?;
                 let policy_optimizer =

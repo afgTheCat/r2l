@@ -3,7 +3,7 @@
 pub mod buffer;
 pub mod worker;
 
-use crate::sampler5::worker::Worker;
+use crate::{env::EnvironmentDescription, sampler5::worker::Worker};
 use std::sync::Arc;
 
 use bimodal_array::ArrayHandle;
@@ -46,7 +46,7 @@ pub trait PreprocessorY<B: TrajectoryContainer> {
     fn preprocess_states(&mut self, buffers: &[B]);
 }
 
-struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
+pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
     preprocessor: Option<Box<dyn PreprocessorY<BD::Container>>>,
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,
@@ -62,10 +62,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = (0..num_envs)
-            .map(|_| {
-                let container = collection_method.to_container();
-                container
-            })
+            .map(|_| collection_method.to_container())
             .collect();
         let (array_handle, element_handles) = bimodal_array(buffers);
         let worker_pool = match location {
@@ -108,6 +105,10 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
             collection_method,
         }
     }
+
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
+        todo!()
+    }
 }
 
 impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler5 for FinalSampler<E, BD> {
@@ -116,7 +117,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler5 for FinalSampler<
 
     fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
         &mut self,
-        policy: P,
+        _policy: P,
     ) -> impl AsRef<[Self::TrajectoryContainer]> {
         let bound = self.collection_method.method();
         if let Some(pre_processor) = &mut self.preprocessor {

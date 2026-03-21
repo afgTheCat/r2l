@@ -32,7 +32,7 @@ impl RunningMeanStd {
 
     pub fn update(&mut self, arr: &Tensor) -> Result<()> {
         let batch_mean = arr.mean(0)?;
-        let batch_var = biased_var(&arr, 0)?;
+        let batch_var = biased_var(arr, 0)?;
         let batch_count = arr.shape().dim(0)? as f32;
         self.update_from_moments(batch_mean, batch_var, batch_count)?;
         Ok(())
@@ -47,9 +47,11 @@ impl RunningMeanStd {
     ) -> Result<()> {
         let delta = batch_mean.sub(&self.mean)?;
         let tot_count = self.count + batch_count;
-        self.mean = self.mean.add(
-            &(&delta.broadcast_mul(&Tensor::full(batch_count / tot_count, (), &self.device)?)?),
-        )?;
+        self.mean = self.mean.add(&delta.broadcast_mul(&Tensor::full(
+            batch_count / tot_count,
+            (),
+            &self.device,
+        )?)?)?;
         let m_a = self
             .var
             .broadcast_mul(&Tensor::full(self.count, (), self.var.device())?)?;
@@ -66,7 +68,7 @@ impl RunningMeanStd {
             (),
             &self.device,
         )?)?;
-        self.count = batch_count + self.count;
+        self.count += batch_count;
         Ok(())
     }
 }

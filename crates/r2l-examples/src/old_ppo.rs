@@ -1,7 +1,7 @@
 use crate::ENV_NAME;
 use crate::EventBox;
 use crate::PPOProgress;
-use candle_core::{DType, Device, Error, Tensor};
+use candle_core::{Device, Error, Tensor};
 use r2l_agents::LearningModuleKind;
 use r2l_agents::candle_agents::ModuleWithValueFunction;
 use r2l_agents::candle_agents::ppo::{CandlePPOCore, PPOHooksTrait};
@@ -15,9 +15,9 @@ use r2l_core::on_policy_algorithm::{
     DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
 };
 use r2l_core::{Algorithm, distributions::Policy, utils::rollout_buffer::Advantages};
+use std::f64;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
-use std::{any::Any, f64};
 
 #[derive(Debug, Clone)]
 pub struct PPOHook {
@@ -109,7 +109,7 @@ impl PPOHooksTrait<LearningModuleKind> for PPOHook {
     ) -> candle_core::Result<HookResult> {
         let entropy = agent.module.get_policy_ref().entropy().unwrap();
         let device = entropy.device();
-        let entropy_loss = (Tensor::full(self.ent_coeff, (), &device)? * entropy.neg()?)?;
+        let entropy_loss = (Tensor::full(self.ent_coeff, (), device)? * entropy.neg()?)?;
         self.progress
             .collect_batch_data(&data.ratio, &entropy_loss, value_loss, policy_loss)?;
         // TODO: this breaks the computation graph. We need to explore our options here. The most
@@ -135,7 +135,7 @@ impl PPOHooksTrait<LearningModuleKind> for PPOHook {
     }
 }
 
-pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
+pub fn old_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
     let device = Device::Cpu;

@@ -1,22 +1,7 @@
 mod new_ppo;
 pub mod old_ppo;
 
-use candle_core::{DType, Device, Error, Tensor};
-use r2l_agents::LearningModuleKind;
-use r2l_agents::candle_agents::ModuleWithValueFunction;
-use r2l_agents::candle_agents::ppo::{CandlePPOCore, PPOHooksTrait};
-use r2l_agents::candle_agents::ppo::{HookResult, PPOBatchData};
-use r2l_api::builders::agents::ppo::PPOBuilder;
-use r2l_api::builders::sampler::{EnvPoolType, SamplerType};
-use r2l_candle_lm::candle_rollout_buffer::{CandleRolloutBuffer, RolloutBatch};
-use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
-use r2l_core::env_builder::EnvBuilderType;
-use r2l_core::on_policy_algorithm::{
-    DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
-};
-use r2l_core::{Algorithm, distributions::Policy, utils::rollout_buffer::Advantages};
-use std::sync::Arc;
-use std::sync::mpsc::Sender;
+use candle_core::{DType, Tensor};
 use std::{any::Any, f64};
 
 const ENV_NAME: &str = "Pendulum-v1";

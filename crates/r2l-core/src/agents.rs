@@ -3,8 +3,6 @@ use crate::{
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
-use candle_core::Tensor;
-use std::borrow::Cow;
 
 pub trait Agent {
     /// The policy

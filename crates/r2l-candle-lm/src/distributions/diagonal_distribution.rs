@@ -59,8 +59,8 @@ impl Policy for DiagGaussianDistribution {
     }
 
     fn log_probs(&self, states: &[CandleTensor], actions: &[CandleTensor]) -> Result<CandleTensor> {
-        let states = CandleTensor::stack(&states, 0)?;
-        let actions = CandleTensor::stack(&actions, 0)?;
+        let states = CandleTensor::stack(states, 0)?;
+        let actions = CandleTensor::stack(actions, 0)?;
         let mu = self.mu_net.forward(&states)?;
         let std = self.log_std.exp()?.broadcast_as(mu.shape())?;
         let var = std.sqr()?;

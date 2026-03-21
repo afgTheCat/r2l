@@ -11,7 +11,6 @@ use crate::{
     tensor::R2lTensor,
 };
 use bimodal_array::ElementHandle;
-use burn::tensor::Tensor;
 use crossbeam::channel::{Receiver, Sender};
 use rand::Rng;
 
@@ -30,8 +29,6 @@ fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
 ) -> Memory<T> {
     let state = if let Some(state) = last_state {
         state
-    } else if let Some(last_state) = last_state {
-        last_state
     } else {
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         env.reset(seed).unwrap()

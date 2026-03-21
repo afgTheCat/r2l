@@ -1,7 +1,6 @@
-use candle_core::{Error, Result, Tensor, safetensors::BufferedSafetensors};
+use candle_core::{Result, Tensor};
 use candle_nn::{Activation, Linear, Module, VarBuilder, linear};
 use either::Either;
-use safetensors::serialize;
 
 #[derive(Debug, Clone)]
 pub struct LinearLayer {
@@ -23,7 +22,7 @@ impl LinearLayer {
     }
 
     fn serialize(&self) -> Result<Vec<u8>> {
-        let data = [
+        let _data = [
             (&self.weight_name, self.layer.weight()),
             (&self.bias_name, self.layer.bias().unwrap()), // TODO: maybe error handle here?
         ];

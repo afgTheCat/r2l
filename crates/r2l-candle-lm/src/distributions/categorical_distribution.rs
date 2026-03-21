@@ -62,8 +62,8 @@ impl Policy for CategoricalDistribution {
     }
 
     fn log_probs(&self, states: &[CandleTensor], actions: &[CandleTensor]) -> Result<CandleTensor> {
-        let states = CandleTensor::stack(&states, 0)?;
-        let actions = CandleTensor::stack(&actions, 0)?;
+        let states = CandleTensor::stack(states, 0)?;
+        let actions = CandleTensor::stack(actions, 0)?;
         let logits = self.logits.forward(&states)?;
         let log_probs = log_softmax(&logits, 1)?;
         let log_probs = actions.mul(&log_probs)?.sum(1)?;

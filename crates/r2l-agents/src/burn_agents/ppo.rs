@@ -71,26 +71,26 @@ pub trait BurnPPPHooksTrait<
 {
     fn before_learning_hook(
         &mut self,
-        agent: &mut BurnPPOCore<B, D>,
-        rollout_buffers: &mut Vec<BurnRolloutBuffer<B>>,
-        advantages: &mut Advantages,
-        returns: &mut Returns,
+        _agent: &mut BurnPPOCore<B, D>,
+        _rollout_buffers: &mut Vec<BurnRolloutBuffer<B>>,
+        _advantages: &mut Advantages,
+        _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
     fn rollout_hook(
         &mut self,
-        agent: &mut BurnPPOCore<B, D>,
-        rollout_buffers: &Vec<BurnRolloutBuffer<B>>,
+        _agent: &mut BurnPPOCore<B, D>,
+        _rollout_buffers: &Vec<BurnRolloutBuffer<B>>,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Break)
     }
 
     fn batch_hook(
         &mut self,
-        agent: &mut BurnPPOCore<B, D>,
-        rollout_batch: &RolloutBatch<B>,
+        _agent: &mut BurnPPOCore<B, D>,
+        _rollout_batch: &RolloutBatch<B>,
         // policy_loss: &mut PolicyLoss,
         // value_loss: &mut ValueLoss,
         // data: &PPOBatchData,
@@ -178,7 +178,7 @@ where
                 self.core.sample_size,
             );
             self.batching_loop(&mut batch_iter)?;
-            let rollout_hook_res = self.hooks.rollout_hook(&mut self.core, &rollouts);
+            let rollout_hook_res = self.hooks.rollout_hook(&mut self.core, rollouts);
             process_hook_result!(rollout_hook_res);
         }
     }

@@ -49,7 +49,7 @@ impl A2CBuilder {
     ) -> Result<A2C<LearningModuleKind>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
-            VarBuilder::from_varmap(&distribution_varmap, DType::F32, &device);
+            VarBuilder::from_varmap(&distribution_varmap, DType::F32, device);
         let policy =
             self.distribution_builder
                 .build(&distribution_var_builder, device, env_description)?;
