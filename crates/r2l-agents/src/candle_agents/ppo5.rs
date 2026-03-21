@@ -182,7 +182,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> Agent5 for CandlePPO5<M, 
         ));
         let logps = logps(buffers, &self.policy());
         self.learning_loop(buffers, advantages, returns, logps)?;
-        todo!()
+        Ok(())
     }
 }
 
@@ -202,12 +202,11 @@ pub fn buffer_advantages_and_returns(
     let mut returns: Vec<f32> = vec![0.; total_steps];
     let mut last_gae_lam: f32 = 0.;
 
-    let mut dones = buffer
-        .terminated()
-        .zip(buffer.trancuated())
-        .map(|(terminated, trancuated)| terminated || trancuated);
-
     for i in (0..total_steps).rev() {
+        let mut dones = buffer
+            .terminated()
+            .zip(buffer.trancuated())
+            .map(|(terminated, trancuated)| terminated || trancuated);
         let next_non_terminal = if dones.nth(i).unwrap() {
             last_gae_lam = 0.;
             0f32
@@ -271,6 +270,7 @@ impl BatchIndexIterator {
             return None;
         }
         let batch_indicies = &self.indicies[self.current..self.current + self.sample_size];
+        self.current += self.sample_size;
         Some(batch_indicies.to_owned())
     }
 }

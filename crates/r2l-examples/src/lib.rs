@@ -1,4 +1,4 @@
-mod new_ppo;
+pub mod new_ppo;
 pub mod old_ppo;
 
 use candle_core::{DType, Tensor};

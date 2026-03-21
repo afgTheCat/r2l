@@ -1,16 +1,13 @@
 use candle_core::Device;
-use r2l_agents::candle_agents::{ppo3::PPO3DefaultHooks, ppo4::PPO4DefaultHooks};
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_core::{
     Algorithm,
     env_builder::EnvBuilderType,
     on_policy_algorithm::{
-        DefaultOnPolicyAlgorightmsHooks, DefaultOnPolicyAlgorightmsHooks3,
-        DefaultOnPolicyAlgorightmsHooks4, LearningSchedule, OnPolicyAlgorithm, OnPolicyAlgorithm3,
-        OnPolicyAlgorithm4,
+        DefaultOnPolicyAlgorightmsHooks, DefaultOnPolicyAlgorightmsHooks4, LearningSchedule,
+        OnPolicyAlgorithm,
     },
     sampler::{CollectionType, R2lSampler, env_pools::FixedSizeEnvPoolKind},
-    sampler3::{CollectionBound, R2lSamplerX, coordinator::Location},
 };
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use std::{fs::File, sync::Arc};
@@ -46,62 +43,62 @@ fn old_api() {
     op.train().unwrap()
 }
 
-fn run_new_test1() {
-    let builder = EnvBuilderType::EnvBuilder {
-        builder: Arc::new(GymEnvBuilder::new("Pendulum-v1")),
-        n_envs: 10,
-    };
-    let sampler: R2lSamplerX<GymEnv> = R2lSamplerX::build(
-        builder,
-        CollectionBound::StepBound { steps: 2048 },
-        None,
-        Location::Vec,
-    );
-    let env_description = sampler.env_description();
-    let agent = PPOBuilder::default()
-        .build3(&Device::Cpu, &env_description, PPO3DefaultHooks::new())
-        .unwrap();
-    let hooks = DefaultOnPolicyAlgorightmsHooks3::new(LearningSchedule::RolloutBound {
-        total_rollouts: 100,
-        current_rollout: 0,
-    });
-    let mut op3 = OnPolicyAlgorithm3 {
-        sampler,
-        agent,
-        hooks,
-    };
-    op3.train().unwrap();
-}
+// fn run_new_test1() {
+//     let builder = EnvBuilderType::EnvBuilder {
+//         builder: Arc::new(GymEnvBuilder::new("Pendulum-v1")),
+//         n_envs: 10,
+//     };
+//     let sampler: R2lSamplerX<GymEnv> = R2lSamplerX::build(
+//         builder,
+//         CollectionBound::StepBound { steps: 2048 },
+//         None,
+//         Location::Vec,
+//     );
+//     let env_description = sampler.env_description();
+//     let agent = PPOBuilder::default()
+//         .build3(&Device::Cpu, &env_description, PPO3DefaultHooks::new())
+//         .unwrap();
+//     let hooks = DefaultOnPolicyAlgorightmsHooks3::new(LearningSchedule::RolloutBound {
+//         total_rollouts: 100,
+//         current_rollout: 0,
+//     });
+//     let mut op3 = OnPolicyAlgorithm3 {
+//         sampler,
+//         agent,
+//         hooks,
+//     };
+//     op3.train().unwrap();
+// }
 
-fn run_new_test2() {
-    let builder = EnvBuilderType::EnvBuilder {
-        builder: Arc::new(GymEnvBuilder::new("Pendulum-v1")),
-        n_envs: 10,
-    };
-    let sampler: R2lSamplerX<GymEnv> = R2lSamplerX::build(
-        builder,
-        CollectionBound::StepBound { steps: 2048 },
-        None,
-        Location::Vec,
-    );
-
-    let env_description = sampler.env_description();
-    let agent = PPOBuilder::default()
-        .build4(&Device::Cpu, &env_description, PPO4DefaultHooks::new())
-        .unwrap();
-
-    let hooks = DefaultOnPolicyAlgorightmsHooks4::new(LearningSchedule::RolloutBound {
-        total_rollouts: 100,
-        current_rollout: 0,
-    });
-
-    let mut op3 = OnPolicyAlgorithm4 {
-        sampler,
-        agent,
-        hooks,
-    };
-    op3.train().unwrap();
-}
+// fn run_new_test2() {
+//     let builder = EnvBuilderType::EnvBuilder {
+//         builder: Arc::new(GymEnvBuilder::new("Pendulum-v1")),
+//         n_envs: 10,
+//     };
+//     let sampler: R2lSamplerX<GymEnv> = R2lSamplerX::build(
+//         builder,
+//         CollectionBound::StepBound { steps: 2048 },
+//         None,
+//         Location::Vec,
+//     );
+//
+//     let env_description = sampler.env_description();
+//     let agent = PPOBuilder::default()
+//         .build4(&Device::Cpu, &env_description, PPO4DefaultHooks::new())
+//         .unwrap();
+//
+//     let hooks = DefaultOnPolicyAlgorightmsHooks4::new(LearningSchedule::RolloutBound {
+//         total_rollouts: 100,
+//         current_rollout: 0,
+//     });
+//
+//     let mut op3 = OnPolicyAlgorithm4 {
+//         sampler,
+//         agent,
+//         hooks,
+//     };
+//     op3.train().unwrap();
+// }
 
 fn ptest_func(f: fn()) {
     let guard = pprof::ProfilerGuardBuilder::default()
@@ -118,12 +115,12 @@ fn ptest_func(f: fn()) {
     };
 }
 
-#[test]
-fn new_api1() {
-    ptest_func(run_new_test1);
-}
-
-#[test]
-fn new_api2() {
-    ptest_func(run_new_test2);
-}
+// #[test]
+// fn new_api1() {
+//     ptest_func(run_new_test1);
+// }
+//
+// #[test]
+// fn new_api2() {
+//     ptest_func(run_new_test2);
+// }

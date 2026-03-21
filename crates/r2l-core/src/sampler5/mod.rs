@@ -3,10 +3,11 @@
 pub mod buffer;
 pub mod worker;
 
-use crate::{env::EnvironmentDescription, sampler5::worker::Worker};
+use crate::{env::EnvironmentDescription, rng::RNG, sampler5::worker::Worker};
 use std::sync::Arc;
 
 use bimodal_array::ArrayHandle;
+use rand::Rng;
 
 use crate::{
     distributions::Policy,
@@ -107,7 +108,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
     }
 
     pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
-        todo!()
+        self.worker_pool.env_description()
     }
 }
 
@@ -117,8 +118,9 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler5 for FinalSampler<
 
     fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
         &mut self,
-        _policy: P,
+        policy: P,
     ) -> impl AsRef<[Self::TrajectoryContainer]> {
+        self.worker_pool.set_policy(policy);
         let bound = self.collection_method.method();
         if let Some(pre_processor) = &mut self.preprocessor {
             let mut current_step = 0;

@@ -1,5 +1,5 @@
 use crate::{
-    env::Env,
+    env::{Env, EnvironmentDescription},
     sampler::{
         env_pools::{
             thread_env_pool::{

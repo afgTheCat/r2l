@@ -76,6 +76,7 @@ impl PPOHooksTrait5<LearningModuleKind> for PPOHook {
         let mut total_episodes: usize = 0;
         for buffer in buffers {
             total_rewards += buffer.rewards().sum::<f32>();
+            let asd = buffer.terminated().collect::<Vec<_>>();
             total_episodes += buffer.dones().filter(|x| *x).count();
         }
         advantages.normalize();

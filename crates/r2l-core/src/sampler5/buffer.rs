@@ -10,6 +10,7 @@ use crate::{
     tensor::R2lTensor,
 };
 
+#[derive(Debug)]
 pub struct Memory<T> {
     pub state: T,
     pub next_state: T,
@@ -104,7 +105,7 @@ impl<T: R2lTensor> TrajectoryBound for StepTrajectoryBound<T> {
     type Container = FixedSizeStateBuffer<T>;
 
     fn to_container(&self) -> Self::Container {
-        todo!()
+        FixedSizeStateBuffer::new(self.steps)
     }
 
     fn method(&self) -> RolloutMode {

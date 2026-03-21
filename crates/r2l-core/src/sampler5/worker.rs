@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     distributions::Policy,
-    env::{Env, SnapShot},
+    env::{Env, EnvironmentDescription, SnapShot},
     rng::RNG,
     sampler5::{
         RolloutMode,
@@ -76,6 +76,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
                 for _ in 0..steps {
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, distr, last_state);
+                    self.last_state = Some(memory.next_state.clone());
                     buffer.push(memory);
                 }
             }
@@ -85,9 +86,12 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, distr, last_state);
                     let terminates = memory.terminates();
+                    self.last_state = Some(memory.next_state.clone());
                     buffer.push(memory);
-                    episodes += 1;
-                    if episodes >= n_episodes && terminates {
+                    if terminates {
+                        episodes += 1;
+                    }
+                    if episodes >= n_episodes {
                         break;
                     }
                 }
@@ -176,6 +180,13 @@ pub enum WorkerPool<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>
 }
 
 impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> WorkerPool<E, B> {
+    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
+        match self {
+            Self::Vec(workers) => workers[0].env.env_description(),
+            _ => todo!(),
+        }
+    }
+
     pub fn set_policy<P: Policy<Tensor = E::Tensor> + Clone>(&mut self, policy: P) {
         match self {
             WorkerPool::Vec(workers) => {
