@@ -149,13 +149,13 @@ pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let device = Device::Cpu;
     let env_builder = EnvBuilderType::EnvBuilder {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
-        n_envs: 1,
+        n_envs: 5,
     };
     let sampler = FinalSampler::build(
         env_builder,
         StepTrajectoryBound::new(2048),
         None,
-        Location::Vec,
+        Location::Thread,
     );
     let env_description = sampler.env_description();
     let mut agent = PPOBuilder::default().build5(&device, &env_description, ppo_hook)?;
@@ -168,4 +168,17 @@ pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
         }),
     };
     algo.train()
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{EventBox, new_ppo::new_train_ppo};
+    use std::sync::mpsc;
+    use std::sync::mpsc::{Receiver, Sender};
+
+    #[test]
+    fn thing() {
+        let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
+        new_train_ppo(event_tx);
+    }
 }

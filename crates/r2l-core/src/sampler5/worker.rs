@@ -7,6 +7,7 @@ use crate::{
     sampler5::{
         RolloutMode,
         buffer::{ExpandableTrajectoryContainer, Memory},
+        worker,
     },
     tensor::R2lTensor,
 };
@@ -103,24 +104,26 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
 pub enum WorkerCommand<T: R2lTensor> {
     SetPolicy(Box<dyn Policy<Tensor = T>>),
     Collect(RolloutMode),
+    GetEnvironmentDescription,
 }
 
-pub enum WorkerResult {
+pub enum WorkerResult<T: R2lTensor> {
     PolicySet,
     Collected,
+    EnvironmentDescription(EnvironmentDescription<T>),
 }
 
 pub struct ThreadWorker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
     worker: Worker<E, D>,
     rx: Receiver<WorkerCommand<E::Tensor>>,
-    tx: Sender<WorkerResult>,
+    tx: Sender<WorkerResult<E::Tensor>>,
 }
 
 impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<E, D> {
     pub fn new(
         worker: Worker<E, D>,
         rx: Receiver<WorkerCommand<E::Tensor>>,
-        tx: Sender<WorkerResult>,
+        tx: Sender<WorkerResult<E::Tensor>>,
     ) -> Self {
         Self { worker, rx, tx }
     }
@@ -135,6 +138,15 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
                 }
                 WorkerCommand::Collect(bound) => {
                     self.worker.collect_rollout(bound);
+                    self.tx.send(WorkerResult::Collected).unwrap();
+                }
+                WorkerCommand::GetEnvironmentDescription => {
+                    let environment_descriotion = self.worker.env.env_description();
+                    self.tx
+                        .send(WorkerResult::EnvironmentDescription(
+                            environment_descriotion,
+                        ))
+                        .unwrap();
                 }
             }
         }
@@ -142,10 +154,23 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
 }
 
 pub struct ThreadWorkers<T: R2lTensor>(
-    pub HashMap<usize, (Sender<WorkerCommand<T>>, Receiver<WorkerResult>)>,
+    pub HashMap<usize, (Sender<WorkerCommand<T>>, Receiver<WorkerResult<T>>)>,
 );
 
 impl<T: R2lTensor> ThreadWorkers<T> {
+    pub fn get_environment_description(&self) -> EnvironmentDescription<T> {
+        let channels = &self.0;
+        let (command_tx, worker_rx) = channels.get(&0).unwrap();
+        command_tx
+            .send(WorkerCommand::GetEnvironmentDescription)
+            .unwrap();
+        let WorkerResult::EnvironmentDescription(env_description) = worker_rx.recv().unwrap()
+        else {
+            todo!()
+        };
+        env_description
+    }
+
     pub fn set_policy<P: Policy<Tensor = T> + Clone>(&self, policy: P) {
         let channels = &self.0;
         let num_envs = channels.len();
@@ -183,7 +208,7 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
     pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         match self {
             Self::Vec(workers) => workers[0].env.env_description(),
-            _ => todo!(),
+            Self::Thread(tw) => tw.get_environment_description(),
         }
     }
 
