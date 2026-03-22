@@ -2,9 +2,10 @@ use crate::sequential::Sequential;
 use anyhow::Result;
 use burn::module::Module;
 use burn::tensor::cast::ToElement;
-use burn::tensor::{Distribution as BurnDistribution, Shape};
+use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor as BurnTensor};
 use r2l_core::distributions::Policy;
+use std::f32;
 
 #[derive(Debug, Module)]
 pub struct DiagGaussianDistribution<B: Backend> {
@@ -57,14 +58,37 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
     // different trait, as log_probs are not really used during inference.
     fn log_probs(
         &self,
-        _states: &[Self::Tensor],
-        _actions: &[Self::Tensor],
+        states: &[Self::Tensor],
+        actions: &[Self::Tensor],
     ) -> Result<Self::Tensor> {
-        todo!()
+        let device: <B as Backend>::Device = Default::default();
+        let states: BurnTensor<B, 2> = BurnTensor::stack(states.to_vec(), 0);
+        let actions: BurnTensor<B, 2> = BurnTensor::stack(actions.to_vec(), 0);
+        let mu = self.mu_net.forward(states);
+        let std = self.log_std.clone().exp();
+        let var = std.clone() * std;
+        let log_sqrt_2pi = f32::ln(f32::sqrt(2f32 * f32::consts::PI));
+        let log_sqrt_2pi: BurnTensor<B, 2> = BurnTensor::from_data(
+            TensorData::new(vec![log_sqrt_2pi; mu.shape().num_elements()], mu.shape().dims),
+            &device,
+        );
+        let actions_minus_mu = actions - mu;
+        let log_probs: BurnTensor<B, 2> = (actions_minus_mu.clone() * actions_minus_mu) / (2 * var);
+        let log_probs = log_probs.neg() - self.log_std.clone() - log_sqrt_2pi;
+        Ok(log_probs.sum_dim(1).squeeze())
     }
 
     fn entropy(&self) -> Result<Self::Tensor> {
-        todo!()
+        let device: <B as Backend>::Device = Default::default();
+        let entropy_per_dim = self.log_std.clone()
+            + BurnTensor::from_data(
+                TensorData::new(
+                    vec![0.5 * ((2. * f32::consts::PI).ln() + 1.); self.log_std.shape().num_elements()],
+                    self.log_std.shape().dims,
+                ),
+                &device,
+            );
+        Ok(entropy_per_dim.sum_dim(1).squeeze())
     }
 
     fn std(&self) -> Result<f32> {
