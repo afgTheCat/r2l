@@ -5,7 +5,7 @@ use crate::{
     utils::rollout_buffer::RolloutBuffer,
 };
 use crossbeam::channel::{Receiver, RecvError};
-use rand::Rng;
+use rand::RngExt;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 
 pub struct FixedSizeStateBuffer<E: Env> {

@@ -40,6 +40,6 @@ impl<B: AutodiffBackend> BurnPPODebug<B> {
         let actions_minus_mu = actions - mu;
         let log_probs: Tensor<B, 2> = (actions_minus_mu.clone() * actions_minus_mu) / (2 * var);
         let log_probs = log_probs.neg() - self.model.log_std.clone() - log_sqrt_2pi;
-        log_probs.sum_dim(1).squeeze(1)
+        log_probs.sum_dim(1).squeeze()
     }
 }

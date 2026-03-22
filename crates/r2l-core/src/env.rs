@@ -10,7 +10,6 @@ use crate::{
     utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
-use bincode::{Decode, Encode};
 
 #[derive(Debug, Clone)]
 pub enum Space<T> {
@@ -90,7 +89,7 @@ pub trait Env {
 
 pub type EnvTensor<E> = <E as Env>::Tensor;
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy)]
 pub enum RolloutMode {
     EpisodeBound { n_episodes: usize },
     StepBound { n_steps: usize },

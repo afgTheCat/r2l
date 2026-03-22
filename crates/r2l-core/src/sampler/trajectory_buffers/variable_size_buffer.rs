@@ -4,7 +4,7 @@ use crate::{
     rng::RNG,
     utils::rollout_buffer::RolloutBuffer,
 };
-use rand::Rng;
+use rand::RngExt;
 
 #[derive(Clone)]
 pub struct VariableSizedStateBuffer<E: Env> {

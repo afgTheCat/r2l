@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     distributions::Policy,
     env::{Env, EnvironmentDescription, SnapShot},
@@ -12,7 +10,8 @@ use crate::{
 };
 use bimodal_array::ElementHandle;
 use crossbeam::channel::{Receiver, Sender};
-use rand::Rng;
+use rand::RngExt;
+use std::collections::HashMap;
 
 pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
     pub env: E,

@@ -79,6 +79,6 @@ where
     fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
         let observation: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
         let value = self.model.value_net.forward(observation);
-        Ok(value.squeeze(1))
+        Ok(value.squeeze())
     }
 }

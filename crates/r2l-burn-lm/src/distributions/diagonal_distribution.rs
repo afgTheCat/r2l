@@ -50,12 +50,16 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         let std = self.log_std.clone().exp();
         let noise = BurnTensor::random(mu.shape(), BurnDistribution::Normal(0., 1.), &device);
         let action = mu + noise * std;
-        Ok(action.squeeze(0))
+        Ok(action.squeeze())
     }
 
     // FIXME: we probably want a differnt type states, actions etc. Alternatively we should have a
     // different trait, as log_probs are not really used during inference.
-    fn log_probs(&self, _states: &[Self::Tensor], _actions: &[Self::Tensor]) -> Result<Self::Tensor> {
+    fn log_probs(
+        &self,
+        _states: &[Self::Tensor],
+        _actions: &[Self::Tensor],
+    ) -> Result<Self::Tensor> {
         todo!()
     }
 

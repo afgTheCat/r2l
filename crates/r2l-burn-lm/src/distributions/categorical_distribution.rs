@@ -54,7 +54,7 @@ impl<B: Backend> Policy for CategoricalDistribution<B> {
         let logits = self.logits.forward(states);
         let log_probs = softmax(logits, 1);
         let log_probs = (actions * log_probs).sum_dim(1);
-        Ok(log_probs.squeeze(1))
+        Ok(log_probs.squeeze())
     }
 
     fn std(&self) -> anyhow::Result<f32> {

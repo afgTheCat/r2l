@@ -14,7 +14,6 @@ interprocess = "2.2.3"
 rayon = "1.10.0"
 derive_more = { version = "2.0.1", features = ["full"] }
 enum_dispatch = "0.3.13"
-bincode = { workspace = true }
 either = {workspace = true}
 safetensors = "0.4.1"
 smol = "2.0.2"
@@ -28,7 +27,6 @@ itertools = "0.14.0"
 
 [dev-dependencies]
 r2l-api = { workspace = true }
-# r2l-buffer = { workspace = true }
 candle-core = { workspace = true }
 
 [features]
