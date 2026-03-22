@@ -18,6 +18,14 @@ pub trait BurnPolicy<B: AutodiffBackend>:
 {
 }
 
+impl<B: AutodiffBackend, M> BurnPolicy<B> for M
+where
+    M: AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
+        + ModuleDisplay
+        + Policy<Tensor = Tensor<B, 1>>,
+{
+}
+
 pub struct PolicyValuesLosses<B: AutodiffBackend> {
     pub policy_loss: Tensor<B, 1>,
     pub value_loss: Tensor<B, 1>,

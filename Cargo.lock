@@ -6163,6 +6163,7 @@ name = "r2l-examples"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "burn",
  "candle-core",
  "crossterm 0.29.0",
  "eframe",
@@ -6172,6 +6173,7 @@ dependencies = [
  "once_cell",
  "r2l-agents",
  "r2l-api",
+ "r2l-burn-lm",
  "r2l-candle-lm",
  "r2l-core",
  "r2l-gym",
