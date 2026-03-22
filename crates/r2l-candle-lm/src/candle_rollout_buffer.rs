@@ -24,7 +24,7 @@ impl CandleRolloutBuffer {
         lambda: f32,
     ) -> Result<(Vec<f32>, Vec<f32>)> {
         let values_stacked = value_func
-            .calculate_values(&self.0.states.iter().cloned().collect::<Vec<_>>())
+            .calculate_values(&self.0.states.to_vec())
             .unwrap();
         let values: Vec<f32> = values_stacked.to_vec1()?;
         let total_steps = self.0.rewards.len();

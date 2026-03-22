@@ -1,6 +1,6 @@
-use crate::{Policy, burn_agents::ppo::HookResult};
+use crate::burn_agents::ppo::HookResult;
 use burn::{
-    module::{AutodiffModule, ModuleDisplay},
+    module::AutodiffModule,
     prelude::Backend,
     tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
 };
@@ -8,9 +8,8 @@ use r2l_burn_lm::{
     learning_module::{BurnPolicy, ParalellActorCriticLM},
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
 };
-use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
+use r2l_core::utils::rollout_buffer::{Advantages, Returns};
 use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
-use r2l_core::{agents::TensorOfAgent, policies::LearningModule};
 
 pub struct PPOBatchData<B: Backend> {
     pub logp: Logp<B>,
@@ -73,7 +72,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> Agent5 fo
 
     fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
         &mut self,
-        buffers: &[C],
+        _buffers: &[C],
     ) -> anyhow::Result<()> {
         todo!()
     }

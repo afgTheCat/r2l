@@ -6,8 +6,3 @@ pub mod learning_module;
 pub mod sequential;
 pub mod tensors;
 
-use burn::optim::AdamW;
-use burn::optim::adaptor::OptimizerAdaptor;
-use burn::tensor::backend::AutodiffBackend;
-use burn::{module::Module, prelude::Backend, tensor::Tensor};
-use std::f32;

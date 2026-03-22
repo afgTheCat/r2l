@@ -148,7 +148,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> CandlePPO5<M, H> {
         logps: Logps,
     ) -> Result<()> {
         loop {
-            self.batching_loop(&buffers, &advantages, &logps, &returns)?;
+            self.batching_loop(buffers, &advantages, &logps, &returns)?;
             let rollout_hook_res = self.hooks.rollout_hook(buffers, &mut self.ppo);
             process_hook_result!(rollout_hook_res);
         }

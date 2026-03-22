@@ -1,6 +1,6 @@
 use anyhow::Result;
 use burn::{
-    module::{AutodiffModule, ModuleDisplay},
+    module::AutodiffModule,
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_burn_lm::{
