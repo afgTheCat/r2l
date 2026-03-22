@@ -1,5 +1,7 @@
-pub mod new_ppo;
-pub mod old_ppo;
+pub mod burn;
+pub mod candle;
+
+pub use candle::{new_ppo, old_ppo};
 
 use candle_core::{DType, Tensor};
 use std::{any::Any, f64};
