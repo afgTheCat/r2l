@@ -228,7 +228,7 @@ impl<A: Agent5, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgorigh
         }
     }
 
-    fn post_training_hook(&mut self, policy: <Self::A as Agent5>::Policy) -> bool {
+    fn post_training_hook(&mut self, _policy: <Self::A as Agent5>::Policy) -> bool {
         false
     }
 

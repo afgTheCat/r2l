@@ -3,12 +3,6 @@
 pub mod buffer;
 pub mod worker;
 
-use crate::{env::EnvironmentDescription, rng::RNG, sampler5::worker::Worker};
-use std::sync::Arc;
-
-use bimodal_array::ArrayHandle;
-use rand::Rng;
-
 use crate::{
     distributions::Policy,
     env::Env,
@@ -19,7 +13,10 @@ use crate::{
     },
     tensor::R2lTensor,
 };
+use crate::{env::EnvironmentDescription, sampler5::worker::Worker};
+use bimodal_array::ArrayHandle;
 use bimodal_array::bimodal_array;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy)]
 pub enum RolloutMode {

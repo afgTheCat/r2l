@@ -7,7 +7,6 @@ use crate::{
     sampler5::{
         RolloutMode,
         buffer::{ExpandableTrajectoryContainer, Memory},
-        worker,
     },
     tensor::R2lTensor,
 };

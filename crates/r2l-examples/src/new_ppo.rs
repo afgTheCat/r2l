@@ -4,24 +4,18 @@ use crate::PPOProgress;
 use candle_core::{Device, Error, Tensor};
 use r2l_agents::LearningModuleKind;
 use r2l_agents::candle_agents::ModuleWithValueFunction;
-use r2l_agents::candle_agents::ppo::{CandlePPOCore, PPOHooksTrait};
 use r2l_agents::candle_agents::ppo::{HookResult, PPOBatchData};
-use r2l_agents::candle_agents::ppo5::CandlePPO5;
 use r2l_agents::candle_agents::ppo5::PPOHooksTrait5;
 use r2l_api::builders::agents::ppo::PPOBuilder;
-use r2l_api::builders::sampler::{EnvPoolType, SamplerType};
-use r2l_candle_lm::candle_rollout_buffer::{CandleRolloutBuffer, RolloutBatch};
 use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
 use r2l_core::env_builder::EnvBuilderType;
 use r2l_core::on_policy_algorithm::DefaultOnPolicyAlgorightmsHooks5;
+use r2l_core::on_policy_algorithm::LearningSchedule;
 use r2l_core::on_policy_algorithm::OnPolicyAlgorithm5;
-use r2l_core::on_policy_algorithm::{
-    DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
-};
 use r2l_core::sampler5::FinalSampler;
 use r2l_core::sampler5::Location;
 use r2l_core::sampler5::buffer::StepTrajectoryBound;
-use r2l_core::{Algorithm, distributions::Policy, utils::rollout_buffer::Advantages};
+use r2l_core::{distributions::Policy, utils::rollout_buffer::Advantages};
 use std::f64;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
@@ -76,7 +70,6 @@ impl PPOHooksTrait5<LearningModuleKind> for PPOHook {
         let mut total_episodes: usize = 0;
         for buffer in buffers {
             total_rewards += buffer.rewards().sum::<f32>();
-            let asd = buffer.terminated().collect::<Vec<_>>();
             total_episodes += buffer.dones().filter(|x| *x).count();
         }
         advantages.normalize();
@@ -143,7 +136,6 @@ impl PPOHooksTrait5<LearningModuleKind> for PPOHook {
 }
 
 pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
-    let device = Device::Cpu;
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
     let device = Device::Cpu;
@@ -158,7 +150,7 @@ pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
         Location::Thread,
     );
     let env_description = sampler.env_description();
-    let mut agent = PPOBuilder::default().build5(&device, &env_description, ppo_hook)?;
+    let agent = PPOBuilder::default().build5(&device, &env_description, ppo_hook)?;
     let mut algo = OnPolicyAlgorithm5 {
         sampler,
         agent,
@@ -168,17 +160,4 @@ pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
         }),
     };
     algo.train()
-}
-
-#[cfg(test)]
-mod test {
-    use crate::{EventBox, new_ppo::new_train_ppo};
-    use std::sync::mpsc;
-    use std::sync::mpsc::{Receiver, Sender};
-
-    #[test]
-    fn thing() {
-        let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
-        new_train_ppo(event_tx);
-    }
 }
