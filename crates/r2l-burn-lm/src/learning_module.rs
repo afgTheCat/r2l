@@ -10,6 +10,14 @@ use r2l_core::{
     policies::{LearningModule, ValueFunction},
 };
 
+// A series constraints that we need for the policy to work nicely with AdamW
+pub trait BurnPolicy<B: AutodiffBackend>:
+    AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
+    + ModuleDisplay
+    + Policy<Tensor = Tensor<B, 1>>
+{
+}
+
 pub struct PolicyValuesLosses<B: AutodiffBackend> {
     pub policy_loss: Tensor<B, 1>,
     pub value_loss: Tensor<B, 1>,
@@ -29,21 +37,12 @@ impl<B: Backend, M: Module<B>> ParalellActorModel<B, M> {
 }
 
 // TODO: this is messy, like mega messy.
-pub struct ParalellActorCriticLM<
-    B: AutodiffBackend,
-    M: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>,
-> where
-    <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
+pub struct ParalellActorCriticLM<B: AutodiffBackend, M: BurnPolicy<B>> {
     pub model: ParalellActorModel<B, M>,
     pub optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
 }
 
-impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
-    ParalellActorCriticLM<B, M>
-where
-    <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ParalellActorCriticLM<B, M> {
     pub fn new(
         model: ParalellActorModel<B, M>,
         optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
@@ -52,11 +51,7 @@ where
     }
 }
 
-impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
-    LearningModule for ParalellActorCriticLM<B, M>
-where
-    <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
+impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for ParalellActorCriticLM<B, M> {
     type Losses = PolicyValuesLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -69,11 +64,7 @@ where
     }
 }
 
-impl<B: AutodiffBackend, M: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
-    ValueFunction for ParalellActorCriticLM<B, M>
-where
-    <M as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for ParalellActorCriticLM<B, M> {
     type Tensor = Tensor<B, 1>;
 
     fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {

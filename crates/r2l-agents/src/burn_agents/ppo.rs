@@ -7,7 +7,7 @@ use r2l_burn_lm::{
     burn_rollout_buffer::{
         BurnRolloutBuffer, RolloutBatch, RolloutBatchIterator, calculate_advantages_and_returns,
     },
-    learning_module::{ParalellActorCriticLM, PolicyValuesLosses},
+    learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses},
 };
 use r2l_core::policies::ValueFunction;
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns, RolloutBuffer};
@@ -28,12 +28,7 @@ pub enum HookResult {
     Break,
 }
 
-pub struct BurnPPOCore<
-    B: AutodiffBackend,
-    D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>,
-> where
-    <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
+pub struct BurnPPOCore<B: AutodiffBackend, D: BurnPolicy<B>> {
     pub lm: ParalellActorCriticLM<B, D>,
     pub clip_range: f32,
     pub sample_size: usize,
@@ -41,11 +36,7 @@ pub struct BurnPPOCore<
     pub lambda: f32,
 }
 
-impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
-    BurnPPOCore<B, D>
-where
-    <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
+impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOCore<B, D> {
     pub fn new(
         lm: ParalellActorCriticLM<B, D>,
         clip_range: f32,
@@ -63,12 +54,7 @@ where
     }
 }
 
-pub trait BurnPPPHooksTrait<
-    B: AutodiffBackend,
-    D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>,
-> where
-    <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
+pub trait BurnPPPHooksTrait<B: AutodiffBackend, D: BurnPolicy<B>> {
     fn before_learning_hook(
         &mut self,
         _agent: &mut BurnPPOCore<B, D>,
@@ -101,28 +87,14 @@ pub trait BurnPPPHooksTrait<
 
 pub struct EmptyBurnPPOHooks;
 
-impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
-    BurnPPPHooksTrait<B, D> for EmptyBurnPPOHooks
-where
-    <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
-}
+impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPPHooksTrait<B, D> for EmptyBurnPPOHooks {}
 
-pub struct BurnPPO<
-    B: AutodiffBackend,
-    D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>,
-> where
-    <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
+pub struct BurnPPO<B: AutodiffBackend, D: BurnPolicy<B>> {
     pub core: BurnPPOCore<B, D>,
     pub hooks: Box<dyn BurnPPPHooksTrait<B, D>>,
 }
 
-impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>>
-    BurnPPO<B, D>
-where
-    <D as AutodiffModule<B>>::InnerModule: ModuleDisplay,
-{
+impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPO<B, D> {
     pub fn new(core: BurnPPOCore<B, D>, hooks: Box<dyn BurnPPPHooksTrait<B, D>>) -> Self {
         Self { core, hooks }
     }
@@ -193,12 +165,7 @@ fn uplift_tensor<const N: usize, B: AutodiffBackend>(
     Tensor::from_data(data, &device)
 }
 
-impl<B: AutodiffBackend, D: AutodiffModule<B> + ModuleDisplay + Policy<Tensor = Tensor<B, 1>>> Agent
-    for BurnPPO<B, D>
-where
-    <D as AutodiffModule<B>>::InnerModule:
-        ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>,
-{
+impl<B: AutodiffBackend, D: BurnPolicy<B>> Agent for BurnPPO<B, D> {
     type Policy = D::InnerModule;
 
     fn policy(&self) -> Self::Policy {
