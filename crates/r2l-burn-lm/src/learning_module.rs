@@ -66,7 +66,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for ParalellActorCriti
         let loss = losses.policy_loss + losses.value_loss;
         let grads = loss.backward();
         let grads = GradientsParams::from_grads(grads, &self.model);
-        let new_model = self.optimizer.step(1e-4, self.model.clone(), grads);
+        let new_model = self.optimizer.step(3e-4, self.model.clone(), grads);
         self.model = new_model;
         Ok(())
     }

@@ -99,7 +99,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         if should_stop {
             self.current_rollout += 1;
             self.progress.std = agent.lm.model.distr.std().unwrap();
-            self.progress.learning_rate = 1e-4;
+            self.progress.learning_rate = 3e-4;
             let progress = self.progress.clear();
             self.tx
                 .send(Box::new(progress))
@@ -161,8 +161,8 @@ pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let policy_layers = &[observation_size, 64, 64, action_size];
     let value_layers = &[observation_size, 64, 64, 1];
     let distr: DiagGaussianDistribution<BurnBackend> =
-        DiagGaussianDistribution::build(policy_layers, value_layers);
-    let value_net = distr.value_net.clone();
+        DiagGaussianDistribution::build(policy_layers);
+    let value_net = r2l_burn_lm::sequential::Sequential::build(value_layers);
     let model = ParalellActorModel::new(distr, value_net);
     let lm = ParalellActorCriticLM::new(model, AdamWConfig::new().init());
     let agent = BurnPPO::new(BurnPPOCore::new(lm, 0.2, 64, 0.98, 0.8), ppo_hook);
