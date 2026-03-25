@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use r2l_examples::burn::new_ppo::new_train_ppo as new_train_ppo_burn;
+use r2l_examples::candle::new_ppo::new_train_ppo as new_train_ppo_candle;
 use r2l_examples::{EventBox, PPOProgress};
-// use r2l_examples::{candle::new_ppo::new_train_ppo, candle::old_ppo::old_train_ppo};
-use r2l_examples::burn::new_ppo::new_train_ppo;
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -226,7 +226,7 @@ fn main() -> io::Result<()> {
     std::thread::spawn(move || {
         handle_input_events(tx_to_input_events);
     });
-    std::thread::spawn(move || match new_train_ppo(event_tx) {
+    std::thread::spawn(move || match new_train_ppo_candle(event_tx) {
         Ok(()) => {
             println!("ppo trainted normally")
         }

@@ -36,7 +36,10 @@ impl LearningModuleBuilder {
         let input_size = env_description.observation_size();
         let optimizer_params = ParamsAdamW {
             lr: 3e-4,
-            weight_decay: 0.01,
+            beta1: 0.9,
+            beta2: 0.999,
+            eps: 1e-5,
+            weight_decay: 1e-4,
             ..Default::default()
         };
         match &self.learning_module_type {

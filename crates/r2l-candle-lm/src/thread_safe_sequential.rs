@@ -1,5 +1,6 @@
 use candle_core::{Result, Tensor};
-use candle_nn::{Activation, Linear, Module, VarBuilder, linear};
+use candle_nn::init::{FanInOut, NonLinearity, NormalOrUniform};
+use candle_nn::{Activation, Init, Linear, Module, VarBuilder};
 use either::Either;
 
 #[derive(Debug, Clone)]
@@ -13,7 +14,26 @@ impl LinearLayer {
     pub fn new(in_dim: usize, out_dim: usize, vb: &VarBuilder, prefix: &str) -> Result<Self> {
         let weight_name = format!("{prefix}_weight");
         let bias_name = format!("{prefix}_bias");
-        let layer = linear(in_dim, out_dim, vb.pp(prefix))?;
+        let layer_vb = vb.pp(prefix);
+        let weight = layer_vb.get_with_hints(
+            (out_dim, in_dim),
+            "weight",
+            Init::Kaiming {
+                dist: NormalOrUniform::Uniform,
+                fan: FanInOut::FanIn,
+                non_linearity: NonLinearity::ExplicitGain(1.0 / 3.0f64.sqrt()),
+            },
+        )?;
+        let bound = 1. / (in_dim as f64).sqrt();
+        let bias = layer_vb.get_with_hints(
+            out_dim,
+            "bias",
+            Init::Uniform {
+                lo: -bound,
+                up: bound,
+            },
+        )?;
+        let layer = Linear::new(weight, Some(bias));
         Ok(Self {
             layer,
             weight_name,
