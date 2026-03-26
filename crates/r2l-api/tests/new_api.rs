@@ -43,63 +43,6 @@ fn old_api() {
     op.train().unwrap()
 }
 
-// fn run_new_test1() {
-//     let builder = EnvBuilderType::EnvBuilder {
-//         builder: Arc::new(GymEnvBuilder::new("Pendulum-v1")),
-//         n_envs: 10,
-//     };
-//     let sampler: R2lSamplerX<GymEnv> = R2lSamplerX::build(
-//         builder,
-//         CollectionBound::StepBound { steps: 2048 },
-//         None,
-//         Location::Vec,
-//     );
-//     let env_description = sampler.env_description();
-//     let agent = PPOBuilder::default()
-//         .build3(&Device::Cpu, &env_description, PPO3DefaultHooks::new())
-//         .unwrap();
-//     let hooks = DefaultOnPolicyAlgorightmsHooks3::new(LearningSchedule::RolloutBound {
-//         total_rollouts: 100,
-//         current_rollout: 0,
-//     });
-//     let mut op3 = OnPolicyAlgorithm3 {
-//         sampler,
-//         agent,
-//         hooks,
-//     };
-//     op3.train().unwrap();
-// }
-
-// fn run_new_test2() {
-//     let builder = EnvBuilderType::EnvBuilder {
-//         builder: Arc::new(GymEnvBuilder::new("Pendulum-v1")),
-//         n_envs: 10,
-//     };
-//     let sampler: R2lSamplerX<GymEnv> = R2lSamplerX::build(
-//         builder,
-//         CollectionBound::StepBound { steps: 2048 },
-//         None,
-//         Location::Vec,
-//     );
-//
-//     let env_description = sampler.env_description();
-//     let agent = PPOBuilder::default()
-//         .build4(&Device::Cpu, &env_description, PPO4DefaultHooks::new())
-//         .unwrap();
-//
-//     let hooks = DefaultOnPolicyAlgorightmsHooks4::new(LearningSchedule::RolloutBound {
-//         total_rollouts: 100,
-//         current_rollout: 0,
-//     });
-//
-//     let mut op3 = OnPolicyAlgorithm4 {
-//         sampler,
-//         agent,
-//         hooks,
-//     };
-//     op3.train().unwrap();
-// }
-
 fn ptest_func(f: fn()) {
     let guard = pprof::ProfilerGuardBuilder::default()
         .frequency(1000)
@@ -114,13 +57,3 @@ fn ptest_func(f: fn()) {
         report.flamegraph(file).unwrap();
     };
 }
-
-// #[test]
-// fn new_api1() {
-//     ptest_func(run_new_test1);
-// }
-//
-// #[test]
-// fn new_api2() {
-//     ptest_func(run_new_test2);
-// }

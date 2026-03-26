@@ -74,6 +74,17 @@ pub trait TrajectoryContainer: Sync {
     }
 }
 
+// TODO: I think maybe we need a pop_last. Or maybe a mut ref to the last
+pub trait EditableTrajectoryContainer: TrajectoryContainer {
+    fn pop_last_state(&mut self) -> Self::Tensor;
+
+    fn pop_last_reward(&mut self) -> f32;
+
+    fn set_last_state(&mut self, t: Self::Tensor);
+
+    fn set_last_reward(&mut self, r: f32);
+}
+
 pub trait ExpandableTrajectoryContainer: TrajectoryContainer + Send + 'static {
     fn push(&mut self, memory: Memory<Self::Tensor>);
 }
