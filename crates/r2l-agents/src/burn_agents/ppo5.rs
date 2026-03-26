@@ -1,4 +1,3 @@
-use crate::burn_agents::ppo::HookResult;
 use burn::{
     prelude::Backend,
     tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
@@ -14,6 +13,8 @@ use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
 use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
 use rand::seq::SliceRandom;
 use std::ops::Deref;
+
+use crate::HookResult;
 
 macro_rules! process_hook_result {
     ($hook_res:expr) => {
@@ -117,12 +118,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
             let logp_old = BurnTensor::from_data(logp_old.as_slice(), &Default::default());
             let returns = returns.sample(&indices);
             let returns = BurnTensor::from_data(returns.as_slice(), &Default::default());
-            let logp = Logp(
-                ppo.lm
-                    .model
-                    .distr
-                    .log_probs(&observations, &actions)?,
-            );
+            let logp = Logp(ppo.lm.model.distr.log_probs(&observations, &actions)?);
             let values_pred = ValuesPred(ppo.lm.calculate_values(&observations)?);
             let value_diff = returns.clone() - values_pred.deref().clone();
             let mut value_loss = ValueLoss((value_diff.clone() * value_diff).mean());
@@ -168,9 +164,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> Agent5
-    for BurnPPO<B, D, H>
-{
+impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> Agent5 for BurnPPO<B, D, H> {
     type Tensor = BurnTensor<B::InnerBackend, 1>;
     type Policy = D::InnerModule;
 
@@ -217,7 +211,10 @@ fn buffer_advantages_and_returns<
 ) -> anyhow::Result<(Vec<f32>, Vec<f32>)> {
     let mut states = buffer.states().cloned().collect::<Vec<_>>();
     states.push(buffer.next_states().last().unwrap().clone());
-    let states = states.into_iter().map(uplift_tensor::<1, B>).collect::<Vec<_>>();
+    let states = states
+        .into_iter()
+        .map(uplift_tensor::<1, B>)
+        .collect::<Vec<_>>();
     let values = value_func.calculate_values(&states)?;
     let values: Vec<f32> = values.to_data().to_vec().unwrap();
     let total_steps = buffer.rewards().count();
@@ -277,7 +274,9 @@ impl BatchIndexIterator {
         let mut indices = (0..buffers.len())
             .flat_map(|i| {
                 let buffer = &buffers[i];
-                (0..buffer.rewards().count()).map(|j| (i, j)).collect::<Vec<_>>()
+                (0..buffer.rewards().count())
+                    .map(|j| (i, j))
+                    .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
         RNG.with_borrow_mut(|rng| indices.shuffle(rng));

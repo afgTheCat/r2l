@@ -21,7 +21,7 @@ pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> 
     pub last_state: Option<E::Tensor>,
 }
 
-fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
+pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
     distr: &mut Box<dyn Policy<Tensor = T>>,
     last_state: Option<T>,
@@ -82,6 +82,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
             RolloutMode::EpisodeBound { n_episodes } => {
                 let mut episodes = 0;
                 loop {
+                    // TODO: this is a bit awkward.
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, distr, last_state);
                     let terminates = memory.terminates();

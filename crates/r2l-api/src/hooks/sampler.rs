@@ -3,9 +3,9 @@ use candle_core::{Device, Result, Tensor};
 use r2l_core::{
     distributions::Policy,
     env::Env,
-    sampler::{
-        SequntialStepBoundHooks, trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer,
-    },
+    // sampler::{
+    //     SequntialStepBoundHooks, trajectory_buffers::fixed_size_buffer::FixedSizeStateBuffer,
+    // },
     // sampler2::{Preprocessor, env_pools::builder::BufferKind},
     tensor::R2lBuffer,
 };
@@ -55,34 +55,34 @@ impl EnvNormalizer {
         normalized_rew.clamp(-self.clip_rew, self.clip_rew)
     }
 
-    fn normalize_buffers<E: Env<Tensor = R2lBuffer>>(
-        &mut self,
-        states: &mut Vec<FixedSizeStateBuffer<E>>,
-        device: &Device,
-    ) -> Result<()> {
-        let n_envs = states.len();
-        let obs: Vec<Tensor> = states
-            .iter_mut()
-            .map(|buff| buff.pop_last_state().into())
-            .collect();
-        let obs = Tensor::stack(&obs, 0)?;
-        self.obs_rms.update(&obs)?;
-        let obs = self.normalize_obs(obs)?;
-        for (state_idx, obs) in obs.chunk(n_envs, 0)?.into_iter().enumerate() {
-            let obs = obs.squeeze(0)?;
-            states[state_idx].set_last_state(R2lBuffer::from_candle_tensor(&obs));
-        }
-        let rewards: Vec<_> = states.iter_mut().map(|buf| buf.pop_last_reward()).collect();
-        let rewards = Tensor::from_slice(&rewards, rewards.len(), device)?;
-        let gamma = Tensor::full(self.gamma, (), device)?;
-        self.returns = self.returns.broadcast_mul(&gamma)?.add(&rewards)?;
-        self.ret_rms.update(&self.returns)?;
-        let rewards = self.normalize_rew(rewards)?;
-        for (rew_idx, rew) in (rewards.to_vec1()? as Vec<f32>).iter().enumerate() {
-            states[rew_idx].set_last_reward(*rew);
-        }
-        Ok(())
-    }
+    // fn normalize_buffers<E: Env<Tensor = R2lBuffer>>(
+    //     &mut self,
+    //     states: &mut Vec<FixedSizeStateBuffer<E>>,
+    //     device: &Device,
+    // ) -> Result<()> {
+    //     let n_envs = states.len();
+    //     let obs: Vec<Tensor> = states
+    //         .iter_mut()
+    //         .map(|buff| buff.pop_last_state().into())
+    //         .collect();
+    //     let obs = Tensor::stack(&obs, 0)?;
+    //     self.obs_rms.update(&obs)?;
+    //     let obs = self.normalize_obs(obs)?;
+    //     for (state_idx, obs) in obs.chunk(n_envs, 0)?.into_iter().enumerate() {
+    //         let obs = obs.squeeze(0)?;
+    //         states[state_idx].set_last_state(R2lBuffer::from_candle_tensor(&obs));
+    //     }
+    //     let rewards: Vec<_> = states.iter_mut().map(|buf| buf.pop_last_reward()).collect();
+    //     let rewards = Tensor::from_slice(&rewards, rewards.len(), device)?;
+    //     let gamma = Tensor::full(self.gamma, (), device)?;
+    //     self.returns = self.returns.broadcast_mul(&gamma)?.add(&rewards)?;
+    //     self.ret_rms.update(&self.returns)?;
+    //     let rewards = self.normalize_rew(rewards)?;
+    //     for (rew_idx, rew) in (rewards.to_vec1()? as Vec<f32>).iter().enumerate() {
+    //         states[rew_idx].set_last_reward(*rew);
+    //     }
+    //     Ok(())
+    // }
 }
 
 // impl<E: Env> Preprocessor<E, BufferKind<E>> for EnvNormalizer {
@@ -94,31 +94,31 @@ impl EnvNormalizer {
 //         // TODO: implement normalizer
 //     }
 // }
-
-impl<E: Env> SequntialStepBoundHooks<E> for Evaluator<E> {
-    fn process_last_step(
-        &mut self,
-        distr: &dyn Policy<Tensor = E::Tensor>,
-        buffers: &mut Vec<FixedSizeStateBuffer<E>>,
-    ) {
-        let n_envs = buffers.len();
-        self.evaluate(distr, n_envs).unwrap();
-    }
-
-    fn post_process_hook(&self) {}
-}
-
-impl<E: Env<Tensor = R2lBuffer>> SequntialStepBoundHooks<E> for EnvNormalizer {
-    fn process_last_step(
-        &mut self,
-        _distr: &dyn Policy<Tensor = E::Tensor>,
-        buffers: &mut Vec<FixedSizeStateBuffer<E>>,
-    ) {
-        self.normalize_buffers(buffers, &Device::Cpu).unwrap()
-    }
-
-    fn post_process_hook(&self) {}
-}
+//
+// impl<E: Env> SequntialStepBoundHooks<E> for Evaluator<E> {
+//     fn process_last_step(
+//         &mut self,
+//         distr: &dyn Policy<Tensor = E::Tensor>,
+//         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
+//     ) {
+//         let n_envs = buffers.len();
+//         self.evaluate(distr, n_envs).unwrap();
+//     }
+//
+//     fn post_process_hook(&self) {}
+// }
+//
+// impl<E: Env<Tensor = R2lBuffer>> SequntialStepBoundHooks<E> for EnvNormalizer {
+//     fn process_last_step(
+//         &mut self,
+//         _distr: &dyn Policy<Tensor = E::Tensor>,
+//         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
+//     ) {
+//         self.normalize_buffers(buffers, &Device::Cpu).unwrap()
+//     }
+//
+//     fn post_process_hook(&self) {}
+// }
 
 pub struct EvaluatorNormalizer<E: Env> {
     pub evaluator: Evaluator<E>,
@@ -126,33 +126,33 @@ pub struct EvaluatorNormalizer<E: Env> {
     pub device: Device,
 }
 
-impl<E: Env> EvaluatorNormalizer<E> {
-    pub fn new(evaluator: Evaluator<E>, normalizer: EnvNormalizer, device: Device) -> Self {
-        Self {
-            normalizer,
-            device,
-            evaluator,
-        }
-    }
-}
-
-impl<E: Env<Tensor = R2lBuffer>> SequntialStepBoundHooks<E> for EvaluatorNormalizer<E> {
-    fn process_last_step(
-        &mut self,
-        distr: &dyn Policy<Tensor = E::Tensor>,
-        buffers: &mut Vec<FixedSizeStateBuffer<E>>,
-    ) {
-        let n_envs = buffers.len();
-        self.evaluator.evaluate(distr, n_envs).unwrap();
-        self.normalizer
-            .normalize_buffers(buffers, &self.device)
-            .unwrap()
-    }
-
-    // TODO: we might not even need this!
-    fn post_process_hook(&self) {}
-}
-
+// impl<E: Env> EvaluatorNormalizer<E> {
+//     pub fn new(evaluator: Evaluator<E>, normalizer: EnvNormalizer, device: Device) -> Self {
+//         Self {
+//             normalizer,
+//             device,
+//             evaluator,
+//         }
+//     }
+// }
+//
+// impl<E: Env<Tensor = R2lBuffer>> SequntialStepBoundHooks<E> for EvaluatorNormalizer<E> {
+//     fn process_last_step(
+//         &mut self,
+//         distr: &dyn Policy<Tensor = E::Tensor>,
+//         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
+//     ) {
+//         let n_envs = buffers.len();
+//         self.evaluator.evaluate(distr, n_envs).unwrap();
+//         self.normalizer
+//             .normalize_buffers(buffers, &self.device)
+//             .unwrap()
+//     }
+//
+//     // TODO: we might not even need this!
+//     fn post_process_hook(&self) {}
+// }
+//
 // impl<E: Env> Preprocessor<E, BufferKind<E>> for EvaluatorNormalizer<E> {
 //     fn preprocess_states(
 //         &mut self,

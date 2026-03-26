@@ -1,8 +1,7 @@
 pub mod new_ppo;
-pub mod old_ppo;
 
-use candle_core::{DType, Tensor};
 use crate::PPOProgress;
+use candle_core::{DType, Tensor};
 
 impl PPOProgress {
     pub fn collect_batch_data(

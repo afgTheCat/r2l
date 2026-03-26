@@ -1,4 +1,5 @@
 pub mod fixed_size;
+pub mod variable_size;
 pub mod wrapper;
 
 use std::marker::PhantomData;

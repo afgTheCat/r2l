@@ -12,8 +12,10 @@ use crate::{
     tensor::R2lTensor,
 };
 use crate::{env::EnvironmentDescription, sampler5::worker::Worker};
+use anyhow::Result;
 use bimodal_array::ArrayHandle;
 use bimodal_array::bimodal_array;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy)]
@@ -104,6 +106,64 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
 
     pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         self.worker_pool.env_description()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PolicyWrapper<P: Policy + Clone, T: R2lTensor> {
+    policy: P,
+    env: PhantomData<T>,
+}
+
+impl<D: Policy + Clone, T: R2lTensor> PolicyWrapper<D, T> {
+    pub fn new(policy: D) -> Self {
+        Self {
+            policy,
+            env: PhantomData,
+        }
+    }
+}
+
+impl<D: Policy + Clone, T: R2lTensor> Policy for PolicyWrapper<D, T>
+where
+    T: From<D::Tensor>,
+    T: Into<D::Tensor>,
+{
+    type Tensor = T;
+
+    fn std(&self) -> Result<f32> {
+        self.policy.std()
+    }
+
+    fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
+        let action = self.policy.get_action(observation.into())?;
+        Ok(action.into())
+    }
+
+    fn log_probs(
+        &self,
+        observations: &[Self::Tensor],
+        actions: &[Self::Tensor],
+    ) -> Result<Self::Tensor> {
+        let observations = observations
+            .iter()
+            // TODO: this clone will be expensive
+            .map(|o| o.clone().into())
+            .collect::<Vec<_>>();
+        let actions = actions.iter().map(|a| a.clone().into()).collect::<Vec<_>>();
+        let log_probs = self.policy.log_probs(&observations, &actions)?;
+        Ok(log_probs.into())
+    }
+
+    fn entropy(&self) -> Result<Self::Tensor> {
+        let entropy = self.policy.entropy()?;
+        Ok(entropy.into())
+    }
+
+    fn resample_noise(&mut self) -> Result<()> {
+        // TODO: we may want the distribution to be behind a RwLock, but I doubt that this will be
+        // called a whole lot. In future releases we should enable finer control of noise sampling
+        todo!()
     }
 }
 

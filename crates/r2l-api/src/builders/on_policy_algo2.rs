@@ -1,105 +1,102 @@
 use crate::builders::{
     agents::a2c::A2CBuilder,
-    sampler::{EnvPoolType, SamplerType},
+    // sampler::{EnvPoolType, SamplerType},
     sampler_hooks2::EvaluatorNormalizerOptions,
 };
 use anyhow::Result;
 use candle_core::Device;
 use derive_more::{Deref, DerefMut};
-use r2l_agents::{
-    LearningModuleKind,
-    candle_agents::a2c::A2C,
-};
+use r2l_agents::{LearningModuleKind, candle_agents::a2c::A2C};
 use r2l_core::{
     env::Env,
     env_builder::{EnvBuilderTrait, EnvBuilderType},
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
-    sampler::R2lSampler,
+    // sampler::R2lSampler,
     // sampler3::buffers::Buffer,
     tensor::R2lBuffer,
 };
 use std::sync::Arc;
 
 // TODO: this is pretty much a sampler builder at this point
-pub struct OnPolicyAlgorithmBuilder {
-    pub device: Device,
-    pub sampler_type: SamplerType,
-    pub learning_schedule: LearningSchedule,
-}
-
-impl Default for OnPolicyAlgorithmBuilder {
-    fn default() -> Self {
-        Self {
-            device: Device::Cpu,
-            sampler_type: SamplerType {
-                capacity: 2048,
-                hook_options: Default::default(),
-                env_pool_type: Default::default(),
-            },
-            learning_schedule: LearningSchedule::TotalStepBound {
-                total_steps: 0,
-                current_step: 0,
-            },
-        }
-    }
-}
-
-#[derive(Deref, DerefMut)]
-pub struct A2CAlgoBuilder {
-    #[deref]
-    #[deref_mut]
-    on_policy_builder: OnPolicyAlgorithmBuilder,
-    a2c_builder: A2CBuilder,
-}
-
-impl Default for A2CAlgoBuilder {
-    fn default() -> Self {
-        let sampler_type = SamplerType {
-            capacity: 5, // Default value in SB3
-            hook_options: EvaluatorNormalizerOptions::default(),
-            env_pool_type: EnvPoolType::VecStep,
-        };
-        Self {
-            on_policy_builder: OnPolicyAlgorithmBuilder {
-                sampler_type,
-                ..Default::default()
-            },
-            a2c_builder: Default::default(),
-        }
-    }
-}
-
-impl A2CAlgoBuilder {
-    pub fn build<E: Env<Tensor = R2lBuffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
-        &self,
-        env_builder: EB,
-        n_envs: usize,
-    ) -> Result<
-        OnPolicyAlgorithm<
-            R2lSampler<EB::Env>,
-            A2C<LearningModuleKind>,
-            DefaultOnPolicyAlgorightmsHooks,
-        >,
-    > {
-        let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
-            EnvBuilderType::EnvBuilder {
-                builder: Arc::new(env_builder),
-                n_envs,
-            },
-        );
-        let env_description = sampler.env_description();
-        let agent = self
-            .a2c_builder
-            .build(&self.on_policy_builder.device, &env_description)?;
-        let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.on_policy_builder.learning_schedule);
-        Ok(OnPolicyAlgorithm {
-            sampler,
-            agent,
-            hooks,
-        })
-    }
-}
-
+// pub struct OnPolicyAlgorithmBuilder {
+//     pub device: Device,
+//     pub sampler_type: SamplerType,
+//     pub learning_schedule: LearningSchedule,
+// }
+//
+// impl Default for OnPolicyAlgorithmBuilder {
+//     fn default() -> Self {
+//         Self {
+//             device: Device::Cpu,
+//             sampler_type: SamplerType {
+//                 capacity: 2048,
+//                 hook_options: Default::default(),
+//                 env_pool_type: Default::default(),
+//             },
+//             learning_schedule: LearningSchedule::TotalStepBound {
+//                 total_steps: 0,
+//                 current_step: 0,
+//             },
+//         }
+//     }
+// }
+//
+// #[derive(Deref, DerefMut)]
+// pub struct A2CAlgoBuilder {
+//     #[deref]
+//     #[deref_mut]
+//     on_policy_builder: OnPolicyAlgorithmBuilder,
+//     a2c_builder: A2CBuilder,
+// }
+//
+// impl Default for A2CAlgoBuilder {
+//     fn default() -> Self {
+//         let sampler_type = SamplerType {
+//             capacity: 5, // Default value in SB3
+//             hook_options: EvaluatorNormalizerOptions::default(),
+//             env_pool_type: EnvPoolType::VecStep,
+//         };
+//         Self {
+//             on_policy_builder: OnPolicyAlgorithmBuilder {
+//                 sampler_type,
+//                 ..Default::default()
+//             },
+//             a2c_builder: Default::default(),
+//         }
+//     }
+// }
+//
+// impl A2CAlgoBuilder {
+//     pub fn build<E: Env<Tensor = R2lBuffer> + 'static, EB: EnvBuilderTrait<Env = E>>(
+//         &self,
+//         env_builder: EB,
+//         n_envs: usize,
+//     ) -> Result<
+//         OnPolicyAlgorithm<
+//             R2lSampler<EB::Env>,
+//             A2C<LearningModuleKind>,
+//             DefaultOnPolicyAlgorightmsHooks,
+//         >,
+//     > {
+//         let sampler = self.on_policy_builder.sampler_type.build_with_builder_type(
+//             EnvBuilderType::EnvBuilder {
+//                 builder: Arc::new(env_builder),
+//                 n_envs,
+//             },
+//         );
+//         let env_description = sampler.env_description();
+//         let agent = self
+//             .a2c_builder
+//             .build(&self.on_policy_builder.device, &env_description)?;
+//         let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.on_policy_builder.learning_schedule);
+//         Ok(OnPolicyAlgorithm {
+//             sampler,
+//             agent,
+//             hooks,
+//         })
+//     }
+// }
+//
 // #[derive(Deref, DerefMut)]
 // pub struct PPOAlgoBuilder2 {
 //     #[deref]

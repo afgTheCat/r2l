@@ -4,8 +4,10 @@ use burn::{
     optim::AdamWConfig,
     tensor::{Tensor, backend::AutodiffBackend},
 };
-use r2l_agents::burn_agents::ppo::HookResult;
-use r2l_agents::burn_agents::ppo5::{BurnPPO, BurnPPOCore, BurnPPOHooksTrait, PPOBatchData};
+use r2l_agents::{
+    HookResult,
+    burn_agents::ppo5::{BurnPPO, BurnPPOCore, BurnPPOHooksTrait, PPOBatchData},
+};
 use r2l_burn_lm::{
     distributions::diagonal_distribution::DiagGaussianDistribution,
     learning_module::{BurnPolicy, ParalellActorCriticLM, ParalellActorModel},

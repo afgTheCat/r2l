@@ -1,4 +1,4 @@
-use crate::candle_agents::{ModuleWithValueFunction, ppo::HookResult};
+use crate::{HookResult, candle_agents::ModuleWithValueFunction};
 use anyhow::Result;
 use candle_core::{Device, Tensor as CandleTensor};
 use r2l_candle_lm::{

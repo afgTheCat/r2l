@@ -12,6 +12,11 @@ use r2l_candle_lm::{
 };
 use r2l_core::{distributions::Policy, policies::LearningModule};
 
+pub enum HookResult {
+    Continue,
+    Break,
+}
+
 pub struct GenericLearningModuleWithValueFunction<
     P: Policy<Tensor = CandleTensor> + Clone,
     L: LearningModule<Losses = PolicyValuesLosses>,

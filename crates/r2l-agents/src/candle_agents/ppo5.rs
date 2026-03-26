@@ -1,6 +1,5 @@
-use crate::CandleTensor;
-use crate::candle_agents::ppo::PPOBatchData;
-use crate::candle_agents::{ModuleWithValueFunction, ppo::HookResult};
+use crate::candle_agents::ModuleWithValueFunction;
+use crate::{CandleTensor, HookResult};
 use candle_core::{Device, Error, Result};
 use r2l_candle_lm::learning_module2::PolicyValuesLosses;
 use r2l_candle_lm::tensors::{Logp, LogpDiff, PolicyLoss};
@@ -22,6 +21,13 @@ macro_rules! process_hook_result {
             HookResult::Break => return Ok(()),
         }
     };
+}
+
+pub struct PPOBatchData {
+    pub logp: Logp,
+    pub values_pred: ValuesPred,
+    pub logp_diff: LogpDiff,
+    pub ratio: CandleTensor,
 }
 
 pub trait PPOHooksTrait5<M: ModuleWithValueFunction> {
