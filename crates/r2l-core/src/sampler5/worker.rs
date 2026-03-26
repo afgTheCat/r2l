@@ -16,7 +16,7 @@ use std::collections::HashMap;
 pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
     pub env: E,
     pub buffer: ElementHandle<D>,
-    // TODO: this is a bit archaic, we might want somethings else
+    // TODO: this is a bit archaic, we might want somethings else here
     pub policy: Option<Box<dyn Policy<Tensor = E::Tensor>>>,
     pub last_state: Option<E::Tensor>,
 }
