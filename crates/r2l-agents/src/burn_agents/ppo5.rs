@@ -16,15 +16,6 @@ use std::ops::Deref;
 
 use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
 
-macro_rules! process_hook_result {
-    ($hook_res:expr) => {
-        match $hook_res? {
-            HookResult::Continue => {}
-            HookResult::Break => return Ok(()),
-        }
-    };
-}
-
 pub struct PPOBatchData<B: Backend> {
     pub logp: Logp<B>,
     pub values_pred: ValuesPred<B>,
@@ -165,7 +156,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
     ) -> anyhow::Result<()> {
         loop {
             self.batching_loop(buffers, &advantages, &logps, &returns)?;
-            process_hook_result!(self.hooks.rollout_hook(&mut self.core, buffers));
+            crate::process_hook_result!(self.hooks.rollout_hook(&mut self.core, buffers));
         }
     }
 }
@@ -189,7 +180,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> Agent5 fo
             self.core.lambda,
             uplift_tensor,
         )?;
-        process_hook_result!(self.hooks.before_learning_hook(
+        crate::process_hook_result!(self.hooks.before_learning_hook(
             &mut self.core,
             buffers,
             &mut advantages,

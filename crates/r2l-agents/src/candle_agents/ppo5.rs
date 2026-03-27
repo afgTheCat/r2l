@@ -17,15 +17,6 @@ use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
 use rand::seq::SliceRandom;
 use std::ops::Deref;
 
-macro_rules! process_hook_result {
-    ($hook_res:expr) => {
-        match $hook_res? {
-            HookResult::Continue => {}
-            HookResult::Break => return Ok(()),
-        }
-    };
-}
-
 pub struct PPOBatchData {
     pub logp: Logp,
     pub values_pred: ValuesPred,
@@ -159,7 +150,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> CandlePPO5<M, H> {
         loop {
             self.batching_loop(buffers, &advantages, &logps, &returns)?;
             let rollout_hook_res = self.hooks.rollout_hook(buffers, &mut self.ppo);
-            process_hook_result!(rollout_hook_res);
+            crate::process_hook_result!(rollout_hook_res);
         }
     }
 }
@@ -184,7 +175,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> Agent5 for CandlePPO5<M, 
             self.ppo.lambda,
             |t| t.clone(),
         )?;
-        process_hook_result!(self.hooks.before_learning_hook(
+        crate::process_hook_result!(self.hooks.before_learning_hook(
             &mut self.ppo,
             buffers,
             &mut advantages,

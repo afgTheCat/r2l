@@ -24,6 +24,16 @@ pub enum HookResult {
     Break,
 }
 
+#[macro_export]
+macro_rules! process_hook_result {
+    ($hook_res:expr) => {
+        match $hook_res? {
+            $crate::HookResult::Continue => {}
+            $crate::HookResult::Break => return Ok(()),
+        }
+    };
+}
+
 struct BatchIndexIterator {
     indicies: Vec<(usize, usize)>,
     sample_size: usize,
