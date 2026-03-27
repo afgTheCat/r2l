@@ -14,7 +14,7 @@ use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
 use rand::seq::SliceRandom;
 use std::ops::Deref;
 
-use crate::HookResult;
+use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
 
 macro_rules! process_hook_result {
     ($hook_res:expr) => {
@@ -93,6 +93,12 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOCore<B, D> {
     }
 }
 
+fn uplift_tensor<const N: usize, B: AutodiffBackend>(
+    tensor: &BurnTensor<B::InnerBackend, N>,
+) -> BurnTensor<B, N> {
+    BurnTensor::from_data(tensor.to_data(), &Default::default())
+}
+
 impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B, D, H> {
     pub fn new(core: BurnPPOCore<B, D>, hooks: H) -> Self {
         Self { core, hooks }
@@ -105,13 +111,13 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
         logps: &Logps,
         returns: &Returns,
     ) -> anyhow::Result<()> {
-        let mut index_iterator = BatchIndexIterator::new::<B, C>(buffers, self.core.sample_size);
+        let mut index_iterator = BatchIndexIterator::new(buffers, self.core.sample_size);
         let ppo = &mut self.core;
         loop {
             let Some(indices) = index_iterator.iter() else {
                 return Ok(());
             };
-            let (observations, actions) = sample::<B, C>(buffers, &indices);
+            let (observations, actions) = sample(buffers, &indices, uplift_tensor);
             let advantages = advantages.sample(&indices);
             let advantages = BurnTensor::from_data(advantages.as_slice(), &Default::default());
             let logp_old = logps.sample(&indices);
@@ -176,11 +182,12 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> Agent5 fo
         &mut self,
         buffers: &[C],
     ) -> anyhow::Result<()> {
-        let (mut advantages, mut returns) = buffers_advantages_and_returns::<B, C>(
+        let (mut advantages, mut returns) = buffers_advantages_and_returns(
             buffers,
             &self.core.lm,
             self.core.gamma,
             self.core.lambda,
+            uplift_tensor,
         )?;
         process_hook_result!(self.hooks.before_learning_hook(
             &mut self.core,
@@ -188,141 +195,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> Agent5 fo
             &mut advantages,
             &mut returns
         ));
-        let logps = logps::<B, C>(buffers, &self.policy())?;
+        let logps = logps(buffers, &self.policy());
         self.learning_loop(buffers, advantages, returns, logps)?;
         Ok(())
     }
-}
-
-fn uplift_tensor<const N: usize, B: AutodiffBackend>(
-    tensor: BurnTensor<B::InnerBackend, N>,
-) -> BurnTensor<B, N> {
-    BurnTensor::from_data(tensor.into_data(), &Default::default())
-}
-
-fn buffer_advantages_and_returns<
-    B: AutodiffBackend,
-    C: TrajectoryContainer<Tensor = BurnTensor<B::InnerBackend, 1>>,
->(
-    buffer: &C,
-    value_func: &impl ValueFunction<Tensor = BurnTensor<B, 1>>,
-    gamma: f32,
-    lambda: f32,
-) -> anyhow::Result<(Vec<f32>, Vec<f32>)> {
-    let mut states = buffer.states().cloned().collect::<Vec<_>>();
-    states.push(buffer.next_states().last().unwrap().clone());
-    let states = states
-        .into_iter()
-        .map(uplift_tensor::<1, B>)
-        .collect::<Vec<_>>();
-    let values = value_func.calculate_values(&states)?;
-    let values: Vec<f32> = values.to_data().to_vec().unwrap();
-    let total_steps = buffer.rewards().count();
-    let mut advantages: Vec<f32> = vec![0.; total_steps];
-    let mut returns: Vec<f32> = vec![0.; total_steps];
-    let mut last_gae_lam: f32 = 0.;
-
-    for i in (0..total_steps).rev() {
-        let mut dones = buffer.dones();
-        let next_non_terminal = if dones.nth(i).unwrap() {
-            last_gae_lam = 0.;
-            0f32
-        } else {
-            1.
-        };
-        let delta = buffer.rewards().nth(i).unwrap() + next_non_terminal * gamma * values[i + 1]
-            - values[i];
-        last_gae_lam = delta + next_non_terminal * gamma * lambda * last_gae_lam;
-        advantages[i] = last_gae_lam;
-        returns[i] = last_gae_lam + values[i];
-    }
-
-    Ok((advantages, returns))
-}
-
-fn buffers_advantages_and_returns<
-    B: AutodiffBackend,
-    C: TrajectoryContainer<Tensor = BurnTensor<B::InnerBackend, 1>>,
->(
-    buffers: &[C],
-    value_func: &impl ValueFunction<Tensor = BurnTensor<B, 1>>,
-    gamma: f32,
-    lambda: f32,
-) -> anyhow::Result<(Advantages, Returns)> {
-    let mut advantage_vec = vec![];
-    let mut returns_vec = vec![];
-    for buffer in buffers {
-        let (advantages, returns) =
-            buffer_advantages_and_returns::<B, C>(buffer, value_func, gamma, lambda)?;
-        advantage_vec.push(advantages);
-        returns_vec.push(returns);
-    }
-    Ok((Advantages(advantage_vec), Returns(returns_vec)))
-}
-
-struct BatchIndexIterator {
-    indices: Vec<(usize, usize)>,
-    sample_size: usize,
-    current: usize,
-}
-
-impl BatchIndexIterator {
-    fn new<B: AutodiffBackend, C: TrajectoryContainer<Tensor = BurnTensor<B::InnerBackend, 1>>>(
-        buffers: &[C],
-        sample_size: usize,
-    ) -> Self {
-        let mut indices = (0..buffers.len())
-            .flat_map(|i| {
-                let buffer = &buffers[i];
-                (0..buffer.rewards().count())
-                    .map(|j| (i, j))
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        RNG.with_borrow_mut(|rng| indices.shuffle(rng));
-        Self {
-            indices,
-            sample_size,
-            current: 0,
-        }
-    }
-
-    fn iter(&mut self) -> Option<Vec<(usize, usize)>> {
-        let total_size = self.indices.len();
-        if self.sample_size + self.current >= total_size {
-            return None;
-        }
-        let batch_indices = &self.indices[self.current..self.current + self.sample_size];
-        self.current += self.sample_size;
-        Some(batch_indices.to_owned())
-    }
-}
-
-fn logps<B: AutodiffBackend, C: TrajectoryContainer<Tensor = BurnTensor<B::InnerBackend, 1>>>(
-    buffers: &[C],
-    policy: &impl Policy<Tensor = BurnTensor<B::InnerBackend, 1>>,
-) -> anyhow::Result<Logps> {
-    let mut logps = vec![];
-    for buffer in buffers {
-        let states = buffer.states().cloned().collect::<Vec<_>>();
-        let actions = buffer.actions().cloned().collect::<Vec<_>>();
-        let logp = policy.log_probs(&states, &actions)?;
-        logps.push(logp.to_data().to_vec().unwrap());
-    }
-    Ok(Logps(logps))
-}
-
-fn sample<B: AutodiffBackend, C: TrajectoryContainer<Tensor = BurnTensor<B::InnerBackend, 1>>>(
-    buffers: &[C],
-    indices: &[(usize, usize)],
-) -> (Vec<BurnTensor<B, 1>>, Vec<BurnTensor<B, 1>>) {
-    let mut observations = vec![];
-    let mut actions = vec![];
-    for (buffer_idx, idx) in indices {
-        let observation = buffers[*buffer_idx].states().nth(*idx).unwrap().clone();
-        let action = buffers[*buffer_idx].actions().nth(*idx).unwrap().clone();
-        observations.push(uplift_tensor::<1, B>(observation));
-        actions.push(uplift_tensor::<1, B>(action));
-    }
-    (observations, actions)
 }

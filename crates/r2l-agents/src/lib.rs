@@ -2,7 +2,6 @@ pub mod burn_agents;
 pub mod candle_agents;
 
 use crate::candle_agents::ModuleWithValueFunction;
-// use crate::candle_agents::ppo5::buffer_advantages_and_returns;
 use r2l_candle_lm::{
     distributions::DistributionKind,
     learning_module2::{
@@ -75,29 +74,31 @@ fn logps<T: R2lTensor, B: TrajectoryContainer<Tensor = T>>(
     Logps(logps)
 }
 
-fn sample<T: R2lTensor, B: TrajectoryContainer<Tensor = T>>(
+fn sample<T1: R2lTensor, B: TrajectoryContainer<Tensor = T1>, T2: R2lTensor, L: Fn(&T1) -> T2>(
     buffers: &[B],
     indicies: &[(usize, usize)],
-) -> (Vec<T>, Vec<T>) {
+    lifter: L,
+) -> (Vec<T2>, Vec<T2>) {
     let mut observations = vec![];
     let mut actions = vec![];
     for (buffer_idx, idx) in indicies {
         let observation = buffers[*buffer_idx].states().nth(*idx).unwrap();
         let action = buffers[*buffer_idx].actions().nth(*idx).unwrap();
-        observations.push(observation.clone());
-        actions.push(action.clone());
+        observations.push(lifter(observation));
+        actions.push(lifter(action));
     }
     (observations, actions)
 }
 
-pub fn buffer_advantages_and_returns<T: R2lTensor>(
-    buffer: &impl TrajectoryContainer<Tensor = T>,
-    value_func: &impl ValueFunction<Tensor = T>,
+pub fn buffer_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) -> T2>(
+    buffer: &impl TrajectoryContainer<Tensor = T1>,
+    value_func: &impl ValueFunction<Tensor = T2>,
     gamma: f32,
     lambda: f32,
+    lifter: L,
 ) -> anyhow::Result<(Vec<f32>, Vec<f32>)> {
-    let mut states = buffer.states().cloned().collect::<Vec<_>>();
-    states.push(buffer.next_states().last().unwrap().clone());
+    let mut states = buffer.states().map(&lifter).collect::<Vec<_>>();
+    states.push(buffer.next_states().last().map(&lifter).unwrap());
     let values_stacked = value_func.calculate_values(&states).unwrap();
     let values: Vec<f32> = values_stacked.to_vec();
     let total_steps = buffer.rewards().count();
@@ -125,17 +126,23 @@ pub fn buffer_advantages_and_returns<T: R2lTensor>(
     Ok((advantages, returns))
 }
 
-pub fn buffers_advantages_and_returns<T: R2lTensor, B: TrajectoryContainer<Tensor = T>>(
+pub fn buffers_advantages_and_returns<
+    T1: R2lTensor,
+    B: TrajectoryContainer<Tensor = T1>,
+    T2: R2lTensor,
+    L: Fn(&T1) -> T2,
+>(
     buffers: &[B],
-    value_func: &impl ValueFunction<Tensor = T>,
+    value_func: &impl ValueFunction<Tensor = T2>,
     gamma: f32,
     lambda: f32,
+    lifter: L,
 ) -> anyhow::Result<(Advantages, Returns)> {
     let mut advantage_vec = vec![];
     let mut returns_vec = vec![];
     for buffer in buffers {
         let (advantages, returns) =
-            buffer_advantages_and_returns(buffer, value_func, gamma, lambda)?;
+            buffer_advantages_and_returns(buffer, value_func, gamma, lambda, &lifter)?;
         advantage_vec.push(advantages);
         returns_vec.push(returns);
     }

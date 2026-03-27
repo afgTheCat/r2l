@@ -97,7 +97,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> CandlePPO5<M, H> {
             let Some(indicies) = index_iterator.iter() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(buffers, &indicies);
+            let (observations, actions) = sample(buffers, &indicies, |t| t.clone());
             let advantages = advantages.sample(&indicies);
             let advantages = CandleTensor::from_slice(&advantages, advantages.len(), &ppo.device)?;
             let logp_old = logps.sample(&indicies);
@@ -182,6 +182,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> Agent5 for CandlePPO5<M, 
             self.ppo.module.value_func(),
             self.ppo.gamma,
             self.ppo.lambda,
+            |t| t.clone(),
         )?;
         process_hook_result!(self.hooks.before_learning_hook(
             &mut self.ppo,

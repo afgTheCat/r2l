@@ -226,7 +226,7 @@ fn main() -> io::Result<()> {
     std::thread::spawn(move || {
         handle_input_events(tx_to_input_events);
     });
-    std::thread::spawn(move || match new_train_ppo_burn(event_tx) {
+    std::thread::spawn(move || match new_train_ppo_candle(event_tx) {
         Ok(()) => {
             println!("ppo trainted normally")
         }
