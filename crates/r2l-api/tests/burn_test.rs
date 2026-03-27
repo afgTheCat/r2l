@@ -3,7 +3,6 @@ use burn::{
     optim::AdamWConfig,
 };
 use r2l_agents::burn_agents::ppo::{BurnPPO, BurnPPOCore, EmptyBurnPPOHooks};
-//  use r2l_api::builders::sampler::samplertype;
 use r2l_burn_lm::{
     distributions::categorical_distribution::CategoricalDistribution,
     learning_module::{ParalellActorCriticLM, ParalellActorModel},

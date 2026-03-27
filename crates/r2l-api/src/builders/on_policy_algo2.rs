@@ -11,8 +11,6 @@ use r2l_core::{
     env::Env,
     env_builder::{EnvBuilderTrait, EnvBuilderType},
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
-    // sampler::R2lSampler,
-    // sampler3::buffers::Buffer,
     tensor::R2lBuffer,
 };
 use std::sync::Arc;

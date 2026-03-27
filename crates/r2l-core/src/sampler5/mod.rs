@@ -39,13 +39,13 @@ pub enum Location {
     Thread,
 }
 
-pub trait PreprocessorY<B: TrajectoryContainer> {
+pub trait PreprocessorY<T: R2lTensor, B: TrajectoryContainer<Tensor = T>> {
     // The question is, can we make this dyn compatible? Otherwise we just use a ref
-    fn preprocess_states(&mut self, buffers: &[B]);
+    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = T>, buffers: &mut [B]);
 }
 
 pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
-    preprocessor: Option<Box<dyn PreprocessorY<BD::Container>>>,
+    preprocessor: Option<Box<dyn PreprocessorY<E::Tensor, BD::Container>>>,
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,
     collection_method: BD,
@@ -55,7 +55,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
     pub fn build<EB: EnvBuilderTrait<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         collection_method: BD,
-        preprocessor: Option<Box<dyn PreprocessorY<BD::Container>>>,
+        preprocessor: Option<Box<dyn PreprocessorY<E::Tensor, BD::Container>>>,
         location: Location,
     ) -> Self {
         let num_envs = env_builder.num_envs();
@@ -175,7 +175,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler5 for FinalSampler<
         &mut self,
         policy: P,
     ) -> impl AsRef<[Self::TrajectoryContainer]> {
-        self.worker_pool.set_policy(policy);
+        self.worker_pool.set_policy(policy.clone());
         let bound = self.collection_method.method();
         if let Some(pre_processor) = &mut self.preprocessor {
             let mut current_step = 0;
@@ -184,8 +184,8 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler5 for FinalSampler<
                 panic!("pre processors currently only support rollout bounds");
             };
             while current_step < steps {
-                let buffers = self.all_buffers.lock().unwrap();
-                pre_processor.preprocess_states(buffers.as_ref());
+                let mut buffers = self.all_buffers.lock().unwrap();
+                pre_processor.preprocess_states(&policy, buffers.as_mut());
                 drop(buffers);
                 self.worker_pool.single_step();
                 current_step += 1;

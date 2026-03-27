@@ -99,13 +99,3 @@ impl<E: Env> Evaluator<E> {
         }
     }
 }
-
-// impl<E: Env> Preprocessor<E, BufferKind<E>> for Evaluator<E> {
-//     fn preprocess_states(
-//         &mut self,
-//         policy: &dyn Policy<Tensor = <E as Env>::Tensor>,
-//         buffers: &mut Vec<BufferKind<E>>,
-//     ) {
-//         // TODO: evalution should not happen here
-//     }
-// }

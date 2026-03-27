@@ -1,5 +1,7 @@
+// TODO: we should make Evaluator + Noramlizer not depend on candle
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 use candle_core::{Device, Result, Tensor};
+use r2l_core::sampler5::PreprocessorY;
 use r2l_core::sampler5::buffer::{EditableTrajectoryContainer, TrajectoryContainer};
 use r2l_core::{distributions::Policy, env::Env, tensor::R2lBuffer};
 
@@ -48,10 +50,7 @@ impl EnvNormalizer {
         normalized_rew.clamp(-self.clip_rew, self.clip_rew)
     }
 
-    fn normalize_buffers<
-        E: Env<Tensor = Tensor>,
-        B: EditableTrajectoryContainer<Tensor = Tensor>,
-    >(
+    fn normalize_buffers<B: EditableTrajectoryContainer<Tensor = Tensor>>(
         &mut self,
         states: &mut [B],
         device: &Device,
@@ -78,40 +77,21 @@ impl EnvNormalizer {
     }
 }
 
-// impl<E: Env> Preprocessor<E, BufferKind<E>> for EnvNormalizer {
-//     fn preprocess_states(
-//         &mut self,
-//         policy: &dyn Policy<Tensor = <E as Env>::Tensor>,
-//         buffers: &mut Vec<BufferKind<E>>,
-//     ) {
-//         // TODO: implement normalizer
-//     }
-// }
-//
-// impl<E: Env> SequntialStepBoundHooks<E> for Evaluator<E> {
-//     fn process_last_step(
-//         &mut self,
-//         distr: &dyn Policy<Tensor = E::Tensor>,
-//         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
-//     ) {
-//         let n_envs = buffers.len();
-//         self.evaluate(distr, n_envs).unwrap();
-//     }
-//
-//     fn post_process_hook(&self) {}
-// }
-//
-// impl<E: Env<Tensor = R2lBuffer>> SequntialStepBoundHooks<E> for EnvNormalizer {
-//     fn process_last_step(
-//         &mut self,
-//         _distr: &dyn Policy<Tensor = E::Tensor>,
-//         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
-//     ) {
-//         self.normalize_buffers(buffers, &Device::Cpu).unwrap()
-//     }
-//
-//     fn post_process_hook(&self) {}
-// }
+// TODO: this needs to be reconsidered
+impl<B: EditableTrajectoryContainer<Tensor = Tensor>> PreprocessorY<Tensor, B> for EnvNormalizer {
+    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = Tensor>, buffers: &mut [B]) {
+        self.normalize_buffers(buffers, &Device::Cpu).unwrap();
+    }
+}
+
+impl<B: EditableTrajectoryContainer<Tensor = Tensor>, E: Env<Tensor = Tensor>>
+    PreprocessorY<Tensor, B> for Evaluator<E>
+{
+    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = Tensor>, buffers: &mut [B]) {
+        let n_envs = buffers.len();
+        self.evaluate(policy, n_envs).unwrap();
+    }
+}
 
 pub struct EvaluatorNormalizer<E: Env> {
     pub evaluator: Evaluator<E>,
@@ -119,39 +99,24 @@ pub struct EvaluatorNormalizer<E: Env> {
     pub device: Device,
 }
 
-// impl<E: Env> EvaluatorNormalizer<E> {
-//     pub fn new(evaluator: Evaluator<E>, normalizer: EnvNormalizer, device: Device) -> Self {
-//         Self {
-//             normalizer,
-//             device,
-//             evaluator,
-//         }
-//     }
-// }
-//
-// impl<E: Env<Tensor = R2lBuffer>> SequntialStepBoundHooks<E> for EvaluatorNormalizer<E> {
-//     fn process_last_step(
-//         &mut self,
-//         distr: &dyn Policy<Tensor = E::Tensor>,
-//         buffers: &mut Vec<FixedSizeStateBuffer<E>>,
-//     ) {
-//         let n_envs = buffers.len();
-//         self.evaluator.evaluate(distr, n_envs).unwrap();
-//         self.normalizer
-//             .normalize_buffers(buffers, &self.device)
-//             .unwrap()
-//     }
-//
-//     // TODO: we might not even need this!
-//     fn post_process_hook(&self) {}
-// }
-//
-// impl<E: Env> Preprocessor<E, BufferKind<E>> for EvaluatorNormalizer<E> {
-//     fn preprocess_states(
-//         &mut self,
-//         policy: &dyn Policy<Tensor = <E as Env>::Tensor>,
-//         buffers: &mut Vec<BufferKind<E>>,
-//     ) {
-//         // TODO: evaluator normalizer should not exists
-//     }
-// }
+impl<E: Env> EvaluatorNormalizer<E> {
+    pub fn new(evaluator: Evaluator<E>, normalizer: EnvNormalizer, device: Device) -> Self {
+        Self {
+            evaluator,
+            normalizer,
+            device,
+        }
+    }
+}
+
+impl<B: EditableTrajectoryContainer<Tensor = Tensor>, E: Env<Tensor = Tensor>>
+    PreprocessorY<Tensor, B> for EvaluatorNormalizer<E>
+{
+    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = Tensor>, buffers: &mut [B]) {
+        let n_envs = buffers.len();
+        self.evaluator.evaluate(policy, n_envs).unwrap();
+        self.normalizer
+            .normalize_buffers(buffers, &self.device)
+            .unwrap()
+    }
+}
