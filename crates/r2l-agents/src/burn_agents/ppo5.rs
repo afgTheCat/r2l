@@ -14,7 +14,10 @@ use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
 use rand::seq::SliceRandom;
 use std::ops::Deref;
 
-use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
+use crate::{
+    BatchIndexIterator, HookResult, buffers_advantages_and_returns, burn_agents::uplift_tensor,
+    logps, sample,
+};
 
 pub struct PPOBatchData<B: Backend> {
     pub logp: Logp<B>,
@@ -82,12 +85,6 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOCore<B, D> {
             lambda,
         }
     }
-}
-
-fn uplift_tensor<const N: usize, B: AutodiffBackend>(
-    tensor: &BurnTensor<B::InnerBackend, N>,
-) -> BurnTensor<B, N> {
-    BurnTensor::from_data(tensor.to_data(), &Default::default())
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B, D, H> {
