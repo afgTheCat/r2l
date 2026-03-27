@@ -2,7 +2,7 @@ pub mod burn_agents;
 pub mod candle_agents;
 
 use crate::candle_agents::ModuleWithValueFunction;
-use candle_core::Tensor as CandleTensor;
+// use crate::candle_agents::ppo5::buffer_advantages_and_returns;
 use r2l_candle_lm::{
     distributions::DistributionKind,
     learning_module2::{
@@ -10,76 +10,134 @@ use r2l_candle_lm::{
         SequentialValueFunction,
     },
 };
+use r2l_core::policies::ValueFunction;
+use r2l_core::tensor::R2lTensor;
 use r2l_core::{distributions::Policy, policies::LearningModule};
+use r2l_core::{rng::RNG, utils::rollout_buffer::Logps};
+use r2l_core::{
+    sampler5::buffer::TrajectoryContainer,
+    utils::rollout_buffer::{Advantages, Returns},
+};
+use rand::seq::SliceRandom;
 
 pub enum HookResult {
     Continue,
     Break,
 }
 
-pub struct GenericLearningModuleWithValueFunction<
-    P: Policy<Tensor = CandleTensor> + Clone,
-    L: LearningModule<Losses = PolicyValuesLosses>,
-> {
-    pub policy: P,
-    pub learning_module: L,
-    pub value_function: SequentialValueFunction,
+struct BatchIndexIterator {
+    indicies: Vec<(usize, usize)>,
+    sample_size: usize,
+    current: usize,
 }
 
-impl<P: Policy<Tensor = CandleTensor> + Clone, L: LearningModule<Losses = PolicyValuesLosses>>
-    ModuleWithValueFunction for GenericLearningModuleWithValueFunction<P, L>
-{
-    type P = P;
-    type L = L;
-    type V = SequentialValueFunction;
-
-    fn get_inference_policy(&self) -> Self::P {
-        self.policy.clone()
-    }
-
-    fn get_policy_ref(&self) -> &Self::P {
-        &self.policy
-    }
-
-    fn learning_module(&mut self) -> &mut Self::L {
-        &mut self.learning_module
-    }
-
-    fn value_func(&self) -> &Self::V {
-        &self.value_function
-    }
-}
-
-pub enum ActorCriticKind {
-    Decoupled(DecoupledActorCriticLM2),
-    Paralell(ParalellActorCriticLM2),
-}
-
-impl ActorCriticKind {
-    pub fn policy_learning_rate(&self) -> f64 {
-        match self {
-            Self::Decoupled(decoupled) => decoupled.policy_learning_rate(),
-            Self::Paralell(paralell) => paralell.policy_learning_rate(),
+impl BatchIndexIterator {
+    pub fn new<B: TrajectoryContainer>(buffers: &[B], sample_size: usize) -> Self {
+        let mut indicies = (0..buffers.len())
+            .flat_map(|i| {
+                let rb = &buffers[i];
+                (0..rb.len()).map(|j| (i, j)).collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        RNG.with_borrow_mut(|rng| indicies.shuffle(rng));
+        Self {
+            indicies,
+            sample_size,
+            current: 0,
         }
     }
-}
 
-impl LearningModule for ActorCriticKind {
-    type Losses = PolicyValuesLosses;
-
-    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
-        match self {
-            Self::Decoupled(lm) => lm.update(losses),
-            Self::Paralell(lm) => lm.update(losses),
+    fn iter(&mut self) -> Option<Vec<(usize, usize)>> {
+        let total_size = self.indicies.len();
+        if self.sample_size + self.current >= total_size {
+            return None;
         }
+        let batch_indicies = &self.indicies[self.current..self.current + self.sample_size];
+        self.current += self.sample_size;
+        Some(batch_indicies.to_owned())
     }
 }
 
-pub type LearningModuleKind =
-    GenericLearningModuleWithValueFunction<DistributionKind, ActorCriticKind>;
+fn logps<T: R2lTensor, B: TrajectoryContainer<Tensor = T>>(
+    buffers: &[B],
+    policy: &impl Policy<Tensor = T>,
+) -> Logps {
+    let mut logps = vec![];
+    for buffer in buffers {
+        let states = buffer.states().cloned().collect::<Vec<_>>();
+        let actions = buffer.actions().cloned().collect::<Vec<_>>();
+        let logp = policy
+            .log_probs(&states, &actions)
+            .map(|t| t.to_vec())
+            .unwrap();
+        logps.push(logp);
+    }
+    Logps(logps)
+}
 
-pub struct GenericLearningModuleWithValueFunction2 {
-    pub policy: Box<dyn Policy<Tensor = CandleTensor>>,
-    pub learning_module: Box<dyn LearningModule<Losses = PolicyValuesLosses>>,
-    pub value_function: SequentialValueFunction,
+fn sample<T: R2lTensor, B: TrajectoryContainer<Tensor = T>>(
+    buffers: &[B],
+    indicies: &[(usize, usize)],
+) -> (Vec<T>, Vec<T>) {
+    let mut observations = vec![];
+    let mut actions = vec![];
+    for (buffer_idx, idx) in indicies {
+        let observation = buffers[*buffer_idx].states().nth(*idx).unwrap();
+        let action = buffers[*buffer_idx].actions().nth(*idx).unwrap();
+        observations.push(observation.clone());
+        actions.push(action.clone());
+    }
+    (observations, actions)
+}
+
+pub fn buffer_advantages_and_returns<T: R2lTensor>(
+    buffer: &impl TrajectoryContainer<Tensor = T>,
+    value_func: &impl ValueFunction<Tensor = T>,
+    gamma: f32,
+    lambda: f32,
+) -> anyhow::Result<(Vec<f32>, Vec<f32>)> {
+    let mut states = buffer.states().cloned().collect::<Vec<_>>();
+    states.push(buffer.next_states().last().unwrap().clone());
+    let values_stacked = value_func.calculate_values(&states).unwrap();
+    let values: Vec<f32> = values_stacked.to_vec();
+    let total_steps = buffer.rewards().count();
+    let mut advantages: Vec<f32> = vec![0.; total_steps];
+    let mut returns: Vec<f32> = vec![0.; total_steps];
+    let mut last_gae_lam: f32 = 0.;
+
+    for i in (0..total_steps).rev() {
+        let mut dones = buffer
+            .terminated()
+            .zip(buffer.trancuated())
+            .map(|(terminated, trancuated)| terminated || trancuated);
+        let next_non_terminal = if dones.nth(i).unwrap() {
+            last_gae_lam = 0.;
+            0f32
+        } else {
+            1.
+        };
+        let delta = buffer.rewards().nth(i).unwrap() + next_non_terminal * gamma * values[i + 1]
+            - values[i];
+        last_gae_lam = delta + next_non_terminal * gamma * lambda * last_gae_lam;
+        advantages[i] = last_gae_lam;
+        returns[i] = last_gae_lam + values[i];
+    }
+    Ok((advantages, returns))
+}
+
+pub fn buffers_advantages_and_returns<T: R2lTensor, B: TrajectoryContainer<Tensor = T>>(
+    buffers: &[B],
+    value_func: &impl ValueFunction<Tensor = T>,
+    gamma: f32,
+    lambda: f32,
+) -> anyhow::Result<(Advantages, Returns)> {
+    let mut advantage_vec = vec![];
+    let mut returns_vec = vec![];
+    for buffer in buffers {
+        let (advantages, returns) =
+            buffer_advantages_and_returns(buffer, value_func, gamma, lambda)?;
+        advantage_vec.push(advantages);
+        returns_vec.push(returns);
+    }
+    Ok((Advantages(advantage_vec), Returns(returns_vec)))
 }

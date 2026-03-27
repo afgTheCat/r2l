@@ -1,6 +1,6 @@
 use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
-use r2l_agents::ActorCriticKind;
+use r2l_agents::candle_agents::ActorCriticKind;
 use r2l_candle_lm::{
     learning_module2::{DecoupledActorCriticLM2, ParalellActorCriticLM2, SequentialValueFunction},
     optimizer::OptimizerWithMaxGrad,

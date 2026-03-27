@@ -1,6 +1,9 @@
+use crate::buffers_advantages_and_returns;
 use crate::candle_agents::ModuleWithValueFunction;
-use crate::{CandleTensor, HookResult};
-use candle_core::{Device, Error, Result};
+use crate::{BatchIndexIterator, HookResult, logps, sample};
+use anyhow::Result;
+use candle_core::Tensor as CandleTensor;
+use candle_core::{Device, Error};
 use r2l_candle_lm::learning_module2::PolicyValuesLosses;
 use r2l_candle_lm::tensors::{Logp, LogpDiff, PolicyLoss};
 use r2l_candle_lm::tensors::{ValueLoss, ValuesPred};
@@ -190,125 +193,4 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> Agent5 for CandlePPO5<M, 
         self.learning_loop(buffers, advantages, returns, logps)?;
         Ok(())
     }
-}
-
-// TODO: should be somewhere else
-pub fn buffer_advantages_and_returns(
-    buffer: &impl TrajectoryContainer<Tensor = CandleTensor>,
-    value_func: &impl ValueFunction<Tensor = CandleTensor>,
-    gamma: f32,
-    lambda: f32,
-) -> Result<(Vec<f32>, Vec<f32>)> {
-    let mut states = buffer.states().cloned().collect::<Vec<_>>();
-    states.push(buffer.next_states().last().unwrap().clone());
-    let values_stacked = value_func.calculate_values(&states).unwrap();
-    let values: Vec<f32> = values_stacked.to_vec1()?;
-    let total_steps = buffer.rewards().count();
-    let mut advantages: Vec<f32> = vec![0.; total_steps];
-    let mut returns: Vec<f32> = vec![0.; total_steps];
-    let mut last_gae_lam: f32 = 0.;
-
-    for i in (0..total_steps).rev() {
-        let mut dones = buffer
-            .terminated()
-            .zip(buffer.trancuated())
-            .map(|(terminated, trancuated)| terminated || trancuated);
-        let next_non_terminal = if dones.nth(i).unwrap() {
-            last_gae_lam = 0.;
-            0f32
-        } else {
-            1.
-        };
-        let delta = buffer.rewards().nth(i).unwrap() + next_non_terminal * gamma * values[i + 1]
-            - values[i];
-        last_gae_lam = delta + next_non_terminal * gamma * lambda * last_gae_lam;
-        advantages[i] = last_gae_lam;
-        returns[i] = last_gae_lam + values[i];
-    }
-    Ok((advantages, returns))
-}
-
-pub fn buffers_advantages_and_returns<B: TrajectoryContainer<Tensor = CandleTensor>>(
-    buffers: &[B],
-    value_func: &impl ValueFunction<Tensor = CandleTensor>,
-    gamma: f32,
-    lambda: f32,
-) -> Result<(Advantages, Returns)> {
-    let mut advantage_vec = vec![];
-    let mut returns_vec = vec![];
-    for buffer in buffers {
-        let (advantages, returns) =
-            buffer_advantages_and_returns(buffer, value_func, gamma, lambda)?;
-        advantage_vec.push(advantages);
-        returns_vec.push(returns);
-    }
-    Ok((Advantages(advantage_vec), Returns(returns_vec)))
-}
-
-struct BatchIndexIterator {
-    indicies: Vec<(usize, usize)>,
-    sample_size: usize,
-    current: usize,
-}
-
-impl BatchIndexIterator {
-    pub fn new<B: TrajectoryContainer<Tensor = CandleTensor>>(
-        buffers: &[B],
-        sample_size: usize,
-    ) -> Self {
-        let mut indicies = (0..buffers.len())
-            .flat_map(|i| {
-                let rb = &buffers[i];
-                (0..rb.len()).map(|j| (i, j)).collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        RNG.with_borrow_mut(|rng| indicies.shuffle(rng));
-        Self {
-            indicies,
-            sample_size,
-            current: 0,
-        }
-    }
-
-    fn iter(&mut self) -> Option<Vec<(usize, usize)>> {
-        let total_size = self.indicies.len();
-        if self.sample_size + self.current >= total_size {
-            return None;
-        }
-        let batch_indicies = &self.indicies[self.current..self.current + self.sample_size];
-        self.current += self.sample_size;
-        Some(batch_indicies.to_owned())
-    }
-}
-
-fn logps<B: TrajectoryContainer<Tensor = CandleTensor>>(
-    buffers: &[B],
-    policy: &impl Policy<Tensor = CandleTensor>,
-) -> Logps {
-    let mut logps = vec![];
-    for buffer in buffers {
-        let states = buffer.states().cloned().collect::<Vec<_>>();
-        let actions = buffer.actions().cloned().collect::<Vec<_>>();
-        let logp = policy
-            .log_probs(&states, &actions)
-            .map(|t| t.to_vec())
-            .unwrap();
-        logps.push(logp);
-    }
-    Logps(logps)
-}
-
-fn sample<B: TrajectoryContainer<Tensor = CandleTensor>>(
-    buffers: &[B],
-    indicies: &[(usize, usize)],
-) -> (Vec<CandleTensor>, Vec<CandleTensor>) {
-    let mut observations = vec![];
-    let mut actions = vec![];
-    for (buffer_idx, idx) in indicies {
-        let observation = buffers[*buffer_idx].states().nth(*idx).unwrap();
-        let action = buffers[*buffer_idx].actions().nth(*idx).unwrap();
-        observations.push(observation.clone());
-        actions.push(action.clone());
-    }
-    (observations, actions)
 }

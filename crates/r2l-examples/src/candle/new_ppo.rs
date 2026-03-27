@@ -3,7 +3,7 @@ use crate::EventBox;
 use crate::PPOProgress;
 use candle_core::{Device, Error, Tensor};
 use r2l_agents::HookResult;
-use r2l_agents::LearningModuleKind;
+use r2l_agents::candle_agents::LearningModuleKind;
 use r2l_agents::candle_agents::ModuleWithValueFunction;
 use r2l_agents::candle_agents::ppo5::PPOBatchData;
 use r2l_agents::candle_agents::ppo5::PPOHooksTrait5;

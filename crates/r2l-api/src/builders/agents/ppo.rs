@@ -5,9 +5,9 @@ use crate::builders::{
 use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_agents::{
+use r2l_agents::candle_agents::{
     GenericLearningModuleWithValueFunction, LearningModuleKind,
-    candle_agents::ppo5::{CandlePPO5, CandlePPOCore5, PPOHooksTrait5},
+    ppo5::{CandlePPO5, CandlePPOCore5, PPOHooksTrait5},
 };
 use r2l_core::env::EnvironmentDescription;
 

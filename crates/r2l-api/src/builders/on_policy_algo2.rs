@@ -6,7 +6,7 @@ use crate::builders::{
 use anyhow::Result;
 use candle_core::Device;
 use derive_more::{Deref, DerefMut};
-use r2l_agents::LearningModuleKind;
+// use r2l_agents::LearningModuleKind;
 use r2l_core::{
     env::Env,
     env_builder::{EnvBuilderTrait, EnvBuilderType},
