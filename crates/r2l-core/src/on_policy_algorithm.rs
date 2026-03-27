@@ -1,13 +1,11 @@
-use crate::agents::TensorOfAgent;
 use crate::sampler5::PolicyWrapper;
 use crate::sampler5::buffer::wrapper::BufferWrapper;
 use crate::{
     Algorithm,
-    agents::{Agent, Agent5},
+    agents::Agent5,
     distributions::Policy,
-    env::{Env, Sampler, TensorOfSampler},
+    env::Env,
     sampler5::{Sampler5, buffer::TrajectoryContainer},
-    utils::rollout_buffer::RolloutBuffer,
 };
 use anyhow::Result;
 use std::marker::PhantomData;
@@ -38,105 +36,6 @@ impl LearningSchedule {
             total_steps,
             current_step: 0,
         }
-    }
-}
-
-pub trait OnPolicyAlgorithmHooks<T: Clone> {
-    fn init_hook(&mut self) -> bool;
-
-    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer<T>]) -> bool;
-
-    fn post_training_hook(&mut self) -> bool;
-
-    fn shutdown_hook(&mut self) -> Result<()>;
-}
-
-pub struct DefaultOnPolicyAlgorightmsHooks {
-    rollout_idx: usize,
-    learning_schedule: LearningSchedule,
-}
-
-impl DefaultOnPolicyAlgorightmsHooks {
-    pub fn new(learning_schedule: LearningSchedule) -> Self {
-        Self {
-            rollout_idx: 0,
-            learning_schedule,
-        }
-    }
-}
-
-impl<T: Clone> OnPolicyAlgorithmHooks<T> for DefaultOnPolicyAlgorightmsHooks {
-    fn init_hook(&mut self) -> bool {
-        false
-    }
-
-    fn post_rollout_hook(&mut self, rollouts: &mut [RolloutBuffer<T>]) -> bool {
-        let _total_reward = rollouts
-            .iter()
-            .map(|s| s.rewards.iter().sum::<f32>())
-            .sum::<f32>();
-        let _episodes: usize = rollouts
-            .iter()
-            .flat_map(|s| &s.dones)
-            .filter(|d| **d)
-            .count();
-        self.rollout_idx += 1;
-        match &mut self.learning_schedule {
-            LearningSchedule::RolloutBound {
-                total_rollouts,
-                current_rollout,
-            } => {
-                *current_rollout += 1;
-                current_rollout >= total_rollouts
-            }
-            LearningSchedule::TotalStepBound {
-                total_steps,
-                current_step,
-            } => {
-                let rollout_steps: usize = rollouts.iter().map(|e| e.actions.len()).sum();
-                *current_step += rollout_steps;
-                current_step >= total_steps
-            }
-        }
-    }
-
-    fn post_training_hook(&mut self) -> bool {
-        false
-    }
-
-    fn shutdown_hook(&mut self) -> Result<()> {
-        Ok(())
-    }
-}
-
-pub struct OnPolicyAlgorithm<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks<TensorOfAgent<A>>> {
-    pub sampler: S,
-    pub agent: A,
-    pub hooks: H,
-}
-
-impl<S: Sampler, A: Agent, H: OnPolicyAlgorithmHooks<TensorOfAgent<A>>> Algorithm
-    for OnPolicyAlgorithm<S, A, H>
-where
-    TensorOfSampler<S>: From<TensorOfAgent<A>>,
-    TensorOfSampler<S>: Into<TensorOfAgent<A>>,
-    <A as Agent>::Policy: Clone,
-{
-    fn train(&mut self) -> Result<()> {
-        if self.hooks.init_hook() {
-            return Ok(());
-        }
-        loop {
-            // rollout phase
-            let distribution = self.agent.policy();
-            let mut rollouts = self.sampler.collect_rollouts(distribution)?;
-            break_on_hook_res!(self.hooks.post_rollout_hook(&mut rollouts));
-
-            // learning phase
-            self.agent.learn(rollouts)?;
-            break_on_hook_res!(self.hooks.post_training_hook());
-        }
-        self.hooks.shutdown_hook()
     }
 }
 

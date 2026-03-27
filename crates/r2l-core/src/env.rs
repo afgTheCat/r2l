@@ -1,15 +1,6 @@
-use std::fmt::Debug;
-
-use crate::{
-    distributions::Policy,
-    // sampler3::{
-    //     buffer_stack::BufferStack3,
-    //     buffers::{Buffer, BufferStack},
-    // },
-    tensor::R2lTensor,
-    utils::rollout_buffer::RolloutBuffer,
-};
+use crate::{distributions::Policy, tensor::R2lTensor};
 use anyhow::Result;
+use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
 pub enum Space<T> {
@@ -94,18 +85,3 @@ pub enum RolloutMode {
     EpisodeBound { n_episodes: usize },
     StepBound { n_steps: usize },
 }
-
-// TODO:
-pub trait Sampler {
-    type Env: Env;
-
-    fn collect_rollouts<D: Policy + Clone>(
-        &mut self,
-        distribution: D,
-    ) -> Result<Vec<RolloutBuffer<D::Tensor>>>
-    where
-        <Self::Env as Env>::Tensor: From<D::Tensor>,
-        <Self::Env as Env>::Tensor: Into<D::Tensor>;
-}
-
-pub type TensorOfSampler<S> = <<S as Sampler>::Env as Env>::Tensor;

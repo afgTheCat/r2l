@@ -1,16 +1,16 @@
 use crate::builders::{
-    agents::a2c::A2CBuilder,
+    // agents::a2c::A2CBuilder,
     // sampler::{EnvPoolType, SamplerType},
     sampler_hooks2::EvaluatorNormalizerOptions,
 };
 use anyhow::Result;
 use candle_core::Device;
 use derive_more::{Deref, DerefMut};
-use r2l_agents::{LearningModuleKind, candle_agents::a2c::A2C};
+use r2l_agents::LearningModuleKind;
 use r2l_core::{
     env::Env,
     env_builder::{EnvBuilderTrait, EnvBuilderType},
-    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
+    on_policy_algorithm::LearningSchedule,
     tensor::R2lBuffer,
 };
 use std::sync::Arc;

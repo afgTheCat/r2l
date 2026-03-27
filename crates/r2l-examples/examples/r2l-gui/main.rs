@@ -5,7 +5,7 @@ mod table;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l_examples::{EventBox, PPOProgress, new_ppo::new_train_ppo, old_ppo::old_train_ppo};
+use r2l_examples::{EventBox, PPOProgress, new_ppo::new_train_ppo};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;

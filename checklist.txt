@@ -5,3 +5,4 @@ Burn follow-ups
   This currently compiles and works with the existing arithmetic, but the convention is loose and should be made explicit later.
 - sampler_hooks_2 should also be redone
 - better error handling!
+- readd a2c/vpg
