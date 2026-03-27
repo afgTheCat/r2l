@@ -140,3 +140,53 @@
 //         Ok(())
 //     }
 // }
+
+use crate::HookResult;
+use crate::candle_agents::ModuleWithValueFunction;
+use candle_core::{Device, Tensor as CandleTensor};
+use r2l_core::utils::rollout_buffer::{Advantages, Returns};
+use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
+
+pub trait A2CHooks<M: ModuleWithValueFunction> {
+    fn before_learning_hook<B: TrajectoryContainer<Tensor = CandleTensor>>(
+        &mut self,
+        _agent: &mut CandleA2CCore5<M>,
+        _buffers: &[B],
+        advantages: &mut Advantages,
+        returns: &mut Returns,
+    ) -> candle_core::Result<HookResult> {
+        Ok(HookResult::Continue)
+    }
+}
+
+pub struct DefaultA2CHooks;
+
+pub struct CandleA2CCore5<M: ModuleWithValueFunction> {
+    pub module: M,
+    pub device: Device,
+    pub gamma: f32,
+    pub lambda: f32,
+    pub sample_size: usize,
+}
+
+pub struct CandleA2C5<M: ModuleWithValueFunction, H: A2CHooks<M>> {
+    pub a2c: CandleA2CCore5<M>,
+    pub hooks: H,
+}
+
+impl<M: ModuleWithValueFunction, H: A2CHooks<M>> Agent5 for CandleA2C5<M, H> {
+    type Tensor = CandleTensor;
+
+    type Policy = <M as ModuleWithValueFunction>::P;
+
+    fn policy(&self) -> Self::Policy {
+        self.a2c.module.get_inference_policy()
+    }
+
+    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
+        &mut self,
+        buffers: &[C],
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+}
