@@ -3,10 +3,7 @@ use crate::{
     utils::{evaluator::Evaluator, running_mean::RunningMeanStd},
 };
 use candle_core::{DType, Device, Tensor};
-use r2l_core::{
-    env::EnvironmentDescription,
-    env_builder::EnvBuilderTrait,
-};
+use r2l_core::{env::EnvironmentDescription, env_builder::EnvBuilderTrait};
 use std::sync::{Arc, Mutex};
 
 pub struct EvaluatorOptions {
