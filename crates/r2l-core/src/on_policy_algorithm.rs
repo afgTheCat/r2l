@@ -2,8 +2,6 @@ use crate::sampler::PolicyWrapper;
 use crate::sampler::buffer::wrapper::BufferWrapper;
 use crate::{
     agents::Agent,
-    distributions::Policy,
-    env::Env,
     sampler::{Sampler5, buffer::TrajectoryContainer},
 };
 use anyhow::Result;
@@ -34,24 +32,6 @@ impl LearningSchedule {
         Self::TotalStepBound {
             total_steps,
             current_step: 0,
-        }
-    }
-}
-
-pub struct DefaultOnPolicyAlgorightmsHooks4<E: Env, P: Policy> {
-    rollout_idx: usize,
-    learning_schedule: LearningSchedule,
-    _buffer: PhantomData<E>,
-    _policy: PhantomData<P>,
-}
-
-impl<E: Env, P: Policy> DefaultOnPolicyAlgorightmsHooks4<E, P> {
-    pub fn new(learning_schedule: LearningSchedule) -> Self {
-        Self {
-            rollout_idx: 0,
-            learning_schedule,
-            _buffer: PhantomData,
-            _policy: PhantomData,
         }
     }
 }

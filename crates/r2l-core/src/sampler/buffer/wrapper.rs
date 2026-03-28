@@ -74,8 +74,12 @@ impl<'a, T: R2lTensor> Iterator for TensorIter<'a, T> {
     }
 }
 
-struct BorrowedWrapper<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S>>
-{
+pub struct BorrowedWrapper<
+    'a,
+    S: R2lTensor,
+    T: R2lTensor + From<T>,
+    B: TrajectoryContainer<Tensor = S>,
+> {
     data: &'a B,
     _phantom: PhantomData<(S, T)>,
 }

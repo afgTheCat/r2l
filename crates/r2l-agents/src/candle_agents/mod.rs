@@ -5,8 +5,7 @@ use candle_core::Tensor as CandleTensor;
 use r2l_candle_lm::{
     distributions::DistributionKind,
     learning_module::{
-        DecoupledActorCriticLM2, ParalellActorCriticLM2, PolicyValuesLosses,
-        SequentialValueFunction,
+        DecoupledActorCriticLM2, ParalellActorCriticLM, PolicyValuesLosses, SequentialValueFunction,
     },
 };
 use r2l_core::{
@@ -63,7 +62,7 @@ impl<P: Policy<Tensor = CandleTensor> + Clone, L: LearningModule<Losses = Policy
 
 pub enum ActorCriticKind {
     Decoupled(DecoupledActorCriticLM2),
-    Paralell(ParalellActorCriticLM2),
+    Paralell(ParalellActorCriticLM),
 }
 
 impl ActorCriticKind {

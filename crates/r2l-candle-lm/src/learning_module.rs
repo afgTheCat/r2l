@@ -39,17 +39,17 @@ impl LearningModule for DecoupledActorCriticLM2 {
 
 /// The policy and the value fuction has the same optimizer
 /// TODO: value_net does not need to be here
-pub struct ParalellActorCriticLM2 {
+pub struct ParalellActorCriticLM {
     pub optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
-impl ParalellActorCriticLM2 {
+impl ParalellActorCriticLM {
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer_with_grad.optimizer.learning_rate()
     }
 }
 
-impl LearningModule for ParalellActorCriticLM2 {
+impl LearningModule for ParalellActorCriticLM {
     type Losses = PolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
