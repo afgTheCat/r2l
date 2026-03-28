@@ -13,7 +13,7 @@ use r2l_core::policies::ValueFunction;
 use r2l_core::rng::RNG;
 use r2l_core::tensor::R2lTensor;
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
-use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
+use r2l_core::{agents::Agent, sampler5::buffer::TrajectoryContainer};
 use rand::seq::SliceRandom;
 use std::ops::Deref;
 
@@ -24,7 +24,7 @@ pub struct PPOBatchData {
     pub ratio: CandleTensor,
 }
 
-pub trait PPOHooksTrait5<M: ModuleWithValueFunction> {
+pub trait PPOHooks<M: ModuleWithValueFunction> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = CandleTensor>>(
         &mut self,
         _agent: &mut CandlePPOCore5<M>,
@@ -63,18 +63,18 @@ pub struct CandlePPOCore5<M: ModuleWithValueFunction> {
     pub device: Device,
 }
 
-pub struct CandlePPO5<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> {
+pub struct CandlePPO5<M: ModuleWithValueFunction, H: PPOHooks<M>> {
     pub ppo: CandlePPOCore5<M>,
     pub hooks: H,
 }
 
-impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> CandlePPO5<M, H> {
+impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO5<M, H> {
     pub fn new(ppo: CandlePPOCore5<M>, hooks: H) -> Self {
         Self { ppo, hooks }
     }
 }
 
-impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> CandlePPO5<M, H> {
+impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO5<M, H> {
     fn batching_loop<B: TrajectoryContainer<Tensor = CandleTensor>>(
         &mut self,
         buffers: &[B],
@@ -155,7 +155,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> CandlePPO5<M, H> {
     }
 }
 
-impl<M: ModuleWithValueFunction, H: PPOHooksTrait5<M>> Agent5 for CandlePPO5<M, H> {
+impl<M: ModuleWithValueFunction, H: PPOHooks<M>> Agent for CandlePPO5<M, H> {
     type Tensor = CandleTensor;
 
     type Policy = <M as ModuleWithValueFunction>::P;

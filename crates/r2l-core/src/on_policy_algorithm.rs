@@ -2,7 +2,7 @@ use crate::sampler5::PolicyWrapper;
 use crate::sampler5::buffer::wrapper::BufferWrapper;
 use crate::{
     Algorithm,
-    agents::Agent5,
+    agents::Agent,
     distributions::Policy,
     env::Env,
     sampler5::{Sampler5, buffer::TrajectoryContainer},
@@ -58,7 +58,7 @@ impl<E: Env, P: Policy> DefaultOnPolicyAlgorightmsHooks4<E, P> {
 }
 
 pub trait OnPolicyAlgorithmHooks5 {
-    type A: Agent5;
+    type A: Agent;
     type S: Sampler5;
 
     fn init_hook(&mut self) -> bool;
@@ -68,24 +68,24 @@ pub trait OnPolicyAlgorithmHooks5 {
         rollouts: &[<Self::S as Sampler5>::TrajectoryContainer],
     ) -> bool;
 
-    fn post_training_hook(&mut self, policy: <Self::A as Agent5>::Policy) -> bool;
+    fn post_training_hook(&mut self, policy: <Self::A as Agent>::Policy) -> bool;
 
     fn shutdown_hook(&mut self) -> Result<()>;
 }
 
-pub struct OnPolicyAlgorithm5<A: Agent5, S: Sampler5, H: OnPolicyAlgorithmHooks5<A = A, S = S>> {
+pub struct OnPolicyAlgorithm5<A: Agent, S: Sampler5, H: OnPolicyAlgorithmHooks5<A = A, S = S>> {
     pub sampler: S,
     pub agent: A,
     pub hooks: H,
 }
 
-pub struct DefaultOnPolicyAlgorightmsHooks5<A: Agent5, S: Sampler5> {
+pub struct DefaultOnPolicyAlgorightmsHooks5<A: Agent, S: Sampler5> {
     rollout_idx: usize,
     learning_schedule: LearningSchedule,
     _phantom: PhantomData<(A, S)>,
 }
 
-impl<A: Agent5, S: Sampler5> DefaultOnPolicyAlgorightmsHooks5<A, S> {
+impl<A: Agent, S: Sampler5> DefaultOnPolicyAlgorightmsHooks5<A, S> {
     pub fn new(learning_schedule: LearningSchedule) -> Self {
         Self {
             rollout_idx: 0,
@@ -95,7 +95,7 @@ impl<A: Agent5, S: Sampler5> DefaultOnPolicyAlgorightmsHooks5<A, S> {
     }
 }
 
-impl<A: Agent5, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgorightmsHooks5<A, S> {
+impl<A: Agent, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgorightmsHooks5<A, S> {
     type A = A;
     type S = S;
 
@@ -127,7 +127,7 @@ impl<A: Agent5, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgorigh
         }
     }
 
-    fn post_training_hook(&mut self, _policy: <Self::A as Agent5>::Policy) -> bool {
+    fn post_training_hook(&mut self, _policy: <Self::A as Agent>::Policy) -> bool {
         false
     }
 
@@ -138,7 +138,7 @@ impl<A: Agent5, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgorigh
 
 impl<
     B: TrajectoryContainer,
-    A: Agent5,
+    A: Agent,
     S: Sampler5<TrajectoryContainer = B>,
     H: OnPolicyAlgorithmHooks5<A = A, S = S>,
 > OnPolicyAlgorithm5<A, S, H>

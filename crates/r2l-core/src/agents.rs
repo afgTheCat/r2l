@@ -1,7 +1,7 @@
 use crate::{distributions::Policy, sampler5::buffer::TrajectoryContainer, tensor::R2lTensor};
 use anyhow::Result;
 
-pub trait Agent5 {
+pub trait Agent {
     type Tensor: R2lTensor;
 
     type Policy: Policy<Tensor = Self::Tensor>;

@@ -7,7 +7,7 @@ use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
 use r2l_core::distributions::Policy;
 use r2l_core::policies::{LearningModule, ValueFunction};
 use r2l_core::utils::rollout_buffer::{Advantages, Returns};
-use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
+use r2l_core::{agents::Agent, sampler5::buffer::TrajectoryContainer};
 
 pub trait A2CHooks<M: ModuleWithValueFunction> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = CandleTensor>>(
@@ -83,7 +83,7 @@ impl<M: ModuleWithValueFunction, H: A2CHooks<M>> CandleA2C5<M, H> {
     }
 }
 
-impl<M: ModuleWithValueFunction, H: A2CHooks<M>> Agent5 for CandleA2C5<M, H> {
+impl<M: ModuleWithValueFunction, H: A2CHooks<M>> Agent for CandleA2C5<M, H> {
     type Tensor = CandleTensor;
     type Policy = <M as ModuleWithValueFunction>::P;
 

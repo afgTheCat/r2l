@@ -6,7 +6,7 @@ use r2l_burn_lm::{
 use r2l_core::distributions::Policy;
 use r2l_core::policies::{LearningModule, ValueFunction};
 use r2l_core::utils::rollout_buffer::{Advantages, Returns};
-use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
+use r2l_core::{agents::Agent, sampler5::buffer::TrajectoryContainer};
 
 use crate::{
     BatchIndexIterator, HookResult, buffers_advantages_and_returns, burn_agents::uplift_tensor,
@@ -76,7 +76,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnA2CHooks<B, D>> BurnA2C5<B, D,
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnA2CHooks<B, D>> Agent5 for BurnA2C5<B, D, H> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnA2CHooks<B, D>> Agent for BurnA2C5<B, D, H> {
     type Tensor = BurnTensor<B::InnerBackend, 1>;
     type Policy = D::InnerModule;
 

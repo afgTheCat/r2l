@@ -1,5 +1,5 @@
 pub mod a2c;
-pub mod ppo5;
+pub mod ppo;
 
 use burn::tensor::{Tensor as BurnTensor, backend::AutodiffBackend};
 

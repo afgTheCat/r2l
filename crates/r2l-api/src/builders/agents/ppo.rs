@@ -7,7 +7,7 @@ use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
 use r2l_agents::candle_agents::{
     GenericLearningModuleWithValueFunction, LearningModuleKind,
-    ppo5::{CandlePPO5, CandlePPOCore5, PPOHooksTrait5},
+    ppo::{CandlePPO5, CandlePPOCore5, PPOHooks},
 };
 use r2l_core::env::EnvironmentDescription;
 
@@ -42,7 +42,7 @@ impl Default for PPOBuilder {
 }
 
 impl PPOBuilder {
-    pub fn build5<T, H: PPOHooksTrait5<LearningModuleKind>>(
+    pub fn build5<T, H: PPOHooks<LearningModuleKind>>(
         &self,
         device: &Device,
         env_description: &EnvironmentDescription<T>,

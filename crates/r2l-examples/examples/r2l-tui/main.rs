@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_examples::burn::new_ppo::new_train_ppo as new_train_ppo_burn;
-use r2l_examples::candle::new_ppo::new_train_ppo as new_train_ppo_candle;
+use r2l_examples::burn::new_train_ppo as new_train_ppo_burn;
+use r2l_examples::candle::new_train_ppo as new_train_ppo_candle;
 use r2l_examples::{EventBox, PPOProgress};
 use ratatui::{
     DefaultTerminal, Frame,

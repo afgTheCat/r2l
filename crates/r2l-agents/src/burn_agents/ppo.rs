@@ -10,7 +10,7 @@ use r2l_core::distributions::Policy;
 use r2l_core::policies::{LearningModule, ValueFunction};
 use r2l_core::rng::RNG;
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
-use r2l_core::{agents::Agent5, sampler5::buffer::TrajectoryContainer};
+use r2l_core::{agents::Agent, sampler5::buffer::TrajectoryContainer};
 use rand::seq::SliceRandom;
 use std::ops::Deref;
 
@@ -158,7 +158,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> Agent5 for BurnPPO<B, D, H> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> Agent for BurnPPO<B, D, H> {
     type Tensor = BurnTensor<B::InnerBackend, 1>;
     type Policy = D::InnerModule;
 
