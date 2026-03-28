@@ -1,17 +1,9 @@
 pub mod burn_agents;
 pub mod candle_agents;
 
-use crate::candle_agents::ModuleWithValueFunction;
-use r2l_candle_lm::{
-    distributions::DistributionKind,
-    learning_module2::{
-        DecoupledActorCriticLM2, ParalellActorCriticLM2, PolicyValuesLosses,
-        SequentialValueFunction,
-    },
-};
 use r2l_core::policies::ValueFunction;
 use r2l_core::tensor::R2lTensor;
-use r2l_core::{distributions::Policy, policies::LearningModule};
+use r2l_core::distributions::Policy;
 use r2l_core::{rng::RNG, utils::rollout_buffer::Logps};
 use r2l_core::{
     sampler::buffer::TrajectoryContainer,

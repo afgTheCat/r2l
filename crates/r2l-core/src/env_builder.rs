@@ -1,6 +1,6 @@
 use crate::env::Env;
 use anyhow::Result;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 pub trait EnvBuilderTrait: Sync + Send + 'static {
     type Env: Env;

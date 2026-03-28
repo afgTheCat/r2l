@@ -1,4 +1,4 @@
-use crate::{distributions::Policy, tensor::R2lTensor};
+use crate::tensor::R2lTensor;
 use anyhow::Result;
 use std::fmt::Debug;
 

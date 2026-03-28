@@ -69,8 +69,7 @@ impl<E: Env> Evaluator<E> {
             Ok(())
         } else {
             let snapshots: Vec<_> = (0..self.eval_episodes)
-                .map(|_| run_episode(&mut self.env, dist))
-                .flatten()
+                .flat_map(|_| run_episode(&mut self.env, dist))
                 .collect();
             let rewards = snapshots.iter().map(|s| s.reward).collect::<Vec<_>>();
             let dones = snapshots

@@ -3,7 +3,7 @@ use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 use candle_core::{Device, Result, Tensor};
 use r2l_core::sampler::PreprocessorY;
 use r2l_core::sampler::buffer::{EditableTrajectoryContainer, TrajectoryContainer};
-use r2l_core::{distributions::Policy, env::Env, tensor::R2lBuffer};
+use r2l_core::{distributions::Policy, env::Env};
 
 pub struct EnvNormalizer {
     pub obs_rms: RunningMeanStd,
@@ -79,7 +79,7 @@ impl EnvNormalizer {
 
 // TODO: this needs to be reconsidered
 impl<B: EditableTrajectoryContainer<Tensor = Tensor>> PreprocessorY<Tensor, B> for EnvNormalizer {
-    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = Tensor>, buffers: &mut [B]) {
+    fn preprocess_states(&mut self, _policy: &dyn Policy<Tensor = Tensor>, buffers: &mut [B]) {
         self.normalize_buffers(buffers, &Device::Cpu).unwrap();
     }
 }

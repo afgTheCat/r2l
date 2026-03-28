@@ -1,12 +1,11 @@
 use crate::{
-    hooks::sampler::{EnvNormalizer, EvaluatorNormalizer},
+    hooks::sampler::EnvNormalizer,
     utils::{evaluator::Evaluator, running_mean::RunningMeanStd},
 };
 use candle_core::{DType, Device, Tensor};
 use r2l_core::{
-    env::{Env, EnvironmentDescription},
+    env::EnvironmentDescription,
     env_builder::EnvBuilderTrait,
-    tensor::R2lBuffer,
 };
 use std::sync::{Arc, Mutex};
 

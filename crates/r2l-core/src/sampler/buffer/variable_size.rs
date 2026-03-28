@@ -10,6 +10,12 @@ pub struct VariableSizedStateBuffer<T: R2lTensor> {
     pub trancuated: Vec<bool>,
 }
 
+impl<T: R2lTensor> Default for VariableSizedStateBuffer<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: R2lTensor> VariableSizedStateBuffer<T> {
     pub fn new() -> Self {
         Self {

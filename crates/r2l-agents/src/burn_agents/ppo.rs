@@ -8,10 +8,8 @@ use r2l_burn_lm::{
 };
 use r2l_core::distributions::Policy;
 use r2l_core::policies::{LearningModule, ValueFunction};
-use r2l_core::rng::RNG;
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
 use r2l_core::{agents::Agent, sampler::buffer::TrajectoryContainer};
-use rand::seq::SliceRandom;
 use std::ops::Deref;
 
 use crate::{

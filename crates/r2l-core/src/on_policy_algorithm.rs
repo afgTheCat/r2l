@@ -1,7 +1,6 @@
 use crate::sampler::PolicyWrapper;
 use crate::sampler::buffer::wrapper::BufferWrapper;
 use crate::{
-    Algorithm,
     agents::Agent,
     distributions::Policy,
     env::Env,
