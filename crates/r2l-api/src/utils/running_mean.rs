@@ -75,10 +75,9 @@ impl RunningMeanStd {
 
 #[cfg(test)]
 mod test {
-    use candle_core::{Device, Result, Tensor};
-    use rand::{Rng, thread_rng};
-
     use crate::utils::running_mean::{RunningMeanStd, biased_var};
+    use candle_core::{Device, Result, Tensor};
+    use rand::{RngExt, rng};
 
     #[test]
     fn test_biased_var() -> Result<()> {
@@ -105,13 +104,13 @@ mod test {
     #[test]
     fn test_running_mean_std_running() -> Result<()> {
         let device = Device::Cpu;
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let shape = (10, 3);
         let mut rms = RunningMeanStd::new(shape.1, device.clone()); // replace `shape` with e.g. 3 or 10
         let mut all_data = vec![];
 
         for _ in 0..100 {
-            let data: Vec<f32> = (0..30).map(|_| rng.gen_range(-1.0..1.0)).collect();
+            let data: Vec<f32> = (0..30).map(|_| rng.random_range(-1.0..1.0)).collect();
             let tensor = Tensor::from_slice(&data, shape, &device)?; // shape (10, 3)
             rms.update(&tensor)?;
             all_data.extend(data);

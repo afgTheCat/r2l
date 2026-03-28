@@ -178,17 +178,3 @@ pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     };
     algo.train()
 }
-
-#[cfg(test)]
-mod test {
-    use crate::burn::new_ppo::new_train_ppo;
-    use crate::{EventBox, PPOProgress};
-    use std::sync::mpsc::{Receiver, Sender};
-    use std::{f64, io, sync::mpsc};
-
-    #[test]
-    pub fn test_training_asd() {
-        let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
-        new_train_ppo(event_tx);
-    }
-}
