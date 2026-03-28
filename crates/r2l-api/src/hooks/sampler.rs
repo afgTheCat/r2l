@@ -1,8 +1,8 @@
 // TODO: we should make Evaluator + Noramlizer not depend on candle
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 use candle_core::{Device, Result, Tensor};
-use r2l_core::sampler5::PreprocessorY;
-use r2l_core::sampler5::buffer::{EditableTrajectoryContainer, TrajectoryContainer};
+use r2l_core::sampler::PreprocessorY;
+use r2l_core::sampler::buffer::{EditableTrajectoryContainer, TrajectoryContainer};
 use r2l_core::{distributions::Policy, env::Env, tensor::R2lBuffer};
 
 pub struct EnvNormalizer {

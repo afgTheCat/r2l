@@ -1,6 +1,6 @@
-use crate::sampler5::buffer::ExpandableTrajectoryContainer;
+use crate::sampler::buffer::ExpandableTrajectoryContainer;
 use crate::{
-    sampler5::buffer::{Memory, TrajectoryContainer, fixed_size::FixedSizeStateBuffer},
+    sampler::buffer::{Memory, TrajectoryContainer, fixed_size::FixedSizeStateBuffer},
     tensor::R2lTensor,
 };
 use std::marker::PhantomData;

@@ -14,7 +14,7 @@ use r2l_core::tensor::R2lTensor;
 use r2l_core::{distributions::Policy, policies::LearningModule};
 use r2l_core::{rng::RNG, utils::rollout_buffer::Logps};
 use r2l_core::{
-    sampler5::buffer::TrajectoryContainer,
+    sampler::buffer::TrajectoryContainer,
     utils::rollout_buffer::{Advantages, Returns},
 };
 use rand::seq::SliceRandom;

@@ -1,10 +1,10 @@
-use burn::{backend::autodiff::checkpoint::state, module::Module};
+use burn::module::Module;
 use candle_core::{Device, Result};
 use r2l_core::{
     distributions::Policy,
     env::{Env, SnapShot},
     rng::RNG,
-    sampler5::buffer::variable_size::VariableSizedStateBuffer,
+    sampler::buffer::variable_size::VariableSizedStateBuffer,
 };
 use rand::RngExt;
 use std::sync::{Arc, Mutex};
@@ -68,7 +68,6 @@ impl<E: Env> Evaluator<E> {
             self.eval_step += n_envs;
             Ok(())
         } else {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             let snapshots: Vec<_> = (0..self.eval_episodes)
                 .map(|_| run_episode(&mut self.env, dist))
                 .flatten()

@@ -13,7 +13,7 @@ use r2l_core::policies::ValueFunction;
 use r2l_core::rng::RNG;
 use r2l_core::tensor::R2lTensor;
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
-use r2l_core::{agents::Agent, sampler5::buffer::TrajectoryContainer};
+use r2l_core::{agents::Agent, sampler::buffer::TrajectoryContainer};
 use rand::seq::SliceRandom;
 use std::ops::Deref;
 

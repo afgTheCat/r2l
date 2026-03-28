@@ -14,9 +14,9 @@ use r2l_core::env_builder::EnvBuilderType;
 use r2l_core::on_policy_algorithm::DefaultOnPolicyAlgorightmsHooks5;
 use r2l_core::on_policy_algorithm::LearningSchedule;
 use r2l_core::on_policy_algorithm::OnPolicyAlgorithm5;
-use r2l_core::sampler5::FinalSampler;
-use r2l_core::sampler5::Location;
-use r2l_core::sampler5::buffer::StepTrajectoryBound;
+use r2l_core::sampler::FinalSampler;
+use r2l_core::sampler::Location;
+use r2l_core::sampler::buffer::StepTrajectoryBound;
 use r2l_core::{distributions::Policy, utils::rollout_buffer::Advantages};
 use std::f64;
 use std::sync::Arc;
@@ -82,7 +82,7 @@ impl PPOHook {
 }
 
 impl PPOHooks<LearningModuleKind> for PPOHook {
-    fn before_learning_hook<B: r2l_core::sampler5::buffer::TrajectoryContainer<Tensor = Tensor>>(
+    fn before_learning_hook<B: r2l_core::sampler::buffer::TrajectoryContainer<Tensor = Tensor>>(
         &mut self,
         _agent: &mut r2l_agents::candle_agents::ppo::CandlePPOCore5<LearningModuleKind>,
         buffers: &[B],
@@ -104,7 +104,7 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<B: r2l_core::sampler5::buffer::TrajectoryContainer<Tensor = Tensor>>(
+    fn rollout_hook<B: r2l_core::sampler::buffer::TrajectoryContainer<Tensor = Tensor>>(
         &mut self,
         _buffers: &[B],
         agent: &mut r2l_agents::candle_agents::ppo::CandlePPOCore5<LearningModuleKind>,

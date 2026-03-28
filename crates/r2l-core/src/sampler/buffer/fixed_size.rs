@@ -1,7 +1,7 @@
 use ringbuffer::AllocRingBuffer;
 
 use crate::{
-    sampler5::buffer::{ExpandableTrajectoryContainer, Memory, TrajectoryContainer},
+    sampler::buffer::{ExpandableTrajectoryContainer, Memory, TrajectoryContainer},
     tensor::R2lTensor,
 };
 use ringbuffer::RingBuffer;

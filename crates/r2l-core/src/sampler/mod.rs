@@ -5,13 +5,13 @@ use crate::{
     distributions::Policy,
     env::Env,
     env_builder::{EnvBuilderTrait, EnvBuilderType},
-    sampler5::{
+    sampler::{
         buffer::{TrajectoryBound, TrajectoryContainer},
         worker::{ThreadWorker, ThreadWorkers, WorkerPool},
     },
     tensor::R2lTensor,
 };
-use crate::{env::EnvironmentDescription, sampler5::worker::Worker};
+use crate::{env::EnvironmentDescription, sampler::worker::Worker};
 use anyhow::Result;
 use bimodal_array::ArrayHandle;
 use bimodal_array::bimodal_array;

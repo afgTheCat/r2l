@@ -7,8 +7,7 @@ pub mod error;
 pub mod on_policy_algorithm;
 pub mod policies;
 pub mod rng;
-// pub mod sampler;
-pub mod sampler5;
+pub mod sampler;
 pub mod tensor;
 pub mod utils;
 

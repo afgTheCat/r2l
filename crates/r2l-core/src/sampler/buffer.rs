@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use itertools::izip;
 
 use crate::{
-    sampler5::{RolloutMode, buffer::fixed_size::FixedSizeStateBuffer},
+    sampler::{RolloutMode, buffer::fixed_size::FixedSizeStateBuffer},
     tensor::R2lTensor,
 };
 

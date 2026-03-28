@@ -16,7 +16,7 @@ use r2l_burn_lm::{
 use r2l_core::{
     env_builder::EnvBuilderType,
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks5, LearningSchedule, OnPolicyAlgorithm5},
-    sampler5::{FinalSampler, Location, buffer::StepTrajectoryBound},
+    sampler::{FinalSampler, Location, buffer::StepTrajectoryBound},
     utils::rollout_buffer::{Advantages, Returns},
 };
 use std::{f64, sync::Arc, sync::mpsc::Sender};
@@ -66,7 +66,7 @@ fn scalar<B: burn::prelude::Backend>(tensor: &Tensor<B, 1>) -> f32 {
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
     fn before_learning_hook<
-        T: r2l_core::sampler5::buffer::TrajectoryContainer<Tensor = Tensor<B::InnerBackend, 1>>,
+        T: r2l_core::sampler::buffer::TrajectoryContainer<Tensor = Tensor<B::InnerBackend, 1>>,
     >(
         &mut self,
         _agent: &mut BurnPPOCore<B, D>,
@@ -90,7 +90,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
     }
 
     fn rollout_hook<
-        T: r2l_core::sampler5::buffer::TrajectoryContainer<Tensor = Tensor<B::InnerBackend, 1>>,
+        T: r2l_core::sampler::buffer::TrajectoryContainer<Tensor = Tensor<B::InnerBackend, 1>>,
     >(
         &mut self,
         agent: &mut BurnPPOCore<B, D>,

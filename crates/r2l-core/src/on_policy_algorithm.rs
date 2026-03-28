@@ -1,11 +1,11 @@
-use crate::sampler5::PolicyWrapper;
-use crate::sampler5::buffer::wrapper::BufferWrapper;
+use crate::sampler::PolicyWrapper;
+use crate::sampler::buffer::wrapper::BufferWrapper;
 use crate::{
     Algorithm,
     agents::Agent,
     distributions::Policy,
     env::Env,
-    sampler5::{Sampler5, buffer::TrajectoryContainer},
+    sampler::{Sampler5, buffer::TrajectoryContainer},
 };
 use anyhow::Result;
 use std::marker::PhantomData;

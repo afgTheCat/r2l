@@ -1,4 +1,4 @@
-use crate::{sampler5::buffer::TrajectoryContainer, tensor::R2lTensor};
+use crate::{sampler::buffer::TrajectoryContainer, tensor::R2lTensor};
 
 #[derive(Clone)]
 pub struct VariableSizedStateBuffer<T: R2lTensor> {

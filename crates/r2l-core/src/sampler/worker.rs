@@ -2,7 +2,7 @@ use crate::{
     distributions::Policy,
     env::{Env, EnvironmentDescription, SnapShot},
     rng::RNG,
-    sampler5::{
+    sampler::{
         RolloutMode,
         buffer::{ExpandableTrajectoryContainer, Memory},
     },
