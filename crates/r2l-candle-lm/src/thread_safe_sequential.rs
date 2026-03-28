@@ -6,14 +6,10 @@ use either::Either;
 #[derive(Debug, Clone)]
 pub struct LinearLayer {
     layer: Linear,
-    weight_name: String,
-    bias_name: String,
 }
 
 impl LinearLayer {
     pub fn new(in_dim: usize, out_dim: usize, vb: &VarBuilder, prefix: &str) -> Result<Self> {
-        let weight_name = format!("{prefix}_weight");
-        let bias_name = format!("{prefix}_bias");
         let layer_vb = vb.pp(prefix);
         let weight = layer_vb.get_with_hints(
             (out_dim, in_dim),
@@ -34,20 +30,7 @@ impl LinearLayer {
             },
         )?;
         let layer = Linear::new(weight, Some(bias));
-        Ok(Self {
-            layer,
-            weight_name,
-            bias_name,
-        })
-    }
-
-    fn serialize(&self) -> Result<Vec<u8>> {
-        let _data = [
-            (&self.weight_name, self.layer.weight()),
-            (&self.bias_name, self.layer.bias().unwrap()), // TODO: maybe error handle here?
-        ];
-        todo!()
-        // serialize(data, &None).map_err(Error::wrap)
+        Ok(Self { layer })
     }
 }
 

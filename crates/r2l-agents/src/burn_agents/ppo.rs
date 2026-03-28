@@ -6,7 +6,6 @@ use r2l_burn_lm::{
     learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses},
     tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
 };
-use r2l_core::distributions::Policy;
 use r2l_core::policies::{LearningModule, ValueFunction};
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
 use r2l_core::{agents::Agent, sampler::buffer::TrajectoryContainer};

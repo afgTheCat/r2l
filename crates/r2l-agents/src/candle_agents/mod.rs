@@ -4,7 +4,7 @@ pub mod ppo;
 use candle_core::Tensor as CandleTensor;
 use r2l_candle_lm::{
     distributions::DistributionKind,
-    learning_module2::{
+    learning_module::{
         DecoupledActorCriticLM2, ParalellActorCriticLM2, PolicyValuesLosses,
         SequentialValueFunction,
     },

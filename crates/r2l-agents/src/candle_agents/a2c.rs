@@ -2,7 +2,7 @@ use crate::candle_agents::ModuleWithValueFunction;
 use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, sample};
 use anyhow::Result;
 use candle_core::{Device, Error, Tensor as CandleTensor};
-use r2l_candle_lm::learning_module2::PolicyValuesLosses;
+use r2l_candle_lm::learning_module::PolicyValuesLosses;
 use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
 use r2l_core::distributions::Policy;
 use r2l_core::policies::{LearningModule, ValueFunction};

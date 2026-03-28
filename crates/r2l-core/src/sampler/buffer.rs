@@ -2,14 +2,12 @@ pub mod fixed_size;
 pub mod variable_size;
 pub mod wrapper;
 
-use std::marker::PhantomData;
-
-use itertools::izip;
-
 use crate::{
     sampler::{RolloutMode, buffer::fixed_size::FixedSizeStateBuffer},
     tensor::R2lTensor,
 };
+use itertools::izip;
+use std::marker::PhantomData;
 
 #[derive(Debug)]
 pub struct Memory<T> {

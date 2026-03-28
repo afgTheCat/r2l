@@ -4,7 +4,7 @@ use crate::{BatchIndexIterator, HookResult, logps, sample};
 use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use candle_core::{Device, Error};
-use r2l_candle_lm::learning_module2::PolicyValuesLosses;
+use r2l_candle_lm::learning_module::PolicyValuesLosses;
 use r2l_candle_lm::tensors::{Logp, LogpDiff, PolicyLoss};
 use r2l_candle_lm::tensors::{ValueLoss, ValuesPred};
 use r2l_core::distributions::Policy;

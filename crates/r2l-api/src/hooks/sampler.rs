@@ -2,7 +2,7 @@
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 use candle_core::{Device, Result, Tensor};
 use r2l_core::sampler::PreprocessorY;
-use r2l_core::sampler::buffer::{EditableTrajectoryContainer, TrajectoryContainer};
+use r2l_core::sampler::buffer::EditableTrajectoryContainer;
 use r2l_core::{distributions::Policy, env::Env};
 
 pub struct EnvNormalizer {

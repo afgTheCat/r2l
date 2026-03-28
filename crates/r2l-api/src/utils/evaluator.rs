@@ -1,4 +1,3 @@
-use burn::module::Module;
 use candle_core::{Device, Result};
 use r2l_core::{
     distributions::Policy,

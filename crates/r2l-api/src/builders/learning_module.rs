@@ -2,7 +2,7 @@ use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_agents::candle_agents::ActorCriticKind;
 use r2l_candle_lm::{
-    learning_module2::{DecoupledActorCriticLM2, ParalellActorCriticLM2, SequentialValueFunction},
+    learning_module::{DecoupledActorCriticLM2, ParalellActorCriticLM2, SequentialValueFunction},
     optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::build_sequential,
 };
@@ -40,7 +40,6 @@ impl LearningModuleBuilder {
             beta2: 0.999,
             eps: 1e-5,
             weight_decay: 1e-4,
-            ..Default::default()
         };
         match &self.learning_module_type {
             LearningModuleType::Paralell {
