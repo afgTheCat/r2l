@@ -52,7 +52,7 @@ pub trait OnPolicyAlgorithmHooks5 {
     fn shutdown_hook(&mut self) -> Result<()>;
 }
 
-pub struct OnPolicyAlgorithm5<A: Agent, S: Sampler5, H: OnPolicyAlgorithmHooks5<A = A, S = S>> {
+pub struct OnPolicyAlgorithm<A: Agent, S: Sampler5, H: OnPolicyAlgorithmHooks5<A = A, S = S>> {
     pub sampler: S,
     pub agent: A,
     pub hooks: H,
@@ -120,7 +120,7 @@ impl<
     A: Agent,
     S: Sampler5<TrajectoryContainer = B>,
     H: OnPolicyAlgorithmHooks5<A = A, S = S>,
-> OnPolicyAlgorithm5<A, S, H>
+> OnPolicyAlgorithm<A, S, H>
 where
     A::Policy: Clone,
     A::Tensor: From<S::Tensor>,

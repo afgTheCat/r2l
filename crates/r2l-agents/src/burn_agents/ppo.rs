@@ -23,6 +23,28 @@ pub struct PPOBatchData<B: Backend> {
     pub ratio: BurnTensor<B, 1>,
 }
 
+impl<B: Backend> PPOBatchData<B> {
+    pub fn clip_fraction(&self, clip_range: f32) -> f32 {
+        let ratio: Vec<f32> = self.ratio.to_data().to_vec().unwrap();
+        ratio
+            .iter()
+            .filter(|value| (**value - 1.).abs() > clip_range)
+            .count() as f32
+            / ratio.len() as f32
+    }
+
+    pub fn approx_kl(&self) -> f32 {
+        let ratio: Vec<f32> = self.ratio.to_data().to_vec().unwrap();
+        let log_ratio: Vec<f32> = self.logp_diff.to_data().to_vec().unwrap();
+        ratio
+            .iter()
+            .zip(log_ratio.iter())
+            .map(|(ratio, log_ratio)| (ratio - 1.) - log_ratio)
+            .sum::<f32>()
+            / ratio.len() as f32
+    }
+}
+
 pub trait BurnPPOHooksTrait<B: AutodiffBackend, D: BurnPolicy<B>> {
     fn before_learning_hook<T: TrajectoryContainer<Tensor = BurnTensor<B::InnerBackend, 1>>>(
         &mut self,

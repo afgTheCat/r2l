@@ -14,7 +14,7 @@ use r2l_candle_lm::learning_module::PolicyValuesLosses;
 use r2l_core::env_builder::EnvBuilderType;
 use r2l_core::on_policy_algorithm::DefaultOnPolicyAlgorightmsHooks5;
 use r2l_core::on_policy_algorithm::LearningSchedule;
-use r2l_core::on_policy_algorithm::OnPolicyAlgorithm5;
+use r2l_core::on_policy_algorithm::OnPolicyAlgorithm;
 use r2l_core::sampler::FinalSampler;
 use r2l_core::sampler::Location;
 use r2l_core::sampler::buffer::StepTrajectoryBound;
@@ -183,7 +183,7 @@ pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     );
     let env_description = sampler.env_description();
     let agent = PPOBuilder::default().build(&device, &env_description, ppo_hook)?;
-    let mut algo = OnPolicyAlgorithm5 {
+    let mut algo = OnPolicyAlgorithm {
         sampler,
         agent,
         hooks: DefaultOnPolicyAlgorightmsHooks5::new(LearningSchedule::RolloutBound {

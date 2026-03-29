@@ -15,7 +15,7 @@ use r2l_burn_lm::{
 };
 use r2l_core::{
     env_builder::EnvBuilderType,
-    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks5, LearningSchedule, OnPolicyAlgorithm5},
+    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks5, LearningSchedule, OnPolicyAlgorithm},
     sampler::{FinalSampler, Location, buffer::StepTrajectoryBound},
     utils::rollout_buffer::{Advantages, Returns},
 };
@@ -189,7 +189,7 @@ pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let model = ParalellActorModel::new(distr, value_net);
     let lm = ParalellActorCriticLM::new(model, AdamWConfig::new().init());
     let agent = BurnPPO::new(BurnPPOCore::new(lm, 0.2, 64, 0.98, 0.8), ppo_hook);
-    let mut algo = OnPolicyAlgorithm5 {
+    let mut algo = OnPolicyAlgorithm {
         sampler,
         agent,
         hooks: DefaultOnPolicyAlgorightmsHooks5::new(LearningSchedule::RolloutBound {
