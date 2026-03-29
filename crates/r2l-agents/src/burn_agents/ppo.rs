@@ -88,7 +88,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
         Self { core, hooks }
     }
 
-    fn batching_loop<C: TrajectoryContainer<Tensor = BurnTensor<B::InnerBackend, 1>>>(
+    fn batch_loop<C: TrajectoryContainer<Tensor = BurnTensor<B::InnerBackend, 1>>>(
         &mut self,
         buffers: &[C],
         advantages: &Advantages,
@@ -145,7 +145,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
         logps: Logps,
     ) -> anyhow::Result<()> {
         loop {
-            self.batching_loop(buffers, &advantages, &logps, &returns)?;
+            self.batch_loop(buffers, &advantages, &logps, &returns)?;
             crate::process_hook_result!(self.hooks.rollout_hook(&mut self.core, buffers));
         }
     }

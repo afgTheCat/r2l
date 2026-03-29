@@ -18,11 +18,10 @@ pub trait BurnPolicy<B: AutodiffBackend>:
 {
 }
 
-impl<B: AutodiffBackend, M> BurnPolicy<B> for M
-where
+impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
     M: AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
         + ModuleDisplay
-        + Policy<Tensor = Tensor<B, 1>>,
+        + Policy<Tensor = Tensor<B, 1>>
 {
 }
 

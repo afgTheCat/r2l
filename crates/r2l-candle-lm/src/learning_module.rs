@@ -25,6 +25,16 @@ impl DecoupledActorCriticLM {
     pub fn policy_learning_rate(&self) -> f64 {
         self.policy_optimizer_with_grad.optimizer.learning_rate()
     }
+
+    pub fn set_policy_grad_clip(&mut self, max_grad_norm: Option<f32>) {
+        self.policy_optimizer_with_grad
+            .set_max_grad_norm(max_grad_norm);
+    }
+
+    pub fn set_value_grad_clip(&mut self, max_grad_norm: Option<f32>) {
+        self.value_optimizer_with_grad
+            .set_max_grad_norm(max_grad_norm);
+    }
 }
 
 /// The policy and the value function has different optimizers
@@ -49,6 +59,10 @@ pub struct ParalellActorCriticLM {
 impl ParalellActorCriticLM {
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer_with_grad.optimizer.learning_rate()
+    }
+
+    pub fn set_grad_clip(&mut self, max_grad_norm: Option<f32>) {
+        self.optimizer_with_grad.set_max_grad_norm(max_grad_norm);
     }
 }
 

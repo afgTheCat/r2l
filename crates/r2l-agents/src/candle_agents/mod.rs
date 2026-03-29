@@ -71,6 +71,13 @@ impl ActorCriticKind {
             Self::Paralell(paralell) => paralell.policy_learning_rate(),
         }
     }
+
+    pub fn set_grad_clipping(&mut self, max_grad_norm: Option<f32>) {
+        match self {
+            Self::Decoupled(decoupled) => decoupled.set_policy_grad_clip(max_grad_norm),
+            Self::Paralell(paralell) => paralell.set_grad_clip(max_grad_norm),
+        }
+    }
 }
 
 impl LearningModule for ActorCriticKind {

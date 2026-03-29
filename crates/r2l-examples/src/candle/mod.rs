@@ -27,21 +27,19 @@ use std::sync::mpsc::Sender;
 impl PPOProgress {
     pub fn collect_batch_data(
         &mut self,
-        ratio: &Tensor,
-        entropy_loss: &Tensor,
-        value_loss: &Tensor,
-        policy_loss: &Tensor,
+        entropy_loss: f32,
+        value_loss: f32,
+        policy_loss: f32,
+        clip_fraction: f32,
+        clip_range: f32,
+        approx_kl: f32,
     ) -> candle_core::Result<()> {
-        let clip_fraction = (ratio - 1.)?
-            .abs()?
-            .gt(self.clip_range)?
-            .to_dtype(DType::F32)?
-            .mean_all()?
-            .to_scalar::<f32>()?;
         self.clip_fractions.push(clip_fraction);
-        self.entropy_losses.push(entropy_loss.to_scalar()?);
-        self.value_losses.push(value_loss.to_scalar()?);
-        self.policy_losses.push(policy_loss.to_scalar()?);
+        self.entropy_losses.push(entropy_loss);
+        self.value_losses.push(value_loss);
+        self.policy_losses.push(policy_loss);
+        self.clip_range.push(clip_range);
+        self.approx_kl.push(approx_kl);
         Ok(())
     }
 }
@@ -53,7 +51,7 @@ struct PPOHook {
     current_rollout: usize, // track the current rollout
     total_rollouts: usize,  // current rollout
     ent_coeff: f32,         // entropy coefficient
-    clip_range: f32,        // for logging
+    max_grad_norm: f32,     // gradient clipping threshold
     target_kl: f32,         // to control the learning
 
     pub progress: PPOProgress, // I suppose this should not really be here
@@ -65,7 +63,7 @@ impl PPOHook {
         total_epochs: usize,
         total_rollouts: usize,
         ent_coeff: f32,
-        clip_range: f32,
+        max_grad_norm: f32,
         target_kl: f32,
         tx: Sender<EventBox>,
     ) -> Self {
@@ -75,7 +73,7 @@ impl PPOHook {
             current_rollout: 0,
             total_rollouts,
             ent_coeff,
-            clip_range,
+            max_grad_norm,
             target_kl,
             progress: PPOProgress::default(),
             tx,
@@ -132,15 +130,23 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         losses: &mut PolicyValuesLosses,
         data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
+        // This is a bit redundant, the idea here would be for us to be able to change this on the fly.
+        agent
+            .module
+            .learning_module
+            .set_grad_clipping(Some(self.max_grad_norm));
+        let policy_loss = losses.policy_loss.to_scalar()?;
+        let value_loss = losses.value_loss.to_scalar()?;
         let entropy = agent.module.get_policy_ref().entropy().unwrap();
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.ent_coeff, (), device)? * entropy.neg()?)?;
-        self.progress.collect_batch_data(
-            &data.ratio,
-            &entropy_loss,
-            &losses.value_loss,
-            &losses.policy_loss,
-        )?;
+        let entropy = entropy_loss.to_scalar()?;
+        let clip_fraction = (&data.ratio - 1.)?
+            .abs()?
+            .gt(agent.clip_range)?
+            .to_dtype(DType::F32)?
+            .mean_all()?
+            .to_scalar::<f32>()?;
         losses.apply_entropy(entropy_loss).map_err(Error::wrap)?;
         let ratio = data.ratio.detach();
         let log_ratio = data.logp_diff.detach();
@@ -149,6 +155,14 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
             .sub(&log_ratio)?
             .mean_all()?
             .to_scalar::<f32>()?;
+        self.progress.collect_batch_data(
+            entropy,
+            value_loss,
+            policy_loss,
+            clip_fraction,
+            agent.clip_range,
+            approx_kl,
+        )?;
         if approx_kl > 1.5 * self.target_kl {
             Ok(HookResult::Break)
         } else {
@@ -157,9 +171,13 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
     }
 }
 
+const ENT_COEFF: f32 = 0.001;
+const MAX_GRAD_NORM: f32 = 0.5;
+const TARGET_KL: f32 = 0.01;
+
 pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let total_rollouts = 300;
-    let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
+    let ppo_hook = PPOHook::new(10, total_rollouts, ENT_COEFF, MAX_GRAD_NORM, TARGET_KL, tx);
     let device = Device::Cpu;
     let env_builder = EnvBuilderType::EnvBuilder {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),

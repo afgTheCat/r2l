@@ -100,6 +100,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         if should_stop {
             self.current_rollout += 1;
             self.progress.std = agent.lm.model.distr.std().unwrap();
+            // TODO: we should get this from the model, not hard code it here
             self.progress.learning_rate = 3e-4;
             let progress = self.progress.clear();
             self.tx

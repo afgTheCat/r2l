@@ -25,6 +25,7 @@ fn ppo_progres_to_table<'a>(ppo_progress: &'a PPOProgress, name: &'a str) -> Tab
     let value_loss = mean(&ppo_progress.value_losses);
     let policy_loss = mean(&ppo_progress.policy_losses);
     let clip_fraction = mean(&ppo_progress.clip_fractions);
+    let clip_range = mean(&ppo_progress.clip_range);
     let rows = vec![
         // Row::new(vec!["approx_kl".into(), ppo_progress.approx_kl.to_string()]),
         Row::new(vec![
@@ -32,10 +33,7 @@ fn ppo_progres_to_table<'a>(ppo_progress: &'a PPOProgress, name: &'a str) -> Tab
             ppo_progress.avarage_reward.to_string(),
         ]),
         Row::new(vec!["Clip fraction".into(), clip_fraction.to_string()]),
-        Row::new(vec![
-            "Clip range".into(),
-            ppo_progress.clip_range.to_string(),
-        ]),
+        Row::new(vec!["Clip range".into(), clip_range.to_string()]),
         Row::new(vec!["Policy gradient loss".into(), policy_loss.to_string()]),
         Row::new(vec!["Entropy loss".into(), entropy_loss.to_string()]),
         Row::new(vec!["Value loss".into(), value_loss.to_string()]),

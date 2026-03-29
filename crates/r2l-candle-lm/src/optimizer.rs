@@ -62,4 +62,8 @@ impl OptimizerWithMaxGrad {
         self.optimizer.step(&grads)?;
         Ok(())
     }
+
+    pub fn set_max_grad_norm(&mut self, max_grad_norm: Option<f32>) {
+        self.max_grad_norm = max_grad_norm;
+    }
 }
