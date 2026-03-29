@@ -2,7 +2,7 @@ use crate::buffers_advantages_and_returns;
 use crate::candle_agents::ModuleWithValueFunction;
 use crate::{BatchIndexIterator, HookResult, logps, sample};
 use anyhow::Result;
-use candle_core::Tensor as CandleTensor;
+use candle_core::{DType, Tensor as CandleTensor};
 use candle_core::{Device, Error};
 use r2l_candle_lm::learning_module::PolicyValuesLosses;
 use r2l_candle_lm::tensors::ValuesPred;
@@ -18,6 +18,27 @@ pub struct PPOBatchData {
     pub values_pred: ValuesPred,
     pub logp_diff: LogpDiff,
     pub ratio: CandleTensor,
+}
+
+impl PPOBatchData {
+    pub fn clip_fraction(&self, clip_range: f32) -> candle_core::Result<f32> {
+        (&self.ratio - 1.)?
+            .abs()?
+            .gt(clip_range)?
+            .to_dtype(DType::F32)?
+            .mean_all()?
+            .to_scalar::<f32>()
+    }
+
+    pub fn approx_kl(&self) -> candle_core::Result<f32> {
+        let ratio = self.ratio.detach();
+        let log_ratio = self.logp_diff.detach();
+        ratio
+            .sub(&CandleTensor::ones_like(&ratio)?)?
+            .sub(&log_ratio)?
+            .mean_all()?
+            .to_scalar::<f32>()
+    }
 }
 
 pub trait PPOHooks<M: ModuleWithValueFunction> {

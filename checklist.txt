@@ -1,5 +1,7 @@
 Burn follow-ups
 
+- API PPO hook: KL early stop currently breaks only the current batch loop, not the remaining PPO epochs for the rollout update.
+- API PPO hook: avoid dividing average reward by zero when no episodes terminate in the rollout buffers.
 - Add PPO `clip_range_vf` support.
   This needs old value predictions from rollout time plus clipped critic loss handling.
 - Tighten the `DiagGaussianDistribution` `log_std` shape contract in `crates/r2l-burn-lm/src/distributions/diagonal_distribution.rs`.

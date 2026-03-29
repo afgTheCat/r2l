@@ -30,7 +30,6 @@ struct PPOHook {
     current_rollout: usize,
     total_rollouts: usize,
     ent_coeff: f32,
-    clip_range: f32,
     target_kl: f32,
     max_grad_norm: GradientClipping,
     vf_coef: f32,
@@ -44,7 +43,6 @@ impl PPOHook {
         total_epochs: usize,
         total_rollouts: usize,
         ent_coeff: f32,
-        clip_range: f32,
         target_kl: f32,
         max_grad_norm: GradientClipping,
         tx: Sender<EventBox>,
@@ -55,7 +53,6 @@ impl PPOHook {
             current_rollout: 0,
             total_rollouts,
             ent_coeff,
-            clip_range,
             target_kl,
             vf_coef: 1.,
             progress: PPOProgress::default(),
@@ -135,7 +132,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
         let clip_fraction = ratio
             .iter()
-            .filter(|value| (**value - 1.).abs() > self.clip_range)
+            .filter(|value| (**value - 1.).abs() > agent.clip_range)
             .count() as f32
             / ratio.len() as f32;
         losses.apply_entropy(entropy_loss);
@@ -167,7 +164,6 @@ pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
         10,
         total_rollouts,
         0.001,
-        0.2,
         0.01,
         GradientClipping::Norm(0.5),
         tx,

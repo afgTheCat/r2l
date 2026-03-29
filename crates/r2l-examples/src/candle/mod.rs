@@ -2,7 +2,7 @@ use crate::ENV_NAME;
 use crate::EventBox;
 use crate::PPOProgress;
 
-use candle_core::{DType, Device, Error, Tensor};
+use candle_core::{Device, Error, Tensor};
 use r2l_agents::HookResult;
 use r2l_agents::candle_agents::LearningModuleKind;
 use r2l_agents::candle_agents::ModuleWithValueFunction;
@@ -144,20 +144,9 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.ent_coeff, (), device)? * entropy.neg()?)?;
         let entropy = entropy_loss.to_scalar()?;
-        let clip_fraction = (&data.ratio - 1.)?
-            .abs()?
-            .gt(agent.clip_range)?
-            .to_dtype(DType::F32)?
-            .mean_all()?
-            .to_scalar::<f32>()?;
+        let clip_fraction = data.clip_fraction(agent.clip_range)?;
         losses.apply_entropy(entropy_loss).map_err(Error::wrap)?;
-        let ratio = data.ratio.detach();
-        let log_ratio = data.logp_diff.detach();
-        let approx_kl = ratio
-            .sub(&Tensor::ones_like(&ratio)?)?
-            .sub(&log_ratio)?
-            .mean_all()?
-            .to_scalar::<f32>()?;
+        let approx_kl = data.approx_kl()?;
         self.progress.collect_batch_data(
             entropy,
             value_loss,
