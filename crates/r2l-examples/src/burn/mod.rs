@@ -10,8 +10,7 @@ use r2l_agents::{
 };
 use r2l_burn_lm::{
     distributions::diagonal_distribution::DiagGaussianDistribution,
-    learning_module::{BurnPolicy, ParalellActorCriticLM, ParalellActorModel},
-    tensors::{PolicyLoss, ValueLoss},
+    learning_module::{BurnPolicy, ParalellActorCriticLM, ParalellActorModel, PolicyValuesLosses},
 };
 use r2l_core::{
     env_builder::EnvBuilderType,
@@ -115,8 +114,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
     fn batch_hook(
         &mut self,
         agent: &mut BurnPPOCore<B, D>,
-        policy_loss: &mut PolicyLoss<B>,
-        value_loss: &mut ValueLoss<B>,
+        losses: &mut PolicyValuesLosses<B>,
         data: &PPOBatchData<B>,
     ) -> candle_core::Result<HookResult> {
         let entropy = agent.lm.model.distr.entropy().unwrap();
@@ -130,8 +128,10 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
             / ratio.len() as f32;
         self.progress.clip_fractions.push(clip_fraction);
         self.progress.entropy_losses.push(scalar(&entropy_loss));
-        self.progress.value_losses.push(scalar(&value_loss.0));
-        self.progress.policy_losses.push(scalar(&policy_loss.0));
+        self.progress.value_losses.push(scalar(&losses.value_loss));
+        self.progress
+            .policy_losses
+            .push(scalar(&losses.policy_loss));
 
         // TODO: keep the entropy-loss application question mirrored with the Candle hook.
         // Updating `policy_loss` directly here still needs a deliberate decision.

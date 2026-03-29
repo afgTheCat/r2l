@@ -15,10 +15,4 @@ pub struct Logp<B: Backend>(pub Tensor<B, 1>);
 pub struct ValuesPred<B: Backend>(pub Tensor<B, 1>);
 
 #[derive(Deref, DerefMut, Debug, Display)]
-pub struct PolicyLoss<B: Backend>(pub Tensor<B, 1>);
-
-#[derive(Deref, DerefMut, Debug, Display)]
-pub struct ValueLoss<B: Backend>(pub Tensor<B, 1>);
-
-#[derive(Deref, DerefMut, Debug, Display)]
 pub struct LogpDiff<B: Backend>(pub Tensor<B, 1>);

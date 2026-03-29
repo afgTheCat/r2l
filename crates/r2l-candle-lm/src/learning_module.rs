@@ -1,21 +1,17 @@
-use crate::{
-    optimizer::OptimizerWithMaxGrad,
-    tensors::{PolicyLoss, ValueLoss},
-    thread_safe_sequential::ThreadSafeSequential,
-};
+use crate::{optimizer::OptimizerWithMaxGrad, thread_safe_sequential::ThreadSafeSequential};
 use anyhow::{Ok, Result};
 use candle_core::Tensor as CandleTensor;
 use candle_nn::{Module, Optimizer};
 use r2l_core::policies::{LearningModule, ValueFunction};
 
 pub struct PolicyValuesLosses {
-    pub policy_loss: PolicyLoss,
-    pub value_loss: ValueLoss,
+    pub policy_loss: CandleTensor,
+    pub value_loss: CandleTensor,
 }
 
 impl PolicyValuesLosses {
     pub fn apply_entropy(&mut self, entropy: CandleTensor) -> Result<()> {
-        self.policy_loss = PolicyLoss(self.policy_loss.0.add(&entropy)?);
+        self.policy_loss = self.policy_loss.add(&entropy)?;
         Ok(())
     }
 }

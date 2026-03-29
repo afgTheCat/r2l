@@ -4,7 +4,7 @@ use burn::{
 };
 use r2l_burn_lm::{
     learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses},
-    tensors::{Logp, LogpDiff, PolicyLoss, ValueLoss, ValuesPred},
+    tensors::{Logp, LogpDiff, ValuesPred},
 };
 use r2l_core::policies::{LearningModule, ValueFunction};
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
@@ -45,8 +45,7 @@ pub trait BurnPPOHooksTrait<B: AutodiffBackend, D: BurnPolicy<B>> {
     fn batch_hook(
         &mut self,
         _agent: &mut BurnPPOCore<B, D>,
-        _policy_loss: &mut PolicyLoss<B>,
-        _value_loss: &mut ValueLoss<B>,
+        _losses: &mut PolicyValuesLosses<B>,
         _data: &PPOBatchData<B>,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Continue)
@@ -112,32 +111,29 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
             let logp = Logp(ppo.lm.model.distr.log_probs(&observations, &actions)?);
             let values_pred = ValuesPred(ppo.lm.calculate_values(&observations)?);
             let value_diff = returns.clone() - values_pred.deref().clone();
-            let mut value_loss = ValueLoss((value_diff.clone() * value_diff).mean());
+            let value_loss = (value_diff.clone() * value_diff).mean();
             let logp_diff = LogpDiff(logp.deref().clone() - logp_old);
             let ratio = logp_diff.clone().exp();
             let clip_adv = ratio
                 .clone()
                 .clamp(1. - ppo.clip_range, 1. + ppo.clip_range)
                 * advantages.clone();
-            let mut policy_loss =
-                PolicyLoss((-(ratio.clone() * advantages).min_pair(clip_adv)).mean());
+            let policy_loss = (-(ratio.clone() * advantages).min_pair(clip_adv)).mean();
             let ppo_data = PPOBatchData {
                 logp,
                 values_pred,
                 logp_diff,
                 ratio,
             };
-            match self
-                .hooks
-                .batch_hook(ppo, &mut policy_loss, &mut value_loss, &ppo_data)?
-            {
+            let mut losses = PolicyValuesLosses {
+                policy_loss,
+                value_loss,
+            };
+            match self.hooks.batch_hook(ppo, &mut losses, &ppo_data)? {
                 HookResult::Break => return Ok(()),
                 HookResult::Continue => {}
             }
-            ppo.lm.update(PolicyValuesLosses {
-                policy_loss: policy_loss.0,
-                value_loss: value_loss.0,
-            })?;
+            ppo.lm.update(losses)?;
         }
     }
 

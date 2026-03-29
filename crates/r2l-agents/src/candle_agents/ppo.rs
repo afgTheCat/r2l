@@ -5,8 +5,8 @@ use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use candle_core::{Device, Error};
 use r2l_candle_lm::learning_module::PolicyValuesLosses;
-use r2l_candle_lm::tensors::{Logp, LogpDiff, PolicyLoss};
-use r2l_candle_lm::tensors::{ValueLoss, ValuesPred};
+use r2l_candle_lm::tensors::ValuesPred;
+use r2l_candle_lm::tensors::{Logp, LogpDiff};
 use r2l_core::distributions::Policy;
 use r2l_core::policies::ValueFunction;
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
@@ -70,7 +70,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO<M, H> {
 }
 
 impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO<M, H> {
-    fn batching_loop<B: TrajectoryContainer<Tensor = CandleTensor>>(
+    fn batch_loop<B: TrajectoryContainer<Tensor = CandleTensor>>(
         &mut self,
         buffers: &[B],
         advantages: &Advantages,
@@ -102,16 +102,14 @@ impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO<M, H> {
                     .calculate_values(&observations)
                     .map_err(Error::wrap)?,
             );
-            let value_loss = ValueLoss(returns.sub(&values_pred)?.sqr()?.mean_all()?);
+            let value_loss = returns.sub(&values_pred)?.sqr()?.mean_all()?;
             let logp_diff = LogpDiff((logp.deref() - &logp_old)?);
             let ratio = logp_diff.exp()?;
             let clip_adv =
                 (ratio.clamp(1. - ppo.clip_range, 1. + ppo.clip_range)? * advantages.clone())?;
-            let policy_loss = PolicyLoss(
-                CandleTensor::minimum(&(&ratio * &advantages)?, &clip_adv)?
-                    .neg()?
-                    .mean_all()?,
-            );
+            let policy_loss = CandleTensor::minimum(&(&ratio * &advantages)?, &clip_adv)?
+                .neg()?
+                .mean_all()?;
             let mut losses = PolicyValuesLosses {
                 policy_loss,
                 value_loss,
@@ -138,7 +136,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO<M, H> {
         logps: Logps,
     ) -> Result<()> {
         loop {
-            self.batching_loop(buffers, &advantages, &logps, &returns)?;
+            self.batch_loop(buffers, &advantages, &logps, &returns)?;
             let rollout_hook_res = self.hooks.rollout_hook(buffers, &mut self.ppo);
             crate::process_hook_result!(rollout_hook_res);
         }

@@ -138,8 +138,8 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         self.progress.collect_batch_data(
             &data.ratio,
             &entropy_loss,
-            &losses.value_loss.0,
-            &losses.policy_loss.0,
+            &losses.value_loss,
+            &losses.policy_loss,
         )?;
         losses.apply_entropy(entropy_loss).map_err(Error::wrap)?;
         let ratio = data.ratio.detach();

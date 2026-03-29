@@ -3,9 +3,8 @@ use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, samp
 use anyhow::Result;
 use candle_core::{Device, Error, Tensor as CandleTensor};
 use r2l_candle_lm::learning_module::PolicyValuesLosses;
-use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
 use r2l_core::distributions::Policy;
-use r2l_core::policies::{LearningModule, ValueFunction};
+use r2l_core::policies::ValueFunction;
 use r2l_core::utils::rollout_buffer::{Advantages, Returns};
 use r2l_core::{agents::Agent, sampler::buffer::TrajectoryContainer};
 
@@ -70,8 +69,8 @@ impl<M: ModuleWithValueFunction, H: A2CHooks<M>> CandleA2C5<M, H> {
                 .value_func()
                 .calculate_values(&observations)
                 .map_err(Error::wrap)?;
-            let value_loss = ValueLoss(returns.sub(&values_pred)?.sqr()?.mean_all()?);
-            let policy_loss = PolicyLoss(advantages.mul(&logps)?.neg()?.mean_all()?);
+            let value_loss = returns.sub(&values_pred)?.sqr()?.mean_all()?;
+            let policy_loss = advantages.mul(&logps)?.neg()?.mean_all()?;
             a2c.module
                 .update(PolicyValuesLosses {
                     policy_loss,

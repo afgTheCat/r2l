@@ -15,10 +15,4 @@ pub struct Logp(pub Tensor);
 pub struct ValuesPred(pub Tensor);
 
 #[derive(Deref, DerefMut, Debug, Display)]
-pub struct PolicyLoss(pub Tensor);
-
-#[derive(Deref, DerefMut, Debug, Display)]
-pub struct ValueLoss(pub Tensor);
-
-#[derive(Deref, DerefMut, Debug, Display)]
 pub struct LogpDiff(pub Tensor);

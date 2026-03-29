@@ -1,8 +1,5 @@
 use burn::tensor::{Tensor as BurnTensor, backend::AutodiffBackend};
-use r2l_burn_lm::{
-    learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses},
-    tensors::{PolicyLoss, ValueLoss},
-};
+use r2l_burn_lm::learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses};
 use r2l_core::policies::{LearningModule, ValueFunction};
 use r2l_core::utils::rollout_buffer::{Advantages, Returns};
 use r2l_core::{agents::Agent, sampler::buffer::TrajectoryContainer};
@@ -65,11 +62,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnA2CHooks<B, D>> BurnA2C5<B, D,
             let logps = a2c.lm.model.distr.log_probs(&observations, &actions)?;
             let values_pred = a2c.lm.calculate_values(&observations)?;
             let value_diff = returns - values_pred;
-            let value_loss = ValueLoss((value_diff.clone() * value_diff).mean());
-            let policy_loss = PolicyLoss((advantages * logps).neg().mean());
+            let value_loss = (value_diff.clone() * value_diff).mean();
+            let policy_loss = (advantages * logps).neg().mean();
             a2c.lm.update(PolicyValuesLosses {
-                policy_loss: policy_loss.0,
-                value_loss: value_loss.0,
+                policy_loss: policy_loss,
+                value_loss: value_loss,
             })?;
         }
     }
