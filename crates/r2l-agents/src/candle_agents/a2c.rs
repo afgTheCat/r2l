@@ -72,10 +72,7 @@ impl<M: ModuleWithValueFunction, H: A2CHooks<M>> CandleA2C5<M, H> {
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean_all()?;
             let policy_loss = advantages.mul(&logps)?.neg()?.mean_all()?;
             a2c.module
-                .update(PolicyValuesLosses {
-                    policy_loss,
-                    value_loss,
-                })
+                .update(PolicyValuesLosses::new(policy_loss, value_loss))
                 .map_err(Error::wrap)?;
         }
     }

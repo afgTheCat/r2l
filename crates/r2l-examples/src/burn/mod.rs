@@ -33,6 +33,7 @@ struct PPOHook {
     clip_range: f32,
     target_kl: f32,
     max_grad_norm: GradientClipping,
+    vf_coef: f32,
 
     pub progress: PPOProgress,
     pub tx: Sender<EventBox>,
@@ -56,6 +57,7 @@ impl PPOHook {
             ent_coeff,
             clip_range,
             target_kl,
+            vf_coef: 1.,
             progress: PPOProgress::default(),
             tx,
             max_grad_norm,
@@ -72,11 +74,12 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         T: r2l_core::sampler::buffer::TrajectoryContainer<Tensor = Tensor<B::InnerBackend, 1>>,
     >(
         &mut self,
-        _agent: &mut BurnPPOCore<B, D>,
+        agent: &mut BurnPPOCore<B, D>,
         buffers: &[T],
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
+        agent.lm.set_grad_clipping(self.max_grad_norm.clone());
         self.current_epoch = 0;
         let mut total_rewards: f32 = 0.;
         let mut total_episodes: usize = 0;
@@ -122,7 +125,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         losses: &mut PolicyValuesLosses<B>,
         data: &PPOBatchData<B>,
     ) -> candle_core::Result<HookResult> {
-        agent.lm.set_grad_clipping(self.max_grad_norm.clone());
+        losses.set_vf_coeff(Some(self.vf_coef));
         let entropy = agent.lm.model.distr.entropy().unwrap();
         let entropy_loss = entropy.neg() * self.ent_coeff;
         let entropy = scalar(&entropy_loss);
@@ -135,7 +138,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
             .filter(|value| (**value - 1.).abs() > self.clip_range)
             .count() as f32
             / ratio.len() as f32;
-        losses.policy_loss = losses.policy_loss.clone() + entropy_loss;
+        losses.apply_entropy(entropy_loss);
         let log_ratio: Vec<f32> = data.logp_diff.to_data().to_vec().unwrap();
         let approx_kl = ratio
             .iter()

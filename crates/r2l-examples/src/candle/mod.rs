@@ -53,6 +53,7 @@ struct PPOHook {
     ent_coeff: f32,         // entropy coefficient
     max_grad_norm: f32,     // gradient clipping threshold
     target_kl: f32,         // to control the learning
+    vf_coef: f32,
 
     pub progress: PPOProgress, // I suppose this should not really be here
     pub tx: Sender<EventBox>,
@@ -75,6 +76,7 @@ impl PPOHook {
             ent_coeff,
             max_grad_norm,
             target_kl,
+            vf_coef: 1.,
             progress: PPOProgress::default(),
             tx,
         }
@@ -84,11 +86,16 @@ impl PPOHook {
 impl PPOHooks<LearningModuleKind> for PPOHook {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = Tensor>>(
         &mut self,
-        _agent: &mut r2l_agents::candle_agents::ppo::CandlePPOCore<LearningModuleKind>,
+        agent: &mut CandlePPOCore<LearningModuleKind>,
         buffers: &[B],
         advantages: &mut Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
     ) -> candle_core::Result<HookResult> {
+        // This is a bit redundant, the idea here would be for us to be able to change this on the fly.
+        agent
+            .module
+            .learning_module
+            .set_grad_clipping(Some(self.max_grad_norm));
         self.current_epoch = 0;
         let mut total_rewards: f32 = 0.;
         let mut total_episodes: usize = 0;
@@ -130,11 +137,7 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         losses: &mut PolicyValuesLosses,
         data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
-        // This is a bit redundant, the idea here would be for us to be able to change this on the fly.
-        agent
-            .module
-            .learning_module
-            .set_grad_clipping(Some(self.max_grad_norm));
+        losses.set_vf_coeff(Some(self.vf_coef));
         let policy_loss = losses.policy_loss.to_scalar()?;
         let value_loss = losses.value_loss.to_scalar()?;
         let entropy = agent.module.get_policy_ref().entropy().unwrap();

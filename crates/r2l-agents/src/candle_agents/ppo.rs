@@ -110,10 +110,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO<M, H> {
             let policy_loss = CandleTensor::minimum(&(&ratio * &advantages)?, &clip_adv)?
                 .neg()?
                 .mean_all()?;
-            let mut losses = PolicyValuesLosses {
-                policy_loss,
-                value_loss,
-            };
+            let mut losses = PolicyValuesLosses::new(policy_loss, value_loss);
             let ppo_data = PPOBatchData {
                 logp,
                 values_pred,

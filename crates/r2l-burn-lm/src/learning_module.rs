@@ -1,6 +1,6 @@
 use crate::sequential::Sequential;
 use burn::{
-    grad_clipping::{self, GradientClipping},
+    grad_clipping::GradientClipping,
     module::{AutodiffModule, Module, ModuleDisplay},
     optim::{AdamW, GradientsParams, Optimizer, adaptor::OptimizerAdaptor},
     prelude::Backend,
@@ -29,6 +29,25 @@ impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
 pub struct PolicyValuesLosses<B: AutodiffBackend> {
     pub policy_loss: Tensor<B, 1>,
     pub value_loss: Tensor<B, 1>,
+    pub vf_coeff: Option<f32>,
+}
+
+impl<B: AutodiffBackend> PolicyValuesLosses<B> {
+    pub fn new(policy_loss: Tensor<B, 1>, value_loss: Tensor<B, 1>) -> Self {
+        Self {
+            policy_loss,
+            value_loss,
+            vf_coeff: None,
+        }
+    }
+
+    pub fn apply_entropy(&mut self, entropy: Tensor<B, 1>) {
+        self.policy_loss = self.policy_loss.clone() + entropy;
+    }
+
+    pub fn set_vf_coeff(&mut self, vf_coeff: Option<f32>) {
+        self.vf_coeff = vf_coeff;
+    }
 }
 
 // a model with a value function
@@ -67,7 +86,11 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for ParalellActorCriti
     type Losses = PolicyValuesLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
-        let loss = losses.policy_loss + losses.value_loss;
+        let loss = if let Some(vf_coeff) = losses.vf_coeff {
+            losses.policy_loss + losses.value_loss.mul_scalar(vf_coeff)
+        } else {
+            losses.policy_loss + losses.value_loss
+        };
         let grads = loss.backward();
         let grads = GradientsParams::from_grads(grads, &self.model);
         let new_model = self.optimizer.step(3e-4, self.model.clone(), grads);

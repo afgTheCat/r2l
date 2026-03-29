@@ -125,10 +125,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
                 logp_diff,
                 ratio,
             };
-            let mut losses = PolicyValuesLosses {
-                policy_loss,
-                value_loss,
-            };
+            let mut losses = PolicyValuesLosses::new(policy_loss, value_loss);
             match self.hooks.batch_hook(ppo, &mut losses, &ppo_data)? {
                 HookResult::Break => return Ok(()),
                 HookResult::Continue => {}

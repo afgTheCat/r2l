@@ -64,10 +64,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnA2CHooks<B, D>> BurnA2C5<B, D,
             let value_diff = returns - values_pred;
             let value_loss = (value_diff.clone() * value_diff).mean();
             let policy_loss = (advantages * logps).neg().mean();
-            a2c.lm.update(PolicyValuesLosses {
-                policy_loss: policy_loss,
-                value_loss: value_loss,
-            })?;
+            a2c.lm
+                .update(PolicyValuesLosses::new(policy_loss, value_loss))?;
         }
     }
 }

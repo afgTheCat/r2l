@@ -7,12 +7,25 @@ use r2l_core::policies::{LearningModule, ValueFunction};
 pub struct PolicyValuesLosses {
     pub policy_loss: CandleTensor,
     pub value_loss: CandleTensor,
+    pub vf_coeff: Option<f32>,
 }
 
 impl PolicyValuesLosses {
+    pub fn new(policy_loss: CandleTensor, value_loss: CandleTensor) -> Self {
+        Self {
+            policy_loss,
+            value_loss,
+            vf_coeff: None,
+        }
+    }
+
     pub fn apply_entropy(&mut self, entropy: CandleTensor) -> Result<()> {
         self.policy_loss = self.policy_loss.add(&entropy)?;
         Ok(())
+    }
+
+    pub fn set_vf_coeff(&mut self, vf_coeff: Option<f32>) {
+        self.vf_coeff = vf_coeff;
     }
 }
 
@@ -44,8 +57,15 @@ impl LearningModule for DecoupledActorCriticLM {
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         self.policy_optimizer_with_grad
             .backward_step(&losses.policy_loss)?;
-        self.value_optimizer_with_grad
-            .backward_step(&losses.value_loss)?;
+        if let Some(vf_coeff) = losses.vf_coeff {
+            let device = losses.value_loss.device();
+            let shape = losses.value_loss.shape();
+            let value_loss = (&losses.value_loss * CandleTensor::full(vf_coeff, shape, device)?)?;
+            self.value_optimizer_with_grad.backward_step(&value_loss)?;
+        } else {
+            self.value_optimizer_with_grad
+                .backward_step(&losses.value_loss)?;
+        };
         Ok(())
     }
 }
@@ -70,7 +90,14 @@ impl LearningModule for ParalellActorCriticLM {
     type Losses = PolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
-        let loss = losses.policy_loss.add(&losses.value_loss)?;
+        let loss = if let Some(vf_coeff) = losses.vf_coeff {
+            let device = losses.value_loss.device();
+            let shape = losses.value_loss.shape();
+            let value_loss = (&losses.value_loss * CandleTensor::full(vf_coeff, shape, device)?)?;
+            losses.policy_loss.add(&value_loss)?
+        } else {
+            losses.policy_loss.add(&losses.value_loss)?
+        };
         self.optimizer_with_grad.backward_step(&loss)?;
         Ok(())
     }
