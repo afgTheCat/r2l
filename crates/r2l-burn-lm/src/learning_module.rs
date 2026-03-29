@@ -1,5 +1,6 @@
 use crate::sequential::Sequential;
 use burn::{
+    grad_clipping::{self, GradientClipping},
     module::{AutodiffModule, Module, ModuleDisplay},
     optim::{AdamW, GradientsParams, Optimizer, adaptor::OptimizerAdaptor},
     prelude::Backend,
@@ -55,6 +56,10 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ParalellActorCriticLM<B, M> {
         optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
     ) -> Self {
         Self { model, optimizer }
+    }
+
+    pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
+        self.optimizer = self.optimizer.clone().with_grad_clipping(grad_clipping);
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::{ENV_NAME, EventBox, PPOProgress};
 use burn::{
     backend::{Autodiff, NdArray},
+    grad_clipping::GradientClipping,
     optim::AdamWConfig,
     tensor::{Tensor, backend::AutodiffBackend},
 };
@@ -22,7 +23,7 @@ use std::{f64, sync::Arc, sync::mpsc::Sender};
 
 type BurnBackend = Autodiff<NdArray>;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct PPOHook {
     current_epoch: usize,
     total_epochs: usize,
@@ -31,6 +32,7 @@ struct PPOHook {
     ent_coeff: f32,
     clip_range: f32,
     target_kl: f32,
+    max_grad_norm: GradientClipping,
 
     pub progress: PPOProgress,
     pub tx: Sender<EventBox>,
@@ -43,6 +45,7 @@ impl PPOHook {
         ent_coeff: f32,
         clip_range: f32,
         target_kl: f32,
+        max_grad_norm: GradientClipping,
         tx: Sender<EventBox>,
     ) -> Self {
         Self {
@@ -55,6 +58,7 @@ impl PPOHook {
             target_kl,
             progress: PPOProgress::default(),
             tx,
+            max_grad_norm,
         }
     }
 }
@@ -118,8 +122,12 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         losses: &mut PolicyValuesLosses<B>,
         data: &PPOBatchData<B>,
     ) -> candle_core::Result<HookResult> {
+        agent.lm.set_grad_clipping(self.max_grad_norm.clone());
         let entropy = agent.lm.model.distr.entropy().unwrap();
         let entropy_loss = entropy.neg() * self.ent_coeff;
+        let entropy = scalar(&entropy_loss);
+        let policy_loss = scalar(&losses.policy_loss);
+        let value_loss = scalar(&losses.value_loss);
 
         let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
         let clip_fraction = ratio
@@ -127,27 +135,40 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
             .filter(|value| (**value - 1.).abs() > self.clip_range)
             .count() as f32
             / ratio.len() as f32;
+        losses.policy_loss = losses.policy_loss.clone() + entropy_loss;
+        let log_ratio: Vec<f32> = data.logp_diff.to_data().to_vec().unwrap();
+        let approx_kl = ratio
+            .iter()
+            .zip(log_ratio.iter())
+            .map(|(ratio, log_ratio)| (ratio - 1.) - log_ratio)
+            .sum::<f32>()
+            / ratio.len() as f32;
         self.progress.clip_fractions.push(clip_fraction);
-        self.progress.entropy_losses.push(scalar(&entropy_loss));
-        self.progress.value_losses.push(scalar(&losses.value_loss));
-        self.progress
-            .policy_losses
-            .push(scalar(&losses.policy_loss));
+        self.progress.entropy_losses.push(entropy);
+        self.progress.value_losses.push(value_loss);
+        self.progress.policy_losses.push(policy_loss);
+        self.progress.clip_range.push(agent.clip_range);
+        self.progress.approx_kl.push(approx_kl);
 
-        // TODO: keep the entropy-loss application question mirrored with the Candle hook.
-        // Updating `policy_loss` directly here still needs a deliberate decision.
-
-        // TODO: keep the KL-based early-stop question mirrored with the Candle hook.
-        // `target_kl` remains tracked on the hook, but we are not acting on it yet.
-        let _ = self.target_kl;
-
-        Ok(HookResult::Continue)
+        if approx_kl > 1.5 * self.target_kl {
+            Ok(HookResult::Break)
+        } else {
+            Ok(HookResult::Continue)
+        }
     }
 }
 
 pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let total_rollouts = 300;
-    let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
+    let ppo_hook = PPOHook::new(
+        10,
+        total_rollouts,
+        0.001,
+        0.2,
+        0.01,
+        GradientClipping::Norm(0.5),
+        tx,
+    );
     let env_builder = EnvBuilderType::EnvBuilder {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
         n_envs: 5,
