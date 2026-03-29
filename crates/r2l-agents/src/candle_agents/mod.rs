@@ -1,11 +1,12 @@
 pub mod a2c;
 pub mod ppo;
 
+use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use r2l_candle_lm::{
     distributions::DistributionKind,
     learning_module::{
-        DecoupledActorCriticLM2, ParalellActorCriticLM, PolicyValuesLosses, SequentialValueFunction,
+        DecoupledActorCriticLM, ParalellActorCriticLM, PolicyValuesLosses, SequentialValueFunction,
     },
 };
 use r2l_core::{
@@ -15,16 +16,15 @@ use r2l_core::{
 
 pub trait ModuleWithValueFunction {
     type P: Policy<Tensor = CandleTensor>;
-    type L: LearningModule<Losses = PolicyValuesLosses>;
     type V: ValueFunction<Tensor = CandleTensor>;
 
     fn get_inference_policy(&self) -> Self::P;
 
     fn get_policy_ref(&self) -> &Self::P;
 
-    fn learning_module(&mut self) -> &mut Self::L;
-
     fn value_func(&self) -> &Self::V;
+
+    fn update(&mut self, losses: PolicyValuesLosses) -> Result<()>;
 }
 
 pub struct GenericLearningModuleWithValueFunction<
@@ -40,7 +40,6 @@ impl<P: Policy<Tensor = CandleTensor> + Clone, L: LearningModule<Losses = Policy
     ModuleWithValueFunction for GenericLearningModuleWithValueFunction<P, L>
 {
     type P = P;
-    type L = L;
     type V = SequentialValueFunction;
 
     fn get_inference_policy(&self) -> Self::P {
@@ -51,17 +50,17 @@ impl<P: Policy<Tensor = CandleTensor> + Clone, L: LearningModule<Losses = Policy
         &self.policy
     }
 
-    fn learning_module(&mut self) -> &mut Self::L {
-        &mut self.learning_module
-    }
-
     fn value_func(&self) -> &Self::V {
         &self.value_function
+    }
+
+    fn update(&mut self, losses: PolicyValuesLosses) -> Result<()> {
+        self.learning_module.update(losses)
     }
 }
 
 pub enum ActorCriticKind {
-    Decoupled(DecoupledActorCriticLM2),
+    Decoupled(DecoupledActorCriticLM),
     Paralell(ParalellActorCriticLM),
 }
 
@@ -77,7 +76,7 @@ impl ActorCriticKind {
 impl LearningModule for ActorCriticKind {
     type Losses = PolicyValuesLosses;
 
-    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
+    fn update(&mut self, losses: Self::Losses) -> Result<()> {
         match self {
             Self::Decoupled(lm) => lm.update(losses),
             Self::Paralell(lm) => lm.update(losses),
@@ -87,3 +86,9 @@ impl LearningModule for ActorCriticKind {
 
 pub type LearningModuleKind =
     GenericLearningModuleWithValueFunction<DistributionKind, ActorCriticKind>;
+
+impl LearningModuleKind {
+    pub fn policy_learning_rate(&self) -> f64 {
+        self.learning_module.policy_learning_rate()
+    }
+}

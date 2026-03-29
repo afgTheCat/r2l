@@ -13,19 +13,26 @@ pub struct PolicyValuesLosses {
     pub value_loss: ValueLoss,
 }
 
-pub struct DecoupledActorCriticLM2 {
+impl PolicyValuesLosses {
+    pub fn apply_entropy(&mut self, entropy: CandleTensor) -> Result<()> {
+        self.policy_loss = PolicyLoss(self.policy_loss.0.add(&entropy)?);
+        Ok(())
+    }
+}
+
+pub struct DecoupledActorCriticLM {
     pub policy_optimizer_with_grad: OptimizerWithMaxGrad,
     pub value_optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
-impl DecoupledActorCriticLM2 {
+impl DecoupledActorCriticLM {
     pub fn policy_learning_rate(&self) -> f64 {
         self.policy_optimizer_with_grad.optimizer.learning_rate()
     }
 }
 
 /// The policy and the value function has different optimizers
-impl LearningModule for DecoupledActorCriticLM2 {
+impl LearningModule for DecoupledActorCriticLM {
     type Losses = PolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {

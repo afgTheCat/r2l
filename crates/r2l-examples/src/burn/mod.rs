@@ -144,7 +144,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
     }
 }
 
-pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
+pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
     let env_builder = EnvBuilderType::EnvBuilder {

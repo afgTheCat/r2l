@@ -7,7 +7,7 @@ use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
 use r2l_agents::candle_agents::{
     GenericLearningModuleWithValueFunction, LearningModuleKind,
-    ppo::{CandlePPO5, CandlePPOCore5, PPOHooks},
+    ppo::{CandlePPO, CandlePPOCore, PPOHooks},
 };
 use r2l_core::env::EnvironmentDescription;
 
@@ -42,12 +42,12 @@ impl Default for PPOBuilder {
 }
 
 impl PPOBuilder {
-    pub fn build5<T, H: PPOHooks<LearningModuleKind>>(
+    pub fn build<T, H: PPOHooks<LearningModuleKind>>(
         &self,
         device: &Device,
         env_description: &EnvironmentDescription<T>,
         hooks: H,
-    ) -> Result<CandlePPO5<LearningModuleKind, H>> {
+    ) -> Result<CandlePPO<LearningModuleKind, H>> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
             VarBuilder::from_varmap(&distribution_varmap, DType::F32, device);
@@ -65,7 +65,7 @@ impl PPOBuilder {
             learning_module,
             value_function,
         };
-        let core = CandlePPOCore5 {
+        let core = CandlePPOCore {
             module,
             clip_range: self.clip_range,
             device: device.clone(),
@@ -73,7 +73,7 @@ impl PPOBuilder {
             lambda: self.lambda,
             sample_size: self.sample_size,
         };
-        let ppo2 = CandlePPO5 { ppo: core, hooks };
-        Ok(ppo2)
+        let ppo = CandlePPO { ppo: core, hooks };
+        Ok(ppo)
     }
 }

@@ -127,17 +127,17 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
                 logp_diff,
                 ratio,
             };
-            let hook_result =
-                self.hooks
-                    .batch_hook(ppo, &mut policy_loss, &mut value_loss, &ppo_data)?;
+            match self
+                .hooks
+                .batch_hook(ppo, &mut policy_loss, &mut value_loss, &ppo_data)?
+            {
+                HookResult::Break => return Ok(()),
+                HookResult::Continue => {}
+            }
             ppo.lm.update(PolicyValuesLosses {
                 policy_loss: policy_loss.0,
                 value_loss: value_loss.0,
             })?;
-            match hook_result {
-                HookResult::Break => return Ok(()),
-                HookResult::Continue => {}
-            }
         }
     }
 

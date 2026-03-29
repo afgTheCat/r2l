@@ -5,7 +5,7 @@ mod table;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l_examples::burn::new_train_ppo;
+use r2l_examples::burn::train_ppo;
 use r2l_examples::{EventBox, PPOProgress};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -106,7 +106,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
-    std::thread::spawn(move || match new_train_ppo(event_tx) {
+    std::thread::spawn(move || match train_ppo(event_tx) {
         Ok(()) => {
             println!("ppo trainted normally")
         }

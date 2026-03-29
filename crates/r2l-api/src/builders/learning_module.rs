@@ -2,7 +2,7 @@ use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_agents::candle_agents::ActorCriticKind;
 use r2l_candle_lm::{
-    learning_module::{DecoupledActorCriticLM2, ParalellActorCriticLM, SequentialValueFunction},
+    learning_module::{DecoupledActorCriticLM, ParalellActorCriticLM, SequentialValueFunction},
     optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::build_sequential,
 };
@@ -81,7 +81,7 @@ impl LearningModuleBuilder {
                     OptimizerWithMaxGrad::new(value_optimizer, *value_max_grad_norm, critic_varmap);
                 Ok((
                     SequentialValueFunction { value_net },
-                    ActorCriticKind::Decoupled(DecoupledActorCriticLM2 {
+                    ActorCriticKind::Decoupled(DecoupledActorCriticLM {
                         policy_optimizer_with_grad,
                         value_optimizer_with_grad,
                     }),

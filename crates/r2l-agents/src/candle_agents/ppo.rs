@@ -8,7 +8,6 @@ use r2l_candle_lm::learning_module::PolicyValuesLosses;
 use r2l_candle_lm::tensors::{Logp, LogpDiff, PolicyLoss};
 use r2l_candle_lm::tensors::{ValueLoss, ValuesPred};
 use r2l_core::distributions::Policy;
-use r2l_core::policies::LearningModule;
 use r2l_core::policies::ValueFunction;
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
 use r2l_core::{agents::Agent, sampler::buffer::TrajectoryContainer};
@@ -24,7 +23,7 @@ pub struct PPOBatchData {
 pub trait PPOHooks<M: ModuleWithValueFunction> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = CandleTensor>>(
         &mut self,
-        _agent: &mut CandlePPOCore5<M>,
+        _agent: &mut CandlePPOCore<M>,
         _buffers: &[B],
         _advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -35,23 +34,22 @@ pub trait PPOHooks<M: ModuleWithValueFunction> {
     fn rollout_hook<B: TrajectoryContainer<Tensor = CandleTensor>>(
         &mut self,
         _buffers: &[B],
-        _agent: &mut CandlePPOCore5<M>,
+        _agent: &mut CandlePPOCore<M>,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Break)
     }
 
     fn batch_hook(
         &mut self,
-        _agent: &mut CandlePPOCore5<M>,
-        _policy_loss: &mut PolicyLoss,
-        _value_loss: &mut ValueLoss,
+        _agent: &mut CandlePPOCore<M>,
+        _losses: &mut PolicyValuesLosses,
         _data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 }
 
-pub struct CandlePPOCore5<M: ModuleWithValueFunction> {
+pub struct CandlePPOCore<M: ModuleWithValueFunction> {
     pub module: M,
     pub clip_range: f32,
     pub gamma: f32,
@@ -60,18 +58,18 @@ pub struct CandlePPOCore5<M: ModuleWithValueFunction> {
     pub device: Device,
 }
 
-pub struct CandlePPO5<M: ModuleWithValueFunction, H: PPOHooks<M>> {
-    pub ppo: CandlePPOCore5<M>,
+pub struct CandlePPO<M: ModuleWithValueFunction, H: PPOHooks<M>> {
+    pub ppo: CandlePPOCore<M>,
     pub hooks: H,
 }
 
-impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO5<M, H> {
-    pub fn new(ppo: CandlePPOCore5<M>, hooks: H) -> Self {
+impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO<M, H> {
+    pub fn new(ppo: CandlePPOCore<M>, hooks: H) -> Self {
         Self { ppo, hooks }
     }
 }
 
-impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO5<M, H> {
+impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO<M, H> {
     fn batching_loop<B: TrajectoryContainer<Tensor = CandleTensor>>(
         &mut self,
         buffers: &[B],
@@ -104,36 +102,31 @@ impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO5<M, H> {
                     .calculate_values(&observations)
                     .map_err(Error::wrap)?,
             );
-            let mut value_loss = ValueLoss(returns.sub(&values_pred)?.sqr()?.mean_all()?);
+            let value_loss = ValueLoss(returns.sub(&values_pred)?.sqr()?.mean_all()?);
             let logp_diff = LogpDiff((logp.deref() - &logp_old)?);
             let ratio = logp_diff.exp()?;
             let clip_adv =
                 (ratio.clamp(1. - ppo.clip_range, 1. + ppo.clip_range)? * advantages.clone())?;
-            let mut policy_loss = PolicyLoss(
+            let policy_loss = PolicyLoss(
                 CandleTensor::minimum(&(&ratio * &advantages)?, &clip_adv)?
                     .neg()?
                     .mean_all()?,
             );
+            let mut losses = PolicyValuesLosses {
+                policy_loss,
+                value_loss,
+            };
             let ppo_data = PPOBatchData {
                 logp,
                 values_pred,
                 logp_diff,
                 ratio,
             };
-            let hook_result =
-                self.hooks
-                    .batch_hook(ppo, &mut policy_loss, &mut value_loss, &ppo_data)?;
-            ppo.module
-                .learning_module()
-                .update(PolicyValuesLosses {
-                    policy_loss,
-                    value_loss,
-                })
-                .map_err(Error::wrap)?;
-            match hook_result {
+            match self.hooks.batch_hook(ppo, &mut losses, &ppo_data)? {
                 HookResult::Break => return Ok(()),
                 HookResult::Continue => {}
             }
+            ppo.module.update(losses).map_err(Error::wrap)?;
         }
     }
 
@@ -152,7 +145,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO5<M, H> {
     }
 }
 
-impl<M: ModuleWithValueFunction, H: PPOHooks<M>> Agent for CandlePPO5<M, H> {
+impl<M: ModuleWithValueFunction, H: PPOHooks<M>> Agent for CandlePPO<M, H> {
     type Tensor = CandleTensor;
 
     type Policy = <M as ModuleWithValueFunction>::P;

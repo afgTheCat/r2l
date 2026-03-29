@@ -6,10 +6,11 @@ use candle_core::{DType, Device, Error, Tensor};
 use r2l_agents::HookResult;
 use r2l_agents::candle_agents::LearningModuleKind;
 use r2l_agents::candle_agents::ModuleWithValueFunction;
+use r2l_agents::candle_agents::ppo::CandlePPOCore;
 use r2l_agents::candle_agents::ppo::PPOBatchData;
 use r2l_agents::candle_agents::ppo::PPOHooks;
 use r2l_api::builders::agents::ppo::PPOBuilder;
-use r2l_candle_lm::tensors::{PolicyLoss, ValueLoss};
+use r2l_candle_lm::learning_module::PolicyValuesLosses;
 use r2l_core::env_builder::EnvBuilderType;
 use r2l_core::on_policy_algorithm::DefaultOnPolicyAlgorightmsHooks5;
 use r2l_core::on_policy_algorithm::LearningSchedule;
@@ -17,6 +18,7 @@ use r2l_core::on_policy_algorithm::OnPolicyAlgorithm5;
 use r2l_core::sampler::FinalSampler;
 use r2l_core::sampler::Location;
 use r2l_core::sampler::buffer::StepTrajectoryBound;
+use r2l_core::sampler::buffer::TrajectoryContainer;
 use r2l_core::{distributions::Policy, utils::rollout_buffer::Advantages};
 use std::f64;
 use std::sync::Arc;
@@ -82,9 +84,9 @@ impl PPOHook {
 }
 
 impl PPOHooks<LearningModuleKind> for PPOHook {
-    fn before_learning_hook<B: r2l_core::sampler::buffer::TrajectoryContainer<Tensor = Tensor>>(
+    fn before_learning_hook<B: TrajectoryContainer<Tensor = Tensor>>(
         &mut self,
-        _agent: &mut r2l_agents::candle_agents::ppo::CandlePPOCore5<LearningModuleKind>,
+        _agent: &mut r2l_agents::candle_agents::ppo::CandlePPOCore<LearningModuleKind>,
         buffers: &[B],
         advantages: &mut Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
@@ -104,10 +106,10 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<B: r2l_core::sampler::buffer::TrajectoryContainer<Tensor = Tensor>>(
+    fn rollout_hook<B: TrajectoryContainer<Tensor = Tensor>>(
         &mut self,
         _buffers: &[B],
-        agent: &mut r2l_agents::candle_agents::ppo::CandlePPOCore5<LearningModuleKind>,
+        agent: &mut CandlePPOCore<LearningModuleKind>,
     ) -> candle_core::Result<HookResult> {
         self.current_epoch += 1;
         let should_stop = self.current_epoch == self.total_epochs;
@@ -115,7 +117,7 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
             // snapshot the learned things, API can be much better
             self.current_rollout += 1;
             self.progress.std = agent.module.get_policy_ref().std().unwrap();
-            self.progress.learning_rate = agent.module.learning_module().policy_learning_rate();
+            self.progress.learning_rate = agent.module.policy_learning_rate();
             let progress = self.progress.clear();
             self.tx.send(Box::new(progress)).map_err(Error::wrap)?;
             Ok(HookResult::Break)
@@ -126,40 +128,36 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
 
     fn batch_hook(
         &mut self,
-        agent: &mut r2l_agents::candle_agents::ppo::CandlePPOCore5<LearningModuleKind>,
-        policy_loss: &mut PolicyLoss,
-        value_loss: &mut ValueLoss,
+        agent: &mut CandlePPOCore<LearningModuleKind>,
+        losses: &mut PolicyValuesLosses,
         data: &PPOBatchData,
     ) -> candle_core::Result<HookResult> {
         let entropy = agent.module.get_policy_ref().entropy().unwrap();
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.ent_coeff, (), device)? * entropy.neg()?)?;
-        self.progress
-            .collect_batch_data(&data.ratio, &entropy_loss, value_loss, policy_loss)?;
-        // TODO: this breaks the computation graph. We need to explore our options here. The most
-        // reasonable choice seems to be that we switch up our hook interface by not only allowing
-        // booleans to be returned, but that seems a lot of work right now
-        // *policy_loss = PolicyLoss(policy_loss.add(&entropy_loss)?);
-
-        // TODO: this seems to slow down the learning process quite a bit. Maybe there is an issue with
-        // the learning rate?
-        // let approx_kl = (data
-        //     .ratio
-        //     .detach()
-        //     .exp()?
-        //     .sub(&Tensor::ones_like(&data.ratio.detach())?))?
-        // .sub(&data.ratio.detach())?
-        // .mean_all()?
-        // .to_scalar::<f32>()?;
-        // if approx_kl > 1.5 * self.target_kl {
-        // } else {
-        // }
-        // Ok(approx_kl > 1.5 * app_data.target_kl)
-        Ok(HookResult::Continue)
+        self.progress.collect_batch_data(
+            &data.ratio,
+            &entropy_loss,
+            &losses.value_loss.0,
+            &losses.policy_loss.0,
+        )?;
+        losses.apply_entropy(entropy_loss).map_err(Error::wrap)?;
+        let ratio = data.ratio.detach();
+        let log_ratio = data.logp_diff.detach();
+        let approx_kl = ratio
+            .sub(&Tensor::ones_like(&ratio)?)?
+            .sub(&log_ratio)?
+            .mean_all()?
+            .to_scalar::<f32>()?;
+        if approx_kl > 1.5 * self.target_kl {
+            Ok(HookResult::Break)
+        } else {
+            Ok(HookResult::Continue)
+        }
     }
 }
 
-pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
+pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let total_rollouts = 300;
     let ppo_hook = PPOHook::new(10, total_rollouts, 0., 0., 0.01, tx);
     let device = Device::Cpu;
@@ -174,7 +172,7 @@ pub fn new_train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
         Location::Thread,
     );
     let env_description = sampler.env_description();
-    let agent = PPOBuilder::default().build5(&device, &env_description, ppo_hook)?;
+    let agent = PPOBuilder::default().build(&device, &env_description, ppo_hook)?;
     let mut algo = OnPolicyAlgorithm5 {
         sampler,
         agent,
