@@ -60,7 +60,7 @@ pub trait BurnPPOHooksTrait<B: AutodiffBackend, D: BurnPolicy<B>> {
         &mut self,
         _agent: &mut BurnPPOCore<B, D>,
         _rollout_buffers: &[T],
-    ) -> candle_core::Result<HookResult> {
+    ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Break)
     }
 
@@ -69,7 +69,7 @@ pub trait BurnPPOHooksTrait<B: AutodiffBackend, D: BurnPolicy<B>> {
         _agent: &mut BurnPPOCore<B, D>,
         _losses: &mut PolicyValuesLosses<B>,
         _data: &PPOBatchData<B>,
-    ) -> candle_core::Result<HookResult> {
+    ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 }

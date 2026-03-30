@@ -38,7 +38,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         &mut self,
         agent: &mut BurnPPOCore<B, D>,
         rollout_buffers: &[T],
-    ) -> candle_core::Result<HookResult> {
+    ) -> anyhow::Result<HookResult> {
         self.current_epoch += 1;
         let should_stop = self.current_epoch == self.total_epochs;
         if should_stop {
@@ -63,7 +63,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         agent: &mut BurnPPOCore<B, D>,
         losses: &mut PolicyValuesLosses<B>,
         data: &PPOBatchData<B>,
-    ) -> candle_core::Result<HookResult> {
+    ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
         let entropy = agent.lm.model.distr.entropy().unwrap();
         let entropy_loss = entropy.neg() * self.entropy_coeff;
