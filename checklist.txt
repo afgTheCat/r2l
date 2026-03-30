@@ -10,6 +10,5 @@ Burn follow-ups
 - sampler_hooks_2 should also be redone
 - better error handling! Currently the burn ppo does depend on candle's error for some reason
 - readd vpg
-- make the policy editable...
 - So I am rather happy about the hooks builder. I am also happy with how the OnPolicyAlgorithm looks right now. What we want is one good builder for PPO and to hook it up with the GUI and the TUI implementations.
 - Maybe we want the Buffer to be indexable for minibatching?

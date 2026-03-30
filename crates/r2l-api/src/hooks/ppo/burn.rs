@@ -1,18 +1,24 @@
 use crate::hooks::ppo::{BatchStats, PPOHook};
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
-use r2l_agents::{HookResult, burn_agents::ppo::BurnPPOHooksTrait};
-use r2l_burn_lm::learning_module::BurnPolicy;
-use r2l_core::sampler::buffer::TrajectoryContainer;
+use r2l_agents::{
+    HookResult,
+    burn_agents::ppo::{BurnPPOCore, BurnPPOHooksTrait, PPOBatchData},
+};
+use r2l_burn_lm::learning_module::{BurnPolicy, PolicyValuesLosses};
+use r2l_core::{
+    sampler::buffer::TrajectoryContainer,
+    utils::rollout_buffer::{Advantages, Returns},
+};
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
     fn before_learning_hook<
         T: TrajectoryContainer<Tensor = burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
     >(
         &mut self,
-        agent: &mut r2l_agents::burn_agents::ppo::BurnPPOCore<B, D>,
+        agent: &mut BurnPPOCore<B, D>,
         _rollout_buffers: &[T],
-        advantages: &mut r2l_core::utils::rollout_buffer::Advantages,
-        _returns: &mut r2l_core::utils::rollout_buffer::Returns,
+        advantages: &mut Advantages,
+        _returns: &mut Returns,
     ) -> anyhow::Result<r2l_agents::HookResult> {
         self.current_epoch = 0;
         if self.normalize_advantage {
@@ -30,7 +36,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         T: TrajectoryContainer<Tensor = burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
     >(
         &mut self,
-        agent: &mut r2l_agents::burn_agents::ppo::BurnPPOCore<B, D>,
+        agent: &mut BurnPPOCore<B, D>,
         rollout_buffers: &[T],
     ) -> candle_core::Result<HookResult> {
         self.current_epoch += 1;
@@ -54,9 +60,9 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
 
     fn batch_hook(
         &mut self,
-        agent: &mut r2l_agents::burn_agents::ppo::BurnPPOCore<B, D>,
-        losses: &mut r2l_burn_lm::learning_module::PolicyValuesLosses<B>,
-        data: &r2l_agents::burn_agents::ppo::PPOBatchData<B>,
+        agent: &mut BurnPPOCore<B, D>,
+        losses: &mut PolicyValuesLosses<B>,
+        data: &PPOBatchData<B>,
     ) -> candle_core::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
         let entropy = agent.lm.model.distr.entropy().unwrap();
