@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l_examples::candle::train_ppo as new_train_ppo_candle;
-use r2l_examples::{EventBox, PPOProgress};
+use r2l_examples::{EventBox, PPOStats};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -18,47 +18,15 @@ fn mean(numbers: &[f32]) -> f32 {
     sum / numbers.len() as f32
 }
 
-fn ppo_progres_to_table<'a>(ppo_progress: &'a PPOProgress, name: &'a str) -> Table<'a> {
-    let block = Block::bordered().title(name).border_set(border::THICK);
-    let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
-    let entropy_loss = mean(&ppo_progress.entropy_losses);
-    let value_loss = mean(&ppo_progress.value_losses);
-    let policy_loss = mean(&ppo_progress.policy_losses);
-    let clip_fraction = mean(&ppo_progress.clip_fractions);
-    let clip_range = mean(&ppo_progress.clip_range);
-    let rows = vec![
-        // Row::new(vec!["approx_kl".into(), ppo_progress.approx_kl.to_string()]),
-        Row::new(vec![
-            "Avarage reward".into(),
-            ppo_progress.avarage_reward.to_string(),
-        ]),
-        Row::new(vec!["Clip fraction".into(), clip_fraction.to_string()]),
-        Row::new(vec!["Clip range".into(), clip_range.to_string()]),
-        Row::new(vec!["Policy gradient loss".into(), policy_loss.to_string()]),
-        Row::new(vec!["Entropy loss".into(), entropy_loss.to_string()]),
-        Row::new(vec!["Value loss".into(), value_loss.to_string()]),
-        // Row::new(vec![
-        //     "explained_variance".into(),
-        //     ppo_progress.explained_variance.to_string(),
-        // ]),
-        Row::new(vec![
-            "Learning rate".into(),
-            ppo_progress.learning_rate.to_string(),
-        ]),
-        Row::new(vec![
-            "Standard deviation".into(),
-            ppo_progress.std.to_string(),
-        ]),
-    ];
-    Table::new(rows, widths).block(block)
-}
-
 #[derive(Debug, Default)]
 struct App {
     exit: bool,
-    latest_update: Option<PPOProgress>,
-    best_update: Option<PPOProgress>,
+    latest_update: Option<PPOStats>,
+    best_update: Option<PPOStats>,
     rollout_rewards_avg: Vec<f32>,
+    clip_range: f32,
+    total_rollouts: usize,
+    current_rollout: usize,
 }
 
 impl Widget for &App {
@@ -73,18 +41,28 @@ impl Widget for &App {
         ]);
         let [statistics_area, progress_bar_area, chart_area] = horizontal_area.areas(area);
         self.draw_statistics(statistics_area, buf);
-        self.draw_progress_bar(progress_bar_area, buf);
+        let progress = self.current_rollout as f64 / self.total_rollouts as f64;
+        self.draw_progress_bar(progress_bar_area, buf, progress);
         self.draw_chart(chart_area, buf);
     }
 }
 
 impl App {
+    fn new(total_rollouts: usize, clip_range: f32) -> Self {
+        Self {
+            total_rollouts,
+            clip_range,
+            ..Default::default()
+        }
+    }
+
     pub fn run(mut self, terminal: &mut DefaultTerminal, rx: Receiver<EventBox>) -> io::Result<()> {
         while !self.exit {
             let event = rx.recv().unwrap();
             event
-                .downcast::<PPOProgress>()
+                .downcast::<PPOStats>()
                 .map(|progress| {
+                    self.current_rollout += 1;
                     self.handle_progress(*progress);
                 })
                 .or_else(|event| {
@@ -98,7 +76,7 @@ impl App {
         Ok(())
     }
 
-    fn handle_progress(&mut self, progress: PPOProgress) {
+    fn handle_progress(&mut self, progress: PPOStats) {
         self.rollout_rewards_avg.push(progress.avarage_reward);
         match &self.best_update {
             None => self.best_update = Some(progress.clone()),
@@ -132,13 +110,70 @@ impl App {
         self.exit = true;
     }
 
+    fn ppo_progress_to_table<'a>(&self, ppo_progress: &'a PPOStats, name: &'a str) -> Table<'a> {
+        let block = Block::bordered().title(name).border_set(border::THICK);
+        let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
+        let entropy_loss = mean(
+            &ppo_progress
+                .batch_stats
+                .iter()
+                .map(|s| s.entropy_loss)
+                .collect::<Vec<_>>(),
+        );
+        let value_loss = mean(
+            &ppo_progress
+                .batch_stats
+                .iter()
+                .map(|s| s.value_loss)
+                .collect::<Vec<_>>(),
+        );
+        let policy_loss = mean(
+            &ppo_progress
+                .batch_stats
+                .iter()
+                .map(|s| s.policy_loss)
+                .collect::<Vec<_>>(),
+        );
+        let clip_fraction = mean(
+            &ppo_progress
+                .batch_stats
+                .iter()
+                .map(|s| s.clip_fraction)
+                .collect::<Vec<_>>(),
+        );
+        let rows = vec![
+            // Row::new(vec!["approx_kl".into(), ppo_progress.approx_kl.to_string()]),
+            Row::new(vec![
+                "Avarage reward".into(),
+                ppo_progress.avarage_reward.to_string(),
+            ]),
+            Row::new(vec!["Clip fraction".into(), clip_fraction.to_string()]),
+            Row::new(vec!["Clip range".into(), self.clip_range.to_string()]),
+            Row::new(vec!["Policy gradient loss".into(), policy_loss.to_string()]),
+            Row::new(vec!["Entropy loss".into(), entropy_loss.to_string()]),
+            Row::new(vec!["Value loss".into(), value_loss.to_string()]),
+            Row::new(vec!["explained_variance".into(), "to be added".to_string()]),
+            Row::new(vec![
+                "Learning rate".into(),
+                ppo_progress.learning_rate.to_string(),
+            ]),
+            Row::new(vec![
+                "Standard deviation".into(),
+                ppo_progress.std.to_string(),
+            ]),
+        ];
+        Table::new(rows, widths).block(block)
+    }
+
     fn draw_statistics(&self, statistics_area: Rect, buf: &mut Buffer) {
         if let (Some(latest_update), Some(best_update)) = (&self.latest_update, &self.best_update) {
             let vertical_area =
                 Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
             let [latest_stat_area, best_stat_area] = vertical_area.areas(statistics_area);
-            ppo_progres_to_table(latest_update, "Latest update").render(latest_stat_area, buf);
-            ppo_progres_to_table(best_update, "Best update").render(best_stat_area, buf);
+            self.ppo_progress_to_table(latest_update, "Latest update")
+                .render(latest_stat_area, buf);
+            self.ppo_progress_to_table(best_update, "Best update")
+                .render(best_stat_area, buf);
         }
     }
 
@@ -195,10 +230,7 @@ impl App {
         }
     }
 
-    fn draw_progress_bar(&self, pb_area: Rect, buf: &mut Buffer) {
-        let Some(progress) = self.latest_update.as_ref().map(|x| x.progress) else {
-            return;
-        };
+    fn draw_progress_bar(&self, pb_area: Rect, buf: &mut Buffer, progress: f64) {
         let block = Block::bordered()
             .title(Line::from(" Learning Progress "))
             .border_set(border::THICK);
@@ -223,17 +255,20 @@ fn main() -> io::Result<()> {
     std::thread::spawn(move || {
         handle_input_events(tx_to_input_events);
     });
-    std::thread::spawn(move || match new_train_ppo_candle(event_tx) {
-        Ok(()) => {
-            println!("ppo trainted normally")
-        }
-        Err(err) => {
-            eprintln!("ppo was not trained normally, err: {err}")
-        }
-    });
+    let total_rollouts = 300;
+    let clip_range = 0.2;
+    std::thread::spawn(
+        move || match new_train_ppo_candle(event_tx, total_rollouts, clip_range) {
+            Ok(()) => {
+                println!("ppo trainted normally")
+            }
+            Err(err) => {
+                eprintln!("ppo was not trained normally, err: {err}")
+            }
+        },
+    );
     let mut terminal = ratatui::init();
-    let app_result = App::default().run(&mut terminal, event_rx);
-    // learning_t.join().unwrap();
+    let app_result = App::new(total_rollouts, clip_range).run(&mut terminal, event_rx);
     ratatui::restore();
     app_result
 }

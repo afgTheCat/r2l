@@ -76,4 +76,9 @@ impl PPOBuilder {
         let ppo = CandlePPO { ppo: core, hooks };
         Ok(ppo)
     }
+
+    pub fn clip_range(mut self, clip_range: f32) -> Self {
+        self.clip_range = clip_range;
+        self
+    }
 }

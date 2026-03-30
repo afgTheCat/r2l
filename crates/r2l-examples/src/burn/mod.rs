@@ -1,4 +1,4 @@
-use crate::{ENV_NAME, EventBox, PPOProgress};
+use crate::{ENV_NAME, EventBox, PPOStats};
 use burn::{
     backend::{Autodiff, NdArray},
     grad_clipping::GradientClipping,
@@ -19,7 +19,7 @@ use r2l_core::{
     sampler::{FinalSampler, Location, buffer::StepTrajectoryBound},
     utils::rollout_buffer::{Advantages, Returns},
 };
-use std::{f64, sync::Arc, sync::mpsc::Sender};
+use std::{sync::Arc, sync::mpsc::Sender};
 
 type BurnBackend = Autodiff<NdArray>;
 
@@ -27,21 +27,19 @@ type BurnBackend = Autodiff<NdArray>;
 struct PPOHook {
     current_epoch: usize,
     total_epochs: usize,
-    current_rollout: usize,
-    total_rollouts: usize,
     ent_coeff: f32,
     target_kl: f32,
     max_grad_norm: GradientClipping,
     vf_coef: f32,
 
-    pub progress: PPOProgress,
+    pub progress: PPOStats,
     pub tx: Sender<EventBox>,
 }
 
 impl PPOHook {
     fn new(
         total_epochs: usize,
-        total_rollouts: usize,
+        // total_rollouts: usize,
         ent_coeff: f32,
         target_kl: f32,
         max_grad_norm: GradientClipping,
@@ -50,12 +48,10 @@ impl PPOHook {
         Self {
             current_epoch: 0,
             total_epochs,
-            current_rollout: 0,
-            total_rollouts,
             ent_coeff,
             target_kl,
             vf_coef: 1.,
-            progress: PPOProgress::default(),
+            progress: PPOStats::default(),
             tx,
             max_grad_norm,
         }
@@ -86,9 +82,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         }
         advantages.normalize();
         let avarage_reward = total_rewards / total_episodes as f32;
-        let progress = self.current_rollout as f64 / self.total_rollouts as f64;
         self.progress.avarage_reward = avarage_reward;
-        self.progress.progress = progress;
         Ok(HookResult::Continue)
     }
 
@@ -102,7 +96,6 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         self.current_epoch += 1;
         let should_stop = self.current_epoch == self.total_epochs;
         if should_stop {
-            self.current_rollout += 1;
             self.progress.std = agent.lm.model.distr.std().unwrap();
             // TODO: we should get this from the model, not hard code it here
             self.progress.learning_rate = 3e-4;
@@ -143,13 +136,13 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
             .map(|(ratio, log_ratio)| (ratio - 1.) - log_ratio)
             .sum::<f32>()
             / ratio.len() as f32;
-        self.progress.clip_fractions.push(clip_fraction);
-        self.progress.entropy_losses.push(entropy);
-        self.progress.value_losses.push(value_loss);
-        self.progress.policy_losses.push(policy_loss);
-        self.progress.clip_range.push(agent.clip_range);
-        self.progress.approx_kl.push(approx_kl);
-
+        self.progress.collect_batch_data(
+            entropy,
+            value_loss,
+            policy_loss,
+            clip_fraction,
+            approx_kl,
+        );
         if approx_kl > 1.5 * self.target_kl {
             Ok(HookResult::Break)
         } else {
@@ -158,16 +151,12 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
     }
 }
 
-pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
-    let total_rollouts = 300;
-    let ppo_hook = PPOHook::new(
-        10,
-        total_rollouts,
-        0.001,
-        0.01,
-        GradientClipping::Norm(0.5),
-        tx,
-    );
+pub fn train_ppo(
+    tx: Sender<EventBox>,
+    total_rollouts: usize,
+    clip_range: f32,
+) -> anyhow::Result<()> {
+    let ppo_hook = PPOHook::new(10, 0.001, 0.01, GradientClipping::Norm(0.5), tx);
     let env_builder = EnvBuilderType::EnvBuilder {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
         n_envs: 5,
@@ -188,7 +177,7 @@ pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
     let value_net = r2l_burn_lm::sequential::Sequential::build(value_layers);
     let model = ParalellActorModel::new(distr, value_net);
     let lm = ParalellActorCriticLM::new(model, AdamWConfig::new().init());
-    let agent = BurnPPO::new(BurnPPOCore::new(lm, 0.2, 64, 0.98, 0.8), ppo_hook);
+    let agent = BurnPPO::new(BurnPPOCore::new(lm, clip_range, 64, 0.98, 0.8), ppo_hook);
     let mut algo = OnPolicyAlgorithm {
         sampler,
         agent,

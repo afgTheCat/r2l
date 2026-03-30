@@ -64,7 +64,7 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
         let approx_kl = data.approx_kl()?;
         self.report.collect_batch_data(BatchStats {
-            clip_fracion: data.clip_fraction(agent.clip_range)?,
+            clip_fraction: data.clip_fraction(agent.clip_range)?,
             policy_loss: losses.policy_loss.to_scalar()?,
             entropy_loss: entropy_loss.to_scalar()?,
             value_loss: losses.value_loss.to_scalar()?,

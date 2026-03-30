@@ -6,7 +6,7 @@ mod table;
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
 use r2l_examples::burn::train_ppo;
-use r2l_examples::{EventBox, PPOProgress};
+use r2l_examples::{EventBox, PPOStats};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
@@ -18,10 +18,17 @@ struct App {
     best_table: UpdateTable,
     rx: Receiver<EventBox>,
     rollout_rewards_avg: Vec<f32>,
+    total_rollouts: usize,
+    current_rollout: usize,
 }
 
 impl App {
-    fn new(cc: &eframe::CreationContext<'_>, rx: Receiver<EventBox>) -> Self {
+    fn new(
+        cc: &eframe::CreationContext<'_>,
+        rx: Receiver<EventBox>,
+        total_rollouts: usize,
+        clip_range: f32,
+    ) -> Self {
         // Customize egui here with cc.egui_ctx.set_fonts and cc.egui_ctx.set_visuals.
         // Restore app state using cc.storage (requires the "persistence" feature).
         // Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
@@ -29,9 +36,17 @@ impl App {
         // Self::default()
         Self {
             rx,
-            recent_table: UpdateTable::default(),
-            best_table: UpdateTable::default(),
+            recent_table: UpdateTable {
+                clip_range,
+                ..Default::default()
+            },
+            best_table: UpdateTable {
+                clip_range,
+                progress: Default::default(),
+            },
             rollout_rewards_avg: vec![],
+            total_rollouts,
+            current_rollout: 0,
         }
     }
 }
@@ -44,7 +59,7 @@ impl eframe::App for App {
             let Ok(event) = event else {
                 break;
             };
-            let Ok(progress) = event.downcast::<PPOProgress>() else {
+            let Ok(progress) = event.downcast::<PPOStats>() else {
                 break;
             };
             let avg_rewards = progress.avarage_reward;
@@ -98,6 +113,7 @@ impl eframe::App for App {
     }
 }
 
+// TODO: we would like to create the agent here!
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -106,17 +122,22 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
-    std::thread::spawn(move || match train_ppo(event_tx) {
-        Ok(()) => {
-            println!("ppo trainted normally")
-        }
-        Err(err) => {
-            eprintln!("ppo was not trained normally, err: {err}")
-        }
-    });
+    // TODO: we will probably need to define the PPO ourselvs at some point
+    let total_rollouts = 300;
+    let clip_range = 0.2;
+    std::thread::spawn(
+        move || match train_ppo(event_tx, total_rollouts, clip_range) {
+            Ok(()) => {
+                println!("ppo trainted normally")
+            }
+            Err(err) => {
+                eprintln!("ppo was not trained normally, err: {err}")
+            }
+        },
+    );
     eframe::run_native(
         "R2L tui example",
         options,
-        Box::new(|cc| Ok(Box::new(App::new(cc, event_rx)))),
+        Box::new(|cc| Ok(Box::new(App::new(cc, event_rx, total_rollouts, clip_range)))),
     )
 }

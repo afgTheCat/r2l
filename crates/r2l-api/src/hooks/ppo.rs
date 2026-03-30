@@ -101,8 +101,9 @@ impl PPOHookBuilder {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BatchStats {
-    pub clip_fracion: f32,
+    pub clip_fraction: f32,
     pub entropy_loss: f32,
     pub policy_loss: f32,
     pub approx_kl: f32,

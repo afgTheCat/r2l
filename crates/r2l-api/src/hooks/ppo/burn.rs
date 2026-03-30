@@ -63,7 +63,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         let approx_kl = data.approx_kl();
         self.report.collect_batch_data(BatchStats {
-            clip_fracion: data.clip_fraction(agent.clip_range),
+            clip_fraction: data.clip_fraction(agent.clip_range),
             policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
             entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
             value_loss: losses.value_loss.to_data().to_vec::<f32>().unwrap()[0],

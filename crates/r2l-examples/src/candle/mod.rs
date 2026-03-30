@@ -1,6 +1,6 @@
 use crate::ENV_NAME;
 use crate::EventBox;
-use crate::PPOProgress;
+use crate::PPOStats;
 
 use candle_core::{Device, Error, Tensor};
 use r2l_agents::HookResult;
@@ -10,6 +10,7 @@ use r2l_agents::candle_agents::ppo::CandlePPOCore;
 use r2l_agents::candle_agents::ppo::PPOBatchData;
 use r2l_agents::candle_agents::ppo::PPOHooks;
 use r2l_api::builders::agents::ppo::PPOBuilder;
+use r2l_api::hooks::ppo::BatchStats;
 use r2l_candle_lm::learning_module::PolicyValuesLosses;
 use r2l_core::env_builder::EnvBuilderType;
 use r2l_core::on_policy_algorithm::DefaultOnPolicyAlgorightmsHooks5;
@@ -20,49 +21,44 @@ use r2l_core::sampler::Location;
 use r2l_core::sampler::buffer::StepTrajectoryBound;
 use r2l_core::sampler::buffer::TrajectoryContainer;
 use r2l_core::{distributions::Policy, utils::rollout_buffer::Advantages};
-use std::f64;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
-impl PPOProgress {
+impl PPOStats {
     pub fn collect_batch_data(
         &mut self,
         entropy_loss: f32,
         value_loss: f32,
         policy_loss: f32,
         clip_fraction: f32,
-        clip_range: f32,
         approx_kl: f32,
-    ) -> candle_core::Result<()> {
-        self.clip_fractions.push(clip_fraction);
-        self.entropy_losses.push(entropy_loss);
-        self.value_losses.push(value_loss);
-        self.policy_losses.push(policy_loss);
-        self.clip_range.push(clip_range);
-        self.approx_kl.push(approx_kl);
-        Ok(())
+    ) {
+        self.batch_stats.push(BatchStats {
+            clip_fraction,
+            entropy_loss,
+            policy_loss,
+            approx_kl,
+            value_loss,
+        });
     }
 }
 
 #[derive(Debug, Clone)]
 struct PPOHook {
-    current_epoch: usize,   // track the current epoch
-    total_epochs: usize,    // current epoch we are in
-    current_rollout: usize, // track the current rollout
-    total_rollouts: usize,  // current rollout
-    ent_coeff: f32,         // entropy coefficient
-    max_grad_norm: f32,     // gradient clipping threshold
-    target_kl: f32,         // to control the learning
+    current_epoch: usize, // track the current epoch
+    total_epochs: usize,  // current epoch we are in
+    ent_coeff: f32,       // entropy coefficient
+    max_grad_norm: f32,   // gradient clipping threshold
+    target_kl: f32,       // to control the learning
     vf_coef: f32,
 
-    pub progress: PPOProgress, // I suppose this should not really be here
+    pub progress: PPOStats, // I suppose this should not really be here
     pub tx: Sender<EventBox>,
 }
 
 impl PPOHook {
     fn new(
         total_epochs: usize,
-        total_rollouts: usize,
         ent_coeff: f32,
         max_grad_norm: f32,
         target_kl: f32,
@@ -71,13 +67,11 @@ impl PPOHook {
         Self {
             current_epoch: 0,
             total_epochs,
-            current_rollout: 0,
-            total_rollouts,
             ent_coeff,
             max_grad_norm,
             target_kl,
             vf_coef: 1.,
-            progress: PPOProgress::default(),
+            progress: PPOStats::default(),
             tx,
         }
     }
@@ -105,9 +99,7 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         }
         advantages.normalize();
         let avarage_reward = total_rewards / total_episodes as f32;
-        let progress = self.current_rollout as f64 / self.total_rollouts as f64;
         self.progress.avarage_reward = avarage_reward;
-        self.progress.progress = progress;
         Ok(HookResult::Continue)
     }
 
@@ -120,7 +112,6 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         let should_stop = self.current_epoch == self.total_epochs;
         if should_stop {
             // snapshot the learned things, API can be much better
-            self.current_rollout += 1;
             self.progress.std = agent.module.get_policy_ref().std().unwrap();
             self.progress.learning_rate = agent.module.policy_learning_rate();
             let progress = self.progress.clear();
@@ -152,9 +143,8 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
             value_loss,
             policy_loss,
             clip_fraction,
-            agent.clip_range,
             approx_kl,
-        )?;
+        );
         if approx_kl > 1.5 * self.target_kl {
             Ok(HookResult::Break)
         } else {
@@ -167,9 +157,12 @@ const ENT_COEFF: f32 = 0.001;
 const MAX_GRAD_NORM: f32 = 0.5;
 const TARGET_KL: f32 = 0.01;
 
-pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
-    let total_rollouts = 300;
-    let ppo_hook = PPOHook::new(10, total_rollouts, ENT_COEFF, MAX_GRAD_NORM, TARGET_KL, tx);
+pub fn train_ppo(
+    tx: Sender<EventBox>,
+    total_rollouts: usize,
+    clip_range: f32,
+) -> anyhow::Result<()> {
+    let ppo_hook = PPOHook::new(10, ENT_COEFF, MAX_GRAD_NORM, TARGET_KL, tx);
     let device = Device::Cpu;
     let env_builder = EnvBuilderType::EnvBuilder {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
@@ -182,7 +175,10 @@ pub fn train_ppo(tx: Sender<EventBox>) -> anyhow::Result<()> {
         Location::Thread,
     );
     let env_description = sampler.env_description();
-    let agent = PPOBuilder::default().build(&device, &env_description, ppo_hook)?;
+    let agent =
+        PPOBuilder::default()
+            .clip_range(clip_range)
+            .build(&device, &env_description, ppo_hook)?;
     let mut algo = OnPolicyAlgorithm {
         sampler,
         agent,
