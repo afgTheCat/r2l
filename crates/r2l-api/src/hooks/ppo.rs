@@ -110,7 +110,7 @@ pub struct BatchStats {
     pub value_loss: f32,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct PPOStats {
     pub batch_stats: Vec<BatchStats>,
     pub std: f32,

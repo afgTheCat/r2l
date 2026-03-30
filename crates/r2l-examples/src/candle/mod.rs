@@ -1,6 +1,6 @@
 use crate::ENV_NAME;
 use crate::EventBox;
-use crate::PPOStats;
+use crate::PPOStatsOld;
 
 use candle_core::{Device, Error, Tensor};
 use r2l_agents::HookResult;
@@ -24,7 +24,7 @@ use r2l_core::{distributions::Policy, utils::rollout_buffer::Advantages};
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
-impl PPOStats {
+impl PPOStatsOld {
     pub fn collect_batch_data(
         &mut self,
         entropy_loss: f32,
@@ -52,7 +52,7 @@ struct PPOHook {
     target_kl: f32,       // to control the learning
     vf_coef: f32,
 
-    pub progress: PPOStats, // I suppose this should not really be here
+    pub progress: PPOStatsOld, // I suppose this should not really be here
     pub tx: Sender<EventBox>,
 }
 
@@ -71,7 +71,7 @@ impl PPOHook {
             max_grad_norm,
             target_kl,
             vf_coef: 1.,
-            progress: PPOStats::default(),
+            progress: PPOStatsOld::default(),
             tx,
         }
     }

@@ -6,7 +6,7 @@ mod table;
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
 use r2l_examples::burn::train_ppo;
-use r2l_examples::{EventBox, PPOStats};
+use r2l_examples::{EventBox, PPOStatsOld};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
@@ -59,7 +59,7 @@ impl eframe::App for App {
             let Ok(event) = event else {
                 break;
             };
-            let Ok(progress) = event.downcast::<PPOStats>() else {
+            let Ok(progress) = event.downcast::<PPOStatsOld>() else {
                 break;
             };
             let avg_rewards = progress.avarage_reward;

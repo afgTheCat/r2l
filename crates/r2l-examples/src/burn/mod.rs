@@ -1,4 +1,4 @@
-use crate::{ENV_NAME, EventBox, PPOStats};
+use crate::{ENV_NAME, EventBox, PPOStatsOld};
 use burn::{
     backend::{Autodiff, NdArray},
     grad_clipping::GradientClipping,
@@ -32,7 +32,7 @@ struct PPOHook {
     max_grad_norm: GradientClipping,
     vf_coef: f32,
 
-    pub progress: PPOStats,
+    pub progress: PPOStatsOld,
     pub tx: Sender<EventBox>,
 }
 
@@ -51,7 +51,7 @@ impl PPOHook {
             ent_coeff,
             target_kl,
             vf_coef: 1.,
-            progress: PPOStats::default(),
+            progress: PPOStatsOld::default(),
             tx,
             max_grad_norm,
         }

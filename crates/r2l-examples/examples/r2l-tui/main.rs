@@ -1,6 +1,13 @@
+use candle_core::Device;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_examples::candle::train_ppo as new_train_ppo_candle;
-use r2l_examples::{EventBox, PPOStats};
+use r2l_api::builders::agents::ppo::PPOBuilder;
+use r2l_api::hooks::ppo::{PPOHookBuilder, PPOStats};
+use r2l_core::env_builder::EnvBuilderType;
+use r2l_core::on_policy_algorithm::{
+    DefaultOnPolicyAlgorightmsHooks5, LearningSchedule, OnPolicyAlgorithm,
+};
+use r2l_core::sampler::buffer::StepTrajectoryBound;
+use r2l_core::sampler::{FinalSampler, Location};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -10,6 +17,7 @@ use ratatui::{
     text::Line,
     widgets::{Axis, Block, Borders, Chart, Dataset, Gauge, GraphType, Row, Table, Widget},
 };
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::{f64, io, sync::mpsc};
 
@@ -18,10 +26,12 @@ fn mean(numbers: &[f32]) -> f32 {
     sum / numbers.len() as f32
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct App {
     exit: bool,
     latest_update: Option<PPOStats>,
+    update_rx: Receiver<PPOStats>,
+    input_rx: Receiver<KeyEvent>,
     best_update: Option<PPOStats>,
     rollout_rewards_avg: Vec<f32>,
     clip_range: f32,
@@ -48,29 +58,34 @@ impl Widget for &App {
 }
 
 impl App {
-    fn new(total_rollouts: usize, clip_range: f32) -> Self {
+    fn new(
+        total_rollouts: usize,
+        clip_range: f32,
+        update_rx: Receiver<PPOStats>,
+        input_rx: Receiver<KeyEvent>,
+    ) -> Self {
         Self {
             total_rollouts,
             clip_range,
-            ..Default::default()
+            update_rx,
+            input_rx,
+            best_update: None,
+            latest_update: None,
+            rollout_rewards_avg: vec![],
+            current_rollout: 0,
+            exit: false,
         }
     }
 
-    pub fn run(mut self, terminal: &mut DefaultTerminal, rx: Receiver<EventBox>) -> io::Result<()> {
+    pub fn run(mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
-            let event = rx.recv().unwrap();
-            event
-                .downcast::<PPOStats>()
-                .map(|progress| {
-                    self.current_rollout += 1;
-                    self.handle_progress(*progress);
-                })
-                .or_else(|event| {
-                    event.downcast::<KeyEvent>().map(|key_event| {
-                        self.handle_events(*key_event).unwrap();
-                    })
-                })
-                .unwrap_or_else(|_| unreachable!("Unknown event type received"));
+            if let Ok(key_event) = self.input_rx.try_recv() {
+                self.handle_events(key_event)?;
+            };
+            if let Ok(update) = self.update_rx.try_recv() {
+                self.current_rollout += 1;
+                self.handle_progress(update);
+            }
             terminal.draw(|frame| self.draw(frame))?;
         }
         Ok(())
@@ -243,22 +258,65 @@ impl App {
     }
 }
 
-fn handle_input_events(tx: mpsc::Sender<EventBox>) {
+fn handle_input_events(tx: mpsc::Sender<KeyEvent>) {
     if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
-        tx.send(Box::new(key_event)).unwrap()
+        tx.send(key_event).unwrap()
     }
 }
 
+const ENT_COEFF: f32 = 0.001;
+const MAX_GRAD_NORM: f32 = 0.5;
+const TARGET_KL: f32 = 0.01;
+const ENV_NAME: &str = "Pendulum-v1";
+
+pub fn train_ppo2(
+    tx: Sender<PPOStats>,
+    total_rollouts: usize,
+    clip_range: f32,
+) -> anyhow::Result<()> {
+    let ppo_hook = PPOHookBuilder::new()
+        .with_entropy_coeff(ENT_COEFF)
+        .with_gradient_clipping(Some(MAX_GRAD_NORM))
+        .with_target_kl(Some(TARGET_KL))
+        .build(tx);
+    let device = Device::Cpu;
+    let env_builder = EnvBuilderType::EnvBuilder {
+        builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
+        n_envs: 5,
+    };
+    let sampler = FinalSampler::build(
+        env_builder,
+        StepTrajectoryBound::new(2048),
+        None,
+        Location::Thread,
+    );
+    let env_description = sampler.env_description();
+    let agent =
+        PPOBuilder::default()
+            .clip_range(clip_range)
+            .build(&device, &env_description, ppo_hook)?;
+    let mut algo = OnPolicyAlgorithm {
+        sampler,
+        agent,
+        hooks: DefaultOnPolicyAlgorightmsHooks5::new(LearningSchedule::RolloutBound {
+            total_rollouts,
+            current_rollout: 0,
+        }),
+    };
+    algo.train()
+}
+
 fn main() -> io::Result<()> {
-    let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
-    let tx_to_input_events = event_tx.clone();
+    let (input_tx, input_rx): (Sender<KeyEvent>, Receiver<KeyEvent>) = mpsc::channel();
+    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
+    let tx_to_input_events = input_tx.clone();
     std::thread::spawn(move || {
         handle_input_events(tx_to_input_events);
     });
     let total_rollouts = 300;
     let clip_range = 0.2;
     std::thread::spawn(
-        move || match new_train_ppo_candle(event_tx, total_rollouts, clip_range) {
+        move || match train_ppo2(update_tx, total_rollouts, clip_range) {
             Ok(()) => {
                 println!("ppo trainted normally")
             }
@@ -268,7 +326,7 @@ fn main() -> io::Result<()> {
         },
     );
     let mut terminal = ratatui::init();
-    let app_result = App::new(total_rollouts, clip_range).run(&mut terminal, event_rx);
+    let app_result = App::new(total_rollouts, clip_range, update_rx, input_rx).run(&mut terminal);
     ratatui::restore();
     app_result
 }
