@@ -104,12 +104,14 @@ pub enum WorkerCommand<T: R2lTensor> {
     SetPolicy(Box<dyn Policy<Tensor = T>>),
     Collect(RolloutMode),
     GetEnvironmentDescription,
+    Shutdown,
 }
 
 pub enum WorkerResult<T: R2lTensor> {
     PolicySet,
     Collected,
     EnvironmentDescription(EnvironmentDescription<T>),
+    Shutdown,
 }
 
 pub struct ThreadWorker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
@@ -146,6 +148,10 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
                             environment_descriotion,
                         ))
                         .unwrap();
+                }
+                WorkerCommand::Shutdown => {
+                    self.tx.send(WorkerResult::Shutdown).unwrap();
+                    break;
                 }
             }
         }
@@ -196,6 +202,19 @@ impl<T: R2lTensor> ThreadWorkers<T> {
             rx.recv().unwrap();
         }
     }
+
+    pub fn shutdown(&self) {
+        let channels = &self.0;
+        let num_envs = channels.len();
+        for idx in 0..num_envs {
+            let tx = &channels.get(&idx).unwrap().0;
+            tx.send(WorkerCommand::Shutdown).unwrap();
+        }
+        for idx in 0..num_envs {
+            let rx = &channels.get(&idx).unwrap().1;
+            rx.recv().unwrap();
+        }
+    }
 }
 
 pub enum WorkerPool<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> {
@@ -239,5 +258,16 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
 
     pub fn single_step(&mut self) {
         self.collect(RolloutMode::StepBound { n_steps: 1 });
+    }
+
+    pub fn shutdown(&self) {
+        match self {
+            WorkerPool::Vec(_) => {
+                // No need to explicitly shut down
+            }
+            WorkerPool::Thread(workers) => {
+                workers.shutdown();
+            }
+        }
     }
 }

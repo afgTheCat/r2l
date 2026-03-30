@@ -10,4 +10,6 @@ pub trait Agent {
 
     fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(&mut self, buffers: &[C])
     -> Result<()>;
+
+    fn shutdown(&mut self) {}
 }

@@ -8,6 +8,7 @@ use r2l_core::on_policy_algorithm::{
 };
 use r2l_core::sampler::buffer::StepTrajectoryBound;
 use r2l_core::sampler::{FinalSampler, Location};
+use r2l_examples::EventBox;
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -30,8 +31,7 @@ fn mean(numbers: &[f32]) -> f32 {
 struct App {
     exit: bool,
     latest_update: Option<PPOStats>,
-    update_rx: Receiver<PPOStats>,
-    input_rx: Receiver<KeyEvent>,
+    rx: Receiver<EventBox>,
     best_update: Option<PPOStats>,
     rollout_rewards_avg: Vec<f32>,
     clip_range: f32,
@@ -58,17 +58,11 @@ impl Widget for &App {
 }
 
 impl App {
-    fn new(
-        total_rollouts: usize,
-        clip_range: f32,
-        update_rx: Receiver<PPOStats>,
-        input_rx: Receiver<KeyEvent>,
-    ) -> Self {
+    fn new(total_rollouts: usize, clip_range: f32, rx: Receiver<EventBox>) -> Self {
         Self {
             total_rollouts,
             clip_range,
-            update_rx,
-            input_rx,
+            rx,
             best_update: None,
             latest_update: None,
             rollout_rewards_avg: vec![],
@@ -79,13 +73,19 @@ impl App {
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
-            if let Ok(key_event) = self.input_rx.try_recv() {
-                self.handle_events(key_event)?;
-            };
-            if let Ok(update) = self.update_rx.try_recv() {
-                self.current_rollout += 1;
-                self.handle_progress(update);
-            }
+            let event = self.rx.recv().unwrap();
+            event
+                .downcast::<PPOStats>()
+                .map(|progress| {
+                    self.current_rollout += 1;
+                    self.handle_progress(*progress);
+                })
+                .or_else(|event| {
+                    event.downcast::<KeyEvent>().map(|key_event| {
+                        self.handle_events(*key_event).unwrap();
+                    })
+                })
+                .unwrap_or_else(|_| unreachable!("Unknown event type received"));
             terminal.draw(|frame| self.draw(frame))?;
         }
         Ok(())
@@ -258,10 +258,14 @@ impl App {
     }
 }
 
-fn handle_input_events(tx: mpsc::Sender<KeyEvent>) {
-    if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
-        tx.send(key_event).unwrap()
-    }
+fn handle_input_events(tx: mpsc::Sender<EventBox>) {
+    std::thread::spawn(move || {
+        loop {
+            if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
+                tx.send(Box::new(key_event)).unwrap()
+            }
+        }
+    });
 }
 
 const ENT_COEFF: f32 = 0.001;
@@ -269,7 +273,7 @@ const MAX_GRAD_NORM: f32 = 0.5;
 const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
 
-pub fn train_ppo2(
+pub fn train_ppo(
     tx: Sender<PPOStats>,
     total_rollouts: usize,
     clip_range: f32,
@@ -306,17 +310,23 @@ pub fn train_ppo2(
     algo.train()
 }
 
-fn main() -> io::Result<()> {
-    let (input_tx, input_rx): (Sender<KeyEvent>, Receiver<KeyEvent>) = mpsc::channel();
-    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
-    let tx_to_input_events = input_tx.clone();
+pub fn adapt_ppo_events(update_rx: Receiver<PPOStats>, tx_to_updates: Sender<EventBox>) {
     std::thread::spawn(move || {
-        handle_input_events(tx_to_input_events);
+        while let Ok(update) = update_rx.recv() {
+            tx_to_updates.send(Box::new(update)).unwrap();
+        }
     });
+}
+
+fn main() -> io::Result<()> {
+    let (event_tx, event_rx) = mpsc::channel();
+    let (update_tx, update_rx) = mpsc::channel();
+    handle_input_events(event_tx.clone());
+    adapt_ppo_events(update_rx, event_tx.clone());
     let total_rollouts = 300;
     let clip_range = 0.2;
     std::thread::spawn(
-        move || match train_ppo2(update_tx, total_rollouts, clip_range) {
+        move || match train_ppo(update_tx, total_rollouts, clip_range) {
             Ok(()) => {
                 println!("ppo trainted normally")
             }
@@ -326,7 +336,7 @@ fn main() -> io::Result<()> {
         },
     );
     let mut terminal = ratatui::init();
-    let app_result = App::new(total_rollouts, clip_range, update_rx, input_rx).run(&mut terminal);
+    let app_result = App::new(total_rollouts, clip_range, event_rx).run(&mut terminal);
     ratatui::restore();
     app_result
 }

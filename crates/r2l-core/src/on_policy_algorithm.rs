@@ -2,7 +2,7 @@ use crate::sampler::PolicyWrapper;
 use crate::sampler::buffer::wrapper::BufferWrapper;
 use crate::{
     agents::Agent,
-    sampler::{Sampler5, buffer::TrajectoryContainer},
+    sampler::{Sampler, buffer::TrajectoryContainer},
 };
 use anyhow::Result;
 use std::marker::PhantomData;
@@ -36,35 +36,33 @@ impl LearningSchedule {
     }
 }
 
-pub trait OnPolicyAlgorithmHooks5 {
+pub trait OnPolicyAlgorithmHooks {
     type A: Agent;
-    type S: Sampler5;
+    type S: Sampler;
 
     fn init_hook(&mut self) -> bool;
 
-    fn post_rollout_hook(
-        &mut self,
-        rollouts: &[<Self::S as Sampler5>::TrajectoryContainer],
-    ) -> bool;
+    fn post_rollout_hook(&mut self, rollouts: &[<Self::S as Sampler>::TrajectoryContainer])
+    -> bool;
 
     fn post_training_hook(&mut self, policy: <Self::A as Agent>::Policy) -> bool;
 
-    fn shutdown_hook(&mut self) -> Result<()>;
+    fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()>;
 }
 
-pub struct OnPolicyAlgorithm<A: Agent, S: Sampler5, H: OnPolicyAlgorithmHooks5<A = A, S = S>> {
+pub struct OnPolicyAlgorithm<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> {
     pub sampler: S,
     pub agent: A,
     pub hooks: H,
 }
 
-pub struct DefaultOnPolicyAlgorightmsHooks5<A: Agent, S: Sampler5> {
+pub struct DefaultOnPolicyAlgorightmsHooks5<A: Agent, S: Sampler> {
     rollout_idx: usize,
     learning_schedule: LearningSchedule,
     _phantom: PhantomData<(A, S)>,
 }
 
-impl<A: Agent, S: Sampler5> DefaultOnPolicyAlgorightmsHooks5<A, S> {
+impl<A: Agent, S: Sampler> DefaultOnPolicyAlgorightmsHooks5<A, S> {
     pub fn new(learning_schedule: LearningSchedule) -> Self {
         Self {
             rollout_idx: 0,
@@ -74,7 +72,7 @@ impl<A: Agent, S: Sampler5> DefaultOnPolicyAlgorightmsHooks5<A, S> {
     }
 }
 
-impl<A: Agent, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgorightmsHooks5<A, S> {
+impl<A: Agent, S: Sampler> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorightmsHooks5<A, S> {
     type A = A;
     type S = S;
 
@@ -84,7 +82,7 @@ impl<A: Agent, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgoright
 
     fn post_rollout_hook(
         &mut self,
-        rollouts: &[<Self::S as Sampler5>::TrajectoryContainer],
+        rollouts: &[<Self::S as Sampler>::TrajectoryContainer],
     ) -> bool {
         self.rollout_idx += 1;
         match &mut self.learning_schedule {
@@ -110,7 +108,9 @@ impl<A: Agent, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgoright
         false
     }
 
-    fn shutdown_hook(&mut self) -> Result<()> {
+    fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()> {
+        agent.shutdown();
+        sampler.shutdown();
         Ok(())
     }
 }
@@ -118,8 +118,8 @@ impl<A: Agent, S: Sampler5> OnPolicyAlgorithmHooks5 for DefaultOnPolicyAlgoright
 impl<
     B: TrajectoryContainer,
     A: Agent,
-    S: Sampler5<TrajectoryContainer = B>,
-    H: OnPolicyAlgorithmHooks5<A = A, S = S>,
+    S: Sampler<TrajectoryContainer = B>,
+    H: OnPolicyAlgorithmHooks<A = A, S = S>,
 > OnPolicyAlgorithm<A, S, H>
 where
     A::Policy: Clone,
@@ -147,6 +147,6 @@ where
             break_on_hook_res!(self.hooks.post_training_hook(policy));
         }
 
-        self.hooks.shutdown_hook()
+        self.hooks.shutdown_hook(&mut self.agent, &mut self.sampler)
     }
 }

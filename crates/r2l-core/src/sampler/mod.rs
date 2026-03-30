@@ -24,7 +24,7 @@ pub enum RolloutMode {
     StepBound { n_steps: usize },
 }
 
-pub trait Sampler5 {
+pub trait Sampler {
     type Tensor: R2lTensor;
     type TrajectoryContainer: TrajectoryContainer<Tensor = Self::Tensor>;
 
@@ -32,6 +32,8 @@ pub trait Sampler5 {
         &mut self,
         policy: P,
     ) -> impl AsRef<[Self::TrajectoryContainer]>;
+
+    fn shutdown(&mut self) {}
 }
 
 pub enum Location {
@@ -167,7 +169,7 @@ where
     }
 }
 
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler5 for FinalSampler<E, BD> {
+impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E, BD> {
     type Tensor = E::Tensor;
     type TrajectoryContainer = BD::Container;
 
@@ -194,5 +196,9 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler5 for FinalSampler<
             self.worker_pool.collect(bound);
         }
         self.all_buffers.lock().unwrap()
+    }
+
+    fn shutdown(&mut self) {
+        self.worker_pool.shutdown();
     }
 }
