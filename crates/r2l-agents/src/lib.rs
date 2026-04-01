@@ -1,9 +1,10 @@
 pub mod burn_agents;
 pub mod candle_agents;
+pub mod ppo;
 
+use r2l_core::distributions::Policy;
 use r2l_core::policies::ValueFunction;
 use r2l_core::tensor::R2lTensor;
-use r2l_core::distributions::Policy;
 use r2l_core::{rng::RNG, utils::rollout_buffer::Logps};
 use r2l_core::{
     sampler::buffer::TrajectoryContainer,

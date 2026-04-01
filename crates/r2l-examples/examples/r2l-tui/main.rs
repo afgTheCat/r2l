@@ -327,9 +327,7 @@ fn main() -> io::Result<()> {
     let clip_range = 0.2;
     std::thread::spawn(
         move || match train_ppo(update_tx, total_rollouts, clip_range) {
-            Ok(()) => {
-                println!("ppo trainted normally")
-            }
+            Ok(()) => {}
             Err(err) => {
                 eprintln!("ppo was not trained normally, err: {err}")
             }

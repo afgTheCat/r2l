@@ -92,7 +92,10 @@ impl PPOHookBuilder {
             total_epochs: self.total_epochs,
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
-            target_kl: self.target_kl,
+            target_kl: self.target_kl.map(|target| TargetKl {
+                target,
+                target_exceeded: false,
+            }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
             report: PPOStats::default(),
@@ -124,12 +127,23 @@ impl PPOStats {
     }
 }
 
+struct TargetKl {
+    target: f32,
+    target_exceeded: bool,
+}
+
+impl TargetKl {
+    pub fn target_kl_exceeded(&mut self) -> bool {
+        std::mem::take(&mut self.target_exceeded)
+    }
+}
+
 pub struct PPOHook {
     normalize_advantage: bool,
     total_epochs: usize,
     entropy_coeff: f32,
     vf_coeff: Option<f32>,
-    target_kl: Option<f32>,
+    target_kl: Option<TargetKl>,
     gradient_clipping: Option<f32>,
     current_epoch: usize,
     report: PPOStats,

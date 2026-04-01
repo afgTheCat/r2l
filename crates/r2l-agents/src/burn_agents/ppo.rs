@@ -2,14 +2,10 @@ use burn::{
     prelude::Backend,
     tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
 };
-use r2l_burn_lm::{
-    learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses},
-    tensors::{Logp, LogpDiff, ValuesPred},
-};
+use r2l_burn_lm::learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses};
 use r2l_core::policies::{LearningModule, ValueFunction};
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
 use r2l_core::{agents::Agent, sampler::buffer::TrajectoryContainer};
-use std::ops::Deref;
 
 use crate::{
     BatchIndexIterator, HookResult, buffers_advantages_and_returns, burn_agents::uplift_tensor,
@@ -17,9 +13,9 @@ use crate::{
 };
 
 pub struct PPOBatchData<B: Backend> {
-    pub logp: Logp<B>,
-    pub values_pred: ValuesPred<B>,
-    pub logp_diff: LogpDiff<B>,
+    pub logp: BurnTensor<B, 1>,
+    pub values_pred: BurnTensor<B, 1>,
+    pub logp_diff: BurnTensor<B, 1>,
     pub ratio: BurnTensor<B, 1>,
 }
 
@@ -130,11 +126,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, H: BurnPPOHooksTrait<B, D>> BurnPPO<B
             let logp_old = BurnTensor::from_data(logp_old.as_slice(), &Default::default());
             let returns = returns.sample(&indices);
             let returns = BurnTensor::from_data(returns.as_slice(), &Default::default());
-            let logp = Logp(ppo.lm.model.distr.log_probs(&observations, &actions)?);
-            let values_pred = ValuesPred(ppo.lm.calculate_values(&observations)?);
-            let value_diff = returns.clone() - values_pred.deref().clone();
+            let logp = ppo.lm.model.distr.log_probs(&observations, &actions)?;
+            let values_pred = ppo.lm.calculate_values(&observations)?;
+            let value_diff = returns.clone() - values_pred.clone();
             let value_loss = (value_diff.clone() * value_diff).mean();
-            let logp_diff = LogpDiff(logp.deref().clone() - logp_old);
+            let logp_diff = logp.clone() - logp_old;
             let ratio = logp_diff.clone().exp();
             let clip_adv = ratio
                 .clone()

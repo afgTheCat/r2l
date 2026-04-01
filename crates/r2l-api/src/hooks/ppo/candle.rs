@@ -34,7 +34,12 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         agent: &mut CandlePPOCore<LearningModuleKind>,
     ) -> candle_core::Result<r2l_agents::HookResult> {
         self.current_epoch += 1;
-        let should_stop = self.current_epoch == self.total_epochs;
+        let target_kl_exceeded = if let Some(target_kl) = &mut self.target_kl {
+            target_kl.target_kl_exceeded()
+        } else {
+            false
+        };
+        let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
             let mut total_rewards: f32 = 0.;
             let mut total_episodes: usize = 0;
@@ -73,8 +78,9 @@ impl PPOHooks<LearningModuleKind> for PPOHook {
         if self.entropy_coeff != 0. {
             losses.apply_entropy(entropy_loss).map_err(Error::wrap)?;
         }
-        if let Some(target_kl) = self.target_kl {
-            if approx_kl > 1.5 * target_kl {
+        if let Some(target_kl) = &mut self.target_kl {
+            if approx_kl > 1.5 * target_kl.target {
+                target_kl.target_exceeded = true;
                 Ok(HookResult::Break)
             } else {
                 Ok(HookResult::Continue)

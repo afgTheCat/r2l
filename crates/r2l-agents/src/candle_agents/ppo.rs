@@ -2,21 +2,18 @@ use crate::buffers_advantages_and_returns;
 use crate::candle_agents::ModuleWithValueFunction;
 use crate::{BatchIndexIterator, HookResult, logps, sample};
 use anyhow::Result;
+use candle_core::Device;
 use candle_core::{DType, Tensor as CandleTensor};
-use candle_core::{Device, Error};
 use r2l_candle_lm::learning_module::PolicyValuesLosses;
-use r2l_candle_lm::tensors::ValuesPred;
-use r2l_candle_lm::tensors::{Logp, LogpDiff};
 use r2l_core::distributions::Policy;
 use r2l_core::policies::ValueFunction;
 use r2l_core::utils::rollout_buffer::{Advantages, Logps, Returns};
 use r2l_core::{agents::Agent, sampler::buffer::TrajectoryContainer};
-use std::ops::Deref;
 
 pub struct PPOBatchData {
-    pub logp: Logp,
-    pub values_pred: ValuesPred,
-    pub logp_diff: LogpDiff,
+    pub logp: CandleTensor,
+    pub values_pred: CandleTensor,
+    pub logp_diff: CandleTensor,
     pub ratio: CandleTensor,
 }
 
@@ -111,20 +108,13 @@ impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO<M, H> {
             let logp_old = CandleTensor::from_slice(&logp_old, logp_old.len(), &ppo.device)?;
             let returns = returns.sample(&indicies);
             let returns = CandleTensor::from_slice(&returns, returns.len(), &ppo.device)?;
-            let logp = Logp(
-                ppo.module
-                    .get_policy_ref()
-                    .log_probs(&observations, &actions)
-                    .map_err(Error::wrap)?,
-            );
-            let values_pred = ValuesPred(
-                ppo.module
-                    .value_func()
-                    .calculate_values(&observations)
-                    .map_err(Error::wrap)?,
-            );
+            let logp = ppo
+                .module
+                .get_policy_ref()
+                .log_probs(&observations, &actions)?;
+            let values_pred = ppo.module.value_func().calculate_values(&observations)?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean_all()?;
-            let logp_diff = LogpDiff((logp.deref() - &logp_old)?);
+            let logp_diff = (&logp - &logp_old)?;
             let ratio = logp_diff.exp()?;
             let clip_adv =
                 (ratio.clamp(1. - ppo.clip_range, 1. + ppo.clip_range)? * advantages.clone())?;
@@ -142,7 +132,7 @@ impl<M: ModuleWithValueFunction, H: PPOHooks<M>> CandlePPO<M, H> {
                 HookResult::Break => return Ok(()),
                 HookResult::Continue => {}
             }
-            ppo.module.update(losses).map_err(Error::wrap)?;
+            ppo.module.update(losses)?;
         }
     }
 
