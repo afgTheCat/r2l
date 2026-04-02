@@ -19,13 +19,13 @@ pub trait ModuleWithValueFunction {
     type InferenceTensor: R2lTensor;
     // The tensor type used internally for learning
     type Tensor: R2lTensor;
-
     // What we need is an inference policy type (maybe actor?)
     type InferencePolicy: Policy<Tensor = Self::InferenceTensor>;
     // The policy that has autograd
     type Policy: Policy<Tensor = Self::Tensor>;
-
+    // The value function
     type ValueFunction: ValueFunction<Tensor = Self::Tensor>;
+    // The losses
     type Losses;
 
     fn get_inference_policy(&self) -> Self::InferencePolicy;

@@ -1,7 +1,8 @@
+pub mod at2;
 pub mod burn;
 pub mod candle;
 
-use std::sync::mpsc::Sender;
+use std::{marker::PhantomData, sync::mpsc::Sender};
 
 // All the hooks that the user might want to adjust
 #[derive(Debug, Clone)]
@@ -86,7 +87,7 @@ impl PPOHookBuilder {
         self.gradient_clipping
     }
 
-    pub fn build(self, tx: Sender<PPOStats>) -> PPOHook {
+    pub fn build<T>(self, tx: Sender<PPOStats>) -> PPOHook<T> {
         PPOHook {
             normalize_advantage: self.normalize_advantage,
             total_epochs: self.total_epochs,
@@ -100,6 +101,7 @@ impl PPOHookBuilder {
             current_epoch: 0,
             report: PPOStats::default(),
             tx,
+            _phantom: PhantomData,
         }
     }
 }
@@ -138,7 +140,7 @@ impl TargetKl {
     }
 }
 
-pub struct PPOHook {
+pub struct PPOHook<T = ()> {
     normalize_advantage: bool,
     total_epochs: usize,
     entropy_coeff: f32,
@@ -148,4 +150,5 @@ pub struct PPOHook {
     current_epoch: usize,
     report: PPOStats,
     tx: Sender<PPOStats>,
+    _phantom: PhantomData<T>,
 }
