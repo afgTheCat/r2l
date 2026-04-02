@@ -124,14 +124,14 @@ pub struct PPOStats {
 }
 
 impl PPOStats {
-    fn collect_batch_data(&mut self, batch_stats: BatchStats) {
+    pub fn collect_batch_data(&mut self, batch_stats: BatchStats) {
         self.batch_stats.push(batch_stats);
     }
 }
 
-struct TargetKl {
-    target: f32,
-    target_exceeded: bool,
+pub struct TargetKl {
+    pub target: f32,
+    pub target_exceeded: bool,
 }
 
 impl TargetKl {
@@ -141,14 +141,14 @@ impl TargetKl {
 }
 
 pub struct PPOHook<T = ()> {
-    normalize_advantage: bool,
-    total_epochs: usize,
-    entropy_coeff: f32,
-    vf_coeff: Option<f32>,
-    target_kl: Option<TargetKl>,
-    gradient_clipping: Option<f32>,
-    current_epoch: usize,
-    report: PPOStats,
-    tx: Sender<PPOStats>,
+    pub normalize_advantage: bool,
+    pub total_epochs: usize,
+    pub entropy_coeff: f32,
+    pub vf_coeff: Option<f32>,
+    pub target_kl: Option<TargetKl>,
+    pub gradient_clipping: Option<f32>,
+    pub current_epoch: usize,
+    pub report: PPOStats,
+    pub tx: Sender<PPOStats>,
     _phantom: PhantomData<T>,
 }
