@@ -1,12 +1,41 @@
-use crate::learning_module::R2lCandleLearningModule;
-use candle_core::Tensor;
-use r2l_agents::ppo2::PPOModule2;
+use crate::{
+    builders::{
+        distribution::DistributionBuilder,
+        learning_module::{LearningModuleBuilder, LearningModuleType},
+    },
+    hooks::ppo::PPOHookBuilder,
+    // learning_module::ActorCriticKind,
+};
+use candle_core::{DType, Device, Tensor};
+use candle_nn::{VarBuilder, VarMap};
+use r2l_agents::{
+    candle_agents::ActorCriticKind,
+    ppo2::{NewPPO, PPOModule2},
+};
 use r2l_candle_lm::{
     distributions::DistributionKind,
     learning_module::{PolicyValuesLosses, SequentialValueFunction},
 };
 use r2l_core::policies::LearningModule;
 
+pub struct R2lCandleLearningModule {
+    pub policy: DistributionKind,
+    pub actor_critic: ActorCriticKind,
+    pub value_function: SequentialValueFunction,
+}
+
+impl R2lCandleLearningModule {
+    pub fn set_grad_clipping(&mut self, gradient_clipping: Option<f32>) {
+        self.actor_critic.set_grad_clipping(gradient_clipping);
+    }
+
+    pub fn policy_learning_rate(&self) -> f64 {
+        self.actor_critic.policy_learning_rate()
+    }
+}
+
+// NOTE: I super don't like this, but whatever.
+// R2lTensorOp should probably be the default? Probably
 impl PPOModule2 for R2lCandleLearningModule {
     type Tensor = Tensor;
     type InferenceTensor = Tensor;
@@ -24,22 +53,59 @@ impl PPOModule2 for R2lCandleLearningModule {
     }
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
-        self.learning_module.update(losses)
+        self.actor_critic.update(losses)
     }
 
     fn value_func(&self) -> &Self::ValueFunction {
         &self.value_function
     }
 
+    // this is also not PPO
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::Tensor {
         Tensor::from_slice(slice, slice.len(), &candle_core::Device::Cpu).unwrap()
     }
 
+    // this is very not PPO
     fn lifter(t: &Self::InferenceTensor) -> Self::Tensor {
         t.clone()
     }
 
+    // this needs to be a constraint on the losses
     fn get_losses(policy_loss: Self::Tensor, value_loss: Self::Tensor) -> Self::Losses {
         PolicyValuesLosses::new(policy_loss, value_loss)
+    }
+}
+
+pub struct R2lCandleLearningModuleBuilder {
+    pub device: Device,
+    pub distribution_builder: DistributionBuilder,
+    pub hook_builder: PPOHookBuilder,
+    pub actor_critic_type: LearningModuleBuilder,
+}
+
+impl R2lCandleLearningModuleBuilder {
+    fn build_lm(&mut self) -> anyhow::Result<R2lCandleLearningModule> {
+        let distribution_varmap = VarMap::new();
+        let distribution_var_builder =
+            VarBuilder::from_varmap(&distribution_varmap, DType::F32, &self.device);
+        let policy = self
+            .distribution_builder
+            .build(&distribution_var_builder, &self.device)?;
+        let (value_function, learning_module) = self.actor_critic_type.build(
+            distribution_varmap,
+            distribution_var_builder,
+            &self.device,
+        )?;
+        let learning_module = R2lCandleLearningModule {
+            policy,
+            actor_critic: learning_module,
+            value_function,
+        };
+        Ok(learning_module)
+    }
+
+    fn build(mut self) -> anyhow::Result<()> {
+        let lm = self.build_lm()?;
+        todo!()
     }
 }

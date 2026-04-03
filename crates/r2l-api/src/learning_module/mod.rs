@@ -81,5 +81,3 @@ impl ModuleWithValueFunction for R2lCandleLearningModule {
 }
 
 impl CandleModuleWithValueFunction for R2lCandleLearningModule {}
-
-// TODO: add the builder here

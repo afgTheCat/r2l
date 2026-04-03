@@ -20,20 +20,20 @@ pub enum LearningModuleType {
     },
 }
 
-// TODO: we probably need to rethink this
+// TODO: we probably need to rethink this. We need to add the optimizer params
 pub struct LearningModuleBuilder {
     pub learning_module_type: LearningModuleType,
+    pub observation_size: Option<usize>,
 }
 
 impl LearningModuleBuilder {
-    pub fn build<T>(
+    pub fn build(
         &self,
         distribution_varmap: VarMap,
         distr_var_builder: VarBuilder,
-        env_description: &EnvironmentDescription<T>,
         device: &Device,
     ) -> Result<(SequentialValueFunction, ActorCriticKind)> {
-        let input_size = env_description.observation_size();
+        let observation_size = self.observation_size.unwrap();
         let optimizer_params = ParamsAdamW {
             lr: 3e-4,
             beta1: 0.9,
@@ -48,7 +48,7 @@ impl LearningModuleBuilder {
             } => {
                 let value_layers = &[&value_layers[..], &[1]].concat();
                 let value_net =
-                    build_sequential(input_size, value_layers, &distr_var_builder, "value")?;
+                    build_sequential(observation_size, value_layers, &distr_var_builder, "value")?;
                 let optimizer =
                     AdamW::new(distribution_varmap.all_vars(), optimizer_params.clone())?;
                 let optimizer_with_grad =
@@ -68,7 +68,8 @@ impl LearningModuleBuilder {
                 let critic_varmap = VarMap::new();
                 let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, device);
                 let value_layers = &[&value_layers[..], &[1]].concat();
-                let value_net = build_sequential(input_size, value_layers, &critic_vb, "value")?;
+                let value_net =
+                    build_sequential(observation_size, value_layers, &critic_vb, "value")?;
                 let policy_optimizer =
                     AdamW::new(distribution_varmap.all_vars(), optimizer_params.clone())?;
                 let value_optimizer = AdamW::new(critic_varmap.all_vars(), optimizer_params)?;
@@ -88,5 +89,16 @@ impl LearningModuleBuilder {
                 ))
             }
         }
+    }
+
+    pub fn build_with_env<T>(
+        &mut self,
+        distribution_varmap: VarMap,
+        distr_var_builder: VarBuilder,
+        env_description: &EnvironmentDescription<T>,
+        device: &Device,
+    ) -> Result<(SequentialValueFunction, ActorCriticKind)> {
+        self.observation_size = Some(env_description.observation_size());
+        self.build(distribution_varmap, distr_var_builder, device)
     }
 }

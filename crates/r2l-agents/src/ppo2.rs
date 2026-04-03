@@ -42,6 +42,7 @@ pub trait PPOModule2 {
     // TODO: to be removed
     fn lifter(t: &Self::InferenceTensor) -> Self::Tensor;
 
+    // TODO: don't really know if we need this
     fn get_losses(policy_loss: Self::Tensor, value_loss: Self::Tensor) -> Self::Losses;
 }
 

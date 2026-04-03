@@ -26,12 +26,16 @@ impl Default for PPOBuilder {
             distribution_builder: DistributionBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,
+                action_size: None,
+                observation_size: None,
+                action_space_type: None,
             },
             learning_module_builder: LearningModuleBuilder {
                 learning_module_type: LearningModuleType::Paralell {
                     value_layers: vec![64, 64],
                     max_grad_norm: None,
                 },
+                observation_size: None,
             },
             clip_range: 0.2,
             lambda: 0.8,
@@ -43,7 +47,7 @@ impl Default for PPOBuilder {
 
 impl PPOBuilder {
     pub fn build<T, H: PPOHooks<LearningModuleKind>>(
-        &self,
+        &mut self,
         device: &Device,
         env_description: &EnvironmentDescription<T>,
         hooks: H,
@@ -51,10 +55,12 @@ impl PPOBuilder {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
             VarBuilder::from_varmap(&distribution_varmap, DType::F32, device);
-        let policy =
-            self.distribution_builder
-                .build(&distribution_var_builder, device, env_description)?;
-        let (value_function, learning_module) = self.learning_module_builder.build(
+        let policy = self.distribution_builder.build_with_env(
+            &distribution_var_builder,
+            device,
+            &env_description,
+        )?;
+        let (value_function, learning_module) = self.learning_module_builder.build_with_env(
             distribution_varmap,
             distribution_var_builder,
             env_description,
