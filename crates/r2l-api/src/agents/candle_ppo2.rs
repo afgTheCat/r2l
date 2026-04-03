@@ -167,7 +167,7 @@ impl PPOCandleAgentBuilder {
 }
 
 // Goal: PPOBuilder::new()
-struct PPOBuilder<
+pub struct PPOBuilder<
     EB: EnvBuilderTrait,
     BD: TrajectoryBound<Tensor = EB::Tensor> = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>,
 > {
@@ -179,7 +179,7 @@ struct PPOBuilder<
 }
 
 impl<EB: EnvBuilderTrait> PPOBuilder<EB> {
-    fn new(builder: EB, n_envs: usize) -> Self {
+    pub fn new(builder: EB, n_envs: usize) -> Self {
         let env_builder = EnvBuilder::homogenous(builder, n_envs);
         let ppo_params = NewPPOParams::default();
         Self {
