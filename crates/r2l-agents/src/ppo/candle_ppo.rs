@@ -1,13 +1,11 @@
-use r2l_candle_lm::{CandleModuleWithValueFunction, learning_module::PolicyValuesLosses};
+use r2l_candle_lm::CandleModuleWithValueFunction;
 use r2l_core::{
     agents::Agent,
-    distributions::Policy,
-    policies::ValueFunction,
     sampler::buffer::TrajectoryContainer,
     utils::rollout_buffer::{Advantages, Logps, Returns},
 };
 
-use crate::ppo::{PPOBatchData, PPOHooksTrait, PPOParams};
+use crate::ppo::{PPOModule, PPOHooksTrait, PPOParams};
 use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
 use candle_core::Tensor as CandleTensor;
 
@@ -41,23 +39,14 @@ impl<M: CandleModuleWithValueFunction, H: PPOHooksTrait<M>> CandlePPO<M, H> {
             let logp_old = CandleTensor::from_slice(&logp_old, logp_old.len(), &self.device)?;
             let returns = returns.sample(&indicies);
             let returns = CandleTensor::from_slice(&returns, returns.len(), &self.device)?;
-            let logp = ppo.module.get_policy().log_probs(&observations, &actions)?;
-            let values_pred = ppo.module.value_func().calculate_values(&observations)?;
-            let value_loss = returns.sub(&values_pred)?.sqr()?.mean_all()?;
-            let logp_diff = (&logp - &logp_old)?;
-            let ratio = logp_diff.exp()?;
-            let clip_adv =
-                (ratio.clamp(1. - ppo.clip_range, 1. + ppo.clip_range)? * advantages.clone())?;
-            let policy_loss = CandleTensor::minimum(&(&ratio * &advantages)?, &clip_adv)?
-                .neg()?
-                .mean_all()?;
-            let mut losses = PolicyValuesLosses::new(policy_loss, value_loss);
-            let ppo_data = PPOBatchData {
-                logp,
-                values_pred,
-                logp_diff,
-                ratio,
-            };
+            let (mut losses, ppo_data) = ppo.module.ppo_batch_data_and_losses(
+                &observations,
+                &actions,
+                &advantages,
+                &logp_old,
+                &returns,
+                ppo.clip_range,
+            )?;
             match self.hooks.batch_hook(ppo, &mut losses, &ppo_data)? {
                 HookResult::Break => return Ok(()),
                 HookResult::Continue => {}

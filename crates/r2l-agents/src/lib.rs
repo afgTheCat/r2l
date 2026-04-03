@@ -1,6 +1,7 @@
 pub mod burn_agents;
 pub mod candle_agents;
 pub mod ppo;
+pub mod ppo2;
 
 use r2l_core::distributions::Policy;
 use r2l_core::policies::ValueFunction;

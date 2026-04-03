@@ -13,7 +13,7 @@ pub trait ValueFunction {
     fn calculate_values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor>;
 }
 
-// This might be too complicated
+// I don't think we need this
 pub trait ModuleWithValueFunction {
     // The tensor type returned to env
     type InferenceTensor: R2lTensor;

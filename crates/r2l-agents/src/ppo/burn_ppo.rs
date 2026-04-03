@@ -1,10 +1,8 @@
 use burn::tensor::Tensor as BurnTensor;
 use burn::tensor::backend::AutodiffBackend;
-use r2l_burn_lm::{BurnModuleWithValueFunction, learning_module::PolicyValuesLosses};
+use r2l_burn_lm::BurnModuleWithValueFunction;
 use r2l_core::{
     agents::Agent,
-    distributions::Policy,
-    policies::ValueFunction,
     sampler::buffer::TrajectoryContainer,
     utils::rollout_buffer::{Advantages, Logps, Returns},
 };
@@ -12,7 +10,7 @@ use std::marker::PhantomData;
 
 use crate::{
     BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps,
-    ppo::{PPOBatchData, PPOHooksTrait, PPOParams},
+    ppo::{PPOModule, PPOHooksTrait, PPOParams},
     sample,
 };
 
@@ -49,24 +47,14 @@ impl<B: AutodiffBackend, M: BurnModuleWithValueFunction<B>, H: PPOHooksTrait<M>>
             let logp_old = BurnTensor::from_data(logp_old.as_slice(), &Default::default());
             let returns = returns.sample(&indices);
             let returns = BurnTensor::from_data(returns.as_slice(), &Default::default());
-            let logp = ppo.module.get_policy().log_probs(&observations, &actions)?;
-            let values_pred = ppo.module.value_func().calculate_values(&observations)?;
-            let value_diff = returns.clone() - values_pred.clone();
-            let value_loss = (value_diff.clone() * value_diff).mean();
-            let logp_diff = logp.clone() - logp_old;
-            let ratio = logp_diff.clone().exp();
-            let clip_adv = ratio
-                .clone()
-                .clamp(1. - ppo.clip_range, 1. + ppo.clip_range)
-                * advantages.clone();
-            let policy_loss = (-(ratio.clone() * advantages).min_pair(clip_adv)).mean();
-            let ppo_data = PPOBatchData {
-                logp,
-                values_pred,
-                logp_diff,
-                ratio,
-            };
-            let mut losses = PolicyValuesLosses::new(policy_loss, value_loss);
+            let (mut losses, ppo_data) = ppo.module.ppo_batch_data_and_losses(
+                &observations,
+                &actions,
+                &advantages,
+                &logp_old,
+                &returns,
+                ppo.clip_range,
+            )?;
             match self.hooks.batch_hook(ppo, &mut losses, &ppo_data)? {
                 HookResult::Break => return Ok(()),
                 HookResult::Continue => {}

@@ -10,6 +10,18 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn to_vec(&self) -> Vec<f32>;
 }
 
+// TODO: make this more generic
+pub trait R2lTensorOp: R2lTensor {
+    fn calculate_logp_diff(logp: &Self, logp_old: &Self) -> anyhow::Result<Self>;
+    fn calculate_ratio(logp_diff: &Self) -> anyhow::Result<Self>;
+    fn calculate_policy_loss(
+        ratio: &Self,
+        advantages: &Self,
+        clip_range: f32,
+    ) -> anyhow::Result<Self>;
+    fn calculate_value_loss(returns: &Self, values_pred: &Self) -> anyhow::Result<Self>;
+}
+
 // TODO: let's start using the DType at one point
 // Also this should be called something else
 // Name is also in progress for now
