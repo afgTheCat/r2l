@@ -1,5 +1,8 @@
 use crate::{
-    builders::{distribution::DistributionBuilder, learning_module::LearningModuleBuilder},
+    builders::{
+        distribution::{ActionSpaceType, DistributionBuilder},
+        learning_module::LearningModuleBuilder,
+    },
     hooks::ppo::{PPOHook, PPOHookBuilder, PPOStats},
 };
 use candle_core::{DType, Device, Tensor};
@@ -13,10 +16,15 @@ use r2l_candle_lm::{
     learning_module::{PolicyValuesLosses, SequentialValueFunction},
 };
 use r2l_core::{
-    env::Env,
-    env_builder::{self, EnvBuilder, EnvBuilderTrait},
+    agents::Agent,
+    env::Space,
+    env_builder::{EnvBuilder, EnvBuilderTrait},
+    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, OnPolicyAlgorithm},
     policies::LearningModule,
-    sampler::buffer::{StepTrajectoryBound, TrajectoryBound},
+    sampler::{
+        FinalSampler, Location,
+        buffer::{StepTrajectoryBound, TrajectoryBound, TrajectoryContainer},
+    },
 };
 use std::sync::mpsc::Sender;
 
@@ -77,6 +85,28 @@ impl PPOModule2 for R2lCandleLearningModule {
     }
 }
 
+pub struct DefaultPPO(NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>);
+
+impl Agent for DefaultPPO {
+    type Tensor = candle_core::Tensor;
+    type Policy = DistributionKind;
+
+    fn policy(&self) -> Self::Policy {
+        self.0.policy()
+    }
+
+    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
+        &mut self,
+        buffers: &[C],
+    ) -> anyhow::Result<()> {
+        self.0.learn(buffers)
+    }
+
+    fn shutdown(&mut self) {
+        self.0.shutdown();
+    }
+}
+
 pub struct PPOCandleAgentBuilder {
     pub device: Device,
     pub distribution_builder: DistributionBuilder,
@@ -85,17 +115,33 @@ pub struct PPOCandleAgentBuilder {
     pub ppo_params: NewPPOParams,
 }
 
+impl Default for PPOCandleAgentBuilder {
+    fn default() -> Self {
+        todo!()
+    }
+}
+
 impl PPOCandleAgentBuilder {
-    fn build_lm(&mut self) -> anyhow::Result<R2lCandleLearningModule> {
+    fn build_lm(
+        &mut self,
+        observation_size: usize,
+        action_size: usize,
+        action_space: ActionSpaceType,
+    ) -> anyhow::Result<R2lCandleLearningModule> {
         let distribution_varmap = VarMap::new();
-        let distribution_var_builder =
+        let distr_var_builder =
             VarBuilder::from_varmap(&distribution_varmap, DType::F32, &self.device);
-        let policy = self
-            .distribution_builder
-            .build(&distribution_var_builder, &self.device)?;
+        let policy = self.distribution_builder.build(
+            &distr_var_builder,
+            &self.device,
+            observation_size,
+            action_size,
+            action_space,
+        )?;
         let (value_function, learning_module) = self.actor_critic_type.build(
             distribution_varmap,
-            distribution_var_builder,
+            distr_var_builder,
+            observation_size,
             &self.device,
         )?;
         let learning_module = R2lCandleLearningModule {
@@ -108,12 +154,15 @@ impl PPOCandleAgentBuilder {
 
     fn build(
         mut self,
+        observation_size: usize,
+        action_size: usize,
+        action_space: ActionSpaceType,
         tx: Sender<PPOStats>,
-    ) -> anyhow::Result<NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>> {
-        let lm = self.build_lm()?;
+    ) -> anyhow::Result<DefaultPPO> {
+        let lm = self.build_lm(observation_size, action_size, action_space)?;
         let hooks = self.hook_builder.build(tx);
         let params = self.ppo_params;
-        Ok(NewPPO { lm, hooks, params })
+        Ok(DefaultPPO(NewPPO { lm, hooks, params }))
     }
 }
 
@@ -125,6 +174,8 @@ struct PPOBuilder<
     pub ppo_params: NewPPOParams,
     pub env_builder: EnvBuilder<EB>,
     pub trajectory_bound: BD,
+    pub agent_builder: PPOCandleAgentBuilder,
+    pub location: Location,
 }
 
 impl<EB: EnvBuilderTrait> PPOBuilder<EB> {
@@ -135,6 +186,8 @@ impl<EB: EnvBuilderTrait> PPOBuilder<EB> {
             ppo_params,
             env_builder,
             trajectory_bound: StepTrajectoryBound::new(1024),
+            agent_builder: PPOCandleAgentBuilder::default(),
+            location: Location::Vec,
         }
     }
 }
@@ -147,12 +200,52 @@ impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBuilder<E
         let Self {
             ppo_params,
             env_builder,
+            agent_builder,
+            location,
             ..
         } = self;
         PPOBuilder {
             ppo_params,
             env_builder,
             trajectory_bound,
+            agent_builder,
+            location,
         }
+    }
+
+    // TODO: too much. Also not generic enough
+    pub fn build(
+        self,
+        tx: Sender<PPOStats>,
+    ) -> anyhow::Result<
+        OnPolicyAlgorithm<
+            DefaultPPO,
+            FinalSampler<EB::Env, BD>,
+            DefaultOnPolicyAlgorightmsHooks<DefaultPPO, FinalSampler<EB::Env, BD>>,
+        >,
+    > {
+        let env_description = self.env_builder.env_description()?;
+        let sampler =
+            FinalSampler::build(self.env_builder, self.trajectory_bound, None, self.location);
+        let observation_size = env_description.observation_size();
+        let action_size = env_description.action_size();
+        let action_space = match env_description.action_space {
+            Space::Discrete(_) => ActionSpaceType::Discrete,
+            Space::Continous { .. } => ActionSpaceType::Continous,
+        };
+        let agent = self
+            .agent_builder
+            .build(observation_size, action_size, action_space, tx)?;
+        let hooks = DefaultOnPolicyAlgorightmsHooks::new(
+            r2l_core::on_policy_algorithm::LearningSchedule::RolloutBound {
+                total_rollouts: 300,
+                current_rollout: 0,
+            },
+        );
+        Ok(OnPolicyAlgorithm {
+            sampler,
+            agent,
+            hooks,
+        })
     }
 }

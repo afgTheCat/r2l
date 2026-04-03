@@ -1,4 +1,7 @@
-use crate::{env::Env, tensor::R2lTensor};
+use crate::{
+    env::{Env, EnvironmentDescription},
+    tensor::R2lTensor,
+};
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -7,6 +10,11 @@ pub trait EnvBuilderTrait: Sync + Send + 'static {
     type Env: Env<Tensor = Self::Tensor>;
 
     fn build_env(&self) -> Result<Self::Env>;
+
+    fn env_description(&self) -> Result<EnvironmentDescription<Self::Tensor>> {
+        let env = self.build_env()?;
+        Ok(env.env_description())
+    }
 }
 
 impl<E: Env, F: Sync + Send + 'static> EnvBuilderTrait for F
@@ -53,6 +61,13 @@ impl<EB: EnvBuilderTrait> EnvBuilder<EB> {
         match &self {
             Self::Homogenous { builder, .. } => builder.clone(),
             Self::Heterogenous { builders } => builders[0].clone(),
+        }
+    }
+
+    pub fn env_description(&self) -> Result<EnvironmentDescription<EB::Tensor>> {
+        match &self {
+            Self::Homogenous { builder, n_envs } => builder.env_description(),
+            Self::Heterogenous { builders } => builders[0].env_description(),
         }
     }
 }

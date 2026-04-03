@@ -23,7 +23,6 @@ pub enum LearningModuleType {
 // TODO: we probably need to rethink this. We need to add the optimizer params
 pub struct LearningModuleBuilder {
     pub learning_module_type: LearningModuleType,
-    pub observation_size: Option<usize>,
     pub params: ParamsAdamW,
 }
 
@@ -32,9 +31,9 @@ impl LearningModuleBuilder {
         &self,
         distribution_varmap: VarMap,
         distr_var_builder: VarBuilder,
+        observation_size: usize,
         device: &Device,
     ) -> Result<(SequentialValueFunction, ActorCriticKind)> {
-        let observation_size = self.observation_size.unwrap();
         match &self.learning_module_type {
             LearningModuleType::Paralell {
                 value_layers,
@@ -92,7 +91,12 @@ impl LearningModuleBuilder {
         env_description: &EnvironmentDescription<T>,
         device: &Device,
     ) -> Result<(SequentialValueFunction, ActorCriticKind)> {
-        self.observation_size = Some(env_description.observation_size());
-        self.build(distribution_varmap, distr_var_builder, device)
+        let observation_size = env_description.observation_size();
+        self.build(
+            distribution_varmap,
+            distr_var_builder,
+            observation_size,
+            device,
+        )
     }
 }

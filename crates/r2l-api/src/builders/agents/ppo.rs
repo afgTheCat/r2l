@@ -26,16 +26,12 @@ impl Default for PPOBuilder {
             distribution_builder: DistributionBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,
-                action_size: None,
-                observation_size: None,
-                action_space_type: None,
             },
             learning_module_builder: LearningModuleBuilder {
                 learning_module_type: LearningModuleType::Paralell {
                     value_layers: vec![64, 64],
                     max_grad_norm: None,
                 },
-                observation_size: None,
                 params: ParamsAdamW {
                     lr: 3e-4,
                     beta1: 0.9,

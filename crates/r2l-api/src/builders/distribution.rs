@@ -22,29 +22,26 @@ pub enum ActionSpaceType {
 pub struct DistributionBuilder {
     pub hidden_layers: Vec<usize>,
     pub distribution_type: DistributionType,
-    pub action_size: Option<usize>,
-    pub observation_size: Option<usize>,
-    pub action_space_type: Option<ActionSpaceType>,
 }
 
 impl DistributionBuilder {
     pub fn build(
         &self,
-        distribution_varbuilder: &VarBuilder,
+        distr_varbuilder: &VarBuilder,
         device: &Device,
+        observation_size: usize,
+        action_size: usize,
+        action_space: ActionSpaceType,
     ) -> Result<DistributionKind> {
-        let observation_size = self.observation_size.unwrap();
-        let action_size = self.action_size.unwrap();
-        let action_space = self.action_space_type.unwrap();
         let layers = &[&self.hidden_layers[..], &[action_size]].concat();
         match self.distribution_type {
             DistributionType::DiagGaussianDistribution => {
-                let log_std = distribution_varbuilder.get(action_size, "log_std")?;
+                let log_std = distr_varbuilder.get(action_size, "log_std")?;
                 Ok(DistributionKind::DiagGaussian(
                     DiagGaussianDistribution::build(
                         observation_size,
                         layers,
-                        distribution_varbuilder,
+                        distr_varbuilder,
                         log_std,
                         "policy",
                     )?,
@@ -55,7 +52,7 @@ impl DistributionBuilder {
                     observation_size,
                     action_size,
                     layers,
-                    distribution_varbuilder,
+                    distr_varbuilder,
                     device.clone(),
                     "policy",
                 )?,
@@ -66,18 +63,18 @@ impl DistributionBuilder {
                         observation_size,
                         action_size,
                         layers,
-                        distribution_varbuilder,
+                        distr_varbuilder,
                         device.clone(),
                         "policy",
                     )?,
                 )),
                 ActionSpaceType::Continous => {
-                    let log_std = distribution_varbuilder.get(action_size, "log_std")?;
+                    let log_std = distr_varbuilder.get(action_size, "log_std")?;
                     Ok(DistributionKind::DiagGaussian(
                         DiagGaussianDistribution::build(
                             observation_size,
                             layers,
-                            distribution_varbuilder,
+                            distr_varbuilder,
                             log_std,
                             "policy",
                         )?,
@@ -93,12 +90,18 @@ impl DistributionBuilder {
         device: &Device,
         env_description: &EnvironmentDescription<T>,
     ) -> Result<DistributionKind> {
-        self.action_size = Some(env_description.action_size());
-        self.observation_size = Some(env_description.observation_size());
-        self.action_space_type = match env_description.action_space {
-            Space::Continous { .. } => Some(ActionSpaceType::Continous),
-            Space::Discrete(..) => Some(ActionSpaceType::Discrete),
+        let observation_size = env_description.observation_size();
+        let action_size = env_description.action_size();
+        let action_space_type = match env_description.action_space {
+            Space::Continous { .. } => ActionSpaceType::Continous,
+            Space::Discrete(..) => ActionSpaceType::Discrete,
         };
-        self.build(distribution_varbuilder, device)
+        self.build(
+            distribution_varbuilder,
+            device,
+            observation_size,
+            action_size,
+            action_space_type,
+        )
     }
 }

@@ -16,7 +16,7 @@ use r2l_burn_lm::{
 };
 use r2l_core::env_builder::EnvBuilder;
 use r2l_core::on_policy_algorithm::{
-    DefaultOnPolicyAlgorightmsHooks5, LearningSchedule, OnPolicyAlgorithm,
+    DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
 };
 use r2l_core::sampler::{FinalSampler, Location, buffer::StepTrajectoryBound};
 use r2l_examples::EventBox;
@@ -171,7 +171,7 @@ pub fn train_ppo2(
     let mut algo = OnPolicyAlgorithm {
         sampler,
         agent,
-        hooks: DefaultOnPolicyAlgorightmsHooks5::new(LearningSchedule::RolloutBound {
+        hooks: DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::RolloutBound {
             total_rollouts,
             current_rollout: 0,
         }),
