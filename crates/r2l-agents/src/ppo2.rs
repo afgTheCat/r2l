@@ -60,6 +60,27 @@ pub struct NewPPOBatchData<T: R2lTensor> {
     pub ratio: T,
 }
 
+impl NewPPOBatchData<candle_core::Tensor> {
+    pub fn clip_fraction(&self, clip_range: f32) -> candle_core::Result<f32> {
+        (&self.ratio - 1.)?
+            .abs()?
+            .gt(clip_range)?
+            .to_dtype(candle_core::DType::F32)?
+            .mean_all()?
+            .to_scalar::<f32>()
+    }
+
+    pub fn approx_kl(&self) -> candle_core::Result<f32> {
+        let ratio = self.ratio.detach();
+        let log_ratio = self.logp_diff.detach();
+        ratio
+            .sub(&candle_core::Tensor::ones_like(&ratio)?)?
+            .sub(&log_ratio)?
+            .mean_all()?
+            .to_scalar::<f32>()
+    }
+}
+
 pub trait NewPPOHooksTrait<M: PPOModule2> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
         &mut self,

@@ -4,7 +4,6 @@ use crate::{
         learning_module::{LearningModuleBuilder, LearningModuleType},
     },
     hooks::ppo::PPOHookBuilder,
-    // learning_module::ActorCriticKind,
 };
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{VarBuilder, VarMap};
