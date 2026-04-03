@@ -91,6 +91,7 @@ impl LearningModuleBuilder {
         }
     }
 
+    // I gues we don't really need this
     pub fn build_with_env<T>(
         &mut self,
         distribution_varmap: VarMap,

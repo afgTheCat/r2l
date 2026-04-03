@@ -292,7 +292,7 @@ pub fn train_ppo(
         env_builder,
         StepTrajectoryBound::new(2048),
         None,
-        Location::Thread,
+        Location::Vec,
     );
     let env_description = sampler.env_description();
     let agent =

@@ -34,7 +34,7 @@ impl DistributionBuilder {
         device: &Device,
     ) -> Result<DistributionKind> {
         let observation_size = self.observation_size.unwrap();
-        let action_size = self.observation_size.unwrap();
+        let action_size = self.action_size.unwrap();
         let action_space = self.action_space_type.unwrap();
         let layers = &[&self.hidden_layers[..], &[action_size]].concat();
         match self.distribution_type {
@@ -93,7 +93,7 @@ impl DistributionBuilder {
         device: &Device,
         env_description: &EnvironmentDescription<T>,
     ) -> Result<DistributionKind> {
-        self.observation_size = Some(env_description.action_size());
+        self.action_size = Some(env_description.action_size());
         self.observation_size = Some(env_description.observation_size());
         self.action_space_type = match env_description.action_space {
             Space::Continous { .. } => Some(ActionSpaceType::Continous),

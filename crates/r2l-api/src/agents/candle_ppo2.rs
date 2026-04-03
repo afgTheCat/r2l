@@ -3,19 +3,20 @@ use crate::{
         distribution::DistributionBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
     },
-    hooks::ppo::PPOHookBuilder,
+    hooks::ppo::{PPOHook, PPOHookBuilder, PPOStats},
 };
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{VarBuilder, VarMap};
 use r2l_agents::{
     candle_agents::ActorCriticKind,
-    ppo2::{NewPPO, PPOModule2},
+    ppo2::{NewPPO, NewPPOParams, PPOModule2},
 };
 use r2l_candle_lm::{
     distributions::DistributionKind,
     learning_module::{PolicyValuesLosses, SequentialValueFunction},
 };
 use r2l_core::policies::LearningModule;
+use std::sync::mpsc::Sender;
 
 pub struct R2lCandleLearningModule {
     pub policy: DistributionKind,
@@ -34,7 +35,6 @@ impl R2lCandleLearningModule {
 }
 
 // NOTE: I super don't like this, but whatever.
-// R2lTensorOp should probably be the default? Probably
 impl PPOModule2 for R2lCandleLearningModule {
     type Tensor = Tensor;
     type InferenceTensor = Tensor;
@@ -80,6 +80,7 @@ pub struct R2lCandleLearningModuleBuilder {
     pub distribution_builder: DistributionBuilder,
     pub hook_builder: PPOHookBuilder,
     pub actor_critic_type: LearningModuleBuilder,
+    pub ppo_params: NewPPOParams,
 }
 
 impl R2lCandleLearningModuleBuilder {
@@ -103,8 +104,13 @@ impl R2lCandleLearningModuleBuilder {
         Ok(learning_module)
     }
 
-    fn build(mut self) -> anyhow::Result<()> {
+    fn build(
+        mut self,
+        tx: Sender<PPOStats>,
+    ) -> anyhow::Result<NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>> {
         let lm = self.build_lm()?;
-        todo!()
+        let hooks = self.hook_builder.build(tx);
+        let params = self.ppo_params;
+        Ok(NewPPO { lm, hooks, params })
     }
 }

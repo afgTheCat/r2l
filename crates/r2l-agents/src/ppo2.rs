@@ -114,9 +114,9 @@ pub trait NewPPOHooksTrait<M: PPOModule2> {
 }
 
 pub struct NewPPO<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> {
-    params: NewPPOParams,
-    lm: Module,
-    hooks: Hooks,
+    pub params: NewPPOParams,
+    pub lm: Module,
+    pub hooks: Hooks,
 }
 
 impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> {
