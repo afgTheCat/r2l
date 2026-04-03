@@ -24,6 +24,7 @@ pub enum LearningModuleType {
 pub struct LearningModuleBuilder {
     pub learning_module_type: LearningModuleType,
     pub observation_size: Option<usize>,
+    pub params: ParamsAdamW,
 }
 
 impl LearningModuleBuilder {
@@ -34,13 +35,6 @@ impl LearningModuleBuilder {
         device: &Device,
     ) -> Result<(SequentialValueFunction, ActorCriticKind)> {
         let observation_size = self.observation_size.unwrap();
-        let optimizer_params = ParamsAdamW {
-            lr: 3e-4,
-            beta1: 0.9,
-            beta2: 0.999,
-            eps: 1e-5,
-            weight_decay: 1e-4,
-        };
         match &self.learning_module_type {
             LearningModuleType::Paralell {
                 value_layers,
@@ -49,8 +43,7 @@ impl LearningModuleBuilder {
                 let value_layers = &[&value_layers[..], &[1]].concat();
                 let value_net =
                     build_sequential(observation_size, value_layers, &distr_var_builder, "value")?;
-                let optimizer =
-                    AdamW::new(distribution_varmap.all_vars(), optimizer_params.clone())?;
+                let optimizer = AdamW::new(distribution_varmap.all_vars(), self.params.clone())?;
                 let optimizer_with_grad =
                     OptimizerWithMaxGrad::new(optimizer, *max_grad_norm, distribution_varmap);
                 Ok((
@@ -71,8 +64,8 @@ impl LearningModuleBuilder {
                 let value_net =
                     build_sequential(observation_size, value_layers, &critic_vb, "value")?;
                 let policy_optimizer =
-                    AdamW::new(distribution_varmap.all_vars(), optimizer_params.clone())?;
-                let value_optimizer = AdamW::new(critic_varmap.all_vars(), optimizer_params)?;
+                    AdamW::new(distribution_varmap.all_vars(), self.params.clone())?;
+                let value_optimizer = AdamW::new(critic_varmap.all_vars(), self.params.clone())?;
                 let policy_optimizer_with_grad = OptimizerWithMaxGrad::new(
                     policy_optimizer,
                     *policy_max_grad_norm,

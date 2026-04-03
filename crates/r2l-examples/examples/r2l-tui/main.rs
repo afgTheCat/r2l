@@ -2,7 +2,7 @@ use candle_core::Device;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::hooks::ppo::{PPOHookBuilder, PPOStats};
-use r2l_core::env_builder::EnvBuilderType;
+use r2l_core::env_builder::EnvBuilder;
 use r2l_core::on_policy_algorithm::{
     DefaultOnPolicyAlgorightmsHooks5, LearningSchedule, OnPolicyAlgorithm,
 };
@@ -284,7 +284,7 @@ pub fn train_ppo(
         .with_target_kl(Some(TARGET_KL))
         .build(tx);
     let device = Device::Cpu;
-    let env_builder = EnvBuilderType::EnvBuilder {
+    let env_builder = EnvBuilder::Homogenous {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
         n_envs: 5,
     };

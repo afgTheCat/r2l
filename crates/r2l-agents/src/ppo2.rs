@@ -53,6 +53,12 @@ pub struct NewPPOParams {
     pub sample_size: usize,
 }
 
+impl Default for NewPPOParams {
+    fn default() -> Self {
+        todo!()
+    }
+}
+
 pub struct NewPPOBatchData<T: R2lTensor> {
     pub logp: T,
     pub values_pred: T,

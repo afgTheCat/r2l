@@ -4,7 +4,7 @@ pub mod worker;
 use crate::{
     distributions::Policy,
     env::Env,
-    env_builder::{EnvBuilderTrait, EnvBuilderType},
+    env_builder::{EnvBuilder, EnvBuilderTrait},
     sampler::{
         buffer::{TrajectoryBound, TrajectoryContainer},
         worker::{ThreadWorker, ThreadWorkers, WorkerPool},
@@ -46,6 +46,7 @@ pub trait PreprocessorY<T: R2lTensor, B: TrajectoryContainer<Tensor = T>> {
     fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = T>, buffers: &mut [B]);
 }
 
+// BD: collection method should probably be an enum!
 pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
     preprocessor: Option<Box<dyn PreprocessorY<E::Tensor, BD::Container>>>,
     all_buffers: ArrayHandle<BD::Container>,
@@ -55,7 +56,7 @@ pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
 
 impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
     pub fn build<EB: EnvBuilderTrait<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+        env_builder: EnvBuilder<EB>,
         collection_method: BD,
         preprocessor: Option<Box<dyn PreprocessorY<E::Tensor, BD::Container>>>,
         location: Location,
@@ -64,10 +65,10 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
         let buffers = (0..num_envs)
             .map(|_| collection_method.to_container())
             .collect();
-        let (array_handle, element_handles) = bimodal_array(buffers);
+        let (all_buffers, buffer_handlers) = bimodal_array(buffers);
         let worker_pool = match location {
             Location::Vec => {
-                let workers = element_handles
+                let workers = buffer_handlers
                     .into_iter()
                     .enumerate()
                     .map(|(idx, element_handle)| {
@@ -79,7 +80,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
             }
             Location::Thread => {
                 let env_builder = Arc::new(env_builder);
-                let workers = element_handles
+                let workers = buffer_handlers
                     .into_iter()
                     .enumerate()
                     .map(|(idx, element_handle)| {
@@ -100,7 +101,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
         };
         Self {
             preprocessor,
-            all_buffers: array_handle,
+            all_buffers,
             worker_pool,
             collection_method,
         }
@@ -108,6 +109,40 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
 
     pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
         self.worker_pool.env_description()
+    }
+}
+
+impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E, BD> {
+    type Tensor = E::Tensor;
+    type TrajectoryContainer = BD::Container;
+
+    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        policy: P,
+    ) -> impl AsRef<[Self::TrajectoryContainer]> {
+        self.worker_pool.set_policy(policy.clone());
+        let bound = self.collection_method.method();
+        if let Some(pre_processor) = &mut self.preprocessor {
+            let mut current_step = 0;
+            // TODO: with the new implementation, this might became trivial
+            let RolloutMode::StepBound { n_steps: steps } = bound else {
+                panic!("pre processors currently only support rollout bounds");
+            };
+            while current_step < steps {
+                let mut buffers = self.all_buffers.lock().unwrap();
+                pre_processor.preprocess_states(&policy, buffers.as_mut());
+                drop(buffers);
+                self.worker_pool.single_step();
+                current_step += 1;
+            }
+        } else {
+            self.worker_pool.collect(bound);
+        }
+        self.all_buffers.lock().unwrap()
+    }
+
+    fn shutdown(&mut self) {
+        self.worker_pool.shutdown();
     }
 }
 
@@ -166,39 +201,5 @@ where
         // TODO: we may want the distribution to be behind a RwLock, but I doubt that this will be
         // called a whole lot. In future releases we should enable finer control of noise sampling
         todo!()
-    }
-}
-
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E, BD> {
-    type Tensor = E::Tensor;
-    type TrajectoryContainer = BD::Container;
-
-    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
-        &mut self,
-        policy: P,
-    ) -> impl AsRef<[Self::TrajectoryContainer]> {
-        self.worker_pool.set_policy(policy.clone());
-        let bound = self.collection_method.method();
-        if let Some(pre_processor) = &mut self.preprocessor {
-            let mut current_step = 0;
-            // TODO: with the new implementation, this might became trivial
-            let RolloutMode::StepBound { n_steps: steps } = bound else {
-                panic!("pre processors currently only support rollout bounds");
-            };
-            while current_step < steps {
-                let mut buffers = self.all_buffers.lock().unwrap();
-                pre_processor.preprocess_states(&policy, buffers.as_mut());
-                drop(buffers);
-                self.worker_pool.single_step();
-                current_step += 1;
-            }
-        } else {
-            self.worker_pool.collect(bound);
-        }
-        self.all_buffers.lock().unwrap()
-    }
-
-    fn shutdown(&mut self) {
-        self.worker_pool.shutdown();
     }
 }

@@ -4,7 +4,7 @@ use crate::builders::{
 };
 use anyhow::Result;
 use candle_core::{DType, Device};
-use candle_nn::{VarBuilder, VarMap};
+use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
 use r2l_agents::candle_agents::{
     GenericLearningModuleWithValueFunction, LearningModuleKind,
     ppo::{CandlePPO, CandlePPOCore, PPOHooks},
@@ -36,6 +36,13 @@ impl Default for PPOBuilder {
                     max_grad_norm: None,
                 },
                 observation_size: None,
+                params: ParamsAdamW {
+                    lr: 3e-4,
+                    beta1: 0.9,
+                    beta2: 0.999,
+                    eps: 1e-5,
+                    weight_decay: 1e-4,
+                },
             },
             clip_range: 0.2,
             lambda: 0.8,

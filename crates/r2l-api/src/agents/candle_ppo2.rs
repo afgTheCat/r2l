@@ -1,8 +1,5 @@
 use crate::{
-    builders::{
-        distribution::DistributionBuilder,
-        learning_module::{LearningModuleBuilder, LearningModuleType},
-    },
+    builders::{distribution::DistributionBuilder, learning_module::LearningModuleBuilder},
     hooks::ppo::{PPOHook, PPOHookBuilder, PPOStats},
 };
 use candle_core::{DType, Device, Tensor};
@@ -15,7 +12,10 @@ use r2l_candle_lm::{
     distributions::DistributionKind,
     learning_module::{PolicyValuesLosses, SequentialValueFunction},
 };
-use r2l_core::policies::LearningModule;
+use r2l_core::{
+    env_builder::{EnvBuilder, EnvBuilderTrait},
+    policies::LearningModule,
+};
 use std::sync::mpsc::Sender;
 
 pub struct R2lCandleLearningModule {
@@ -75,7 +75,7 @@ impl PPOModule2 for R2lCandleLearningModule {
     }
 }
 
-pub struct R2lCandleLearningModuleBuilder {
+pub struct PPOCandleAgentBuilder {
     pub device: Device,
     pub distribution_builder: DistributionBuilder,
     pub hook_builder: PPOHookBuilder,
@@ -83,7 +83,7 @@ pub struct R2lCandleLearningModuleBuilder {
     pub ppo_params: NewPPOParams,
 }
 
-impl R2lCandleLearningModuleBuilder {
+impl PPOCandleAgentBuilder {
     fn build_lm(&mut self) -> anyhow::Result<R2lCandleLearningModule> {
         let distribution_varmap = VarMap::new();
         let distribution_var_builder =
@@ -112,5 +112,22 @@ impl R2lCandleLearningModuleBuilder {
         let hooks = self.hook_builder.build(tx);
         let params = self.ppo_params;
         Ok(NewPPO { lm, hooks, params })
+    }
+}
+
+// Goal: PPOBuilder::new()
+struct PPOBuilder<EB: EnvBuilderTrait> {
+    pub ppo_params: NewPPOParams,
+    pub env_builder: EnvBuilder<EB>,
+}
+
+impl<EB: EnvBuilderTrait> PPOBuilder<EB> {
+    fn new(builder: EB, n_envs: usize) -> Self {
+        let env_builder = EnvBuilder::homogenous(builder, n_envs);
+        let ppo_params = NewPPOParams::default();
+        Self {
+            ppo_params,
+            env_builder,
+        }
     }
 }

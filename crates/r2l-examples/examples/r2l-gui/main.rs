@@ -14,15 +14,15 @@ use r2l_burn_lm::{
     distributions::diagonal_distribution::DiagGaussianDistribution,
     learning_module::{ParalellActorCriticLM, ParalellActorModel},
 };
-use r2l_core::env_builder::EnvBuilderType;
+use r2l_core::env_builder::EnvBuilder;
 use r2l_core::on_policy_algorithm::{
     DefaultOnPolicyAlgorightmsHooks5, LearningSchedule, OnPolicyAlgorithm,
 };
 use r2l_core::sampler::{FinalSampler, Location, buffer::StepTrajectoryBound};
 use r2l_examples::EventBox;
+use std::sync::Arc;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::Arc;
 use std::time::Duration;
 
 use crate::table::UpdateTable;
@@ -144,7 +144,7 @@ pub fn train_ppo2(
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
         .build(tx);
-    let env_builder = EnvBuilderType::EnvBuilder {
+    let env_builder = EnvBuilder::Homogenous {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
         n_envs: 5,
     };

@@ -20,30 +20,37 @@ where
 }
 
 // how the environment builders should be injected to to the holder
-pub enum EnvBuilderType<EB: EnvBuilderTrait> {
-    EnvBuilder { builder: Arc<EB>, n_envs: usize },
-    EnvBuilderVec { builders: Vec<Arc<EB>> },
+pub enum EnvBuilder<EB: EnvBuilderTrait> {
+    Homogenous { builder: Arc<EB>, n_envs: usize },
+    Heterogenous { builders: Vec<Arc<EB>> },
 }
 
-impl<EB: EnvBuilderTrait> EnvBuilderType<EB> {
+impl<EB: EnvBuilderTrait> EnvBuilder<EB> {
+    pub fn homogenous(builder: EB, n_envs: usize) -> Self {
+        Self::Homogenous {
+            builder: Arc::new(builder),
+            n_envs,
+        }
+    }
+
     pub fn build_idx(&self, idx: usize) -> Result<EB::Env> {
         match &self {
-            Self::EnvBuilder { builder, .. } => builder.build_env(),
-            Self::EnvBuilderVec { builders } => builders[idx].build_env(),
+            Self::Homogenous { builder, .. } => builder.build_env(),
+            Self::Heterogenous { builders } => builders[idx].build_env(),
         }
     }
 
     pub fn num_envs(&self) -> usize {
         match self {
-            Self::EnvBuilder { n_envs, .. } => *n_envs,
-            Self::EnvBuilderVec { builders } => builders.len(),
+            Self::Homogenous { n_envs, .. } => *n_envs,
+            Self::Heterogenous { builders } => builders.len(),
         }
     }
 
     pub fn env_builder(&self) -> Arc<EB> {
         match &self {
-            Self::EnvBuilder { builder, .. } => builder.clone(),
-            Self::EnvBuilderVec { builders } => builders[0].clone(),
+            Self::Homogenous { builder, .. } => builder.clone(),
+            Self::Heterogenous { builders } => builders[0].clone(),
         }
     }
 }
