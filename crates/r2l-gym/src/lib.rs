@@ -156,6 +156,7 @@ impl From<&str> for GymEnvBuilder {
 }
 
 impl EnvBuilderTrait for GymEnvBuilder {
+    type Tensor = R2lBuffer;
     type Env = GymEnv;
 
     fn build_env(&self) -> Result<Self::Env> {

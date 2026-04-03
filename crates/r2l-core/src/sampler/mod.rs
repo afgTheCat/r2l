@@ -1,5 +1,6 @@
 pub mod buffer;
 pub mod worker;
+pub mod worker_pool2;
 
 use crate::{
     distributions::Policy,
@@ -51,7 +52,7 @@ pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
     preprocessor: Option<Box<dyn PreprocessorY<E::Tensor, BD::Container>>>,
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,
-    collection_method: BD,
+    rollout_mode: RolloutMode,
 }
 
 impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
@@ -103,7 +104,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
             preprocessor,
             all_buffers,
             worker_pool,
-            collection_method,
+            rollout_mode: collection_method.method(),
         }
     }
 
@@ -121,11 +122,11 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E
         policy: P,
     ) -> impl AsRef<[Self::TrajectoryContainer]> {
         self.worker_pool.set_policy(policy.clone());
-        let bound = self.collection_method.method();
+        let rollout_mode = self.rollout_mode;
         if let Some(pre_processor) = &mut self.preprocessor {
             let mut current_step = 0;
             // TODO: with the new implementation, this might became trivial
-            let RolloutMode::StepBound { n_steps: steps } = bound else {
+            let RolloutMode::StepBound { n_steps: steps } = rollout_mode else {
                 panic!("pre processors currently only support rollout bounds");
             };
             while current_step < steps {
@@ -136,7 +137,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E
                 current_step += 1;
             }
         } else {
-            self.worker_pool.collect(bound);
+            self.worker_pool.collect(rollout_mode);
         }
         self.all_buffers.lock().unwrap()
     }

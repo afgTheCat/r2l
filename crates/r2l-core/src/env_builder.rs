@@ -1,9 +1,10 @@
-use crate::env::Env;
+use crate::{env::Env, tensor::R2lTensor};
 use anyhow::Result;
 use std::sync::Arc;
 
 pub trait EnvBuilderTrait: Sync + Send + 'static {
-    type Env: Env;
+    type Tensor: R2lTensor;
+    type Env: Env<Tensor = Self::Tensor>;
 
     fn build_env(&self) -> Result<Self::Env>;
 }
@@ -12,6 +13,7 @@ impl<E: Env, F: Sync + Send + 'static> EnvBuilderTrait for F
 where
     F: Fn() -> Result<E>,
 {
+    type Tensor = E::Tensor;
     type Env = E;
 
     fn build_env(&self) -> Result<Self::Env> {

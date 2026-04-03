@@ -13,8 +13,10 @@ use r2l_candle_lm::{
     learning_module::{PolicyValuesLosses, SequentialValueFunction},
 };
 use r2l_core::{
-    env_builder::{EnvBuilder, EnvBuilderTrait},
+    env::Env,
+    env_builder::{self, EnvBuilder, EnvBuilderTrait},
     policies::LearningModule,
+    sampler::buffer::{StepTrajectoryBound, TrajectoryBound},
 };
 use std::sync::mpsc::Sender;
 
@@ -116,9 +118,13 @@ impl PPOCandleAgentBuilder {
 }
 
 // Goal: PPOBuilder::new()
-struct PPOBuilder<EB: EnvBuilderTrait> {
+struct PPOBuilder<
+    EB: EnvBuilderTrait,
+    BD: TrajectoryBound<Tensor = EB::Tensor> = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>,
+> {
     pub ppo_params: NewPPOParams,
     pub env_builder: EnvBuilder<EB>,
+    pub trajectory_bound: BD,
 }
 
 impl<EB: EnvBuilderTrait> PPOBuilder<EB> {
@@ -128,6 +134,25 @@ impl<EB: EnvBuilderTrait> PPOBuilder<EB> {
         Self {
             ppo_params,
             env_builder,
+            trajectory_bound: StepTrajectoryBound::new(1024),
+        }
+    }
+}
+
+impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBuilder<EB, BD> {
+    pub fn with_bound<BD2: TrajectoryBound<Tensor = EB::Tensor>>(
+        self,
+        trajectory_bound: BD2,
+    ) -> PPOBuilder<EB, BD2> {
+        let Self {
+            ppo_params,
+            env_builder,
+            ..
+        } = self;
+        PPOBuilder {
+            ppo_params,
+            env_builder,
+            trajectory_bound,
         }
     }
 }
