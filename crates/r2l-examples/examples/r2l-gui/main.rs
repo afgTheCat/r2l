@@ -143,7 +143,8 @@ pub fn train_ppo2(
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
-        .build(tx);
+        .with_tx(Some(tx))
+        .build();
     let env_builder = EnvBuilder::Homogenous {
         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
         n_envs: 5,

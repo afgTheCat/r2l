@@ -1,6 +1,6 @@
 use candle_core::Device;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_api::agents::candle_ppo2::PPOBuilder2;
+use r2l_api::algorithm::ppo_algorithm::PPOAlgorithmBuiler;
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::hooks::ppo::{PPOHookBuilder, PPOStats};
 use r2l_core::env_builder::EnvBuilder;
@@ -281,7 +281,7 @@ pub fn train_ppo2(
     clip_range: f32,
 ) -> anyhow::Result<()> {
     // TODO: The generic here is ugly
-    let ppo_builder = PPOBuilder2::<GymEnvBuilder>::new(ENV_NAME, 10)
+    let ppo_builder = PPOAlgorithmBuiler::<GymEnvBuilder>::new(ENV_NAME, 10)
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
@@ -291,8 +291,9 @@ pub fn train_ppo2(
         .with_learning_schedule(LearningSchedule::RolloutBound {
             total_rollouts: 300,
             current_rollout: 0,
-        });
-    let mut ppo = ppo_builder.build(tx)?;
+        })
+        .with_reporter(Some(tx));
+    let mut ppo = ppo_builder.build()?;
     ppo.train()
 }
 

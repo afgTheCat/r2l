@@ -12,6 +12,7 @@ pub struct PPOHookBuilder {
     vf_coeff: Option<f32>,
     target_kl: Option<f32>,
     gradient_clipping: Option<f32>,
+    tx: Option<Sender<PPOStats>>,
 }
 
 impl Default for PPOHookBuilder {
@@ -23,6 +24,7 @@ impl Default for PPOHookBuilder {
             vf_coeff: None,
             target_kl: None,
             gradient_clipping: None,
+            tx: None,
         }
     }
 }
@@ -62,6 +64,11 @@ impl PPOHookBuilder {
         self
     }
 
+    pub fn with_tx(mut self, tx: Option<Sender<PPOStats>>) -> Self {
+        self.tx = tx;
+        self
+    }
+
     pub fn normalize_advantage(&self) -> bool {
         self.normalize_advantage
     }
@@ -86,7 +93,7 @@ impl PPOHookBuilder {
         self.gradient_clipping
     }
 
-    pub fn build<T>(self, tx: Sender<PPOStats>) -> PPOHook<T> {
+    pub fn build<T>(self) -> PPOHook<T> {
         PPOHook {
             normalize_advantage: self.normalize_advantage,
             total_epochs: self.total_epochs,
@@ -98,8 +105,12 @@ impl PPOHookBuilder {
             }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
-            report: PPOStats::default(),
-            tx,
+            reporter: self.tx.and_then(|tx| {
+                Some(PPOHookReporter {
+                    report: PPOStats::default(),
+                    tx,
+                })
+            }),
             _phantom: PhantomData,
         }
     }
@@ -139,6 +150,11 @@ impl TargetKl {
     }
 }
 
+pub struct PPOHookReporter {
+    pub report: PPOStats,
+    pub tx: Sender<PPOStats>,
+}
+
 pub struct PPOHook<T = ()> {
     pub normalize_advantage: bool,
     pub total_epochs: usize,
@@ -147,7 +163,8 @@ pub struct PPOHook<T = ()> {
     pub target_kl: Option<TargetKl>,
     pub gradient_clipping: Option<f32>,
     pub current_epoch: usize,
-    pub report: PPOStats,
-    pub tx: Sender<PPOStats>,
+    pub reporter: Option<PPOHookReporter>,
+    // pub report: PPOStats,
+    // pub tx: Option<Sender<PPOStats>>,
     _phantom: PhantomData<T>,
 }

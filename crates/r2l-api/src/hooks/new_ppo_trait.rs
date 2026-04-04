@@ -1,6 +1,6 @@
 use crate::{
     agents::candle_ppo2::R2lCandleLearningModule,
-    hooks::ppo::{BatchStats, PPOHook},
+    hooks::ppo::{BatchStats, PPOHook, PPOHookReporter},
 };
 use burn::module;
 use candle_core::Tensor;
@@ -42,16 +42,18 @@ impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModu
         };
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
-            let mut total_rewards: f32 = 0.;
-            let mut total_episodes: usize = 0;
-            for buffer in buffers {
-                total_rewards += buffer.rewards().sum::<f32>();
-                total_episodes += buffer.dones().filter(|x| *x).count();
+            if let Some(PPOHookReporter { report, tx }) = &mut self.reporter {
+                let mut total_rewards: f32 = 0.;
+                let mut total_episodes: usize = 0;
+                for buffer in buffers {
+                    total_rewards += buffer.rewards().sum::<f32>();
+                    total_episodes += buffer.dones().filter(|x| *x).count();
+                }
+                report.avarage_reward = total_rewards / total_episodes as f32;
+                report.std = module.get_policy().std().unwrap();
+                report.learning_rate = module.policy_learning_rate();
+                tx.send(std::mem::take(report)).unwrap();
             }
-            self.report.avarage_reward = total_rewards / total_episodes as f32;
-            self.report.std = module.get_policy().std().unwrap();
-            self.report.learning_rate = module.policy_learning_rate();
-            self.tx.send(std::mem::take(&mut self.report)).unwrap();
             Ok(HookResult::Break)
         } else {
             Ok(HookResult::Continue)
@@ -70,13 +72,15 @@ impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModu
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
         let approx_kl = data.approx_kl()?;
-        self.report.collect_batch_data(BatchStats {
-            clip_fraction: data.clip_fraction(params.clip_range)?,
-            policy_loss: losses.policy_loss.to_scalar()?,
-            entropy_loss: entropy_loss.to_scalar()?,
-            value_loss: losses.value_loss.to_scalar()?,
-            approx_kl,
-        });
+        if let Some(PPOHookReporter { report, .. }) = &mut self.reporter {
+            report.collect_batch_data(BatchStats {
+                clip_fraction: data.clip_fraction(params.clip_range)?,
+                policy_loss: losses.policy_loss.to_scalar()?,
+                entropy_loss: entropy_loss.to_scalar()?,
+                value_loss: losses.value_loss.to_scalar()?,
+                approx_kl,
+            });
+        }
         if self.entropy_coeff != 0. {
             losses.apply_entropy(entropy_loss)?;
         }

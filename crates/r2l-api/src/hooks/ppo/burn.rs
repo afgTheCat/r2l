@@ -1,4 +1,4 @@
-use crate::hooks::ppo::{BatchStats, PPOHook};
+use crate::hooks::ppo::{BatchStats, PPOHook, PPOHookReporter};
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use r2l_agents::{
     HookResult,
@@ -47,16 +47,18 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         };
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
-            let mut total_rewards: f32 = 0.;
-            let mut total_episodes: usize = 0;
-            for buffer in rollout_buffers {
-                total_rewards += buffer.rewards().sum::<f32>();
-                total_episodes += buffer.dones().filter(|done| *done).count();
+            if let Some(PPOHookReporter { report, tx }) = &mut self.reporter {
+                let mut total_rewards: f32 = 0.;
+                let mut total_episodes: usize = 0;
+                for buffer in rollout_buffers {
+                    total_rewards += buffer.rewards().sum::<f32>();
+                    total_episodes += buffer.dones().filter(|done| *done).count();
+                }
+                report.avarage_reward = total_rewards / total_episodes as f32;
+                report.std = agent.lm.model.distr.std().unwrap();
+                report.learning_rate = 3e-4;
+                tx.send(std::mem::take(report)).unwrap();
             }
-            self.report.avarage_reward = total_rewards / total_episodes as f32;
-            self.report.std = agent.lm.model.distr.std().unwrap();
-            self.report.learning_rate = 3e-4;
-            self.tx.send(std::mem::take(&mut self.report)).unwrap();
             Ok(HookResult::Break)
         } else {
             Ok(HookResult::Continue)
@@ -73,13 +75,16 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnPPOHooksTrait<B, D> for PPOHook {
         let entropy = agent.lm.model.distr.entropy().unwrap();
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         let approx_kl = data.approx_kl();
-        self.report.collect_batch_data(BatchStats {
-            clip_fraction: data.clip_fraction(agent.clip_range),
-            policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
-            entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
-            value_loss: losses.value_loss.to_data().to_vec::<f32>().unwrap()[0],
-            approx_kl,
-        });
+
+        if let Some(PPOHookReporter { report, .. }) = &mut self.reporter {
+            report.collect_batch_data(BatchStats {
+                clip_fraction: data.clip_fraction(agent.clip_range),
+                policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
+                entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
+                value_loss: losses.value_loss.to_data().to_vec::<f32>().unwrap()[0],
+                approx_kl,
+            });
+        }
         if self.entropy_coeff != 0. {
             losses.apply_entropy(entropy_loss);
         }
