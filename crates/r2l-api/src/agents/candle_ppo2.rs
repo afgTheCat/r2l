@@ -19,7 +19,7 @@ use r2l_core::{
     agents::Agent,
     env::Space,
     env_builder::{EnvBuilder, EnvBuilderTrait},
-    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, OnPolicyAlgorithm},
+    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     policies::LearningModule,
     sampler::{
         FinalSampler, Location,
@@ -167,7 +167,7 @@ impl PPOCandleAgentBuilder {
 }
 
 // Goal: PPOBuilder::new()
-pub struct PPOBuilder<
+pub struct PPOBuilder2<
     EB: EnvBuilderTrait,
     BD: TrajectoryBound<Tensor = EB::Tensor> = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>,
 > {
@@ -176,41 +176,120 @@ pub struct PPOBuilder<
     pub trajectory_bound: BD,
     pub agent_builder: PPOCandleAgentBuilder,
     pub location: Location,
+    pub learning_schedule: LearningSchedule,
 }
 
-impl<EB: EnvBuilderTrait> PPOBuilder<EB> {
-    pub fn new(builder: EB, n_envs: usize) -> Self {
+impl<EB: EnvBuilderTrait> PPOBuilder2<EB> {
+    pub fn new(builder: impl Into<EB>, n_envs: usize) -> Self {
         let env_builder = EnvBuilder::homogenous(builder, n_envs);
         let ppo_params = NewPPOParams::default();
         Self {
             ppo_params,
-            env_builder,
+            env_builder: env_builder.into(),
             trajectory_bound: StepTrajectoryBound::new(1024),
             agent_builder: PPOCandleAgentBuilder::default(),
             location: Location::Vec,
+            learning_schedule: LearningSchedule::RolloutBound {
+                total_rollouts: 300,
+                current_rollout: 0,
+            },
         }
     }
 }
 
-impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBuilder<EB, BD> {
+impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBuilder2<EB, BD> {
     pub fn with_bound<BD2: TrajectoryBound<Tensor = EB::Tensor>>(
         self,
         trajectory_bound: BD2,
-    ) -> PPOBuilder<EB, BD2> {
+    ) -> PPOBuilder2<EB, BD2> {
         let Self {
             ppo_params,
             env_builder,
             agent_builder,
             location,
+            learning_schedule,
             ..
         } = self;
-        PPOBuilder {
+        PPOBuilder2 {
             ppo_params,
             env_builder,
             trajectory_bound,
             agent_builder,
             location,
+            learning_schedule,
         }
+    }
+
+    pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
+        self.agent_builder.hook_builder = self
+            .agent_builder
+            .hook_builder
+            .with_normalize_advantage(normalize_advantage);
+        self
+    }
+
+    pub fn with_total_epochs(mut self, total_epochs: usize) -> Self {
+        self.agent_builder.hook_builder = self
+            .agent_builder
+            .hook_builder
+            .with_total_epochs(total_epochs);
+        self
+    }
+
+    pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
+        self.agent_builder.hook_builder = self
+            .agent_builder
+            .hook_builder
+            .with_entropy_coeff(entropy_coeff);
+        self
+    }
+
+    pub fn with_vf_coeff(mut self, vf_coeff: Option<f32>) -> Self {
+        self.agent_builder.hook_builder = self.agent_builder.hook_builder.with_vf_coeff(vf_coeff);
+        self
+    }
+
+    pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
+        self.agent_builder.hook_builder = self.agent_builder.hook_builder.with_target_kl(target_kl);
+        self
+    }
+
+    pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
+        self.agent_builder.hook_builder = self
+            .agent_builder
+            .hook_builder
+            .with_gradient_clipping(gradient_clipping);
+        self
+    }
+
+    pub fn with_clip_range(mut self, clip_range: f32) -> Self {
+        self.ppo_params.clip_range = clip_range;
+        self
+    }
+
+    pub fn with_gamma(mut self, gamma: f32) -> Self {
+        self.ppo_params.gamma = gamma;
+        self
+    }
+
+    pub fn with_lambda(mut self, lambda: f32) -> Self {
+        self.ppo_params.lambda = lambda;
+        self
+    }
+
+    pub fn with_sample_size(mut self, sample_size: usize) -> Self {
+        self.ppo_params.sample_size = sample_size;
+        self
+    }
+
+    pub fn with_location(mut self, location: Location) -> Self {
+        self.location = location;
+        self
+    }
+
+    pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
+        self.learning_schedule = learning_schedule;
+        self
     }
 
     // TODO: too much. Also not generic enough
@@ -236,12 +315,10 @@ impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBuilder<E
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space, tx)?;
-        let hooks = DefaultOnPolicyAlgorightmsHooks::new(
-            r2l_core::on_policy_algorithm::LearningSchedule::RolloutBound {
-                total_rollouts: 300,
-                current_rollout: 0,
-            },
-        );
+        let hooks = DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::RolloutBound {
+            total_rollouts: 300,
+            current_rollout: 0,
+        });
         Ok(OnPolicyAlgorithm {
             sampler,
             agent,

@@ -1,5 +1,6 @@
 use candle_core::Device;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use r2l_api::agents::candle_ppo2::PPOBuilder2;
 use r2l_api::builders::agents::ppo::PPOBuilder;
 use r2l_api::hooks::ppo::{PPOHookBuilder, PPOStats};
 use r2l_core::env_builder::EnvBuilder;
@@ -9,6 +10,7 @@ use r2l_core::on_policy_algorithm::{
 use r2l_core::sampler::buffer::StepTrajectoryBound;
 use r2l_core::sampler::{FinalSampler, Location};
 use r2l_examples::EventBox;
+use r2l_gym::GymEnvBuilder;
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -273,6 +275,26 @@ const MAX_GRAD_NORM: f32 = 0.5;
 const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
 
+pub fn train_ppo2(
+    tx: Sender<PPOStats>,
+    total_rollouts: usize,
+    clip_range: f32,
+) -> anyhow::Result<()> {
+    let ppo_builder = PPOBuilder2::new(ENV_NAME, 10)
+        .with_entropy_coeff(ENT_COEFF)
+        .with_gradient_clipping(Some(MAX_GRAD_NORM))
+        .with_target_kl(Some(TARGET_KL))
+        .with_bound(StepTrajectoryBound::new(2048))
+        .with_location(Location::Vec)
+        .with_clip_range(clip_range)
+        .with_learning_schedule(LearningSchedule::RolloutBound {
+            total_rollouts: 300,
+            current_rollout: 0,
+        });
+    let mut ppo = ppo_builder.build(tx)?;
+    ppo.train()
+}
+
 pub fn train_ppo(
     tx: Sender<PPOStats>,
     total_rollouts: usize,
@@ -285,7 +307,7 @@ pub fn train_ppo(
         .build(tx);
     let device = Device::Cpu;
     let env_builder = EnvBuilder::Homogenous {
-        builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
+        builder: Arc::new(GymEnvBuilder::new(ENV_NAME)),
         n_envs: 5,
     };
     let sampler = FinalSampler::build(
@@ -326,7 +348,7 @@ fn main() -> io::Result<()> {
     let total_rollouts = 300;
     let clip_range = 0.2;
     std::thread::spawn(
-        move || match train_ppo(update_tx, total_rollouts, clip_range) {
+        move || match train_ppo2(update_tx, total_rollouts, clip_range) {
             Ok(()) => {}
             Err(err) => {
                 eprintln!("ppo was not trained normally, err: {err}")
