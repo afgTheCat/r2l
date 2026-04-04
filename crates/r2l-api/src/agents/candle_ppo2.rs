@@ -1,14 +1,15 @@
 use crate::{
     builders::{
-        distribution::{ActionSpaceType, DistributionBuilder},
-        learning_module::LearningModuleBuilder,
+        distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
+        learning_module::{LearningModuleBuilder, LearningModuleType},
     },
     hooks::ppo::{PPOHook, PPOHookBuilder, PPOStats},
 };
 use candle_core::{DType, Device, Tensor};
-use candle_nn::{VarBuilder, VarMap};
+use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
 use r2l_agents::{
     candle_agents::ActorCriticKind,
+    ppo::PPOParams,
     ppo2::{NewPPO, NewPPOParams, PPOModule2},
 };
 use r2l_candle_lm::{
@@ -117,7 +118,28 @@ pub struct PPOCandleAgentBuilder {
 
 impl Default for PPOCandleAgentBuilder {
     fn default() -> Self {
-        todo!()
+        Self {
+            device: Device::Cpu,
+            distribution_builder: DistributionBuilder {
+                hidden_layers: vec![64, 64],
+                distribution_type: DistributionType::Dynamic,
+            },
+            actor_critic_type: LearningModuleBuilder {
+                learning_module_type: LearningModuleType::Paralell {
+                    value_layers: vec![64, 64],
+                    max_grad_norm: None,
+                },
+                params: ParamsAdamW {
+                    lr: 3e-4,
+                    beta1: 0.9,
+                    beta2: 0.999,
+                    eps: 1e-5,
+                    weight_decay: 1e-4,
+                },
+            },
+            hook_builder: PPOHookBuilder::default(),
+            ppo_params: NewPPOParams::default(),
+        }
     }
 }
 
@@ -171,7 +193,6 @@ pub struct PPOBuilder2<
     EB: EnvBuilderTrait,
     BD: TrajectoryBound<Tensor = EB::Tensor> = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>,
 > {
-    pub ppo_params: NewPPOParams,
     pub env_builder: EnvBuilder<EB>,
     pub trajectory_bound: BD,
     pub agent_builder: PPOCandleAgentBuilder,
@@ -180,11 +201,9 @@ pub struct PPOBuilder2<
 }
 
 impl<EB: EnvBuilderTrait> PPOBuilder2<EB> {
-    pub fn new(builder: impl Into<EB>, n_envs: usize) -> Self {
-        let env_builder = EnvBuilder::homogenous(builder, n_envs);
-        let ppo_params = NewPPOParams::default();
+    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+        let env_builder = EnvBuilder::homogenous(builder.into(), n_envs);
         Self {
-            ppo_params,
             env_builder: env_builder.into(),
             trajectory_bound: StepTrajectoryBound::new(1024),
             agent_builder: PPOCandleAgentBuilder::default(),
@@ -203,7 +222,6 @@ impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBuilder2<
         trajectory_bound: BD2,
     ) -> PPOBuilder2<EB, BD2> {
         let Self {
-            ppo_params,
             env_builder,
             agent_builder,
             location,
@@ -211,7 +229,6 @@ impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBuilder2<
             ..
         } = self;
         PPOBuilder2 {
-            ppo_params,
             env_builder,
             trajectory_bound,
             agent_builder,
@@ -263,22 +280,22 @@ impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBuilder2<
     }
 
     pub fn with_clip_range(mut self, clip_range: f32) -> Self {
-        self.ppo_params.clip_range = clip_range;
+        self.agent_builder.ppo_params.clip_range = clip_range;
         self
     }
 
     pub fn with_gamma(mut self, gamma: f32) -> Self {
-        self.ppo_params.gamma = gamma;
+        self.agent_builder.ppo_params.gamma = gamma;
         self
     }
 
     pub fn with_lambda(mut self, lambda: f32) -> Self {
-        self.ppo_params.lambda = lambda;
+        self.agent_builder.ppo_params.lambda = lambda;
         self
     }
 
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
-        self.ppo_params.sample_size = sample_size;
+        self.agent_builder.ppo_params.sample_size = sample_size;
         self
     }
 

@@ -24,6 +24,11 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::{f64, io, sync::mpsc};
 
+const ENT_COEFF: f32 = 0.001;
+const MAX_GRAD_NORM: f32 = 0.5;
+const TARGET_KL: f32 = 0.01;
+const ENV_NAME: &str = "Pendulum-v1";
+
 fn mean(numbers: &[f32]) -> f32 {
     let sum: f32 = numbers.iter().sum();
     sum / numbers.len() as f32
@@ -270,17 +275,13 @@ fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     });
 }
 
-const ENT_COEFF: f32 = 0.001;
-const MAX_GRAD_NORM: f32 = 0.5;
-const TARGET_KL: f32 = 0.01;
-const ENV_NAME: &str = "Pendulum-v1";
-
 pub fn train_ppo2(
     tx: Sender<PPOStats>,
     total_rollouts: usize,
     clip_range: f32,
 ) -> anyhow::Result<()> {
-    let ppo_builder = PPOBuilder2::new(ENV_NAME, 10)
+    // TODO: The generic here is ugly
+    let ppo_builder = PPOBuilder2::<GymEnvBuilder>::new(ENV_NAME, 10)
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
@@ -293,43 +294,6 @@ pub fn train_ppo2(
         });
     let mut ppo = ppo_builder.build(tx)?;
     ppo.train()
-}
-
-pub fn train_ppo(
-    tx: Sender<PPOStats>,
-    total_rollouts: usize,
-    clip_range: f32,
-) -> anyhow::Result<()> {
-    let ppo_hook = PPOHookBuilder::new()
-        .with_entropy_coeff(ENT_COEFF)
-        .with_gradient_clipping(Some(MAX_GRAD_NORM))
-        .with_target_kl(Some(TARGET_KL))
-        .build(tx);
-    let device = Device::Cpu;
-    let env_builder = EnvBuilder::Homogenous {
-        builder: Arc::new(GymEnvBuilder::new(ENV_NAME)),
-        n_envs: 5,
-    };
-    let sampler = FinalSampler::build(
-        env_builder,
-        StepTrajectoryBound::new(2048),
-        None,
-        Location::Vec,
-    );
-    let env_description = sampler.env_description();
-    let agent =
-        PPOBuilder::default()
-            .clip_range(clip_range)
-            .build(&device, &env_description, ppo_hook)?;
-    let mut algo = OnPolicyAlgorithm {
-        sampler,
-        agent,
-        hooks: DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::RolloutBound {
-            total_rollouts,
-            current_rollout: 0,
-        }),
-    };
-    algo.train()
 }
 
 pub fn adapt_ppo_events(update_rx: Receiver<PPOStats>, tx_to_updates: Sender<EventBox>) {

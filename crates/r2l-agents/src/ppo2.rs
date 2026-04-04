@@ -55,7 +55,12 @@ pub struct NewPPOParams {
 
 impl Default for NewPPOParams {
     fn default() -> Self {
-        todo!()
+        Self {
+            clip_range: 0.2,
+            lambda: 0.8,
+            gamma: 0.98,
+            sample_size: 64,
+        }
     }
 }
 
