@@ -5,7 +5,6 @@ use crate::hooks::ppo::PPOHookReporter;
 use crate::learning_module::R2lCandleLearningModule;
 use candle_core::Tensor;
 use r2l_agents::ppo::PPOHooksTrait;
-use r2l_agents::ppo::candle_ppo::CandlePPO;
 use r2l_agents::{
     HookResult,
     ppo::{PPOBatchData, PPOParams},
@@ -94,15 +93,5 @@ impl PPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModule>
         } else {
             Ok(HookResult::Continue)
         }
-    }
-}
-
-pub struct PPOBuilder {
-    hook: PPOHookBuilder,
-}
-
-impl PPOBuilder {
-    fn build(self) -> CandlePPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>> {
-        todo!()
     }
 }

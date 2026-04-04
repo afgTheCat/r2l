@@ -13,8 +13,15 @@ use r2l_core::{
 
 use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
 
+pub trait PPOLosses<T> {
+    fn ppo_losses(policy_loss: T, value_loss: T) -> Self;
+}
+
 // NOTE: heavily in progress
-pub trait PPOModule2: LearningModule + ValueFunction<Tensor = Self::LearningTensor> {
+pub trait PPOModule2:
+    LearningModule<Losses: PPOLosses<Self::LearningTensor>>
+    + ValueFunction<Tensor = Self::LearningTensor>
+{
     // The tensor type returned to env
     type InferenceTensor: R2lTensor;
     // The tensor type used internally for learning
@@ -23,6 +30,7 @@ pub trait PPOModule2: LearningModule + ValueFunction<Tensor = Self::LearningTens
     type InferencePolicy: Policy<Tensor = Self::InferenceTensor>;
     // The policy that has autograd
     type Policy: Policy<Tensor = Self::LearningTensor>;
+
     fn get_inference_policy(&self) -> Self::InferencePolicy;
 
     fn get_policy(&self) -> &Self::Policy;
@@ -32,12 +40,6 @@ pub trait PPOModule2: LearningModule + ValueFunction<Tensor = Self::LearningTens
 
     // TODO: to be removed
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;
-
-    // TODO: don't really know if we need this
-    fn get_losses(
-        policy_loss: Self::LearningTensor,
-        value_loss: Self::LearningTensor,
-    ) -> <Self as LearningModule>::Losses;
 }
 
 pub struct NewPPOParams {
@@ -144,8 +146,7 @@ impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> 
             let returns = lm.tensor_from_slice(&returns.sample(&indicies));
             let logp = lm.get_policy().log_probs(&observations, &actions)?;
             let values_pred = lm.calculate_values(&observations)?;
-            let value_loss =
-                Module::LearningTensor::calculate_value_loss(&returns, &values_pred)?;
+            let value_loss = Module::LearningTensor::calculate_value_loss(&returns, &values_pred)?;
             let logp_diff = Module::LearningTensor::calculate_logp_diff(&logp, &logp_old)?;
             let ratio = Module::LearningTensor::calculate_ratio(&logp_diff)?;
             let policy_loss = Module::LearningTensor::calculate_policy_loss(
@@ -153,7 +154,7 @@ impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> 
                 &advantages,
                 self.params.clip_range,
             )?;
-            let mut losses = Module::get_losses(policy_loss, value_loss);
+            let mut losses = Module::Losses::ppo_losses(policy_loss, value_loss);
             let ppo_data = NewPPOBatchData {
                 logp,
                 values_pred,

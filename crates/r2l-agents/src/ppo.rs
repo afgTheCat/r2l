@@ -1,6 +1,3 @@
-pub mod burn_ppo;
-pub mod candle_ppo;
-
 use burn::tensor::backend::{AutodiffBackend, Backend};
 use r2l_burn_lm::learning_module::PolicyValuesLosses as BurnLosses;
 use r2l_candle_lm::learning_module::PolicyValuesLosses as CandleLosses;
@@ -12,7 +9,7 @@ use r2l_core::{
     utils::rollout_buffer::{Advantages, Returns},
 };
 
-use crate::HookResult;
+use crate::{HookResult, ppo2::PPOLosses};
 
 pub struct PPOBatchData<T: R2lTensor> {
     pub logp: T,
@@ -83,56 +80,6 @@ pub trait PPOTensorOps: R2lTensor {
     fn calculate_value_loss(returns: &Self, values_pred: &Self) -> anyhow::Result<Self>;
 }
 
-pub trait PPOLosses<T> {
-    fn ppo_losses(policy_loss: T, value_loss: T) -> Self;
-}
-
-pub trait PPOModule: ModuleWithValueFunction {
-    fn ppo_batch_data_and_losses(
-        &self,
-        observations: &[Self::Tensor],
-        actions: &[Self::Tensor],
-        advantages: &Self::Tensor,
-        logp_old: &Self::Tensor,
-        returns: &Self::Tensor,
-        clip_range: f32,
-    ) -> anyhow::Result<(Self::Losses, PPOBatchData<Self::Tensor>)>;
-}
-
-impl<M> PPOModule for M
-where
-    M: ModuleWithValueFunction,
-    M::Policy: Policy<Tensor = M::Tensor>,
-    M::ValueFunction: ValueFunction<Tensor = M::Tensor>,
-    M::Tensor: PPOTensorOps,
-    M::Losses: PPOLosses<M::Tensor>,
-{
-    fn ppo_batch_data_and_losses(
-        &self,
-        observations: &[Self::Tensor],
-        actions: &[Self::Tensor],
-        advantages: &Self::Tensor,
-        logp_old: &Self::Tensor,
-        returns: &Self::Tensor,
-        clip_range: f32,
-    ) -> anyhow::Result<(Self::Losses, PPOBatchData<Self::Tensor>)> {
-        let logp = self.get_policy().log_probs(observations, actions)?;
-        let values_pred = self.value_func().calculate_values(observations)?;
-        let value_loss = M::Tensor::calculate_value_loss(returns, &values_pred)?;
-        let logp_diff = M::Tensor::calculate_logp_diff(&logp, logp_old)?;
-        let ratio = M::Tensor::calculate_ratio(&logp_diff)?;
-        let policy_loss = M::Tensor::calculate_policy_loss(&ratio, advantages, clip_range)?;
-        let losses = M::Losses::ppo_losses(policy_loss, value_loss);
-        let ppo_data = PPOBatchData {
-            logp,
-            values_pred,
-            logp_diff,
-            ratio,
-        };
-        Ok((losses, ppo_data))
-    }
-}
-
 impl PPOTensorOps for candle_core::Tensor {
     fn calculate_logp_diff(logp: &Self, logp_old: &Self) -> anyhow::Result<Self> {
         Ok((logp - logp_old)?)
@@ -148,9 +95,11 @@ impl PPOTensorOps for candle_core::Tensor {
         clip_range: f32,
     ) -> anyhow::Result<Self> {
         let clip_adv = (ratio.clamp(1. - clip_range, 1. + clip_range)? * advantages.clone())?;
-        Ok(candle_core::Tensor::minimum(&(ratio * advantages)?, &clip_adv)?
-            .neg()?
-            .mean_all()?)
+        Ok(
+            candle_core::Tensor::minimum(&(ratio * advantages)?, &clip_adv)?
+                .neg()?
+                .mean_all()?,
+        )
     }
 
     fn calculate_value_loss(returns: &Self, values_pred: &Self) -> anyhow::Result<Self> {
@@ -172,10 +121,7 @@ impl<B: AutodiffBackend> PPOTensorOps for burn::Tensor<B, 1> {
         advantages: &Self,
         clip_range: f32,
     ) -> anyhow::Result<Self> {
-        let clip_adv = ratio
-            .clone()
-            .clamp(1. - clip_range, 1. + clip_range)
-            * advantages.clone();
+        let clip_adv = ratio.clone().clamp(1. - clip_range, 1. + clip_range) * advantages.clone();
         Ok((-(ratio.clone() * advantages.clone()).min_pair(clip_adv)).mean())
     }
 

@@ -4,7 +4,9 @@ use burn::{
     prelude::Backend,
     tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
 };
-use r2l_agents::ppo2::{NewPPO, PPOModule2};
+use r2l_agents::{
+    ppo2::{NewPPO, PPOModule2},
+};
 use r2l_burn_lm::learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses};
 use r2l_core::policies::{LearningModule, ValueFunction};
 
@@ -39,13 +41,6 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, V: ValueFunction<Tensor = BurnTensor<
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        todo!()
-    }
-
-    fn get_losses(
-        policy_loss: Self::LearningTensor,
-        value_loss: Self::LearningTensor,
-    ) -> <Self as LearningModule>::Losses {
         todo!()
     }
 }

@@ -87,14 +87,6 @@ impl PPOModule2 for R2lCandleLearningModule {
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
         t.clone()
     }
-
-    // this needs to be a constraint on the losses
-    fn get_losses(
-        policy_loss: Self::LearningTensor,
-        value_loss: Self::LearningTensor,
-    ) -> <Self as LearningModule>::Losses {
-        PolicyValuesLosses::new(policy_loss, value_loss)
-    }
 }
 
 pub struct CandlePPO(pub NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>);
