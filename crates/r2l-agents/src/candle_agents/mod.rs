@@ -4,7 +4,7 @@ pub mod ppo;
 use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use r2l_candle_lm::{
-    distributions::DistributionKind,
+    distributions::CandleDistributionKind,
     learning_module::{
         DecoupledActorCriticLM, ParalellActorCriticLM, PolicyValuesLosses, SequentialValueFunction,
     },
@@ -92,7 +92,7 @@ impl LearningModule for ActorCriticKind {
 }
 
 pub type LearningModuleKind =
-    GenericLearningModuleWithValueFunction<DistributionKind, ActorCriticKind>;
+    GenericLearningModuleWithValueFunction<CandleDistributionKind, ActorCriticKind>;
 
 impl LearningModuleKind {
     pub fn policy_learning_rate(&self) -> f64 {

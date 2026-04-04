@@ -1,6 +1,6 @@
 use r2l_candle_lm::{
     CandleModuleWithValueFunction,
-    distributions::DistributionKind,
+    distributions::CandleDistributionKind,
     learning_module::{
         DecoupledActorCriticLM, ParalellActorCriticLM, PolicyValuesLosses, SequentialValueFunction,
     },
@@ -40,7 +40,7 @@ impl LearningModule for ActorCriticKind {
 }
 
 pub struct R2lCandleLearningModule {
-    pub policy: DistributionKind,
+    pub policy: CandleDistributionKind,
     pub learning_module: ActorCriticKind,
     pub value_function: SequentialValueFunction,
 }
@@ -58,8 +58,8 @@ impl R2lCandleLearningModule {
 impl ModuleWithValueFunction for R2lCandleLearningModule {
     type Tensor = candle_core::Tensor;
     type InferenceTensor = candle_core::Tensor;
-    type Policy = DistributionKind;
-    type InferencePolicy = DistributionKind;
+    type Policy = CandleDistributionKind;
+    type InferencePolicy = CandleDistributionKind;
     type ValueFunction = SequentialValueFunction;
     type Losses = PolicyValuesLosses;
 

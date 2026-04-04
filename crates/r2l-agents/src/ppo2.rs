@@ -16,7 +16,7 @@ use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logp
 // NOTE: heavily in progress
 pub trait PPOModule2 {
     // The tensor type returned to env
-    type InferenceTensor: R2lTensorOp;
+    type InferenceTensor: R2lTensor;
     // The tensor type used internally for learning
     type Tensor: R2lTensorOp;
     // What we need is an inference policy type (maybe actor?)

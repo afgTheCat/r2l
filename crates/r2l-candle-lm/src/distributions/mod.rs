@@ -10,12 +10,12 @@ use r2l_core::distributions::Policy;
 use std::{f32, fmt::Debug};
 
 #[derive(Debug, Clone)]
-pub enum DistributionKind {
+pub enum CandleDistributionKind {
     Categorical(CategoricalDistribution),
     DiagGaussian(DiagGaussianDistribution),
 }
 
-impl Policy for DistributionKind {
+impl Policy for CandleDistributionKind {
     type Tensor = CandleTensor;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {

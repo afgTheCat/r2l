@@ -1,4 +1,4 @@
-use crate::agents::PPOCandleAgentBuilder;
+use crate::agents::PPOCandleLearningModuleBuilder;
 use crate::{
     agents::AgentBuilder,
     builders::{
@@ -15,7 +15,7 @@ use r2l_agents::{
     ppo2::{NewPPO, NewPPOParams, PPOModule2},
 };
 use r2l_candle_lm::{
-    distributions::DistributionKind,
+    distributions::CandleDistributionKind,
     learning_module::{PolicyValuesLosses, SequentialValueFunction},
 };
 use r2l_core::{
@@ -32,7 +32,7 @@ use r2l_core::{
 use std::sync::mpsc::Sender;
 
 pub struct R2lCandleLearningModule {
-    pub policy: DistributionKind,
+    pub policy: CandleDistributionKind,
     pub actor_critic: ActorCriticKind,
     pub value_function: SequentialValueFunction,
 }
@@ -51,8 +51,8 @@ impl R2lCandleLearningModule {
 impl PPOModule2 for R2lCandleLearningModule {
     type Tensor = Tensor;
     type InferenceTensor = Tensor;
-    type Policy = DistributionKind;
-    type InferencePolicy = DistributionKind;
+    type Policy = CandleDistributionKind;
+    type InferencePolicy = CandleDistributionKind;
     type ValueFunction = SequentialValueFunction;
     type Losses = PolicyValuesLosses;
 
@@ -88,11 +88,11 @@ impl PPOModule2 for R2lCandleLearningModule {
     }
 }
 
-pub struct DefaultPPO(pub NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>);
+pub struct CandlePPO(pub NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>);
 
-impl Agent for DefaultPPO {
+impl Agent for CandlePPO {
     type Tensor = candle_core::Tensor;
-    type Policy = DistributionKind;
+    type Policy = CandleDistributionKind;
 
     fn policy(&self) -> Self::Policy {
         self.0.policy()

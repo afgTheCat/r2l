@@ -1,5 +1,5 @@
 use crate::{
-    agents::{AgentBuilder, PPOCandleAgentBuilder, candle_ppo2::DefaultPPO},
+    agents::{AgentBuilder, PPOCandleLearningModuleBuilder, candle_ppo2::CandlePPO},
     algorithm::AlgorightmBuilder,
     builders::distribution::ActionSpaceType,
     hooks::ppo::PPOStats,
@@ -20,13 +20,13 @@ use std::sync::mpsc::Sender;
 pub struct PPOAlgorithmBuiler<
     EB: EnvBuilderTrait,
     BD: TrajectoryBound<Tensor = EB::Tensor> = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>,
->(AlgorightmBuilder<DefaultPPO, PPOCandleAgentBuilder, EB, BD>);
+>(AlgorightmBuilder<CandlePPO, PPOCandleLearningModuleBuilder, EB, BD>);
 
 impl<EB: EnvBuilderTrait> PPOAlgorithmBuiler<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
         Self(AlgorightmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
-            agent_builder: PPOCandleAgentBuilder::default(),
+            agent_builder: PPOCandleLearningModuleBuilder::default(),
             learning_schedule: LearningSchedule::RolloutBound {
                 total_rollouts: 300,
                 current_rollout: 0,
@@ -141,9 +141,9 @@ impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOAlgorithm
         self,
     ) -> anyhow::Result<
         OnPolicyAlgorithm<
-            DefaultPPO,
+            CandlePPO,
             FinalSampler<EB::Env, BD>,
-            DefaultOnPolicyAlgorightmsHooks<DefaultPPO, FinalSampler<EB::Env, BD>>,
+            DefaultOnPolicyAlgorightmsHooks<CandlePPO, FinalSampler<EB::Env, BD>>,
         >,
     > {
         let env_description = self.0.sampler_builder.env_builder.env_description()?;

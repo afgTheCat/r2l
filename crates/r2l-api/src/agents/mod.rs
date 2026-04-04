@@ -1,9 +1,10 @@
 pub mod burn_ppo;
+pub mod burn_ppo2;
 pub mod candle_ppo;
 pub mod candle_ppo2;
 
 use crate::{
-    agents::candle_ppo2::{DefaultPPO, R2lCandleLearningModule},
+    agents::candle_ppo2::{CandlePPO, R2lCandleLearningModule},
     builders::{
         distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
         learning_module::{LearningModuleBuilder, LearningModuleType},
@@ -16,7 +17,7 @@ use r2l_agents::ppo2::{NewPPO, NewPPOParams};
 use r2l_core::agents::Agent;
 
 // NOTE: experimantally implementing it here. in the future this should not depend on candle
-pub struct PPOCandleAgentBuilder {
+pub struct PPOCandleLearningModuleBuilder {
     pub device: Device,
     pub distribution_builder: DistributionBuilder,
     pub hook_builder: PPOHookBuilder,
@@ -24,7 +25,7 @@ pub struct PPOCandleAgentBuilder {
     pub ppo_params: NewPPOParams,
 }
 
-impl Default for PPOCandleAgentBuilder {
+impl Default for PPOCandleLearningModuleBuilder {
     fn default() -> Self {
         Self {
             device: Device::Cpu,
@@ -51,7 +52,7 @@ impl Default for PPOCandleAgentBuilder {
     }
 }
 
-impl PPOCandleAgentBuilder {
+impl PPOCandleLearningModuleBuilder {
     fn build_lm(
         &mut self,
         observation_size: usize,
@@ -83,8 +84,8 @@ impl PPOCandleAgentBuilder {
     }
 }
 
-impl AgentBuilder for PPOCandleAgentBuilder {
-    type Agent = DefaultPPO;
+impl AgentBuilder for PPOCandleLearningModuleBuilder {
+    type Agent = CandlePPO;
 
     fn build(
         mut self,
@@ -95,7 +96,7 @@ impl AgentBuilder for PPOCandleAgentBuilder {
         let lm = self.build_lm(observation_size, action_size, action_space)?;
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
-        Ok(DefaultPPO(NewPPO { lm, hooks, params }))
+        Ok(CandlePPO(NewPPO { lm, hooks, params }))
     }
 }
 

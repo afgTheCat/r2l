@@ -134,7 +134,7 @@ const MAX_GRAD_NORM: f32 = 0.5;
 const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
 
-pub fn train_ppo2(
+pub fn train_ppo(
     tx: Sender<PPOStats>,
     total_rollouts: usize,
     clip_range: f32,
@@ -198,7 +198,7 @@ fn main() -> eframe::Result {
     let total_rollouts = 300;
     let clip_range = 0.2;
     std::thread::spawn(
-        move || match train_ppo2(update_tx, total_rollouts, clip_range) {
+        move || match train_ppo(update_tx, total_rollouts, clip_range) {
             Ok(()) => {
                 println!("ppo trainted normally")
             }
