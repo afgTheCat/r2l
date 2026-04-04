@@ -23,7 +23,7 @@ use r2l_core::{
     env::Space,
     env_builder::EnvBuilderTrait,
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
-    policies::LearningModule,
+    policies::{LearningModule, ValueFunction},
     sampler::{
         FinalSampler, Location,
         buffer::{StepTrajectoryBound, TrajectoryBound, TrajectoryContainer},
@@ -47,14 +47,28 @@ impl R2lCandleLearningModule {
     }
 }
 
+impl ValueFunction for R2lCandleLearningModule {
+    type Tensor = Tensor;
+
+    fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+        self.value_function.calculate_values(observations)
+    }
+}
+
+impl LearningModule for R2lCandleLearningModule {
+    type Losses = PolicyValuesLosses;
+
+    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
+        self.actor_critic.update(losses)
+    }
+}
+
 // NOTE: I super don't like this, but whatever.
 impl PPOModule2 for R2lCandleLearningModule {
-    type Tensor = Tensor;
+    type LearningTensor = Tensor;
     type InferenceTensor = Tensor;
     type Policy = CandleDistributionKind;
     type InferencePolicy = CandleDistributionKind;
-    type ValueFunction = SequentialValueFunction;
-    type Losses = PolicyValuesLosses;
 
     fn get_inference_policy(&self) -> Self::InferencePolicy {
         self.policy.clone()
@@ -64,26 +78,21 @@ impl PPOModule2 for R2lCandleLearningModule {
         &self.policy
     }
 
-    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
-        self.actor_critic.update(losses)
-    }
-
-    fn value_func(&self) -> &Self::ValueFunction {
-        &self.value_function
-    }
-
     // this is also not PPO
-    fn tensor_from_slice(&self, slice: &[f32]) -> Self::Tensor {
+    fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
         Tensor::from_slice(slice, slice.len(), &candle_core::Device::Cpu).unwrap()
     }
 
     // this is very not PPO
-    fn lifter(t: &Self::InferenceTensor) -> Self::Tensor {
+    fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
         t.clone()
     }
 
     // this needs to be a constraint on the losses
-    fn get_losses(policy_loss: Self::Tensor, value_loss: Self::Tensor) -> Self::Losses {
+    fn get_losses(
+        policy_loss: Self::LearningTensor,
+        value_loss: Self::LearningTensor,
+    ) -> <Self as LearningModule>::Losses {
         PolicyValuesLosses::new(policy_loss, value_loss)
     }
 }

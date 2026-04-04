@@ -5,7 +5,7 @@ use anyhow::Result;
 use r2l_core::{
     agents::Agent,
     distributions::Policy,
-    policies::ValueFunction,
+    policies::{LearningModule, ValueFunction},
     sampler::buffer::TrajectoryContainer,
     tensor::{R2lTensor, R2lTensorOp},
     utils::rollout_buffer::{Advantages, Logps, Returns},
@@ -14,36 +14,30 @@ use r2l_core::{
 use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
 
 // NOTE: heavily in progress
-pub trait PPOModule2 {
+pub trait PPOModule2: LearningModule + ValueFunction<Tensor = Self::LearningTensor> {
     // The tensor type returned to env
     type InferenceTensor: R2lTensor;
     // The tensor type used internally for learning
-    type Tensor: R2lTensorOp;
+    type LearningTensor: R2lTensorOp;
     // What we need is an inference policy type (maybe actor?)
     type InferencePolicy: Policy<Tensor = Self::InferenceTensor>;
     // The policy that has autograd
-    type Policy: Policy<Tensor = Self::Tensor>;
-    // The value function
-    type ValueFunction: ValueFunction<Tensor = Self::Tensor>;
-    // The losses
-    type Losses;
-
+    type Policy: Policy<Tensor = Self::LearningTensor>;
     fn get_inference_policy(&self) -> Self::InferencePolicy;
 
     fn get_policy(&self) -> &Self::Policy;
 
-    fn update(&mut self, losses: Self::Losses) -> Result<()>;
-
-    fn value_func(&self) -> &Self::ValueFunction;
+    // TODO: to be removed
+    fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor;
 
     // TODO: to be removed
-    fn tensor_from_slice(&self, slice: &[f32]) -> Self::Tensor;
-
-    // TODO: to be removed
-    fn lifter(t: &Self::InferenceTensor) -> Self::Tensor;
+    fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;
 
     // TODO: don't really know if we need this
-    fn get_losses(policy_loss: Self::Tensor, value_loss: Self::Tensor) -> Self::Losses;
+    fn get_losses(
+        policy_loss: Self::LearningTensor,
+        value_loss: Self::LearningTensor,
+    ) -> <Self as LearningModule>::Losses;
 }
 
 pub struct NewPPOParams {
@@ -117,8 +111,8 @@ pub trait NewPPOHooksTrait<M: PPOModule2> {
         &mut self,
         _params: &mut NewPPOParams,
         _module: &mut M,
-        _losses: &mut M::Losses,
-        _data: &NewPPOBatchData<M::Tensor>,
+        _losses: &mut <M as LearningModule>::Losses,
+        _data: &NewPPOBatchData<M::LearningTensor>,
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
@@ -149,12 +143,16 @@ impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> 
             let logp_old = lm.tensor_from_slice(&logps.sample(&indicies));
             let returns = lm.tensor_from_slice(&returns.sample(&indicies));
             let logp = lm.get_policy().log_probs(&observations, &actions)?;
-            let values_pred = lm.value_func().calculate_values(&observations)?;
-            let value_loss = Module::Tensor::calculate_value_loss(&returns, &values_pred)?;
-            let logp_diff = Module::Tensor::calculate_logp_diff(&logp, &logp_old)?;
-            let ratio = Module::Tensor::calculate_ratio(&logp_diff)?;
-            let policy_loss =
-                Module::Tensor::calculate_policy_loss(&ratio, &advantages, self.params.clip_range)?;
+            let values_pred = lm.calculate_values(&observations)?;
+            let value_loss =
+                Module::LearningTensor::calculate_value_loss(&returns, &values_pred)?;
+            let logp_diff = Module::LearningTensor::calculate_logp_diff(&logp, &logp_old)?;
+            let ratio = Module::LearningTensor::calculate_ratio(&logp_diff)?;
+            let policy_loss = Module::LearningTensor::calculate_policy_loss(
+                &ratio,
+                &advantages,
+                self.params.clip_range,
+            )?;
             let mut losses = Module::get_losses(policy_loss, value_loss);
             let ppo_data = NewPPOBatchData {
                 logp,
@@ -204,7 +202,7 @@ impl<M: PPOModule2, H: NewPPOHooksTrait<M>> Agent for NewPPO<M, H> {
     ) -> Result<()> {
         let (mut advantages, mut returns) = buffers_advantages_and_returns(
             buffers,
-            self.lm.value_func(),
+            &self.lm,
             self.params.gamma,
             self.params.lambda,
             M::lifter,
