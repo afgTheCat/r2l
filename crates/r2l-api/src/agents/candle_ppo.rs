@@ -1,6 +1,5 @@
 use crate::hooks::ppo::BatchStats;
 use crate::hooks::ppo::PPOHook;
-use crate::hooks::ppo::PPOHookBuilder;
 use crate::hooks::ppo::PPOHookReporter;
 use crate::learning_module::R2lCandleLearningModule;
 use candle_core::Tensor;

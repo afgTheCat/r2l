@@ -2,11 +2,10 @@ use crate::{
     agents::candle_ppo2::R2lCandleLearningModule,
     hooks::ppo::{BatchStats, PPOHook, PPOHookReporter},
 };
-use burn::module;
 use candle_core::Tensor;
 use r2l_agents::{
     HookResult,
-    ppo2::{NewPPOBatchData, NewPPOHooksTrait, NewPPOParams, PPOModule2, RolloutLearningModule},
+    ppo2::{NewPPOBatchData, NewPPOHooksTrait, NewPPOParams, RolloutLearningModule},
 };
 use r2l_candle_lm::learning_module::PolicyValuesLosses;
 use r2l_core::{distributions::Policy, sampler::buffer::TrajectoryContainer};

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use burn::tensor::{Tensor as BurnTensor, backend::AutodiffBackend};
-use r2l_agents::ppo2::{NewPPO, PPOModule2, RolloutLearningModule};
+use r2l_agents::ppo2::{PPOModule2, RolloutLearningModule};
 use r2l_burn_lm::learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses};
 use r2l_core::policies::{LearningModule, ValueFunction};
 

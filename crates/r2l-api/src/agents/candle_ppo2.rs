@@ -1,19 +1,9 @@
-use crate::agents::PPOCandleLearningModuleBuilder;
-use crate::{
-    agents::AgentBuilder,
-    builders::{
-        distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
-        learning_module::{LearningModuleBuilder, LearningModuleType},
-    },
-    hooks::ppo::{PPOHook, PPOHookBuilder, PPOStats},
-    sampler::SamplerBuilder,
-};
-use candle_core::{DType, Device, Tensor};
-use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
+use crate::hooks::ppo::PPOHook;
+use candle_core::{Device, Tensor};
 use r2l_agents::ppo2::RolloutLearningModule;
 use r2l_agents::{
     candle_agents::ActorCriticKind,
-    ppo2::{NewPPO, NewPPOParams, PPOModule2},
+    ppo2::{NewPPO, PPOModule2},
 };
 use r2l_candle_lm::{
     distributions::CandleDistributionKind,
@@ -21,16 +11,9 @@ use r2l_candle_lm::{
 };
 use r2l_core::{
     agents::Agent,
-    env::Space,
-    env_builder::EnvBuilderTrait,
-    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     policies::{LearningModule, ValueFunction},
-    sampler::{
-        FinalSampler, Location,
-        buffer::{StepTrajectoryBound, TrajectoryBound, TrajectoryContainer},
-    },
+    sampler::buffer::TrajectoryContainer,
 };
-use std::sync::mpsc::Sender;
 
 pub struct R2lCandleLearningModule {
     pub policy: CandleDistributionKind,

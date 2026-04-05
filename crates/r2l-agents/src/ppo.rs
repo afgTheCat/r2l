@@ -2,8 +2,7 @@ use burn::tensor::backend::{AutodiffBackend, Backend};
 use r2l_burn_lm::learning_module::PolicyValuesLosses as BurnLosses;
 use r2l_candle_lm::learning_module::PolicyValuesLosses as CandleLosses;
 use r2l_core::{
-    distributions::Policy,
-    policies::{ModuleWithValueFunction, ValueFunction},
+    policies::ModuleWithValueFunction,
     sampler::buffer::TrajectoryContainer,
     tensor::R2lTensor,
     utils::rollout_buffer::{Advantages, Returns},

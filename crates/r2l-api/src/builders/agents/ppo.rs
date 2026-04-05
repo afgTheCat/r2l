@@ -61,7 +61,7 @@ impl PPOBuilder {
         let policy = self.distribution_builder.build_with_env(
             &distribution_var_builder,
             device,
-            &env_description,
+            env_description,
         )?;
         let (value_function, learning_module) = self.learning_module_builder.build_with_env(
             distribution_varmap,

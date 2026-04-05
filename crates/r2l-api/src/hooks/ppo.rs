@@ -105,12 +105,10 @@ impl PPOHookBuilder {
             }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
-            reporter: self.tx.and_then(|tx| {
-                Some(PPOHookReporter {
+            reporter: self.tx.map(|tx| PPOHookReporter {
                     report: PPOStats::default(),
                     tx,
-                })
-            }),
+                }),
             _phantom: PhantomData,
         }
     }

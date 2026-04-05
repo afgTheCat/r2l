@@ -66,7 +66,7 @@ impl<EB: EnvBuilderTrait> EnvBuilder<EB> {
 
     pub fn env_description(&self) -> Result<EnvironmentDescription<EB::Tensor>> {
         match &self {
-            Self::Homogenous { builder, n_envs } => builder.env_description(),
+            Self::Homogenous { builder, n_envs: _ } => builder.env_description(),
             Self::Heterogenous { builders } => builders[0].env_description(),
         }
     }
