@@ -1,6 +1,4 @@
-pub mod burn_ppo;
 pub mod burn_ppo2;
-pub mod candle_ppo;
 pub mod candle_ppo2;
 
 use crate::builders::distribution::ActionSpaceType;

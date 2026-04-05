@@ -1,5 +1,4 @@
 use r2l_candle_lm::{
-    CandleModuleWithValueFunction,
     distributions::CandleDistributionKind,
     learning_module::{
         DecoupledActorCriticLM, ParalellActorCriticLM, PolicyValuesLosses, SequentialValueFunction,
@@ -38,46 +37,3 @@ impl LearningModule for ActorCriticKind {
         }
     }
 }
-
-pub struct R2lCandleLearningModule {
-    pub policy: CandleDistributionKind,
-    pub learning_module: ActorCriticKind,
-    pub value_function: SequentialValueFunction,
-}
-
-impl R2lCandleLearningModule {
-    pub fn set_grad_clipping(&mut self, gradient_clipping: Option<f32>) {
-        self.learning_module.set_grad_clipping(gradient_clipping);
-    }
-
-    pub fn policy_learning_rate(&self) -> f64 {
-        self.learning_module.policy_learning_rate()
-    }
-}
-
-impl ModuleWithValueFunction for R2lCandleLearningModule {
-    type Tensor = candle_core::Tensor;
-    type InferenceTensor = candle_core::Tensor;
-    type Policy = CandleDistributionKind;
-    type InferencePolicy = CandleDistributionKind;
-    type ValueFunction = SequentialValueFunction;
-    type Losses = PolicyValuesLosses;
-
-    fn get_inference_policy(&self) -> Self::InferencePolicy {
-        self.policy.clone()
-    }
-
-    fn get_policy(&self) -> &Self::Policy {
-        &self.policy
-    }
-
-    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
-        self.learning_module.update(losses)
-    }
-
-    fn value_func(&self) -> &Self::ValueFunction {
-        &self.value_function
-    }
-}
-
-impl CandleModuleWithValueFunction for R2lCandleLearningModule {}
