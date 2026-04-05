@@ -90,8 +90,10 @@ impl RolloutLearningModule for R2lCandleLearningModule {
     }
 }
 
-// NOTE: I super don't like this, but whatever.
 impl PPOModule2 for R2lCandleLearningModule {}
+
+// TODO: this is the preferred way
+// pub type CandlePPO = NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>;
 
 pub struct CandlePPO(pub NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>);
 
