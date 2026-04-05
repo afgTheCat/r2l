@@ -1,5 +1,5 @@
 use crate::{
-    agents::{burn_ppo2::R2lBurnLearningModule, candle_ppo2::R2lCandleLearningModule},
+    agents::{ppo::burn::R2lBurnLearningModule, ppo::candle::R2lCandleLearningModule},
     hooks::ppo::{BatchStats, PPOHook, PPOHookReporter},
 };
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};

@@ -2,7 +2,6 @@ use burn::tensor::backend::{AutodiffBackend, Backend};
 use r2l_burn_lm::learning_module::PolicyValuesLosses as BurnLosses;
 use r2l_candle_lm::learning_module::PolicyValuesLosses as CandleLosses;
 use r2l_core::{
-    policies::ModuleWithValueFunction,
     sampler::buffer::TrajectoryContainer,
     tensor::R2lTensor,
     utils::rollout_buffer::{Advantages, Returns},
@@ -58,14 +57,6 @@ impl<B: Backend> PPOBatchData<burn::Tensor<B, 1>> {
             .sum::<f32>()
             / ratio.len() as f32
     }
-}
-
-pub struct PPOParams<M: ModuleWithValueFunction> {
-    pub module: M,
-    pub clip_range: f32,
-    pub gamma: f32,
-    pub lambda: f32,
-    pub sample_size: usize,
 }
 
 pub trait PPOTensorOps: R2lTensor {
@@ -139,35 +130,5 @@ impl PPOLosses<candle_core::Tensor> for CandleLosses {
 impl<B: AutodiffBackend> PPOLosses<burn::Tensor<B, 1>> for BurnLosses<B> {
     fn ppo_losses(policy_loss: burn::Tensor<B, 1>, value_loss: burn::Tensor<B, 1>) -> Self {
         BurnLosses::new(policy_loss, value_loss)
-    }
-}
-
-// So this could be a unified implementation. One PPOHooks trait, nice
-pub trait PPOHooksTrait<M: ModuleWithValueFunction> {
-    fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
-        &mut self,
-        _agent: &mut PPOParams<M>,
-        _buffers: &[B],
-        _advantages: &mut Advantages,
-        _returns: &mut Returns,
-    ) -> anyhow::Result<HookResult> {
-        Ok(HookResult::Continue)
-    }
-
-    fn rollout_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
-        &mut self,
-        _buffers: &[B],
-        _agent: &mut PPOParams<M>,
-    ) -> anyhow::Result<HookResult> {
-        Ok(HookResult::Break)
-    }
-
-    fn batch_hook(
-        &mut self,
-        _agent: &mut PPOParams<M>,
-        _losses: &mut M::Losses,
-        _data: &PPOBatchData<M::Tensor>,
-    ) -> anyhow::Result<HookResult> {
-        Ok(HookResult::Continue)
     }
 }

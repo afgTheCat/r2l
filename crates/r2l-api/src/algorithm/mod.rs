@@ -33,7 +33,7 @@ impl<
     BD: TrajectoryBound<Tensor = EB::Tensor>,
 > AlgorightmBuilder<A, AB, EB, BD>
 {
-    fn build(
+    pub fn build(
         self,
     ) -> anyhow::Result<
         OnPolicyAlgorithm<

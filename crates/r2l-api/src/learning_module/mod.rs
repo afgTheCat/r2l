@@ -4,7 +4,7 @@ use r2l_candle_lm::{
         DecoupledActorCriticLM, ParalellActorCriticLM, PolicyValuesLosses, SequentialValueFunction,
     },
 };
-use r2l_core::policies::{LearningModule, ModuleWithValueFunction};
+use r2l_core::policies::LearningModule;
 
 pub enum ActorCriticKind {
     Decoupled(DecoupledActorCriticLM),
