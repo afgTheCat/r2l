@@ -1,9 +1,8 @@
+use crate::agents::AgentBuilder;
+use crate::agents::candle_ppo2::PPOCandleLearningModuleBuilder;
 use crate::{
-    agents::{AgentBuilder, PPOCandleLearningModuleBuilder, candle_ppo2::CandlePPO},
-    algorithm::AlgorightmBuilder,
-    builders::distribution::ActionSpaceType,
-    hooks::ppo::PPOStats,
-    sampler::SamplerBuilder,
+    agents::candle_ppo2::CandlePPO, algorithm::AlgorightmBuilder,
+    builders::distribution::ActionSpaceType, hooks::ppo::PPOStats, sampler::SamplerBuilder,
 };
 use r2l_core::sampler::Location;
 use r2l_core::{

@@ -1,14 +1,9 @@
-use candle_core::Device;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l_api::algorithm::ppo_algorithm::PPOAlgorithmBuiler;
-use r2l_api::builders::agents::ppo::PPOBuilder;
-use r2l_api::hooks::ppo::{PPOHookBuilder, PPOStats};
-use r2l_core::env_builder::EnvBuilder;
-use r2l_core::on_policy_algorithm::{
-    DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
-};
+use r2l_api::hooks::ppo::PPOStats;
+use r2l_core::on_policy_algorithm::LearningSchedule;
+use r2l_core::sampler::Location;
 use r2l_core::sampler::buffer::StepTrajectoryBound;
-use r2l_core::sampler::{FinalSampler, Location};
 use r2l_examples::EventBox;
 use r2l_gym::GymEnvBuilder;
 use ratatui::{
@@ -20,7 +15,6 @@ use ratatui::{
     text::Line,
     widgets::{Axis, Block, Borders, Chart, Dataset, Gauge, GraphType, Row, Table, Widget},
 };
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::{f64, io, sync::mpsc};
 

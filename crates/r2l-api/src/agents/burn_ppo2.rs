@@ -1,14 +1,23 @@
 use burn::{
+    backend::{Autodiff, NdArray},
     grad_clipping::GradientClipping,
+    optim::AdamWConfig,
     tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
 };
-use r2l_agents::ppo2::{NewPPO, PPOModule2, RolloutLearningModule};
-use r2l_burn_lm::learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses};
+use r2l_agents::ppo2::{NewPPO, NewPPOParams, PPOModule2, RolloutLearningModule};
+use r2l_burn_lm::{
+    distributions::diagonal_distribution::DiagGaussianDistribution,
+    learning_module::{BurnPolicy, ParalellActorCriticLM, ParalellActorModel, PolicyValuesLosses},
+};
 use r2l_core::policies::{LearningModule, ValueFunction};
 
-use crate::hooks::ppo::PPOHook;
+use crate::{
+    builders::distribution::ActionSpaceType,
+    hooks::ppo::{PPOHook, PPOHookBuilder},
+};
 
-// TODO: finish this in some form
+// TODO: finish this. Currently the issue with this one is that this is not generic enough. But it's
+// ok for testing out how the API should look like
 pub struct R2lBurnLearningModule<B: AutodiffBackend, D: BurnPolicy<B>> {
     lm: ParalellActorCriticLM<B, D>,
 }
@@ -60,6 +69,37 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> RolloutLearningModule for R2lBurnLear
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOModule2 for R2lBurnLearningModule<B, D> {}
 
+// TODO: a type alias would be prefered
 pub struct BurnPPO<B: AutodiffBackend, D: BurnPolicy<B>>(
     pub NewPPO<R2lBurnLearningModule<B, D>, PPOHook<R2lBurnLearningModule<B, D>>>,
 );
+
+pub struct PPOBurnLearningModuleBuilder {
+    pub ppo_params: NewPPOParams,
+    pub hook_builder: PPOHookBuilder,
+}
+
+// TODO: maybe make this generic?
+type BurnBackend = Autodiff<NdArray>;
+
+impl PPOBurnLearningModuleBuilder {
+    fn build(
+        self,
+        observation_size: usize,
+        action_size: usize,
+        action_space: ActionSpaceType,
+    ) -> anyhow::Result<BurnPPO<BurnBackend, DiagGaussianDistribution<BurnBackend>>> {
+        let policy_layers = &[observation_size, 64, 64, action_size];
+        let value_layers = &[observation_size, 64, 64, 1];
+        let distr: DiagGaussianDistribution<BurnBackend> =
+            DiagGaussianDistribution::build(policy_layers);
+        let value_net = r2l_burn_lm::sequential::Sequential::build(value_layers);
+        let model = ParalellActorModel::new(distr, value_net);
+        let lm = R2lBurnLearningModule {
+            lm: ParalellActorCriticLM::new(model, AdamWConfig::new().init()),
+        };
+        let hooks = self.hook_builder.build();
+        let params = self.ppo_params;
+        Ok(BurnPPO(NewPPO { lm, hooks, params }))
+    }
+}
