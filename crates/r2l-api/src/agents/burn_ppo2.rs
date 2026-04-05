@@ -4,9 +4,7 @@ use burn::{
     prelude::Backend,
     tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
 };
-use r2l_agents::{
-    ppo2::{NewPPO, PPOModule2},
-};
+use r2l_agents::ppo2::{NewPPO, PPOModule2, RolloutLearningModule};
 use r2l_burn_lm::learning_module::{BurnPolicy, ParalellActorCriticLM, PolicyValuesLosses};
 use r2l_core::policies::{LearningModule, ValueFunction};
 
@@ -20,8 +18,28 @@ pub struct R2lBurnLearningModule<
     _phantom: PhantomData<(B, D, V)>,
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>, V: ValueFunction<Tensor = BurnTensor<B, 1>>> PPOModule2
-    for R2lBurnLearningModule<B, D, V>
+impl<B: AutodiffBackend, D: BurnPolicy<B>, V: ValueFunction<Tensor = BurnTensor<B, 1>>>
+    LearningModule for R2lBurnLearningModule<B, D, V>
+{
+    type Losses = PolicyValuesLosses<B>;
+
+    fn update(&mut self, _losses: Self::Losses) -> anyhow::Result<()> {
+        todo!()
+    }
+}
+
+impl<B: AutodiffBackend, D: BurnPolicy<B>, V: ValueFunction<Tensor = BurnTensor<B, 1>>>
+    ValueFunction for R2lBurnLearningModule<B, D, V>
+{
+    type Tensor = BurnTensor<B, 1>;
+
+    fn calculate_values(&self, _observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+        todo!()
+    }
+}
+
+impl<B: AutodiffBackend, D: BurnPolicy<B>, V: ValueFunction<Tensor = BurnTensor<B, 1>>>
+    RolloutLearningModule for R2lBurnLearningModule<B, D, V>
 {
     type LearningTensor = BurnTensor<B, 1>;
     type InferenceTensor = BurnTensor<B::InnerBackend, 1>;
@@ -45,24 +63,9 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>, V: ValueFunction<Tensor = BurnTensor<
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>, V: ValueFunction<Tensor = BurnTensor<B, 1>>> LearningModule
+impl<B: AutodiffBackend, D: BurnPolicy<B>, V: ValueFunction<Tensor = BurnTensor<B, 1>>> PPOModule2
     for R2lBurnLearningModule<B, D, V>
 {
-    type Losses = PolicyValuesLosses<B>;
-
-    fn update(&mut self, _losses: Self::Losses) -> anyhow::Result<()> {
-        todo!()
-    }
-}
-
-impl<B: AutodiffBackend, D: BurnPolicy<B>, V: ValueFunction<Tensor = BurnTensor<B, 1>>> ValueFunction
-    for R2lBurnLearningModule<B, D, V>
-{
-    type Tensor = BurnTensor<B, 1>;
-
-    fn calculate_values(&self, _observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
-        todo!()
-    }
 }
 
 // pub struct R2lBurnLearningModule(pub NewPPO<>)

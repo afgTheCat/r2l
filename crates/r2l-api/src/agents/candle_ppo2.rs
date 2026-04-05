@@ -10,6 +10,7 @@ use crate::{
 };
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
+use r2l_agents::ppo2::RolloutLearningModule;
 use r2l_agents::{
     candle_agents::ActorCriticKind,
     ppo2::{NewPPO, NewPPOParams, PPOModule2},
@@ -35,6 +36,7 @@ pub struct R2lCandleLearningModule {
     pub policy: CandleDistributionKind,
     pub actor_critic: ActorCriticKind,
     pub value_function: SequentialValueFunction,
+    pub device: Device,
 }
 
 impl R2lCandleLearningModule {
@@ -63,8 +65,7 @@ impl LearningModule for R2lCandleLearningModule {
     }
 }
 
-// NOTE: I super don't like this, but whatever.
-impl PPOModule2 for R2lCandleLearningModule {
+impl RolloutLearningModule for R2lCandleLearningModule {
     type LearningTensor = Tensor;
     type InferenceTensor = Tensor;
     type Policy = CandleDistributionKind;
@@ -80,7 +81,7 @@ impl PPOModule2 for R2lCandleLearningModule {
 
     // this is also not PPO
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
-        Tensor::from_slice(slice, slice.len(), &candle_core::Device::Cpu).unwrap()
+        Tensor::from_slice(slice, slice.len(), &self.device).unwrap()
     }
 
     // this is very not PPO
@@ -89,6 +90,9 @@ impl PPOModule2 for R2lCandleLearningModule {
     }
 }
 
+// NOTE: I super don't like this, but whatever.
+impl PPOModule2 for R2lCandleLearningModule {}
+
 pub struct CandlePPO(pub NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>);
 
 impl Agent for CandlePPO {
@@ -96,7 +100,7 @@ impl Agent for CandlePPO {
     type Policy = CandleDistributionKind;
 
     fn policy(&self) -> Self::Policy {
-        self.0.policy()
+        self.0.lm.get_inference_policy()
     }
 
     fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(

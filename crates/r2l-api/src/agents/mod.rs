@@ -79,6 +79,7 @@ impl PPOCandleLearningModuleBuilder {
             policy,
             actor_critic: learning_module,
             value_function,
+            device: self.device.clone(),
         };
         Ok(learning_module)
     }

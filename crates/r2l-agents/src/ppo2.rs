@@ -17,29 +17,32 @@ pub trait PPOLosses<T> {
     fn ppo_losses(policy_loss: T, value_loss: T) -> Self;
 }
 
-// NOTE: heavily in progress
-pub trait PPOModule2:
-    LearningModule<Losses: PPOLosses<Self::LearningTensor>>
-    + ValueFunction<Tensor = Self::LearningTensor>
-{
-    // The tensor type returned to env
+pub trait RolloutLearningModule {
     type InferenceTensor: R2lTensor;
-    // The tensor type used internally for learning
     type LearningTensor: R2lTensorOp;
-    // What we need is an inference policy type (maybe actor?)
+
     type InferencePolicy: Policy<Tensor = Self::InferenceTensor>;
-    // The policy that has autograd
     type Policy: Policy<Tensor = Self::LearningTensor>;
 
-    fn get_inference_policy(&self) -> Self::InferencePolicy;
+    // convesion between the inference tensor and the learning tensor
+    fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;
 
-    fn get_policy(&self) -> &Self::Policy;
-
-    // TODO: to be removed
+    // conversion between raw data and the learning tensor
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor;
 
-    // TODO: to be removed
-    fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;
+    // returns a new inference policy, possibly to run rollouts
+    fn get_inference_policy(&self) -> Self::InferencePolicy;
+
+    // returns the real policy ref, so that we may calculate intermediate stuff for learning logp
+    fn get_policy(&self) -> &Self::Policy;
+}
+
+// NOTE: heavily in progress
+pub trait PPOModule2:
+    RolloutLearningModule
+    + LearningModule<Losses: PPOLosses<<Self as RolloutLearningModule>::LearningTensor>>
+    + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
+{
 }
 
 pub struct NewPPOParams {
