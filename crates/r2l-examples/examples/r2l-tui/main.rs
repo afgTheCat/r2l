@@ -1,5 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_api::algorithm::ppo::PPOCandleAlgorithmBuiler;
+use r2l_api::algorithm::ppo::candle::PPOCandleAlgorithmBuiler;
 use r2l_api::hooks::ppo::PPOStats;
 use r2l_core::on_policy_algorithm::LearningSchedule;
 use r2l_core::sampler::Location;

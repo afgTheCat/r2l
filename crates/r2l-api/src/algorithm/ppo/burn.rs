@@ -12,16 +12,14 @@ use r2l_core::{
 };
 use std::sync::mpsc::{Receiver, Sender};
 
-pub type PPOCandleAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+pub type PPOBurnAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
     AlgorightmBuilder<BurnPPO<BurnBackend>, PPOBurnLearningModuleBuilder, EB, BD>;
 
-impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>>
-    PPOCandleAlgorithmBuiler<EB, BD>
-{
+impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBurnAlgorithmBuiler<EB, BD> {
     pub fn with_bound<BD2: TrajectoryBound<Tensor = EB::Tensor>>(
         self,
         trajectory_bound: BD2,
-    ) -> PPOCandleAlgorithmBuiler<EB, BD2> {
+    ) -> PPOBurnAlgorithmBuiler<EB, BD2> {
         let AlgorightmBuilder {
             sampler_builder,
             agent_builder,
