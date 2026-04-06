@@ -184,10 +184,22 @@ impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModu
         let entropy = module.get_policy().entropy().unwrap();
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
-        let approx_kl = data.approx_kl()?;
+        let ratio = data.ratio.detach();
+        let log_ratio = data.logp_diff.detach();
+        let approx_kl = ratio
+            .sub(&candle_core::Tensor::ones_like(&ratio)?)?
+            .sub(&log_ratio)?
+            .mean_all()?
+            .to_scalar::<f32>()?;
         if let Some(PPOHookReporter { report, .. }) = &mut self.reporter {
+            let clip_fraction = (&data.ratio - 1.)?
+                .abs()?
+                .gt(params.clip_range)?
+                .to_dtype(candle_core::DType::F32)?
+                .mean_all()?
+                .to_scalar::<f32>()?;
             report.collect_batch_data(BatchStats {
-                clip_fraction: data.clip_fraction(params.clip_range)?,
+                clip_fraction,
                 policy_loss: losses.policy_loss.to_scalar()?,
                 entropy_loss: entropy_loss.to_scalar()?,
                 value_loss: losses.value_loss.to_scalar()?,

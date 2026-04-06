@@ -10,7 +10,6 @@ readme = "README.md"
 [features]
 cuda = [
   "r2l-core/cuda",
-  "r2l-agents/cuda",
   "r2l-api/cuda",
   "r2l-candle-lm/cuda",
   "candle-core/cuda",
