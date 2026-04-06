@@ -1,5 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_api::algorithm::ppo::PPOAlgorithmBuiler;
+use r2l_api::algorithm::ppo::PPOCandleAlgorithmBuiler;
 use r2l_api::hooks::ppo::PPOStats;
 use r2l_core::on_policy_algorithm::LearningSchedule;
 use r2l_core::sampler::Location;
@@ -275,7 +275,7 @@ pub fn train_ppo2(
     clip_range: f32,
 ) -> anyhow::Result<()> {
     // TODO: The generic here is ugly
-    let ppo_builder = PPOAlgorithmBuiler::<GymEnvBuilder>::new(ENV_NAME, 10)
+    let ppo_builder = PPOCandleAlgorithmBuiler::<GymEnvBuilder>::new(ENV_NAME, 10)
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))

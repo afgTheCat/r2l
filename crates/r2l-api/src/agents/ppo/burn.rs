@@ -3,7 +3,7 @@ use burn::{
     grad_clipping::GradientClipping,
     module::AutodiffModule,
     optim::AdamWConfig,
-    tensor::{backend::AutodiffBackend, Tensor as BurnTensor},
+    tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
 };
 use r2l_agents::ppo2::{NewPPO, NewPPOParams, PPOModule2, RolloutLearningModule};
 use r2l_burn_lm::{
@@ -77,7 +77,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> RolloutLearningModule for R2lBurnLear
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOModule2 for R2lBurnLearningModule<B, D> {}
 
 // TODO: maybe make this generic?
-type BurnBackend = Autodiff<NdArray>;
+pub type BurnBackend = Autodiff<NdArray>;
 
 // TODO: a type alias would be prefered
 pub struct BurnPPO<B: AutodiffBackend>(
