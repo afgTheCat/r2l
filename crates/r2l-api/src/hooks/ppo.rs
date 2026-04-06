@@ -1,5 +1,5 @@
-pub mod burn;
-pub mod candle;
+// pub mod burn;
+// pub mod candle;
 
 use std::{marker::PhantomData, sync::mpsc::Sender};
 
@@ -106,9 +106,9 @@ impl PPOHookBuilder {
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
             reporter: self.tx.map(|tx| PPOHookReporter {
-                    report: PPOStats::default(),
-                    tx,
-                }),
+                report: PPOStats::default(),
+                tx,
+            }),
             _phantom: PhantomData,
         }
     }
