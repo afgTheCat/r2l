@@ -1,22 +1,13 @@
 use anyhow::Result;
 use r2l_core::{
-    agents::Agent,
-    distributions::Policy,
-    losses::PolicyValuesLosses,
-    policies::{LearningModule, ValueFunction},
-    sampler::buffer::TrajectoryContainer,
-    tensor::R2lTensorMath,
+    agents::Agent, distributions::Policy, losses::PolicyValuesLosses,
+    sampler::buffer::TrajectoryContainer, tensor::R2lTensorMath,
 };
 
-use crate::ppo::RolloutLearningModule;
-use crate::{BatchIndexIterator, buffers_advantages_and_returns, sample};
-
-pub trait VPGModule:
-    RolloutLearningModule<LearningTensor: R2lTensorMath>
-    + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
-    + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
-{
-}
+use crate::{
+    BatchIndexIterator, buffers_advantages_and_returns,
+    on_policy_algorithms::OnPolicyLearningModule, sample,
+};
 
 pub struct NewVPGParams {
     pub gamma: f32,
@@ -34,12 +25,12 @@ impl Default for NewVPGParams {
     }
 }
 
-pub struct NewVPG<Module: VPGModule> {
+pub struct NewVPG<Module: OnPolicyLearningModule> {
     pub params: NewVPGParams,
     pub lm: Module,
 }
 
-impl<Module: VPGModule> NewVPG<Module> {
+impl<Module: OnPolicyLearningModule> NewVPG<Module> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
@@ -65,7 +56,7 @@ impl<Module: VPGModule> NewVPG<Module> {
     }
 }
 
-impl<M: VPGModule> Agent for NewVPG<M> {
+impl<M: OnPolicyLearningModule> Agent for NewVPG<M> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
 

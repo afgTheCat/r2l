@@ -5,7 +5,10 @@ use burn::{
     optim::AdamWConfig,
     tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
 };
-use r2l_agents::ppo::{NewPPOParams, PPO, PPOModule, RolloutLearningModule};
+use r2l_agents::on_policy_algorithms::{
+    OnPolicyLearningModule,
+    ppo::{NewPPOParams, PPO},
+};
 use r2l_burn_lm::{
     distributions::DistributionKind,
     learning_module::{
@@ -53,7 +56,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> ValueFunction for R2lBurnLearningModu
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> RolloutLearningModule for R2lBurnLearningModule<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for R2lBurnLearningModule<B, D> {
     type LearningTensor = BurnTensor<B, 1>;
     type InferenceTensor = BurnTensor<B::InnerBackend, 1>;
     type Policy = D;
@@ -75,8 +78,6 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> RolloutLearningModule for R2lBurnLear
         BurnTensor::from_data(t.to_data(), &Default::default())
     }
 }
-
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOModule for R2lBurnLearningModule<B, D> {}
 
 // TODO: maybe make this generic?
 pub type BurnBackend = Autodiff<NdArray>;

@@ -3,41 +3,16 @@ use r2l_core::{
     agents::Agent,
     distributions::Policy,
     losses::PolicyValuesLosses,
-    policies::{LearningModule, ValueFunction},
+    policies::LearningModule,
     sampler::buffer::TrajectoryContainer,
     tensor::{R2lTensor, R2lTensorMath},
     utils::rollout_buffer::{Advantages, Logps, Returns},
 };
 
-use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
-
-pub trait RolloutLearningModule {
-    type InferenceTensor: R2lTensor;
-    type LearningTensor: R2lTensor;
-
-    type InferencePolicy: Policy<Tensor = Self::InferenceTensor>;
-    type Policy: Policy<Tensor = Self::LearningTensor>;
-
-    // convesion between the inference tensor and the learning tensor
-    fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;
-
-    // conversion between raw data and the learning tensor
-    fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor;
-
-    // returns a new inference policy, possibly to run rollouts
-    fn get_inference_policy(&self) -> Self::InferencePolicy;
-
-    // returns the real policy ref, so that we may calculate intermediate stuff for learning logp
-    fn get_policy(&self) -> &Self::Policy;
-}
-
-// NOTE: heavily in progress
-pub trait PPOModule:
-    RolloutLearningModule<LearningTensor: R2lTensorMath>
-    + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
-    + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
-{
-}
+use crate::{
+    BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps,
+    on_policy_algorithms::OnPolicyLearningModule, sample,
+};
 
 pub struct NewPPOParams {
     pub clip_range: f32,
@@ -85,7 +60,7 @@ impl PPOBatchData<candle_core::Tensor> {
     }
 }
 
-pub trait NewPPOHooksTrait<M: PPOModule> {
+pub trait NewPPOHooksTrait<M: OnPolicyLearningModule> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
         &mut self,
         _params: &mut NewPPOParams,
@@ -117,13 +92,13 @@ pub trait NewPPOHooksTrait<M: PPOModule> {
     }
 }
 
-pub struct PPO<Module: PPOModule, Hooks: NewPPOHooksTrait<Module>> {
+pub struct PPO<Module: OnPolicyLearningModule, Hooks: NewPPOHooksTrait<Module>> {
     pub params: NewPPOParams,
     pub lm: Module,
     pub hooks: Hooks,
 }
 
-impl<Module: PPOModule, Hooks: NewPPOHooksTrait<Module>> PPO<Module, Hooks> {
+impl<Module: OnPolicyLearningModule, Hooks: NewPPOHooksTrait<Module>> PPO<Module, Hooks> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
@@ -185,7 +160,8 @@ impl<Module: PPOModule, Hooks: NewPPOHooksTrait<Module>> PPO<Module, Hooks> {
         }
     }
 }
-impl<M: PPOModule, H: NewPPOHooksTrait<M>> Agent for PPO<M, H> {
+
+impl<M: OnPolicyLearningModule, H: NewPPOHooksTrait<M>> Agent for PPO<M, H> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
 

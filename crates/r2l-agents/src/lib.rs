@@ -1,6 +1,4 @@
-pub mod a2c;
-pub mod ppo;
-pub mod vpg;
+pub mod on_policy_algorithms;
 
 use r2l_core::distributions::Policy;
 use r2l_core::policies::ValueFunction;

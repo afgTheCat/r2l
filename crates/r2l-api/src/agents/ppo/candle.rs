@@ -11,9 +11,8 @@ use crate::{
 use candle_core::Tensor;
 use candle_core::{DType, Device};
 use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
-use r2l_agents::ppo::PPOModule;
-use r2l_agents::ppo::RolloutLearningModule;
-use r2l_agents::ppo::{NewPPOParams, PPO};
+use r2l_agents::on_policy_algorithms::OnPolicyLearningModule;
+use r2l_agents::on_policy_algorithms::ppo::{NewPPOParams, PPO};
 use r2l_candle_lm::{
     distributions::CandleDistributionKind,
     learning_module::{CandlePolicyValuesLosses, SequentialValueFunction},
@@ -57,7 +56,7 @@ impl LearningModule for R2lCandleLearningModule {
     }
 }
 
-impl RolloutLearningModule for R2lCandleLearningModule {
+impl OnPolicyLearningModule for R2lCandleLearningModule {
     type LearningTensor = Tensor;
     type InferenceTensor = Tensor;
     type Policy = CandleDistributionKind;
@@ -81,8 +80,6 @@ impl RolloutLearningModule for R2lCandleLearningModule {
         t.clone()
     }
 }
-
-impl PPOModule for R2lCandleLearningModule {}
 
 // TODO: this is the preferred way
 // pub type CandlePPO = NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>;

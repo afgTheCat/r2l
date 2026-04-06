@@ -3,21 +3,15 @@ use r2l_core::{
     agents::Agent,
     distributions::Policy,
     losses::PolicyValuesLosses,
-    policies::{LearningModule, ValueFunction},
     sampler::buffer::TrajectoryContainer,
     tensor::R2lTensorMath,
     utils::rollout_buffer::{Advantages, Returns},
 };
 
-use crate::ppo::RolloutLearningModule;
-use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, sample};
-
-pub trait A2CModule:
-    RolloutLearningModule<LearningTensor: R2lTensorMath>
-    + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
-    + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
-{
-}
+use crate::{
+    BatchIndexIterator, HookResult, buffers_advantages_and_returns,
+    on_policy_algorithms::OnPolicyLearningModule, sample,
+};
 
 pub struct NewA2CParams {
     pub gamma: f32,
@@ -35,7 +29,7 @@ impl Default for NewA2CParams {
     }
 }
 
-pub trait NewA2CHooksTrait<M: A2CModule> {
+pub trait NewA2CHooksTrait<M: OnPolicyLearningModule> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
         &mut self,
         _params: &mut NewA2CParams,
@@ -50,15 +44,15 @@ pub trait NewA2CHooksTrait<M: A2CModule> {
 
 pub struct DefaultNewA2CHooks;
 
-impl<M: A2CModule> NewA2CHooksTrait<M> for DefaultNewA2CHooks {}
+impl<M: OnPolicyLearningModule> NewA2CHooksTrait<M> for DefaultNewA2CHooks {}
 
-pub struct NewA2C<Module: A2CModule, Hooks: NewA2CHooksTrait<Module>> {
+pub struct NewA2C<Module: OnPolicyLearningModule, Hooks: NewA2CHooksTrait<Module>> {
     pub params: NewA2CParams,
     pub lm: Module,
     pub hooks: Hooks,
 }
 
-impl<Module: A2CModule, Hooks: NewA2CHooksTrait<Module>> NewA2C<Module, Hooks> {
+impl<Module: OnPolicyLearningModule, Hooks: NewA2CHooksTrait<Module>> NewA2C<Module, Hooks> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
@@ -84,7 +78,7 @@ impl<Module: A2CModule, Hooks: NewA2CHooksTrait<Module>> NewA2C<Module, Hooks> {
     }
 }
 
-impl<M: A2CModule, H: NewA2CHooksTrait<M>> Agent for NewA2C<M, H> {
+impl<M: OnPolicyLearningModule, H: NewA2CHooksTrait<M>> Agent for NewA2C<M, H> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
 
