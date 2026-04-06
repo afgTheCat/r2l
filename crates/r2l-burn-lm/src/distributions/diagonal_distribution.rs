@@ -22,7 +22,10 @@ impl<B: Backend> DiagGaussianDistribution<B> {
         let device = Default::default();
         let action_size = *mu_layers.last().unwrap();
         let mu_net: Sequential<B> = Sequential::build(mu_layers);
-        let log_std = Param::from_data(TensorData::zeros::<f32, _>(Shape::new([1, action_size])), &device);
+        let log_std = Param::from_data(
+            TensorData::zeros::<f32, _>(Shape::new([1, action_size])),
+            &device,
+        );
         Self { mu_net, log_std }
     }
 }
@@ -70,10 +73,7 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         let entropy_per_dim = log_std.clone()
             + BurnTensor::from_data(
                 TensorData::new(
-                    vec![
-                        0.5 * ((2. * f32::consts::PI).ln() + 1.);
-                        log_std.shape().num_elements()
-                    ],
+                    vec![0.5 * ((2. * f32::consts::PI).ln() + 1.); log_std.shape().num_elements()],
                     log_std.shape().dims,
                 ),
                 &device,

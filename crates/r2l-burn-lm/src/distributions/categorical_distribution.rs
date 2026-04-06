@@ -2,11 +2,11 @@ use crate::sequential::Sequential;
 use burn::{
     module::Module,
     prelude::Backend,
-    tensor::{Tensor as BurnTensor, TensorData, activation::softmax},
+    tensor::{activation::softmax, Tensor as BurnTensor, TensorData},
 };
 use r2l_core::distributions::Policy;
-use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
+use rand::distr::Distribution as RandDistributiion;
 
 #[derive(Debug, Module)]
 pub struct CategoricalDistribution<B: Backend> {

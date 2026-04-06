@@ -1,4 +1,4 @@
-pub mod ppo_algorithm;
+pub mod ppo;
 
 use r2l_core::{
     agents::Agent,
