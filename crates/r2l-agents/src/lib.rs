@@ -1,6 +1,6 @@
-pub mod a2c2;
-pub mod ppo2;
-pub mod vpg2;
+pub mod a2c;
+pub mod ppo;
+pub mod vpg;
 
 use r2l_core::distributions::Policy;
 use r2l_core::policies::ValueFunction;

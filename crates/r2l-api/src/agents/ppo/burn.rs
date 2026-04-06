@@ -5,7 +5,7 @@ use burn::{
     optim::AdamWConfig,
     tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
 };
-use r2l_agents::ppo2::{NewPPO, NewPPOParams, PPOModule2, RolloutLearningModule};
+use r2l_agents::ppo::{NewPPO, NewPPOParams, PPOModule2, RolloutLearningModule};
 use r2l_burn_lm::{
     distributions::DistributionKind,
     learning_module::{

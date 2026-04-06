@@ -10,7 +10,7 @@ use r2l_core::{
     utils::rollout_buffer::{Advantages, Returns},
 };
 
-use crate::ppo2::RolloutLearningModule;
+use crate::ppo::RolloutLearningModule;
 use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, sample};
 
 pub trait A2CTensorOps: R2lTensor {

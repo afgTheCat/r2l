@@ -7,8 +7,8 @@ use r2l_core::{
     sampler::buffer::TrajectoryContainer,
 };
 
-use crate::a2c2::A2CTensorOps;
-use crate::ppo2::RolloutLearningModule;
+use crate::a2c::A2CTensorOps;
+use crate::ppo::RolloutLearningModule;
 use crate::{BatchIndexIterator, buffers_advantages_and_returns, sample};
 
 pub trait VPGModule2:

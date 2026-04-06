@@ -6,7 +6,7 @@ use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
 use r2l_agents::{
     HookResult,
-    ppo2::{NewPPOBatchData, NewPPOHooksTrait, NewPPOParams, RolloutLearningModule},
+    ppo::{NewPPOBatchData, NewPPOHooksTrait, NewPPOParams, RolloutLearningModule},
 };
 use r2l_burn_lm::learning_module::{BurnPolicy, BurnPolicyValuesLosses};
 use r2l_candle_lm::learning_module::CandlePolicyValuesLosses;

@@ -11,9 +11,9 @@ use crate::{
 use candle_core::Tensor;
 use candle_core::{DType, Device};
 use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
-use r2l_agents::ppo2::PPOModule2;
-use r2l_agents::ppo2::RolloutLearningModule;
-use r2l_agents::ppo2::{NewPPO, NewPPOParams};
+use r2l_agents::ppo::PPOModule2;
+use r2l_agents::ppo::RolloutLearningModule;
+use r2l_agents::ppo::{NewPPO, NewPPOParams};
 use r2l_candle_lm::{
     distributions::CandleDistributionKind,
     learning_module::{CandlePolicyValuesLosses, SequentialValueFunction},
