@@ -1,6 +1,3 @@
-// pub mod burn;
-// pub mod candle;
-
 use std::{marker::PhantomData, sync::mpsc::Sender};
 
 // All the hooks that the user might want to adjust

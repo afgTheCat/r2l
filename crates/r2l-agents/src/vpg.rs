@@ -11,7 +11,7 @@ use r2l_core::{
 use crate::ppo::RolloutLearningModule;
 use crate::{BatchIndexIterator, buffers_advantages_and_returns, sample};
 
-pub trait VPGModule2:
+pub trait VPGModule:
     RolloutLearningModule<LearningTensor: R2lTensorMath>
     + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
     + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
@@ -34,12 +34,12 @@ impl Default for NewVPGParams {
     }
 }
 
-pub struct NewVPG<Module: VPGModule2> {
+pub struct NewVPG<Module: VPGModule> {
     pub params: NewVPGParams,
     pub lm: Module,
 }
 
-impl<Module: VPGModule2> NewVPG<Module> {
+impl<Module: VPGModule> NewVPG<Module> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
@@ -65,7 +65,7 @@ impl<Module: VPGModule2> NewVPG<Module> {
     }
 }
 
-impl<M: VPGModule2> Agent for NewVPG<M> {
+impl<M: VPGModule> Agent for NewVPG<M> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
 

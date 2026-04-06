@@ -6,7 +6,7 @@ use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
 use r2l_agents::{
     HookResult,
-    ppo::{NewPPOBatchData, NewPPOHooksTrait, NewPPOParams, RolloutLearningModule},
+    ppo::{NewPPOHooksTrait, NewPPOParams, PPOBatchData, RolloutLearningModule},
 };
 use r2l_burn_lm::learning_module::{BurnPolicy, BurnPolicyValuesLosses};
 use r2l_candle_lm::learning_module::CandlePolicyValuesLosses;
@@ -74,7 +74,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> NewPPOHooksTrait<R2lBurnLearningModul
         params: &mut NewPPOParams,
         module: &mut R2lBurnLearningModule<B, D>,
         losses: &mut BurnPolicyValuesLosses<B>,
-        data: &NewPPOBatchData<burn::Tensor<B, 1>>,
+        data: &PPOBatchData<burn::Tensor<B, 1>>,
     ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
         let entropy = module.get_policy().entropy().unwrap();
@@ -175,7 +175,7 @@ impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModu
         params: &mut NewPPOParams,
         module: &mut R2lCandleLearningModule,
         losses: &mut CandlePolicyValuesLosses,
-        data: &NewPPOBatchData<candle_core::Tensor>,
+        data: &PPOBatchData<candle_core::Tensor>,
     ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
         let entropy = module.get_policy().entropy().unwrap();

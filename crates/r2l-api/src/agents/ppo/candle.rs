@@ -11,9 +11,9 @@ use crate::{
 use candle_core::Tensor;
 use candle_core::{DType, Device};
 use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
-use r2l_agents::ppo::PPOModule2;
+use r2l_agents::ppo::PPOModule;
 use r2l_agents::ppo::RolloutLearningModule;
-use r2l_agents::ppo::{NewPPO, NewPPOParams};
+use r2l_agents::ppo::{NewPPOParams, PPO};
 use r2l_candle_lm::{
     distributions::CandleDistributionKind,
     learning_module::{CandlePolicyValuesLosses, SequentialValueFunction},
@@ -82,12 +82,12 @@ impl RolloutLearningModule for R2lCandleLearningModule {
     }
 }
 
-impl PPOModule2 for R2lCandleLearningModule {}
+impl PPOModule for R2lCandleLearningModule {}
 
 // TODO: this is the preferred way
 // pub type CandlePPO = NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>;
 
-pub struct CandlePPO(pub NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>);
+pub struct CandlePPO(pub PPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>);
 
 impl Agent for CandlePPO {
     type Tensor = candle_core::Tensor;
@@ -190,6 +190,6 @@ impl AgentBuilder for PPOCandleLearningModuleBuilder {
         let lm = self.build_lm(observation_size, action_size, action_space)?;
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
-        Ok(CandlePPO(NewPPO { lm, hooks, params }))
+        Ok(CandlePPO(PPO { lm, hooks, params }))
     }
 }

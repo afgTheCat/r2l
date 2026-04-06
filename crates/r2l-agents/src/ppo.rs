@@ -32,7 +32,7 @@ pub trait RolloutLearningModule {
 }
 
 // NOTE: heavily in progress
-pub trait PPOModule2:
+pub trait PPOModule:
     RolloutLearningModule<LearningTensor: R2lTensorMath>
     + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
     + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
@@ -57,14 +57,14 @@ impl Default for NewPPOParams {
     }
 }
 
-pub struct NewPPOBatchData<T: R2lTensor> {
+pub struct PPOBatchData<T: R2lTensor> {
     pub logp: T,
     pub values_pred: T,
     pub logp_diff: T,
     pub ratio: T,
 }
 
-impl NewPPOBatchData<candle_core::Tensor> {
+impl PPOBatchData<candle_core::Tensor> {
     pub fn clip_fraction(&self, clip_range: f32) -> candle_core::Result<f32> {
         (&self.ratio - 1.)?
             .abs()?
@@ -85,7 +85,7 @@ impl NewPPOBatchData<candle_core::Tensor> {
     }
 }
 
-pub trait NewPPOHooksTrait<M: PPOModule2> {
+pub trait NewPPOHooksTrait<M: PPOModule> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
         &mut self,
         _params: &mut NewPPOParams,
@@ -111,19 +111,19 @@ pub trait NewPPOHooksTrait<M: PPOModule2> {
         _params: &mut NewPPOParams,
         _module: &mut M,
         _losses: &mut <M as LearningModule>::Losses,
-        _data: &NewPPOBatchData<M::LearningTensor>,
+        _data: &PPOBatchData<M::LearningTensor>,
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 }
 
-pub struct NewPPO<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> {
+pub struct PPO<Module: PPOModule, Hooks: NewPPOHooksTrait<Module>> {
     pub params: NewPPOParams,
     pub lm: Module,
     pub hooks: Hooks,
 }
 
-impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> {
+impl<Module: PPOModule, Hooks: NewPPOHooksTrait<Module>> PPO<Module, Hooks> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
@@ -152,7 +152,7 @@ impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> 
             let ratio_adv = ratio.mul(&advantages)?;
             let policy_loss = ratio_adv.minimum(&clipped_adv)?.neg()?.mean()?;
             let mut losses = Module::Losses::losses(policy_loss, value_loss);
-            let ppo_data = NewPPOBatchData {
+            let ppo_data = PPOBatchData {
                 logp,
                 values_pred,
                 logp_diff,
@@ -185,7 +185,7 @@ impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> 
         }
     }
 }
-impl<M: PPOModule2, H: NewPPOHooksTrait<M>> Agent for NewPPO<M, H> {
+impl<M: PPOModule, H: NewPPOHooksTrait<M>> Agent for PPO<M, H> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
 

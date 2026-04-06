@@ -5,7 +5,7 @@ use burn::{
     optim::AdamWConfig,
     tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
 };
-use r2l_agents::ppo::{NewPPO, NewPPOParams, PPOModule2, RolloutLearningModule};
+use r2l_agents::ppo::{NewPPOParams, PPO, PPOModule, RolloutLearningModule};
 use r2l_burn_lm::{
     distributions::DistributionKind,
     learning_module::{
@@ -76,14 +76,14 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> RolloutLearningModule for R2lBurnLear
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOModule2 for R2lBurnLearningModule<B, D> {}
+impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOModule for R2lBurnLearningModule<B, D> {}
 
 // TODO: maybe make this generic?
 pub type BurnBackend = Autodiff<NdArray>;
 
 // TODO: a type alias would be prefered
 pub struct BurnPPO<B: AutodiffBackend>(
-    pub  NewPPO<
+    pub  PPO<
         R2lBurnLearningModule<B, DistributionKind<B>>,
         PPOHook<R2lBurnLearningModule<B, DistributionKind<B>>>,
     >,
@@ -150,6 +150,6 @@ impl AgentBuilder for PPOBurnLearningModuleBuilder {
         };
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
-        Ok(BurnPPO(NewPPO { lm, hooks, params }))
+        Ok(BurnPPO(PPO { lm, hooks, params }))
     }
 }
