@@ -5,25 +5,16 @@ use r2l_core::{
     losses::PolicyValuesLosses,
     policies::{LearningModule, ValueFunction},
     sampler::buffer::TrajectoryContainer,
+    tensor::R2lTensorMath,
 };
 
-use crate::a2c::A2CTensorOps;
 use crate::ppo::RolloutLearningModule;
 use crate::{BatchIndexIterator, buffers_advantages_and_returns, sample};
 
 pub trait VPGModule2:
-    RolloutLearningModule
+    RolloutLearningModule<LearningTensor: R2lTensorMath>
     + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
     + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
-{
-}
-
-impl<T> VPGModule2 for T
-where
-    T: RolloutLearningModule
-        + LearningModule<Losses: PolicyValuesLosses<<T as RolloutLearningModule>::LearningTensor>>
-        + ValueFunction<Tensor = <T as RolloutLearningModule>::LearningTensor>,
-    T::LearningTensor: A2CTensorOps,
 {
 }
 
@@ -43,18 +34,12 @@ impl Default for NewVPGParams {
     }
 }
 
-pub struct NewVPG<Module: VPGModule2>
-where
-    Module::LearningTensor: A2CTensorOps,
-{
+pub struct NewVPG<Module: VPGModule2> {
     pub params: NewVPGParams,
     pub lm: Module,
 }
 
-impl<Module: VPGModule2> NewVPG<Module>
-where
-    Module::LearningTensor: A2CTensorOps,
-{
+impl<Module: VPGModule2> NewVPG<Module> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
@@ -72,20 +57,15 @@ where
             let returns = lm.tensor_from_slice(&returns.sample(&indices));
             let logp = lm.get_policy().log_probs(&observations, &actions)?;
             let values_pred = lm.calculate_values(&observations)?;
-            let policy_loss =
-                Module::LearningTensor::calculate_a2c_policy_loss(&logp, &advantages)?;
-            let value_loss =
-                Module::LearningTensor::calculate_a2c_value_loss(&returns, &values_pred)?;
+            let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
+            let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
             let losses = Module::Losses::losses(policy_loss, value_loss);
             lm.update(losses)?;
         }
     }
 }
 
-impl<M: VPGModule2> Agent for NewVPG<M>
-where
-    M::LearningTensor: A2CTensorOps,
-{
+impl<M: VPGModule2> Agent for NewVPG<M> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
 

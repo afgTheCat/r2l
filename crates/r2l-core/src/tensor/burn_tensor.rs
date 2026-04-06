@@ -1,4 +1,4 @@
-use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorOp};
+use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorMath};
 use burn::{
     prelude::Backend,
     tensor::{Tensor as BurnTensor, TensorData, backend::AutodiffBackend},
@@ -26,26 +26,40 @@ impl<B: Backend, const D: usize> R2lTensor for BurnTensor<B, D> {
     }
 }
 
-impl<B: AutodiffBackend> R2lTensorOp for burn::Tensor<B, 1> {
-    fn calculate_logp_diff(logp: &Self, logp_old: &Self) -> anyhow::Result<Self> {
-        Ok(logp.clone() - logp_old.clone())
+impl<B: AutodiffBackend> R2lTensorMath for burn::Tensor<B, 1> {
+    fn add(&self, other: &Self) -> anyhow::Result<Self> {
+        Ok(self.clone() + other.clone())
     }
 
-    fn calculate_ratio(logp_diff: &Self) -> anyhow::Result<Self> {
-        Ok(logp_diff.clone().exp())
+    fn sub(&self, other: &Self) -> anyhow::Result<Self> {
+        Ok(self.clone() - other.clone())
     }
 
-    fn calculate_policy_loss(
-        ratio: &Self,
-        advantages: &Self,
-        clip_range: f32,
-    ) -> anyhow::Result<Self> {
-        let clip_adv = ratio.clone().clamp(1. - clip_range, 1. + clip_range) * advantages.clone();
-        Ok((-(ratio.clone() * advantages.clone()).min_pair(clip_adv)).mean())
+    fn mul(&self, other: &Self) -> anyhow::Result<Self> {
+        Ok(self.clone() * other.clone())
     }
 
-    fn calculate_value_loss(returns: &Self, values_pred: &Self) -> anyhow::Result<Self> {
-        let value_diff = returns.clone() - values_pred.clone();
-        Ok((value_diff.clone() * value_diff).mean())
+    fn exp(&self) -> anyhow::Result<Self> {
+        Ok(self.clone().exp())
+    }
+
+    fn clamp(&self, min: f32, max: f32) -> anyhow::Result<Self> {
+        Ok(self.clone().clamp(min, max))
+    }
+
+    fn minimum(&self, other: &Self) -> anyhow::Result<Self> {
+        Ok(self.clone().min_pair(other.clone()))
+    }
+
+    fn neg(&self) -> anyhow::Result<Self> {
+        Ok(self.clone().neg())
+    }
+
+    fn mean(&self) -> anyhow::Result<Self> {
+        Ok(self.clone().mean())
+    }
+
+    fn sqr(&self) -> anyhow::Result<Self> {
+        Ok(self.clone().powf_scalar(2.0))
     }
 }

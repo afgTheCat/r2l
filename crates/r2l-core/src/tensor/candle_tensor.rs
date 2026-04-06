@@ -1,4 +1,4 @@
-use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorOp};
+use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorMath};
 use candle_core::{Device, Tensor as CandleTensor};
 
 impl From<R2lBuffer> for CandleTensor {
@@ -22,6 +22,44 @@ impl R2lTensor for CandleTensor {
     }
 }
 
+impl R2lTensorMath for CandleTensor {
+    fn add(&self, other: &Self) -> anyhow::Result<Self> {
+        Ok(self.add(other)?)
+    }
+
+    fn sub(&self, other: &Self) -> anyhow::Result<Self> {
+        Ok(self.sub(other)?)
+    }
+
+    fn mul(&self, other: &Self) -> anyhow::Result<Self> {
+        Ok(self.mul(other)?)
+    }
+
+    fn exp(&self) -> anyhow::Result<Self> {
+        Ok(self.exp()?)
+    }
+
+    fn clamp(&self, min: f32, max: f32) -> anyhow::Result<Self> {
+        Ok(self.clamp(min, max)?)
+    }
+
+    fn minimum(&self, other: &Self) -> anyhow::Result<Self> {
+        Ok(Self::minimum(self, other)?)
+    }
+
+    fn neg(&self) -> anyhow::Result<Self> {
+        Ok(self.neg()?)
+    }
+
+    fn mean(&self) -> anyhow::Result<Self> {
+        Ok(self.mean_all()?)
+    }
+
+    fn sqr(&self) -> anyhow::Result<Self> {
+        Ok(self.sqr()?)
+    }
+}
+
 impl R2lBuffer {
     pub fn to_candle_tensor(&self) -> CandleTensor {
         self.clone().into()
@@ -37,32 +75,5 @@ impl R2lBuffer {
 
     pub fn from_candle_tensor(tensor: &CandleTensor) -> Self {
         tensor.clone().into()
-    }
-}
-
-impl R2lTensorOp for CandleTensor {
-    fn calculate_logp_diff(logp: &Self, logp_old: &Self) -> anyhow::Result<Self> {
-        Ok((logp - logp_old)?)
-    }
-
-    fn calculate_ratio(logp_diff: &Self) -> anyhow::Result<Self> {
-        Ok(logp_diff.exp()?)
-    }
-
-    fn calculate_policy_loss(
-        ratio: &Self,
-        advantages: &Self,
-        clip_range: f32,
-    ) -> anyhow::Result<Self> {
-        let clip_adv = (ratio.clamp(1. - clip_range, 1. + clip_range)? * advantages.clone())?;
-        Ok(
-            candle_core::Tensor::minimum(&(ratio * advantages)?, &clip_adv)?
-                .neg()?
-                .mean_all()?,
-        )
-    }
-
-    fn calculate_value_loss(returns: &Self, values_pred: &Self) -> anyhow::Result<Self> {
-        Ok(returns.sub(values_pred)?.sqr()?.mean_all()?)
     }
 }

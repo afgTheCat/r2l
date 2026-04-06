@@ -5,7 +5,7 @@ use r2l_core::{
     losses::PolicyValuesLosses,
     policies::{LearningModule, ValueFunction},
     sampler::buffer::TrajectoryContainer,
-    tensor::{R2lTensor, R2lTensorOp},
+    tensor::{R2lTensor, R2lTensorMath},
     utils::rollout_buffer::{Advantages, Logps, Returns},
 };
 
@@ -13,7 +13,7 @@ use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logp
 
 pub trait RolloutLearningModule {
     type InferenceTensor: R2lTensor;
-    type LearningTensor: R2lTensorOp;
+    type LearningTensor: R2lTensor;
 
     type InferencePolicy: Policy<Tensor = Self::InferenceTensor>;
     type Policy: Policy<Tensor = Self::LearningTensor>;
@@ -33,7 +33,7 @@ pub trait RolloutLearningModule {
 
 // NOTE: heavily in progress
 pub trait PPOModule2:
-    RolloutLearningModule
+    RolloutLearningModule<LearningTensor: R2lTensorMath>
     + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
     + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
 {
@@ -143,14 +143,14 @@ impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> 
             let returns = lm.tensor_from_slice(&returns.sample(&indicies));
             let logp = lm.get_policy().log_probs(&observations, &actions)?;
             let values_pred = lm.calculate_values(&observations)?;
-            let value_loss = Module::LearningTensor::calculate_value_loss(&returns, &values_pred)?;
-            let logp_diff = Module::LearningTensor::calculate_logp_diff(&logp, &logp_old)?;
-            let ratio = Module::LearningTensor::calculate_ratio(&logp_diff)?;
-            let policy_loss = Module::LearningTensor::calculate_policy_loss(
-                &ratio,
-                &advantages,
-                self.params.clip_range,
-            )?;
+            let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
+            let logp_diff = logp.sub(&logp_old)?;
+            let ratio = logp_diff.exp()?;
+            let clip_ratio =
+                ratio.clamp(1. - self.params.clip_range, 1. + self.params.clip_range)?;
+            let clipped_adv = clip_ratio.mul(&advantages)?;
+            let ratio_adv = ratio.mul(&advantages)?;
+            let policy_loss = ratio_adv.minimum(&clipped_adv)?.neg()?.mean()?;
             let mut losses = Module::Losses::losses(policy_loss, value_loss);
             let ppo_data = NewPPOBatchData {
                 logp,
