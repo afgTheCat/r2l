@@ -2,15 +2,28 @@ use crate::{optimizer::OptimizerWithMaxGrad, thread_safe_sequential::ThreadSafeS
 use anyhow::{Ok, Result};
 use candle_core::Tensor as CandleTensor;
 use candle_nn::{Module, Optimizer};
-use r2l_core::policies::{LearningModule, ValueFunction};
+use r2l_core::{
+    losses::PolicyValuesLosses,
+    policies::{LearningModule, ValueFunction},
+};
 
-pub struct PolicyValuesLosses {
+pub struct CandlePolicyValuesLosses {
     pub policy_loss: CandleTensor,
     pub value_loss: CandleTensor,
     pub vf_coeff: Option<f32>,
 }
 
-impl PolicyValuesLosses {
+impl PolicyValuesLosses<candle_core::Tensor> for CandlePolicyValuesLosses {
+    fn losses(policy_loss: candle_core::Tensor, value_loss: candle_core::Tensor) -> Self {
+        Self {
+            policy_loss,
+            value_loss,
+            vf_coeff: None,
+        }
+    }
+}
+
+impl CandlePolicyValuesLosses {
     pub fn new(policy_loss: CandleTensor, value_loss: CandleTensor) -> Self {
         Self {
             policy_loss,
@@ -52,7 +65,7 @@ impl DecoupledActorCriticLM {
 
 /// The policy and the value function has different optimizers
 impl LearningModule for DecoupledActorCriticLM {
-    type Losses = PolicyValuesLosses;
+    type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         self.policy_optimizer_with_grad
@@ -108,7 +121,7 @@ impl ActorCriticKind {
 }
 
 impl LearningModule for ActorCriticKind {
-    type Losses = PolicyValuesLosses;
+    type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         match self {
@@ -119,7 +132,7 @@ impl LearningModule for ActorCriticKind {
 }
 
 impl LearningModule for ParalellActorCriticLM {
-    type Losses = PolicyValuesLosses;
+    type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         let loss = if let Some(vf_coeff) = losses.vf_coeff {

@@ -8,6 +8,7 @@ use burn::{
 };
 use r2l_core::{
     distributions::Policy,
+    losses::PolicyValuesLosses,
     policies::{LearningModule, ValueFunction},
 };
 
@@ -26,13 +27,23 @@ impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
 {
 }
 
-pub struct PolicyValuesLosses<B: AutodiffBackend> {
+pub struct BurnPolicyValuesLosses<B: AutodiffBackend> {
     pub policy_loss: Tensor<B, 1>,
     pub value_loss: Tensor<B, 1>,
     pub vf_coeff: Option<f32>,
 }
 
-impl<B: AutodiffBackend> PolicyValuesLosses<B> {
+impl<B: AutodiffBackend> PolicyValuesLosses<Tensor<B, 1>> for BurnPolicyValuesLosses<B> {
+    fn losses(policy_loss: Tensor<B, 1>, value_loss: Tensor<B, 1>) -> Self {
+        Self {
+            policy_loss,
+            value_loss,
+            vf_coeff: None,
+        }
+    }
+}
+
+impl<B: AutodiffBackend> BurnPolicyValuesLosses<B> {
     pub fn new(policy_loss: Tensor<B, 1>, value_loss: Tensor<B, 1>) -> Self {
         Self {
             policy_loss,
@@ -83,7 +94,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ParalellActorCriticLM<B, M> {
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for ParalellActorCriticLM<B, M> {
-    type Losses = PolicyValuesLosses<B>;
+    type Losses = BurnPolicyValuesLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         let loss = if let Some(vf_coeff) = losses.vf_coeff {

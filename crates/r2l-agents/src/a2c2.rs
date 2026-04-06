@@ -1,22 +1,17 @@
 use anyhow::Result;
 use burn::tensor::backend::AutodiffBackend;
-use r2l_burn_lm::learning_module::PolicyValuesLosses as BurnLosses;
-use r2l_candle_lm::learning_module::PolicyValuesLosses as CandleLosses;
 use r2l_core::{
     agents::Agent,
     distributions::Policy,
+    losses::PolicyValuesLosses,
     policies::{LearningModule, ValueFunction},
     sampler::buffer::TrajectoryContainer,
     tensor::R2lTensor,
     utils::rollout_buffer::{Advantages, Returns},
 };
 
-use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, sample};
 use crate::ppo2::RolloutLearningModule;
-
-pub trait A2CLosses<T> {
-    fn a2c_losses(policy_loss: T, value_loss: T) -> Self;
-}
+use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, sample};
 
 pub trait A2CTensorOps: R2lTensor {
     fn calculate_a2c_policy_loss(logp: &Self, advantages: &Self) -> anyhow::Result<Self>;
@@ -44,21 +39,9 @@ impl<B: AutodiffBackend> A2CTensorOps for burn::Tensor<B, 1> {
     }
 }
 
-impl A2CLosses<candle_core::Tensor> for CandleLosses {
-    fn a2c_losses(policy_loss: candle_core::Tensor, value_loss: candle_core::Tensor) -> Self {
-        CandleLosses::new(policy_loss, value_loss)
-    }
-}
-
-impl<B: AutodiffBackend> A2CLosses<burn::Tensor<B, 1>> for BurnLosses<B> {
-    fn a2c_losses(policy_loss: burn::Tensor<B, 1>, value_loss: burn::Tensor<B, 1>) -> Self {
-        BurnLosses::new(policy_loss, value_loss)
-    }
-}
-
 pub trait A2CModule2:
     RolloutLearningModule
-    + LearningModule<Losses: A2CLosses<<Self as RolloutLearningModule>::LearningTensor>>
+    + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
     + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
 {
 }
@@ -66,7 +49,7 @@ pub trait A2CModule2:
 impl<T> A2CModule2 for T
 where
     T: RolloutLearningModule
-        + LearningModule<Losses: A2CLosses<<T as RolloutLearningModule>::LearningTensor>>
+        + LearningModule<Losses: PolicyValuesLosses<<T as RolloutLearningModule>::LearningTensor>>
         + ValueFunction<Tensor = <T as RolloutLearningModule>::LearningTensor>,
     T::LearningTensor: A2CTensorOps,
 {
@@ -142,7 +125,7 @@ where
                 Module::LearningTensor::calculate_a2c_policy_loss(&logp, &advantages)?;
             let value_loss =
                 Module::LearningTensor::calculate_a2c_value_loss(&returns, &values_pred)?;
-            let losses = Module::Losses::a2c_losses(policy_loss, value_loss);
+            let losses = Module::Losses::losses(policy_loss, value_loss);
             lm.update(losses)?;
         }
     }

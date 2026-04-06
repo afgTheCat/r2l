@@ -8,7 +8,9 @@ use burn::{
 use r2l_agents::ppo2::{NewPPO, NewPPOParams, PPOModule2, RolloutLearningModule};
 use r2l_burn_lm::{
     distributions::DistributionKind,
-    learning_module::{BurnPolicy, ParalellActorCriticLM, ParalellActorModel, PolicyValuesLosses},
+    learning_module::{
+        BurnPolicy, BurnPolicyValuesLosses, ParalellActorCriticLM, ParalellActorModel,
+    },
 };
 use r2l_core::{
     agents::Agent,
@@ -36,7 +38,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> R2lBurnLearningModule<B, D> {
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> LearningModule for R2lBurnLearningModule<B, D> {
-    type Losses = PolicyValuesLosses<B>;
+    type Losses = BurnPolicyValuesLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         self.lm.update(losses)

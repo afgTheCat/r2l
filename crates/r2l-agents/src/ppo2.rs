@@ -2,6 +2,7 @@ use anyhow::Result;
 use r2l_core::{
     agents::Agent,
     distributions::Policy,
+    losses::PolicyValuesLosses,
     policies::{LearningModule, ValueFunction},
     sampler::buffer::TrajectoryContainer,
     tensor::{R2lTensor, R2lTensorOp},
@@ -9,10 +10,6 @@ use r2l_core::{
 };
 
 use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
-
-pub trait PPOLosses<T> {
-    fn ppo_losses(policy_loss: T, value_loss: T) -> Self;
-}
 
 pub trait RolloutLearningModule {
     type InferenceTensor: R2lTensor;
@@ -37,7 +34,7 @@ pub trait RolloutLearningModule {
 // NOTE: heavily in progress
 pub trait PPOModule2:
     RolloutLearningModule
-    + LearningModule<Losses: PPOLosses<<Self as RolloutLearningModule>::LearningTensor>>
+    + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
     + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
 {
 }
@@ -154,7 +151,7 @@ impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> 
                 &advantages,
                 self.params.clip_range,
             )?;
-            let mut losses = Module::Losses::ppo_losses(policy_loss, value_loss);
+            let mut losses = Module::Losses::losses(policy_loss, value_loss);
             let ppo_data = NewPPOBatchData {
                 logp,
                 values_pred,

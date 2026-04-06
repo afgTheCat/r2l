@@ -2,17 +2,18 @@ use anyhow::Result;
 use r2l_core::{
     agents::Agent,
     distributions::Policy,
+    losses::PolicyValuesLosses,
     policies::{LearningModule, ValueFunction},
     sampler::buffer::TrajectoryContainer,
 };
 
-use crate::a2c2::{A2CLosses, A2CTensorOps};
+use crate::a2c2::A2CTensorOps;
 use crate::ppo2::RolloutLearningModule;
 use crate::{BatchIndexIterator, buffers_advantages_and_returns, sample};
 
 pub trait VPGModule2:
     RolloutLearningModule
-    + LearningModule<Losses: A2CLosses<<Self as RolloutLearningModule>::LearningTensor>>
+    + LearningModule<Losses: PolicyValuesLosses<<Self as RolloutLearningModule>::LearningTensor>>
     + ValueFunction<Tensor = <Self as RolloutLearningModule>::LearningTensor>
 {
 }
@@ -20,7 +21,7 @@ pub trait VPGModule2:
 impl<T> VPGModule2 for T
 where
     T: RolloutLearningModule
-        + LearningModule<Losses: A2CLosses<<T as RolloutLearningModule>::LearningTensor>>
+        + LearningModule<Losses: PolicyValuesLosses<<T as RolloutLearningModule>::LearningTensor>>
         + ValueFunction<Tensor = <T as RolloutLearningModule>::LearningTensor>,
     T::LearningTensor: A2CTensorOps,
 {
@@ -75,7 +76,7 @@ where
                 Module::LearningTensor::calculate_a2c_policy_loss(&logp, &advantages)?;
             let value_loss =
                 Module::LearningTensor::calculate_a2c_value_loss(&returns, &values_pred)?;
-            let losses = Module::Losses::a2c_losses(policy_loss, value_loss);
+            let losses = Module::Losses::losses(policy_loss, value_loss);
             lm.update(losses)?;
         }
     }

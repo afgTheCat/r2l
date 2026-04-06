@@ -8,8 +8,8 @@ use r2l_agents::{
     HookResult,
     ppo2::{NewPPOBatchData, NewPPOHooksTrait, NewPPOParams, RolloutLearningModule},
 };
-use r2l_burn_lm::learning_module::{BurnPolicy, PolicyValuesLosses as BurnPolicyValuesLosses};
-use r2l_candle_lm::learning_module::PolicyValuesLosses;
+use r2l_burn_lm::learning_module::{BurnPolicy, BurnPolicyValuesLosses};
+use r2l_candle_lm::learning_module::CandlePolicyValuesLosses;
 use r2l_core::{distributions::Policy, sampler::buffer::TrajectoryContainer};
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> NewPPOHooksTrait<R2lBurnLearningModule<B, D>>
@@ -174,7 +174,7 @@ impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModu
         &mut self,
         params: &mut NewPPOParams,
         module: &mut R2lCandleLearningModule,
-        losses: &mut PolicyValuesLosses,
+        losses: &mut CandlePolicyValuesLosses,
         data: &NewPPOBatchData<candle_core::Tensor>,
     ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);

@@ -1,7 +1,4 @@
 pub mod a2c2;
-pub mod burn_agents;
-// pub mod candle_agents;
-pub mod ppo;
 pub mod ppo2;
 pub mod vpg2;
 

@@ -1,6 +1,6 @@
 use r2l_candle_lm::learning_module::{
-        DecoupledActorCriticLM, ParalellActorCriticLM, PolicyValuesLosses,
-    };
+    CandlePolicyValuesLosses, DecoupledActorCriticLM, ParalellActorCriticLM,
+};
 use r2l_core::policies::LearningModule;
 
 pub enum ActorCriticKind {
@@ -25,7 +25,7 @@ impl ActorCriticKind {
 }
 
 impl LearningModule for ActorCriticKind {
-    type Losses = PolicyValuesLosses;
+    type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         match self {

@@ -16,7 +16,7 @@ use r2l_agents::ppo2::RolloutLearningModule;
 use r2l_agents::ppo2::{NewPPO, NewPPOParams};
 use r2l_candle_lm::{
     distributions::CandleDistributionKind,
-    learning_module::{PolicyValuesLosses, SequentialValueFunction},
+    learning_module::{CandlePolicyValuesLosses, SequentialValueFunction},
 };
 use r2l_core::{
     agents::Agent,
@@ -50,7 +50,7 @@ impl ValueFunction for R2lCandleLearningModule {
 }
 
 impl LearningModule for R2lCandleLearningModule {
-    type Losses = PolicyValuesLosses;
+    type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         self.actor_critic.update(losses)

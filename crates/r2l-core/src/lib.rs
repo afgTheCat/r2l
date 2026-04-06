@@ -3,7 +3,7 @@ pub mod distributions;
 pub mod env;
 pub mod env_builder;
 pub mod error;
-// TODO: readd this
+pub mod losses;
 pub mod on_policy_algorithm;
 pub mod policies;
 pub mod rng;
