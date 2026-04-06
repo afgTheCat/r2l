@@ -1,13 +1,9 @@
 use burn::tensor::backend::{AutodiffBackend, Backend};
 use r2l_burn_lm::learning_module::PolicyValuesLosses as BurnLosses;
 use r2l_candle_lm::learning_module::PolicyValuesLosses as CandleLosses;
-use r2l_core::{
-    sampler::buffer::TrajectoryContainer,
-    tensor::R2lTensor,
-    utils::rollout_buffer::{Advantages, Returns},
-};
+use r2l_core::tensor::R2lTensor;
 
-use crate::{HookResult, ppo2::PPOLosses};
+use crate::ppo2::PPOLosses;
 
 pub struct PPOBatchData<T: R2lTensor> {
     pub logp: T,

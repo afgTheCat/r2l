@@ -1,6 +1,5 @@
 pub mod buffer;
 pub mod worker;
-pub mod worker_pool2;
 
 use crate::{
     distributions::Policy,

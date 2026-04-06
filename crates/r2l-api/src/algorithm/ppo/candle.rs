@@ -1,20 +1,14 @@
-use crate::agents::AgentBuilder;
 use crate::{
     agents::ppo::candle::{CandlePPO, PPOCandleLearningModuleBuilder},
     algorithm::AlgorightmBuilder,
-    builders::distribution::ActionSpaceType,
     hooks::ppo::PPOStats,
     sampler::SamplerBuilder,
 };
 use r2l_core::sampler::Location;
 use r2l_core::{
-    env::Space,
     env_builder::EnvBuilderTrait,
-    on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
-    sampler::{
-        FinalSampler,
-        buffer::{StepTrajectoryBound, TrajectoryBound},
-    },
+    on_policy_algorithm::LearningSchedule,
+    sampler::buffer::{StepTrajectoryBound, TrajectoryBound},
 };
 use std::sync::mpsc::Sender;
 

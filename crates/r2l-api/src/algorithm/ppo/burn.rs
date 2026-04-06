@@ -10,7 +10,7 @@ use r2l_core::{
     env_builder::EnvBuilderTrait,
     sampler::buffer::{StepTrajectoryBound, TrajectoryBound},
 };
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Sender;
 
 pub type PPOBurnAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
     AlgorightmBuilder<BurnPPO<BurnBackend>, PPOBurnLearningModuleBuilder, EB, BD>;

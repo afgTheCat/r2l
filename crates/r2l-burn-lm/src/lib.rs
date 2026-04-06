@@ -1,4 +1,3 @@
-use crate::learning_module::PolicyValuesLosses;
 
 // TODO: burn support is highly experimental, and we need to figure out the right abstractions at
 // one point. Maybe next release.

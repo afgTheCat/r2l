@@ -6,7 +6,6 @@ use r2l_candle_lm::{
     optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::build_sequential,
 };
-use r2l_core::env::EnvironmentDescription;
 
 pub enum LearningModuleType {
     Paralell {

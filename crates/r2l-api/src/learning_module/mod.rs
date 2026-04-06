@@ -1,9 +1,6 @@
-use r2l_candle_lm::{
-    distributions::CandleDistributionKind,
-    learning_module::{
-        DecoupledActorCriticLM, ParalellActorCriticLM, PolicyValuesLosses, SequentialValueFunction,
-    },
-};
+use r2l_candle_lm::learning_module::{
+        DecoupledActorCriticLM, ParalellActorCriticLM, PolicyValuesLosses,
+    };
 use r2l_core::policies::LearningModule;
 
 pub enum ActorCriticKind {
