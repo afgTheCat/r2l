@@ -1,6 +1,6 @@
 use crate::{
     agents::{ppo::burn::R2lBurnLearningModule, ppo::candle::R2lCandleLearningModule},
-    hooks::ppo::{BatchStats, PPOHook, PPOHookReporter},
+    hooks::ppo::{BatchStats, StandardPPOHook, StandardPPOHookReporter},
 };
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
@@ -8,21 +8,21 @@ use r2l_agents::{
     HookResult,
     on_policy_algorithms::{
         OnPolicyLearningModule,
-        ppo::{NewPPOHooksTrait, NewPPOParams, PPOBatchData},
+        ppo::{PPOBatchData, PPOHook, PPOParams},
     },
 };
 use r2l_burn_lm::learning_module::{BurnPolicy, BurnPolicyValuesLosses};
 use r2l_candle_lm::learning_module::CandlePolicyValuesLosses;
 use r2l_core::{distributions::Policy, sampler::buffer::TrajectoryContainer};
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> NewPPOHooksTrait<R2lBurnLearningModule<B, D>>
-    for PPOHook<R2lBurnLearningModule<B, D>>
+impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<R2lBurnLearningModule<B, D>>
+    for StandardPPOHook<R2lBurnLearningModule<B, D>>
 {
     fn before_learning_hook<
         T: TrajectoryContainer<Tensor = burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
     >(
         &mut self,
-        _params: &mut NewPPOParams,
+        _params: &mut PPOParams,
         module: &mut R2lBurnLearningModule<B, D>,
         _buffers: &[T],
         advantages: &mut r2l_core::utils::rollout_buffer::Advantages,
@@ -42,7 +42,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> NewPPOHooksTrait<R2lBurnLearningModul
         T: TrajectoryContainer<Tensor = burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
     >(
         &mut self,
-        _params: &mut NewPPOParams,
+        _params: &mut PPOParams,
         module: &mut R2lBurnLearningModule<B, D>,
         buffers: &[T],
     ) -> anyhow::Result<HookResult> {
@@ -54,7 +54,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> NewPPOHooksTrait<R2lBurnLearningModul
         };
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
-            if let Some(PPOHookReporter { report, tx }) = &mut self.reporter {
+            if let Some(StandardPPOHookReporter { report, tx }) = &mut self.reporter {
                 let mut total_rewards: f32 = 0.;
                 let mut total_episodes: usize = 0;
                 for buffer in buffers {
@@ -74,7 +74,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> NewPPOHooksTrait<R2lBurnLearningModul
 
     fn batch_hook(
         &mut self,
-        params: &mut NewPPOParams,
+        params: &mut PPOParams,
         module: &mut R2lBurnLearningModule<B, D>,
         losses: &mut BurnPolicyValuesLosses<B>,
         data: &PPOBatchData<burn::Tensor<B, 1>>,
@@ -93,7 +93,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> NewPPOHooksTrait<R2lBurnLearningModul
                 / ratio.len() as f32
         };
 
-        if let Some(PPOHookReporter { report, .. }) = &mut self.reporter {
+        if let Some(StandardPPOHookReporter { report, .. }) = &mut self.reporter {
             let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
             let clip_fraction = ratio
                 .iter()
@@ -124,10 +124,10 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> NewPPOHooksTrait<R2lBurnLearningModul
     }
 }
 
-impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModule> {
+impl PPOHook<R2lCandleLearningModule> for StandardPPOHook<R2lCandleLearningModule> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = candle_core::Tensor>>(
         &mut self,
-        _params: &mut NewPPOParams,
+        _params: &mut PPOParams,
         module: &mut R2lCandleLearningModule,
         _buffers: &[B],
         advantages: &mut r2l_core::utils::rollout_buffer::Advantages,
@@ -143,7 +143,7 @@ impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModu
 
     fn rollout_hook<B: TrajectoryContainer<Tensor = candle_core::Tensor>>(
         &mut self,
-        _params: &mut NewPPOParams,
+        _params: &mut PPOParams,
         module: &mut R2lCandleLearningModule,
         buffers: &[B],
     ) -> anyhow::Result<HookResult> {
@@ -155,7 +155,7 @@ impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModu
         };
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
-            if let Some(PPOHookReporter { report, tx }) = &mut self.reporter {
+            if let Some(StandardPPOHookReporter { report, tx }) = &mut self.reporter {
                 let mut total_rewards: f32 = 0.;
                 let mut total_episodes: usize = 0;
                 for buffer in buffers {
@@ -175,7 +175,7 @@ impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModu
 
     fn batch_hook(
         &mut self,
-        params: &mut NewPPOParams,
+        params: &mut PPOParams,
         module: &mut R2lCandleLearningModule,
         losses: &mut CandlePolicyValuesLosses,
         data: &PPOBatchData<candle_core::Tensor>,
@@ -191,7 +191,7 @@ impl NewPPOHooksTrait<R2lCandleLearningModule> for PPOHook<R2lCandleLearningModu
             .sub(&log_ratio)?
             .mean_all()?
             .to_scalar::<f32>()?;
-        if let Some(PPOHookReporter { report, .. }) = &mut self.reporter {
+        if let Some(StandardPPOHookReporter { report, .. }) = &mut self.reporter {
             let clip_fraction = (&data.ratio - 1.)?
                 .abs()?
                 .gt(params.clip_range)?

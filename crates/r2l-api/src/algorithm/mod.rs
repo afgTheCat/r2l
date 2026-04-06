@@ -15,7 +15,7 @@ use crate::{
     agents::AgentBuilder, builders::distribution::ActionSpaceType, sampler::SamplerBuilder,
 };
 
-pub struct AlgorightmBuilder<
+pub struct OnPolicyAlgorightmBuilder<
     A: Agent,
     AB: AgentBuilder<Agent = A>,
     EB: EnvBuilderTrait,
@@ -31,7 +31,7 @@ impl<
     AB: AgentBuilder<Agent = A>,
     EB: EnvBuilderTrait,
     BD: TrajectoryBound<Tensor = EB::Tensor>,
-> AlgorightmBuilder<A, AB, EB, BD>
+> OnPolicyAlgorightmBuilder<A, AB, EB, BD>
 {
     pub fn build(
         self,

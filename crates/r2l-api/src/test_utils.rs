@@ -12,7 +12,7 @@ pub fn run_gym_episodes(
 ) -> Result<()> {
     for _ in 0..ep_count {
         let _device = Device::Cpu;
-        let mut env = GymEnv::new(env, Some("human".into()));
+        let mut env = GymEnv::new(env, Some("human".into()))?;
         let seed = rand::random();
         let mut state: Tensor = env.reset(seed)?.into();
         let mut action = dist.get_action(state.unsqueeze(0)?)?;

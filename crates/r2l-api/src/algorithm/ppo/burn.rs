@@ -4,7 +4,7 @@ use crate::hooks::ppo::PPOStats;
 use crate::sampler::SamplerBuilder;
 use crate::{
     agents::ppo::burn::{BurnPPO, PPOBurnLearningModuleBuilder},
-    algorithm::AlgorightmBuilder,
+    algorithm::OnPolicyAlgorightmBuilder,
 };
 use r2l_core::sampler::Location;
 use r2l_core::{
@@ -14,11 +14,11 @@ use r2l_core::{
 use std::sync::mpsc::Sender;
 
 pub type PPOBurnAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    AlgorightmBuilder<BurnPPO<BurnBackend>, PPOBurnLearningModuleBuilder, EB, BD>;
+    OnPolicyAlgorightmBuilder<BurnPPO<BurnBackend>, PPOBurnLearningModuleBuilder, EB, BD>;
 
 impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuiler<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
-        AlgorightmBuilder {
+        OnPolicyAlgorightmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
             agent_builder: PPOBurnLearningModuleBuilder::default(),
             learning_schedule: LearningSchedule::RolloutBound {
@@ -34,13 +34,13 @@ impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBurnAlgor
         self,
         trajectory_bound: BD2,
     ) -> PPOBurnAlgorithmBuiler<EB, BD2> {
-        let AlgorightmBuilder {
+        let OnPolicyAlgorightmBuilder {
             sampler_builder,
             agent_builder,
             learning_schedule,
             ..
         } = self;
-        AlgorightmBuilder {
+        OnPolicyAlgorightmBuilder {
             sampler_builder: sampler_builder.with_bound(trajectory_bound),
             agent_builder,
             learning_schedule,

@@ -1,6 +1,6 @@
 use crate::{
     agents::ppo::candle::{CandlePPO, PPOCandleLearningModuleBuilder},
-    algorithm::AlgorightmBuilder,
+    algorithm::OnPolicyAlgorightmBuilder,
     hooks::ppo::PPOStats,
     sampler::SamplerBuilder,
 };
@@ -13,11 +13,11 @@ use r2l_core::{
 use std::sync::mpsc::Sender;
 
 pub type PPOCandleAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    AlgorightmBuilder<CandlePPO, PPOCandleLearningModuleBuilder, EB, BD>;
+    OnPolicyAlgorightmBuilder<CandlePPO, PPOCandleLearningModuleBuilder, EB, BD>;
 
 impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuiler<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
-        AlgorightmBuilder {
+        OnPolicyAlgorightmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
             agent_builder: PPOCandleLearningModuleBuilder::default(),
             learning_schedule: LearningSchedule::RolloutBound {
@@ -35,13 +35,13 @@ impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>>
         self,
         trajectory_bound: BD2,
     ) -> PPOCandleAlgorithmBuiler<EB, BD2> {
-        let AlgorightmBuilder {
+        let OnPolicyAlgorightmBuilder {
             sampler_builder,
             agent_builder,
             learning_schedule,
             ..
         } = self;
-        AlgorightmBuilder {
+        OnPolicyAlgorightmBuilder {
             sampler_builder: sampler_builder.with_bound(trajectory_bound),
             agent_builder,
             learning_schedule,

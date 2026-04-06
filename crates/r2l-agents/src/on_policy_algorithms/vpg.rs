@@ -9,13 +9,13 @@ use crate::{
     on_policy_algorithms::OnPolicyLearningModule, sample,
 };
 
-pub struct NewVPGParams {
+pub struct VPGParams {
     pub gamma: f32,
     pub lambda: f32,
     pub sample_size: usize,
 }
 
-impl Default for NewVPGParams {
+impl Default for VPGParams {
     fn default() -> Self {
         Self {
             gamma: 0.98,
@@ -25,12 +25,12 @@ impl Default for NewVPGParams {
     }
 }
 
-pub struct NewVPG<Module: OnPolicyLearningModule> {
-    pub params: NewVPGParams,
+pub struct VPG<Module: OnPolicyLearningModule> {
+    pub params: VPGParams,
     pub lm: Module,
 }
 
-impl<Module: OnPolicyLearningModule> NewVPG<Module> {
+impl<Module: OnPolicyLearningModule> VPG<Module> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
@@ -56,7 +56,7 @@ impl<Module: OnPolicyLearningModule> NewVPG<Module> {
     }
 }
 
-impl<M: OnPolicyLearningModule> Agent for NewVPG<M> {
+impl<M: OnPolicyLearningModule> Agent for VPG<M> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
 

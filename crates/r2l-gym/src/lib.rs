@@ -16,8 +16,8 @@ pub struct GymEnv {
 }
 
 impl GymEnv {
-    pub fn new(name: &str, render_mode: Option<String>) -> GymEnv {
-        Python::with_gil(|py| {
+    pub fn new(name: &str, render_mode: Option<String>) -> Result<GymEnv> {
+        let env = Python::with_gil(|py| {
             let gym = py.import("gymnasium")?;
             let kwargs = PyDict::new(py);
             if let Some(render_mode) = render_mode {
@@ -52,8 +52,8 @@ impl GymEnv {
                 action_space,
                 observation_space,
             })
-        })
-        .unwrap()
+        });
+        env.map_err(anyhow::Error::from)
     }
 
     pub fn observation_size(&self) -> usize {
@@ -106,13 +106,13 @@ impl Env for GymEnv {
                 }
                 _ => {
                     let action: Vec<f32> = action.to_data();
+                    // TODO: remove unwrap
                     let action = action.iter().position(|i| *i > 0.).unwrap();
                     self.env.call_method(py, "step", (action,), None)?
                 }
             };
             let step = step.bind(py);
             let next_state: Vec<f32> = step.get_item(0)?.extract()?;
-            // TODO: remove unwrap
             let next_state = R2lBuffer::from_vec(next_state);
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
@@ -160,6 +160,6 @@ impl EnvBuilderTrait for GymEnvBuilder {
     type Env = GymEnv;
 
     fn build_env(&self) -> Result<Self::Env> {
-        Ok(GymEnv::new(&self.0, None))
+        GymEnv::new(&self.0, None)
     }
 }

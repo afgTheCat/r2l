@@ -13,13 +13,13 @@ use crate::{
     on_policy_algorithms::OnPolicyLearningModule, sample,
 };
 
-pub struct NewA2CParams {
+pub struct A2CParams {
     pub gamma: f32,
     pub lambda: f32,
     pub sample_size: usize,
 }
 
-impl Default for NewA2CParams {
+impl Default for A2CParams {
     fn default() -> Self {
         Self {
             gamma: 0.98,
@@ -29,10 +29,10 @@ impl Default for NewA2CParams {
     }
 }
 
-pub trait NewA2CHooksTrait<M: OnPolicyLearningModule> {
+pub trait A2CHook<M: OnPolicyLearningModule> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
         &mut self,
-        _params: &mut NewA2CParams,
+        _params: &mut A2CParams,
         _module: &mut M,
         _buffers: &[B],
         _advantages: &mut Advantages,
@@ -42,17 +42,13 @@ pub trait NewA2CHooksTrait<M: OnPolicyLearningModule> {
     }
 }
 
-pub struct DefaultNewA2CHooks;
-
-impl<M: OnPolicyLearningModule> NewA2CHooksTrait<M> for DefaultNewA2CHooks {}
-
-pub struct NewA2C<Module: OnPolicyLearningModule, Hooks: NewA2CHooksTrait<Module>> {
-    pub params: NewA2CParams,
+pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
+    pub params: A2CParams,
     pub lm: Module,
     pub hooks: Hooks,
 }
 
-impl<Module: OnPolicyLearningModule, Hooks: NewA2CHooksTrait<Module>> NewA2C<Module, Hooks> {
+impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
@@ -78,7 +74,7 @@ impl<Module: OnPolicyLearningModule, Hooks: NewA2CHooksTrait<Module>> NewA2C<Mod
     }
 }
 
-impl<M: OnPolicyLearningModule, H: NewA2CHooksTrait<M>> Agent for NewA2C<M, H> {
+impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
 

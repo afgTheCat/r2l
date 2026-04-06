@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::mpsc::Sender};
 
 // All the hooks that the user might want to adjust
 #[derive(Debug, Clone)]
-pub struct PPOHookBuilder {
+pub struct StandardPPOHookBuilder {
     normalize_advantage: bool,
     total_epochs: usize,
     entropy_coeff: f32,
@@ -12,7 +12,7 @@ pub struct PPOHookBuilder {
     tx: Option<Sender<PPOStats>>,
 }
 
-impl Default for PPOHookBuilder {
+impl Default for StandardPPOHookBuilder {
     fn default() -> Self {
         Self {
             normalize_advantage: true,
@@ -26,7 +26,7 @@ impl Default for PPOHookBuilder {
     }
 }
 
-impl PPOHookBuilder {
+impl StandardPPOHookBuilder {
     pub fn new() -> Self {
         Self::default()
     }
@@ -90,8 +90,8 @@ impl PPOHookBuilder {
         self.gradient_clipping
     }
 
-    pub fn build<T>(self) -> PPOHook<T> {
-        PPOHook {
+    pub fn build<T>(self) -> StandardPPOHook<T> {
+        StandardPPOHook {
             normalize_advantage: self.normalize_advantage,
             total_epochs: self.total_epochs,
             entropy_coeff: self.entropy_coeff,
@@ -102,11 +102,11 @@ impl PPOHookBuilder {
             }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
-            reporter: self.tx.map(|tx| PPOHookReporter {
+            reporter: self.tx.map(|tx| StandardPPOHookReporter {
                 report: PPOStats::default(),
                 tx,
             }),
-            _phantom: PhantomData,
+            _lm: PhantomData,
         }
     }
 }
@@ -145,12 +145,12 @@ impl TargetKl {
     }
 }
 
-pub struct PPOHookReporter {
+pub struct StandardPPOHookReporter {
     pub report: PPOStats,
     pub tx: Sender<PPOStats>,
 }
 
-pub struct PPOHook<T = ()> {
+pub struct StandardPPOHook<T = ()> {
     pub normalize_advantage: bool,
     pub total_epochs: usize,
     pub entropy_coeff: f32,
@@ -158,8 +158,6 @@ pub struct PPOHook<T = ()> {
     pub target_kl: Option<TargetKl>,
     pub gradient_clipping: Option<f32>,
     pub current_epoch: usize,
-    pub reporter: Option<PPOHookReporter>,
-    // pub report: PPOStats,
-    // pub tx: Option<Sender<PPOStats>>,
-    _phantom: PhantomData<T>,
+    pub reporter: Option<StandardPPOHookReporter>,
+    _lm: PhantomData<T>,
 }

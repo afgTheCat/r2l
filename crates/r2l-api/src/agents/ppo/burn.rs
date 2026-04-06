@@ -7,7 +7,7 @@ use burn::{
 };
 use r2l_agents::on_policy_algorithms::{
     OnPolicyLearningModule,
-    ppo::{NewPPOParams, PPO},
+    ppo::{PPO, PPOParams},
 };
 use r2l_burn_lm::{
     distributions::DistributionKind,
@@ -24,7 +24,7 @@ use r2l_core::{
 use crate::{
     agents::AgentBuilder,
     builders::distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
-    hooks::ppo::{PPOHook, PPOHookBuilder},
+    hooks::ppo::{StandardPPOHook, StandardPPOHookBuilder},
 };
 
 // TODO: finish this. Currently the issue with this one is that this is not generic enough. But it's
@@ -86,7 +86,7 @@ pub type BurnBackend = Autodiff<NdArray>;
 pub struct BurnPPO<B: AutodiffBackend>(
     pub  PPO<
         R2lBurnLearningModule<B, DistributionKind<B>>,
-        PPOHook<R2lBurnLearningModule<B, DistributionKind<B>>>,
+        StandardPPOHook<R2lBurnLearningModule<B, DistributionKind<B>>>,
     >,
 );
 
@@ -111,16 +111,16 @@ impl<B: AutodiffBackend> Agent for BurnPPO<B> {
 }
 
 pub struct PPOBurnLearningModuleBuilder {
-    pub ppo_params: NewPPOParams,
-    pub hook_builder: PPOHookBuilder,
+    pub ppo_params: PPOParams,
+    pub hook_builder: StandardPPOHookBuilder,
     pub distribution_builder: DistributionBuilder,
 }
 
 impl Default for PPOBurnLearningModuleBuilder {
     fn default() -> Self {
         Self {
-            hook_builder: PPOHookBuilder::default(),
-            ppo_params: NewPPOParams::default(),
+            hook_builder: StandardPPOHookBuilder::default(),
+            ppo_params: PPOParams::default(),
             distribution_builder: DistributionBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,

@@ -1,18 +1,18 @@
 use crate::agents::AgentBuilder;
-use crate::hooks::ppo::PPOHook;
+use crate::hooks::ppo::StandardPPOHook;
 use crate::learning_module::ActorCriticKind;
 use crate::{
     builders::{
         distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
         learning_module::{LearningModuleBuilder, LearningModuleType},
     },
-    hooks::ppo::PPOHookBuilder,
+    hooks::ppo::StandardPPOHookBuilder,
 };
 use candle_core::Tensor;
 use candle_core::{DType, Device};
 use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
 use r2l_agents::on_policy_algorithms::OnPolicyLearningModule;
-use r2l_agents::on_policy_algorithms::ppo::{NewPPOParams, PPO};
+use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
 use r2l_candle_lm::{
     distributions::CandleDistributionKind,
     learning_module::{CandlePolicyValuesLosses, SequentialValueFunction},
@@ -84,7 +84,7 @@ impl OnPolicyLearningModule for R2lCandleLearningModule {
 // TODO: this is the preferred way
 // pub type CandlePPO = NewPPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>;
 
-pub struct CandlePPO(pub PPO<R2lCandleLearningModule, PPOHook<R2lCandleLearningModule>>);
+pub struct CandlePPO(pub PPO<R2lCandleLearningModule, StandardPPOHook<R2lCandleLearningModule>>);
 
 impl Agent for CandlePPO {
     type Tensor = candle_core::Tensor;
@@ -110,9 +110,9 @@ impl Agent for CandlePPO {
 pub struct PPOCandleLearningModuleBuilder {
     pub device: Device,
     pub distribution_builder: DistributionBuilder,
-    pub hook_builder: PPOHookBuilder,
+    pub hook_builder: StandardPPOHookBuilder,
     pub actor_critic_type: LearningModuleBuilder,
-    pub ppo_params: NewPPOParams,
+    pub ppo_params: PPOParams,
 }
 
 impl Default for PPOCandleLearningModuleBuilder {
@@ -136,8 +136,8 @@ impl Default for PPOCandleLearningModuleBuilder {
                     weight_decay: 1e-4,
                 },
             },
-            hook_builder: PPOHookBuilder::default(),
-            ppo_params: NewPPOParams::default(),
+            hook_builder: StandardPPOHookBuilder::default(),
+            ppo_params: PPOParams::default(),
         }
     }
 }

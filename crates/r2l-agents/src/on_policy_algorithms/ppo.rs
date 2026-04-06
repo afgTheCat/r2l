@@ -14,14 +14,14 @@ use crate::{
     on_policy_algorithms::OnPolicyLearningModule, sample,
 };
 
-pub struct NewPPOParams {
+pub struct PPOParams {
     pub clip_range: f32,
     pub gamma: f32,
     pub lambda: f32,
     pub sample_size: usize,
 }
 
-impl Default for NewPPOParams {
+impl Default for PPOParams {
     fn default() -> Self {
         Self {
             clip_range: 0.2,
@@ -39,10 +39,10 @@ pub struct PPOBatchData<T: R2lTensor> {
     pub ratio: T,
 }
 
-pub trait NewPPOHooksTrait<M: OnPolicyLearningModule> {
+pub trait PPOHook<M: OnPolicyLearningModule> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
         &mut self,
-        _params: &mut NewPPOParams,
+        _params: &mut PPOParams,
         _module: &mut M,
         _buffers: &[B],
         _advantages: &mut Advantages,
@@ -53,7 +53,7 @@ pub trait NewPPOHooksTrait<M: OnPolicyLearningModule> {
 
     fn rollout_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
         &mut self,
-        _params: &mut NewPPOParams,
+        _params: &mut PPOParams,
         _module: &mut M,
         _buffers: &[B],
     ) -> anyhow::Result<HookResult> {
@@ -62,7 +62,7 @@ pub trait NewPPOHooksTrait<M: OnPolicyLearningModule> {
 
     fn batch_hook(
         &mut self,
-        _params: &mut NewPPOParams,
+        _params: &mut PPOParams,
         _module: &mut M,
         _losses: &mut <M as LearningModule>::Losses,
         _data: &PPOBatchData<M::LearningTensor>,
@@ -71,13 +71,13 @@ pub trait NewPPOHooksTrait<M: OnPolicyLearningModule> {
     }
 }
 
-pub struct PPO<Module: OnPolicyLearningModule, Hooks: NewPPOHooksTrait<Module>> {
-    pub params: NewPPOParams,
+pub struct PPO<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
+    pub params: PPOParams,
     pub lm: Module,
     pub hooks: Hooks,
 }
 
-impl<Module: OnPolicyLearningModule, Hooks: NewPPOHooksTrait<Module>> PPO<Module, Hooks> {
+impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
@@ -140,7 +140,7 @@ impl<Module: OnPolicyLearningModule, Hooks: NewPPOHooksTrait<Module>> PPO<Module
     }
 }
 
-impl<M: OnPolicyLearningModule, H: NewPPOHooksTrait<M>> Agent for PPO<M, H> {
+impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
 
