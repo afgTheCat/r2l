@@ -18,7 +18,7 @@ use r2l_core::{
 
 use crate::{
     agents::AgentBuilder,
-    builders::distribution::{ActionSpaceType, DistributionBuilder},
+    builders::distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
     hooks::ppo::{PPOHook, PPOHookBuilder},
 };
 
@@ -111,6 +111,19 @@ pub struct PPOBurnLearningModuleBuilder {
     pub ppo_params: NewPPOParams,
     pub hook_builder: PPOHookBuilder,
     pub distribution_builder: DistributionBuilder,
+}
+
+impl Default for PPOBurnLearningModuleBuilder {
+    fn default() -> Self {
+        Self {
+            hook_builder: PPOHookBuilder::default(),
+            ppo_params: NewPPOParams::default(),
+            distribution_builder: DistributionBuilder {
+                hidden_layers: vec![64, 64],
+                distribution_type: DistributionType::Dynamic,
+            },
+        }
+    }
 }
 
 impl AgentBuilder for PPOBurnLearningModuleBuilder {

@@ -1,6 +1,7 @@
 use crate::agents::ppo::burn::BurnBackend;
 use crate::algorithm::LearningSchedule;
 use crate::hooks::ppo::PPOStats;
+use crate::sampler::SamplerBuilder;
 use crate::{
     agents::ppo::burn::{BurnPPO, PPOBurnLearningModuleBuilder},
     algorithm::AlgorightmBuilder,
@@ -14,6 +15,19 @@ use std::sync::mpsc::Sender;
 
 pub type PPOBurnAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
     AlgorightmBuilder<BurnPPO<BurnBackend>, PPOBurnLearningModuleBuilder, EB, BD>;
+
+impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuiler<EB> {
+    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+        AlgorightmBuilder {
+            sampler_builder: SamplerBuilder::new(builder, n_envs),
+            agent_builder: PPOBurnLearningModuleBuilder::default(),
+            learning_schedule: LearningSchedule::RolloutBound {
+                total_rollouts: 300,
+                current_rollout: 0,
+            },
+        }
+    }
+}
 
 impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> PPOBurnAlgorithmBuiler<EB, BD> {
     pub fn with_bound<BD2: TrajectoryBound<Tensor = EB::Tensor>>(
