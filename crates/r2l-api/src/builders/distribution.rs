@@ -1,9 +1,16 @@
 use anyhow::Result;
+use burn::tensor::backend::AutodiffBackend;
 use candle_core::Device;
 use candle_nn::VarBuilder;
+use r2l_burn_lm::distributions::{
+    categorical_distribution::CategoricalDistribution as BurnCategoricalDistribution,
+    diagonal_distribution::DiagGaussianDistribution as BurnDiagGaussianDistribution,
+    DistributionKind,
+};
 use r2l_candle_lm::distributions::{
-    CandleDistributionKind, categorical_distribution::CategoricalDistribution,
-    diagonal_distribution::DiagGaussianDistribution,
+    categorical_distribution::CategoricalDistribution as CandleCategoricalDistribution,
+    diagonal_distribution::DiagGaussianDistribution as CandleDiagGaussianDistribution,
+    CandleDistributionKind,
 };
 use r2l_core::env::{EnvironmentDescription, Space};
 
@@ -25,7 +32,33 @@ pub struct DistributionBuilder {
 }
 
 impl DistributionBuilder {
-    pub fn build(
+    pub fn build_burn<B: AutodiffBackend>(
+        &self,
+        observation_size: usize,
+        action_size: usize,
+        action_space: ActionSpaceType,
+    ) -> Result<DistributionKind<B>> {
+        let layers = &[&self.hidden_layers[..], &[action_size]].concat();
+        let policy_layers = &[&[observation_size][..], &layers[..]].concat();
+        match self.distribution_type {
+            DistributionType::DiagGaussianDistribution => Ok(DistributionKind::Diag(
+                BurnDiagGaussianDistribution::build(policy_layers),
+            )),
+            DistributionType::CategoricalDistribution => Ok(DistributionKind::Categorical(
+                BurnCategoricalDistribution::build(policy_layers),
+            )),
+            DistributionType::Dynamic => match action_space {
+                ActionSpaceType::Discrete => Ok(DistributionKind::Categorical(
+                    BurnCategoricalDistribution::build(policy_layers),
+                )),
+                ActionSpaceType::Continous => Ok(DistributionKind::Diag(
+                    BurnDiagGaussianDistribution::build(policy_layers),
+                )),
+            },
+        }
+    }
+
+    pub fn build_candle(
         &self,
         distr_varbuilder: &VarBuilder,
         device: &Device,
@@ -38,7 +71,7 @@ impl DistributionBuilder {
             DistributionType::DiagGaussianDistribution => {
                 let log_std = distr_varbuilder.get(action_size, "log_std")?;
                 Ok(CandleDistributionKind::DiagGaussian(
-                    DiagGaussianDistribution::build(
+                    CandleDiagGaussianDistribution::build(
                         observation_size,
                         layers,
                         distr_varbuilder,
@@ -48,7 +81,7 @@ impl DistributionBuilder {
                 ))
             }
             DistributionType::CategoricalDistribution => Ok(CandleDistributionKind::Categorical(
-                CategoricalDistribution::build(
+                CandleCategoricalDistribution::build(
                     observation_size,
                     action_size,
                     layers,
@@ -59,7 +92,7 @@ impl DistributionBuilder {
             )),
             DistributionType::Dynamic => match action_space {
                 ActionSpaceType::Discrete => Ok(CandleDistributionKind::Categorical(
-                    CategoricalDistribution::build(
+                    CandleCategoricalDistribution::build(
                         observation_size,
                         action_size,
                         layers,
@@ -71,7 +104,7 @@ impl DistributionBuilder {
                 ActionSpaceType::Continous => {
                     let log_std = distr_varbuilder.get(action_size, "log_std")?;
                     Ok(CandleDistributionKind::DiagGaussian(
-                        DiagGaussianDistribution::build(
+                        CandleDiagGaussianDistribution::build(
                             observation_size,
                             layers,
                             distr_varbuilder,
@@ -96,7 +129,7 @@ impl DistributionBuilder {
             Space::Continous { .. } => ActionSpaceType::Continous,
             Space::Discrete(..) => ActionSpaceType::Discrete,
         };
-        self.build(
+        self.build_candle(
             distribution_varbuilder,
             device,
             observation_size,

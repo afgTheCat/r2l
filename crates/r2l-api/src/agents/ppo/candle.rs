@@ -93,7 +93,7 @@ impl Agent for CandlePPO {
     type Policy = CandleDistributionKind;
 
     fn policy(&self) -> Self::Policy {
-        self.0.lm.get_inference_policy()
+        self.0.policy()
     }
 
     fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
@@ -154,7 +154,7 @@ impl PPOCandleLearningModuleBuilder {
         let distribution_varmap = VarMap::new();
         let distr_var_builder =
             VarBuilder::from_varmap(&distribution_varmap, DType::F32, &self.device);
-        let policy = self.distribution_builder.build(
+        let policy = self.distribution_builder.build_candle(
             &distr_var_builder,
             &self.device,
             observation_size,

@@ -1,15 +1,13 @@
 use burn::{
     backend::{Autodiff, NdArray},
     grad_clipping::GradientClipping,
+    module::AutodiffModule,
     optim::AdamWConfig,
-    tensor::{Tensor as BurnTensor, backend::AutodiffBackend},
+    tensor::{backend::AutodiffBackend, Tensor as BurnTensor},
 };
 use r2l_agents::ppo2::{NewPPO, NewPPOParams, PPOModule2, RolloutLearningModule};
 use r2l_burn_lm::{
-    distributions::{
-        DistributionKind, categorical_distribution::CategoricalDistribution,
-        diagonal_distribution::DiagGaussianDistribution,
-    },
+    distributions::DistributionKind,
     learning_module::{BurnPolicy, ParalellActorCriticLM, ParalellActorModel, PolicyValuesLosses},
 };
 use r2l_core::{
@@ -20,7 +18,7 @@ use r2l_core::{
 
 use crate::{
     agents::AgentBuilder,
-    builders::distribution::ActionSpaceType,
+    builders::distribution::{ActionSpaceType, DistributionBuilder},
     hooks::ppo::{PPOHook, PPOHookBuilder},
 };
 
@@ -90,24 +88,29 @@ pub struct BurnPPO<B: AutodiffBackend>(
 );
 
 impl<B: AutodiffBackend> Agent for BurnPPO<B> {
-    type Tensor = burn::Tensor<B, 1>;
-    type Policy = DistributionKind<B>;
+    type Tensor = burn::Tensor<B::InnerBackend, 1>;
+    type Policy = <DistributionKind<B> as AutodiffModule<B>>::InnerModule;
 
     fn policy(&self) -> Self::Policy {
-        todo!()
+        self.0.policy()
     }
 
     fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
         &mut self,
         buffers: &[C],
     ) -> anyhow::Result<()> {
-        todo!()
+        self.0.learn(buffers)
+    }
+
+    fn shutdown(&mut self) {
+        self.0.shutdown();
     }
 }
 
 pub struct PPOBurnLearningModuleBuilder {
     pub ppo_params: NewPPOParams,
     pub hook_builder: PPOHookBuilder,
+    pub distribution_builder: DistributionBuilder,
 }
 
 impl AgentBuilder for PPOBurnLearningModuleBuilder {
@@ -119,16 +122,12 @@ impl AgentBuilder for PPOBurnLearningModuleBuilder {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<BurnPPO<BurnBackend>> {
-        let policy_layers = &[observation_size, 64, 64, action_size];
         let value_layers = &[observation_size, 64, 64, 1];
-        let distr = match action_space {
-            ActionSpaceType::Discrete => {
-                DistributionKind::Categorical(CategoricalDistribution::build(policy_layers))
-            }
-            ActionSpaceType::Continous => {
-                DistributionKind::Diag(DiagGaussianDistribution::build(policy_layers))
-            }
-        };
+        let distr = self.distribution_builder.build_burn::<BurnBackend>(
+            observation_size,
+            action_size,
+            action_space,
+        )?;
         let value_net = r2l_burn_lm::sequential::Sequential::build(value_layers);
         let model = ParalellActorModel::new(distr, value_net);
         let lm = R2lBurnLearningModule {

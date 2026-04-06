@@ -82,21 +82,4 @@ impl LearningModuleBuilder {
             }
         }
     }
-
-    // I gues we don't really need this
-    pub fn build_with_env<T>(
-        &mut self,
-        distribution_varmap: VarMap,
-        distr_var_builder: VarBuilder,
-        env_description: &EnvironmentDescription<T>,
-        device: &Device,
-    ) -> Result<(SequentialValueFunction, ActorCriticKind)> {
-        let observation_size = env_description.observation_size();
-        self.build(
-            distribution_varmap,
-            distr_var_builder,
-            observation_size,
-            device,
-        )
-    }
 }
