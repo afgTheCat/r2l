@@ -188,7 +188,6 @@ impl<Module: PPOModule2, Hooks: NewPPOHooksTrait<Module>> NewPPO<Module, Hooks> 
         }
     }
 }
-
 impl<M: PPOModule2, H: NewPPOHooksTrait<M>> Agent for NewPPO<M, H> {
     type Tensor = M::InferenceTensor;
     type Policy = M::InferencePolicy;
