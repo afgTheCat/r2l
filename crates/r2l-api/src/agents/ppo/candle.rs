@@ -1,5 +1,6 @@
 use crate::agents::AgentBuilder;
 use crate::hooks::ppo::PPOHook;
+use crate::learning_module::ActorCriticKind;
 use crate::{
     builders::{
         distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
@@ -10,9 +11,9 @@ use crate::{
 use candle_core::Tensor;
 use candle_core::{DType, Device};
 use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
+use r2l_agents::ppo2::PPOModule2;
 use r2l_agents::ppo2::RolloutLearningModule;
 use r2l_agents::ppo2::{NewPPO, NewPPOParams};
-use r2l_agents::{candle_agents::ActorCriticKind, ppo2::PPOModule2};
 use r2l_candle_lm::{
     distributions::CandleDistributionKind,
     learning_module::{PolicyValuesLosses, SequentialValueFunction},

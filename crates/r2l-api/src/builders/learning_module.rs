@@ -1,11 +1,12 @@
 use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
-use r2l_agents::candle_agents::ActorCriticKind;
 use r2l_candle_lm::{
     learning_module::{DecoupledActorCriticLM, ParalellActorCriticLM, SequentialValueFunction},
     optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::build_sequential,
 };
+
+use crate::learning_module::ActorCriticKind;
 
 pub enum LearningModuleType {
     Paralell {
