@@ -269,7 +269,7 @@ fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     });
 }
 
-pub fn train_ppo2(
+pub fn train_ppo(
     tx: Sender<PPOStats>,
     total_rollouts: usize,
     clip_range: f32,
@@ -283,7 +283,7 @@ pub fn train_ppo2(
         .with_location(Location::Vec)
         .with_clip_range(clip_range)
         .with_learning_schedule(LearningSchedule::RolloutBound {
-            total_rollouts: 300,
+            total_rollouts,
             current_rollout: 0,
         })
         .with_reporter(Some(tx));
@@ -307,7 +307,7 @@ fn main() -> io::Result<()> {
     let total_rollouts = 300;
     let clip_range = 0.2;
     std::thread::spawn(
-        move || match train_ppo2(update_tx, total_rollouts, clip_range) {
+        move || match train_ppo(update_tx, total_rollouts, clip_range) {
             Ok(()) => {}
             Err(err) => {
                 eprintln!("ppo was not trained normally, err: {err}")

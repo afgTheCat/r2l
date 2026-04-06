@@ -3,52 +3,28 @@
 
 mod table;
 
-use burn::{
-    backend::{Autodiff, NdArray},
-    optim::AdamWConfig,
-};
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l_api::{
-    algorithm::ppo::burn::PPOBurnAlgorithmBuiler,
-    hooks::ppo::{PPOHookBuilder, PPOStats},
-};
-use r2l_burn_lm::{
-    distributions::diagonal_distribution::DiagGaussianDistribution,
-    learning_module::{ParalellActorCriticLM, ParalellActorModel},
-};
-use r2l_core::env_builder::EnvBuilder;
-use r2l_core::on_policy_algorithm::{
-    DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm,
-};
-use r2l_core::sampler::{FinalSampler, Location, buffer::StepTrajectoryBound};
+use r2l_api::{algorithm::ppo::burn::PPOBurnAlgorithmBuiler, hooks::ppo::PPOStats};
+use r2l_core::on_policy_algorithm::LearningSchedule;
+use r2l_core::sampler::{Location, buffer::StepTrajectoryBound};
 use r2l_examples::EventBox;
 use r2l_gym::GymEnvBuilder;
-use std::sync::Arc;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 
 use crate::table::UpdateTable;
 
-type BurnBackend = Autodiff<NdArray>;
-
 struct App {
     recent_table: UpdateTable,
     best_table: UpdateTable,
     rx: Receiver<EventBox>,
     rollout_rewards_avg: Vec<f32>,
-    total_rollouts: usize,
-    current_rollout: usize,
 }
 
 impl App {
-    fn new(
-        cc: &eframe::CreationContext<'_>,
-        rx: Receiver<EventBox>,
-        total_rollouts: usize,
-        clip_range: f32,
-    ) -> Self {
+    fn new(_cc: &eframe::CreationContext<'_>, rx: Receiver<EventBox>, clip_range: f32) -> Self {
         // Customize egui here with cc.egui_ctx.set_fonts and cc.egui_ctx.set_visuals.
         // Restore app state using cc.storage (requires the "persistence" feature).
         // Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
@@ -65,14 +41,12 @@ impl App {
                 progress: Default::default(),
             },
             rollout_rewards_avg: vec![],
-            total_rollouts,
-            current_rollout: 0,
         }
     }
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_secs_f64(0.25));
         loop {
             let event = self.rx.try_recv();
@@ -152,59 +126,13 @@ pub fn train_ppo(
         .with_location(Location::Vec)
         .with_clip_range(clip_range)
         .with_learning_schedule(LearningSchedule::RolloutBound {
-            total_rollouts: 300,
+            total_rollouts,
             current_rollout: 0,
         })
         .with_reporter(Some(tx));
     let mut ppo = ppo_builder.build()?;
     ppo.train()
 }
-
-// pub fn train_ppo(
-//     tx: Sender<PPOStats>,
-//     total_rollouts: usize,
-//     clip_range: f32,
-// ) -> anyhow::Result<()> {
-//     let ppo_hook = PPOHookBuilder::new()
-//         .with_entropy_coeff(ENT_COEFF)
-//         .with_gradient_clipping(Some(MAX_GRAD_NORM))
-//         .with_target_kl(Some(TARGET_KL))
-//         .with_tx(Some(tx))
-//         .build();
-//     let env_builder = EnvBuilder::Homogenous {
-//         builder: Arc::new(r2l_gym::GymEnvBuilder::new(ENV_NAME)),
-//         n_envs: 5,
-//     };
-//     let sampler = FinalSampler::build(
-//         env_builder,
-//         StepTrajectoryBound::new(2048),
-//         None,
-//         Location::Vec,
-//     );
-//     let env_description = sampler.env_description();
-//     let action_size = env_description.action_space.size();
-//     let observation_size = env_description.observation_space.size();
-//     let policy_layers = &[observation_size, 64, 64, action_size];
-//     let value_layers = &[observation_size, 64, 64, 1];
-//     let distr: DiagGaussianDistribution<BurnBackend> =
-//         DiagGaussianDistribution::build(policy_layers);
-//     let value_net = r2l_burn_lm::sequential::Sequential::build(value_layers);
-//     let model = ParalellActorModel::new(distr, value_net);
-//     let lm = ParalellActorCriticLM::new(model, AdamWConfig::new().init());
-//     let agent = r2l_agents::burn_agents::ppo::BurnPPO::new(
-//         r2l_agents::burn_agents::ppo::BurnPPOCore::new(lm, clip_range, 64, 0.98, 0.8),
-//         ppo_hook,
-//     );
-//     let mut algo = OnPolicyAlgorithm {
-//         sampler,
-//         agent,
-//         hooks: DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::RolloutBound {
-//             total_rollouts,
-//             current_rollout: 0,
-//         }),
-//     };
-//     algo.train()
-// }
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -236,6 +164,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "R2L tui example",
         options,
-        Box::new(|cc| Ok(Box::new(App::new(cc, event_rx, total_rollouts, clip_range)))),
+        Box::new(|cc| Ok(Box::new(App::new(cc, event_rx, clip_range)))),
     )
 }
