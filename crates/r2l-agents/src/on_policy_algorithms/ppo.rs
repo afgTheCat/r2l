@@ -142,9 +142,9 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
 
 impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
     type Tensor = M::InferenceTensor;
-    type Policy = M::InferencePolicy;
+    type Actor = M::InferencePolicy;
 
-    fn policy(&self) -> Self::Policy {
+    fn actor(&self) -> Self::Actor {
         self.lm.get_inference_policy()
     }
 
@@ -166,7 +166,7 @@ impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
             &mut advantages,
             &mut returns
         ));
-        let logps = logps(buffers, &self.policy());
+        let logps = logps(buffers, &self.actor());
         self.learning_loop(buffers, advantages, returns, logps)?;
         Ok(())
     }

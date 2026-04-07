@@ -45,7 +45,7 @@ pub trait OnPolicyAlgorithmHooks {
     fn post_rollout_hook(&mut self, rollouts: &[<Self::S as Sampler>::TrajectoryContainer])
     -> bool;
 
-    fn post_training_hook(&mut self, policy: <Self::A as Agent>::Policy) -> bool;
+    fn post_training_hook(&mut self, policy: <Self::A as Agent>::Actor) -> bool;
 
     fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()>;
 }
@@ -104,7 +104,7 @@ impl<A: Agent, S: Sampler> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorightms
         }
     }
 
-    fn post_training_hook(&mut self, _policy: <Self::A as Agent>::Policy) -> bool {
+    fn post_training_hook(&mut self, _policy: <Self::A as Agent>::Actor) -> bool {
         false
     }
 
@@ -122,7 +122,7 @@ impl<
     H: OnPolicyAlgorithmHooks<A = A, S = S>,
 > OnPolicyAlgorithm<A, S, H>
 where
-    A::Policy: Clone,
+    A::Actor: Clone,
     A::Tensor: From<S::Tensor>,
     A::Tensor: From<B::Tensor>,
     S::Tensor: From<A::Tensor>,
@@ -132,7 +132,7 @@ where
             return Ok(());
         }
         loop {
-            let policy = self.agent.policy();
+            let policy = self.agent.actor();
             let policy = ActorWrapper::new(policy);
             let buffers = self.sampler.collect_rollouts(policy);
             break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
@@ -143,7 +143,7 @@ where
                 .map(|b| BufferWrapper::new(b))
                 .collect::<Vec<_>>();
             self.agent.learn(&buffers)?;
-            let policy = self.agent.policy();
+            let policy = self.agent.actor();
             break_on_hook_res!(self.hooks.post_training_hook(policy));
         }
 

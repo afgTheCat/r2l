@@ -88,10 +88,10 @@ pub struct CandlePPO(pub PPO<R2lCandleLearningModule, StandardPPOHook<R2lCandleL
 
 impl Agent for CandlePPO {
     type Tensor = candle_core::Tensor;
-    type Policy = CandleDistributionKind;
+    type Actor = CandleDistributionKind;
 
-    fn policy(&self) -> Self::Policy {
-        self.0.policy()
+    fn actor(&self) -> Self::Actor {
+        self.0.actor()
     }
 
     fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(

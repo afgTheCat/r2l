@@ -1,12 +1,13 @@
 pub mod burn;
 pub mod candle;
 
-use r2l_core::{agents::Agent, tensor::R2lBuffer};
+use r2l_core::{agents::Agent, distributions::Actor, tensor::R2lBuffer};
 
 use crate::agents::ppo::{
     burn::{BurnBackend, BurnPPO, PPOBurnLearningModuleBuilder},
     candle::{CandlePPO, PPOCandleLearningModuleBuilder},
 };
+use ::burn::tensor::Tensor as BurnTensor;
 
 // Unified builder trait that either builds a BurnPPO or a CandlePPO
 // this is going to be massive xdddd
@@ -20,6 +21,19 @@ pub enum PPO {
     Candle(CandlePPO),
 }
 
-// impl Agent for PPO {
-//     type Tensor = R2lBuffer;
-// }
+impl Actor for PPO {
+    type Tensor = R2lBuffer;
+
+    fn get_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+        match self {
+            Self::Burn(ppo) => {
+                let observation: BurnTensor<BurnBackend, 1> = observation.into();
+                // let action = ppo
+                todo!()
+            }
+            Self::Candle(ppo) => {
+                todo!()
+            }
+        }
+    }
+}

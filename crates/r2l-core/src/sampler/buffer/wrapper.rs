@@ -84,8 +84,7 @@ pub struct BorrowedWrapper<
     _phantom: PhantomData<(S, T)>,
 }
 
-fn cast_ref<Src: 'static, Dst: 'static>(x: &Src) -> &Dst {
-    debug_assert_eq!(std::any::TypeId::of::<Src>(), std::any::TypeId::of::<Dst>());
+fn cast_ref<Src, Dst>(x: &Src) -> &Dst {
     unsafe { &*(x as *const Src as *const Dst) }
 }
 

@@ -58,9 +58,9 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
 
 impl<M: OnPolicyLearningModule> Agent for VPG<M> {
     type Tensor = M::InferenceTensor;
-    type Policy = M::InferencePolicy;
+    type Actor = M::InferencePolicy;
 
-    fn policy(&self) -> Self::Policy {
+    fn actor(&self) -> Self::Actor {
         self.lm.get_inference_policy()
     }
 

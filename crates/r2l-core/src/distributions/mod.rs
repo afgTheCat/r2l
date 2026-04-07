@@ -1,8 +1,7 @@
 use crate::tensor::R2lTensor;
 use anyhow::Result;
-use std::fmt::Debug;
 
-pub trait Actor: Send + Debug + 'static {
+pub trait Actor: Send + 'static {
     type Tensor: R2lTensor;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;

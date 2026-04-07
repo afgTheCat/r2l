@@ -2,7 +2,7 @@ pub mod buffer;
 pub mod worker;
 
 use crate::{
-    distributions::{Actor, Policy},
+    distributions::Actor,
     env::Env,
     env_builder::{EnvBuilder, EnvBuilderTrait},
     sampler::{
@@ -152,7 +152,7 @@ pub struct ActorWrapper<A: Actor + Clone, T: R2lTensor> {
     env: PhantomData<T>,
 }
 
-impl<D: Policy + Clone, T: R2lTensor> ActorWrapper<D, T> {
+impl<D: Actor + Clone, T: R2lTensor> ActorWrapper<D, T> {
     pub fn new(policy: D) -> Self {
         Self {
             policy,
@@ -161,7 +161,7 @@ impl<D: Policy + Clone, T: R2lTensor> ActorWrapper<D, T> {
     }
 }
 
-impl<D: Policy + Clone, T: R2lTensor> Actor for ActorWrapper<D, T>
+impl<D: Actor + Clone, T: R2lTensor> Actor for ActorWrapper<D, T>
 where
     T: From<D::Tensor>,
     T: Into<D::Tensor>,

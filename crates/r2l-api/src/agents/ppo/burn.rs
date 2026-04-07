@@ -92,10 +92,10 @@ pub struct BurnPPO<B: AutodiffBackend>(
 
 impl<B: AutodiffBackend> Agent for BurnPPO<B> {
     type Tensor = burn::Tensor<B::InnerBackend, 1>;
-    type Policy = <DistributionKind<B> as AutodiffModule<B>>::InnerModule;
+    type Actor = <DistributionKind<B> as AutodiffModule<B>>::InnerModule;
 
-    fn policy(&self) -> Self::Policy {
-        self.0.policy()
+    fn actor(&self) -> Self::Actor {
+        self.0.actor()
     }
 
     fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
