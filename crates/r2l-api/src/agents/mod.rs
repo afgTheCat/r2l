@@ -29,16 +29,6 @@ pub trait AgentBuilder {
     ) -> anyhow::Result<Self::Agent>;
 }
 
-pub enum LearningModuleBuilder {
-    Burn(PPOBurnLearningModuleBuilder),
-    Candle(PPOCandleLearningModuleBuilder),
-}
-
-pub enum BurnOrCandlePPO {
-    Burn(BurnPPO<BurnBackend>),
-    Candle(CandlePPO),
-}
-
 pub enum BurnOrCandlePPOActor {
     Burn(DistributionKind<NdArray>),
     Candle(CandleDistributionKind),
@@ -61,6 +51,11 @@ impl Actor for BurnOrCandlePPOActor {
             }
         }
     }
+}
+
+pub enum BurnOrCandlePPO {
+    Burn(BurnPPO<BurnBackend>),
+    Candle(CandlePPO),
 }
 
 impl Agent for BurnOrCandlePPO {
@@ -112,6 +107,35 @@ impl Agent for BurnOrCandlePPO {
             Self::Candle(ppo) => {
                 ppo.shutdown();
             }
+        }
+    }
+}
+
+pub enum PPOLearningModuleBuilder {
+    Burn(PPOBurnLearningModuleBuilder),
+    Candle(PPOCandleLearningModuleBuilder),
+}
+
+impl AgentBuilder for PPOLearningModuleBuilder {
+    type Agent = BurnOrCandlePPO;
+
+    fn build(
+        self,
+        observation_size: usize,
+        action_size: usize,
+        action_space: ActionSpaceType,
+    ) -> anyhow::Result<Self::Agent> {
+        match self {
+            Self::Burn(builder) => Ok(BurnOrCandlePPO::Burn(builder.build(
+                observation_size,
+                action_size,
+                action_space,
+            )?)),
+            Self::Candle(builer) => Ok(BurnOrCandlePPO::Candle(builer.build(
+                observation_size,
+                action_size,
+                action_space,
+            )?)),
         }
     }
 }
