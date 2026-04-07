@@ -2,7 +2,7 @@ pub mod buffer;
 pub mod worker;
 
 use crate::{
-    distributions::Policy,
+    distributions::{Actor, Policy},
     env::Env,
     env_builder::{EnvBuilder, EnvBuilderTrait},
     sampler::{
@@ -28,7 +28,7 @@ pub trait Sampler {
     type Tensor: R2lTensor;
     type TrajectoryContainer: TrajectoryContainer<Tensor = Self::Tensor>;
 
-    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
+    fn collect_rollouts<P: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
         policy: P,
     ) -> impl AsRef<[Self::TrajectoryContainer]>;
@@ -43,7 +43,7 @@ pub enum Location {
 
 pub trait PreprocessorY<T: R2lTensor, B: TrajectoryContainer<Tensor = T>> {
     // The question is, can we make this dyn compatible? Otherwise we just use a ref
-    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = T>, buffers: &mut [B]);
+    fn preprocess_states(&mut self, policy: &dyn Actor<Tensor = T>, buffers: &mut [B]);
 }
 
 // BD: collection method should probably be an enum!
@@ -116,7 +116,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E
     type Tensor = E::Tensor;
     type TrajectoryContainer = BD::Container;
 
-    fn collect_rollouts<P: Policy<Tensor = Self::Tensor> + Clone>(
+    fn collect_rollouts<P: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
         policy: P,
     ) -> impl AsRef<[Self::TrajectoryContainer]> {
@@ -147,12 +147,12 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E
 }
 
 #[derive(Debug, Clone)]
-pub struct PolicyWrapper<P: Policy + Clone, T: R2lTensor> {
-    policy: P,
+pub struct ActorWrapper<A: Actor + Clone, T: R2lTensor> {
+    policy: A,
     env: PhantomData<T>,
 }
 
-impl<D: Policy + Clone, T: R2lTensor> PolicyWrapper<D, T> {
+impl<D: Policy + Clone, T: R2lTensor> ActorWrapper<D, T> {
     pub fn new(policy: D) -> Self {
         Self {
             policy,
@@ -161,45 +161,15 @@ impl<D: Policy + Clone, T: R2lTensor> PolicyWrapper<D, T> {
     }
 }
 
-impl<D: Policy + Clone, T: R2lTensor> Policy for PolicyWrapper<D, T>
+impl<D: Policy + Clone, T: R2lTensor> Actor for ActorWrapper<D, T>
 where
     T: From<D::Tensor>,
     T: Into<D::Tensor>,
 {
     type Tensor = T;
 
-    fn std(&self) -> Result<f32> {
-        self.policy.std()
-    }
-
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let action = self.policy.get_action(observation.into())?;
         Ok(action.into())
-    }
-
-    fn log_probs(
-        &self,
-        observations: &[Self::Tensor],
-        actions: &[Self::Tensor],
-    ) -> Result<Self::Tensor> {
-        let observations = observations
-            .iter()
-            // TODO: this clone will be expensive
-            .map(|o| o.clone().into())
-            .collect::<Vec<_>>();
-        let actions = actions.iter().map(|a| a.clone().into()).collect::<Vec<_>>();
-        let log_probs = self.policy.log_probs(&observations, &actions)?;
-        Ok(log_probs.into())
-    }
-
-    fn entropy(&self) -> Result<Self::Tensor> {
-        let entropy = self.policy.entropy()?;
-        Ok(entropy.into())
-    }
-
-    fn resample_noise(&mut self) -> Result<()> {
-        // TODO: we may want the distribution to be behind a RwLock, but I doubt that this will be
-        // called a whole lot. In future releases we should enable finer control of noise sampling
-        todo!()
     }
 }

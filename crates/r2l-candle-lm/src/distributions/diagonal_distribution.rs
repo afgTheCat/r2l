@@ -2,7 +2,7 @@ use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use candle_nn::{Module, VarBuilder};
-use r2l_core::distributions::Policy;
+use r2l_core::distributions::{Actor, Policy};
 use std::f32;
 
 // TODO: we may want to resample the noise better than it is now
@@ -39,7 +39,7 @@ impl DiagGaussianDistribution {
     }
 }
 
-impl Policy for DiagGaussianDistribution {
+impl Actor for DiagGaussianDistribution {
     type Tensor = CandleTensor;
 
     fn get_action(&self, observation: CandleTensor) -> Result<CandleTensor> {
@@ -57,7 +57,9 @@ impl Policy for DiagGaussianDistribution {
         let action = (mu + std.mul(&noise.unsqueeze(0)?)?)?.squeeze(0)?.detach();
         Ok(action)
     }
+}
 
+impl Policy for DiagGaussianDistribution {
     fn log_probs(&self, states: &[CandleTensor], actions: &[CandleTensor]) -> Result<CandleTensor> {
         let states = CandleTensor::stack(states, 0)?;
         let actions = CandleTensor::stack(actions, 0)?;

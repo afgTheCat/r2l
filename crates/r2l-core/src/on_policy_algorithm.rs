@@ -1,4 +1,4 @@
-use crate::sampler::PolicyWrapper;
+use crate::sampler::ActorWrapper;
 use crate::sampler::buffer::wrapper::BufferWrapper;
 use crate::{
     agents::Agent,
@@ -133,7 +133,7 @@ where
         }
         loop {
             let policy = self.agent.policy();
-            let policy = PolicyWrapper::new(policy);
+            let policy = ActorWrapper::new(policy);
             let buffers = self.sampler.collect_rollouts(policy);
             break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
 

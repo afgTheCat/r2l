@@ -6,7 +6,7 @@ use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
-use r2l_core::distributions::Policy;
+use r2l_core::distributions::{Actor, Policy};
 use std::{f32, fmt::Debug};
 
 #[derive(Debug, Clone)]
@@ -15,7 +15,7 @@ pub enum CandleDistributionKind {
     DiagGaussian(DiagGaussianDistribution),
 }
 
-impl Policy for CandleDistributionKind {
+impl Actor for CandleDistributionKind {
     type Tensor = CandleTensor;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -24,7 +24,9 @@ impl Policy for CandleDistributionKind {
             Self::DiagGaussian(diag) => diag.get_action(observation),
         }
     }
+}
 
+impl Policy for CandleDistributionKind {
     fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.log_probs(states, actions),

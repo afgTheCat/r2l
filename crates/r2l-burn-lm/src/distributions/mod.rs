@@ -2,8 +2,8 @@ use crate::distributions::{
     categorical_distribution::CategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution,
 };
-use burn::{module::Module, prelude::Backend};
-use r2l_core::distributions::Policy;
+use burn::{Tensor as BurnTensor, module::Module, prelude::Backend};
+use r2l_core::distributions::{Actor, Policy};
 pub mod categorical_distribution;
 pub mod diagonal_distribution;
 
@@ -13,8 +13,8 @@ pub enum DistributionKind<B: Backend> {
     Diag(DiagGaussianDistribution<B>),
 }
 
-impl<B: Backend> Policy for DistributionKind<B> {
-    type Tensor = <DiagGaussianDistribution<B> as Policy>::Tensor;
+impl<B: Backend> Actor for DistributionKind<B> {
+    type Tensor = BurnTensor<B, 1>;
 
     fn get_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
         match self {
@@ -22,7 +22,9 @@ impl<B: Backend> Policy for DistributionKind<B> {
             Self::Diag(diag) => diag.get_action(observation),
         }
     }
+}
 
+impl<B: Backend> Policy for DistributionKind<B> {
     fn log_probs(
         &self,
         observations: &[Self::Tensor],

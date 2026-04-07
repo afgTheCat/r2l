@@ -1,6 +1,7 @@
 // TODO: we should make Evaluator + Noramlizer not depend on candle
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 use candle_core::{Device, Result, Tensor};
+use r2l_core::distributions::Actor;
 use r2l_core::sampler::PreprocessorY;
 use r2l_core::sampler::buffer::EditableTrajectoryContainer;
 use r2l_core::{distributions::Policy, env::Env};
@@ -79,7 +80,7 @@ impl EnvNormalizer {
 
 // TODO: this needs to be reconsidered
 impl<B: EditableTrajectoryContainer<Tensor = Tensor>> PreprocessorY<Tensor, B> for EnvNormalizer {
-    fn preprocess_states(&mut self, _policy: &dyn Policy<Tensor = Tensor>, buffers: &mut [B]) {
+    fn preprocess_states(&mut self, _policy: &dyn Actor<Tensor = Tensor>, buffers: &mut [B]) {
         self.normalize_buffers(buffers, &Device::Cpu).unwrap();
     }
 }
@@ -87,7 +88,7 @@ impl<B: EditableTrajectoryContainer<Tensor = Tensor>> PreprocessorY<Tensor, B> f
 impl<B: EditableTrajectoryContainer<Tensor = Tensor>, E: Env<Tensor = Tensor>>
     PreprocessorY<Tensor, B> for Evaluator<E>
 {
-    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = Tensor>, buffers: &mut [B]) {
+    fn preprocess_states(&mut self, policy: &dyn Actor<Tensor = Tensor>, buffers: &mut [B]) {
         let n_envs = buffers.len();
         self.evaluate(policy, n_envs).unwrap();
     }
@@ -112,7 +113,7 @@ impl<E: Env> EvaluatorNormalizer<E> {
 impl<B: EditableTrajectoryContainer<Tensor = Tensor>, E: Env<Tensor = Tensor>>
     PreprocessorY<Tensor, B> for EvaluatorNormalizer<E>
 {
-    fn preprocess_states(&mut self, policy: &dyn Policy<Tensor = Tensor>, buffers: &mut [B]) {
+    fn preprocess_states(&mut self, policy: &dyn Actor<Tensor = Tensor>, buffers: &mut [B]) {
         let n_envs = buffers.len();
         self.evaluator.evaluate(policy, n_envs).unwrap();
         self.normalizer

@@ -4,7 +4,7 @@ use candle_core::{Device, Error, Tensor as CandleTensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
-use r2l_core::distributions::Policy;
+use r2l_core::distributions::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 
@@ -41,7 +41,7 @@ impl CategoricalDistribution {
     }
 }
 
-impl Policy for CategoricalDistribution {
+impl Actor for CategoricalDistribution {
     type Tensor = CandleTensor;
 
     fn get_action(&self, observation: CandleTensor) -> Result<CandleTensor> {
@@ -60,7 +60,9 @@ impl Policy for CategoricalDistribution {
         let action = CandleTensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
         Ok(action)
     }
+}
 
+impl Policy for CategoricalDistribution {
     fn log_probs(&self, states: &[CandleTensor], actions: &[CandleTensor]) -> Result<CandleTensor> {
         let states = CandleTensor::stack(states, 0)?;
         let actions = CandleTensor::stack(actions, 0)?;

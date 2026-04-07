@@ -4,7 +4,7 @@ use burn::module::{Module, Param};
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor as BurnTensor};
-use r2l_core::distributions::Policy;
+use r2l_core::distributions::{Actor, Policy};
 use std::f32;
 
 #[derive(Debug, Module)]
@@ -30,7 +30,7 @@ impl<B: Backend> DiagGaussianDistribution<B> {
     }
 }
 
-impl<B: Backend> Policy for DiagGaussianDistribution<B> {
+impl<B: Backend> Actor for DiagGaussianDistribution<B> {
     type Tensor = BurnTensor<B, 1>;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -42,7 +42,9 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         let action = mu + noise * std;
         Ok(action.squeeze_dims(&[1]))
     }
+}
 
+impl<B: Backend> Policy for DiagGaussianDistribution<B> {
     // FIXME: we probably want a differnt type states, actions etc. Alternatively we should have a
     // different trait, as log_probs are not really used during inference.
     fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {

@@ -1,5 +1,5 @@
 use crate::{
-    distributions::Policy,
+    distributions::{Actor, Policy},
     env::{Env, EnvironmentDescription, SnapShot},
     rng::RNG,
     sampler::{
@@ -17,13 +17,13 @@ pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> 
     pub env: E,
     pub buffer: ElementHandle<D>,
     // TODO: this is a bit archaic, we might want somethings else here
-    pub policy: Option<Box<dyn Policy<Tensor = E::Tensor>>>,
+    pub policy: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
     pub last_state: Option<E::Tensor>,
 }
 
 pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
-    distr: &mut Box<dyn Policy<Tensor = T>>,
+    distr: &mut Box<dyn Actor<Tensor = T>>,
     last_state: Option<T>,
 ) -> Memory<T> {
     let state = if let Some(state) = last_state {
@@ -101,7 +101,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
 }
 
 pub enum WorkerCommand<T: R2lTensor> {
-    SetPolicy(Box<dyn Policy<Tensor = T>>),
+    SetPolicy(Box<dyn Actor<Tensor = T>>),
     Collect(RolloutMode),
     GetEnvironmentDescription,
     Shutdown,
@@ -176,7 +176,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         env_description
     }
 
-    pub fn set_policy<P: Policy<Tensor = T> + Clone>(&self, policy: P) {
+    pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
         let channels = &self.0;
         let num_envs = channels.len();
         for idx in 0..num_envs {
@@ -230,7 +230,7 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
         }
     }
 
-    pub fn set_policy<P: Policy<Tensor = E::Tensor> + Clone>(&mut self, policy: P) {
+    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
         match self {
             WorkerPool::Vec(workers) => {
                 for worker in workers.iter_mut() {

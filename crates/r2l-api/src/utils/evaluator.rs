@@ -1,6 +1,6 @@
 use candle_core::{Device, Result};
 use r2l_core::{
-    distributions::Policy,
+    distributions::{Actor, Policy},
     env::{Env, SnapShot},
     rng::RNG,
     sampler::buffer::variable_size::VariableSizedStateBuffer,
@@ -20,7 +20,7 @@ pub struct Evaluator<E: Env> {
 
 fn run_episode<E: Env>(
     env: &mut E,
-    dist: &dyn Policy<Tensor = E::Tensor>,
+    dist: &dyn Actor<Tensor = E::Tensor>,
 ) -> Vec<SnapShot<E::Tensor>> {
     let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
     let mut state = env.reset(seed).unwrap();
@@ -62,7 +62,7 @@ impl<E: Env> Evaluator<E> {
         self.evaluations_results.clone()
     }
 
-    pub fn evaluate(&mut self, dist: &dyn Policy<Tensor = E::Tensor>, n_envs: usize) -> Result<()> {
+    pub fn evaluate(&mut self, dist: &dyn Actor<Tensor = E::Tensor>, n_envs: usize) -> Result<()> {
         if self.eval_step < self.eval_freq {
             self.eval_step += n_envs;
             Ok(())

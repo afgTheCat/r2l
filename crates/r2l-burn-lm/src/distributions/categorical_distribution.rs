@@ -2,11 +2,11 @@ use crate::sequential::Sequential;
 use burn::{
     module::Module,
     prelude::Backend,
-    tensor::{activation::softmax, Tensor as BurnTensor, TensorData},
+    tensor::{Tensor as BurnTensor, TensorData, activation::softmax},
 };
-use r2l_core::distributions::Policy;
-use rand::distr::weighted::WeightedIndex;
+use r2l_core::distributions::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
+use rand::distr::weighted::WeightedIndex;
 
 #[derive(Debug, Module)]
 pub struct CategoricalDistribution<B: Backend> {
@@ -25,7 +25,7 @@ impl<B: Backend> CategoricalDistribution<B> {
     }
 }
 
-impl<B: Backend> Policy for CategoricalDistribution<B> {
+impl<B: Backend> Actor for CategoricalDistribution<B> {
     type Tensor = BurnTensor<B, 1>;
 
     fn get_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
@@ -42,7 +42,9 @@ impl<B: Backend> Policy for CategoricalDistribution<B> {
             &device,
         ))
     }
+}
 
+impl<B: Backend> Policy for CategoricalDistribution<B> {
     // FIXME: check the other fixme comment for DiagGaussian
     fn log_probs(
         &self,
