@@ -3,16 +3,13 @@ use r2l_core::{
     agents::Agent,
     distributions::Policy,
     losses::PolicyValuesLosses,
-    policies::LearningModule,
+    policies::{LearningModule, OnPolicyLearningModule},
     sampler::buffer::TrajectoryContainer,
     tensor::{R2lTensor, R2lTensorMath},
     utils::rollout_buffer::{Advantages, Logps, Returns},
 };
 
-use crate::{
-    BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps,
-    on_policy_algorithms::OnPolicyLearningModule, sample,
-};
+use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
 
 pub struct PPOParams {
     pub clip_range: f32,

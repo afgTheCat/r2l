@@ -3,14 +3,14 @@ use burn::tensor::backend::AutodiffBackend;
 use candle_core::Device;
 use candle_nn::VarBuilder;
 use r2l_burn_lm::distributions::{
+    DistributionKind,
     categorical_distribution::CategoricalDistribution as BurnCategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution as BurnDiagGaussianDistribution,
-    DistributionKind,
 };
 use r2l_candle_lm::distributions::{
+    CandleDistributionKind,
     categorical_distribution::CategoricalDistribution as CandleCategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution as CandleDiagGaussianDistribution,
-    CandleDistributionKind,
 };
 use r2l_core::env::{EnvironmentDescription, Space};
 
@@ -115,26 +115,5 @@ impl DistributionBuilder {
                 }
             },
         }
-    }
-
-    pub fn build_with_env<T>(
-        &mut self,
-        distribution_varbuilder: &VarBuilder,
-        device: &Device,
-        env_description: &EnvironmentDescription<T>,
-    ) -> Result<CandleDistributionKind> {
-        let observation_size = env_description.observation_size();
-        let action_size = env_description.action_size();
-        let action_space_type = match env_description.action_space {
-            Space::Continous { .. } => ActionSpaceType::Continous,
-            Space::Discrete(..) => ActionSpaceType::Discrete,
-        };
-        self.build_candle(
-            distribution_varbuilder,
-            device,
-            observation_size,
-            action_size,
-            action_space_type,
-        )
     }
 }

@@ -27,7 +27,7 @@ pub struct LearningModuleBuilder {
 }
 
 impl LearningModuleBuilder {
-    pub fn build(
+    pub fn build_candle(
         &self,
         distribution_varmap: VarMap,
         distr_var_builder: VarBuilder,

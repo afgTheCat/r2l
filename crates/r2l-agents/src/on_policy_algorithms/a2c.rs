@@ -3,15 +3,13 @@ use r2l_core::{
     agents::Agent,
     distributions::Policy,
     losses::PolicyValuesLosses,
+    policies::OnPolicyLearningModule,
     sampler::buffer::TrajectoryContainer,
     tensor::R2lTensorMath,
     utils::rollout_buffer::{Advantages, Returns},
 };
 
-use crate::{
-    BatchIndexIterator, HookResult, buffers_advantages_and_returns,
-    on_policy_algorithms::OnPolicyLearningModule, sample,
-};
+use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, sample};
 
 pub struct A2CParams {
     pub gamma: f32,

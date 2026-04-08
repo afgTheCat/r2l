@@ -11,12 +11,12 @@ use crate::{
 use candle_core::Tensor;
 use candle_core::{DType, Device};
 use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
-use r2l_agents::on_policy_algorithms::OnPolicyLearningModule;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
 use r2l_candle_lm::{
     distributions::CandleDistributionKind,
     learning_module::{CandlePolicyValuesLosses, SequentialValueFunction},
 };
+use r2l_core::policies::OnPolicyLearningModule;
 use r2l_core::{
     agents::Agent,
     policies::{LearningModule, ValueFunction},
@@ -108,11 +108,11 @@ impl Agent for CandlePPO {
 
 // NOTE: experimantally implementing it here. in the future this should not depend on candle
 pub struct PPOCandleLearningModuleBuilder {
-    pub device: Device,
+    pub ppo_params: PPOParams,
     pub distribution_builder: DistributionBuilder,
     pub hook_builder: StandardPPOHookBuilder,
     pub actor_critic_type: LearningModuleBuilder,
-    pub ppo_params: PPOParams,
+    pub device: Device,
 }
 
 impl Default for PPOCandleLearningModuleBuilder {
@@ -159,7 +159,7 @@ impl PPOCandleLearningModuleBuilder {
             action_size,
             action_space,
         )?;
-        let (value_function, learning_module) = self.actor_critic_type.build(
+        let (value_function, learning_module) = self.actor_critic_type.build_candle(
             distribution_varmap,
             distr_var_builder,
             observation_size,

@@ -1,13 +1,10 @@
 use anyhow::Result;
 use r2l_core::{
     agents::Agent, distributions::Policy, losses::PolicyValuesLosses,
-    sampler::buffer::TrajectoryContainer, tensor::R2lTensorMath,
+    policies::OnPolicyLearningModule, sampler::buffer::TrajectoryContainer, tensor::R2lTensorMath,
 };
 
-use crate::{
-    BatchIndexIterator, buffers_advantages_and_returns,
-    on_policy_algorithms::OnPolicyLearningModule, sample,
-};
+use crate::{BatchIndexIterator, buffers_advantages_and_returns, sample};
 
 pub struct VPGParams {
     pub gamma: f32,
