@@ -1,12 +1,20 @@
+use burn::{optim::AdamWConfig, tensor::backend::AutodiffBackend};
 use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
+use r2l_burn_lm::{
+    learning_module::{
+        BurnActorCriticLMKind, BurnDecoupledActorCriticLM, BurnParalellActorCriticLM, BurnPolicy,
+        ParalellActorModel,
+    },
+    sequential::Sequential,
+};
 use r2l_candle_lm::{
     learning_module::{DecoupledActorCriticLM, ParalellActorCriticLM, SequentialValueFunction},
     optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::build_sequential,
 };
 
-use crate::learning_module::ActorCriticKind;
+use crate::learning_module::CandleActorCriticKind;
 
 pub enum LearningModuleType {
     Paralell {
@@ -33,7 +41,7 @@ impl LearningModuleBuilder {
         distr_var_builder: VarBuilder,
         observation_size: usize,
         device: &Device,
-    ) -> Result<(SequentialValueFunction, ActorCriticKind)> {
+    ) -> Result<(SequentialValueFunction, CandleActorCriticKind)> {
         match &self.learning_module_type {
             LearningModuleType::Paralell {
                 value_layers,
@@ -47,7 +55,7 @@ impl LearningModuleBuilder {
                     OptimizerWithMaxGrad::new(optimizer, *max_grad_norm, distribution_varmap);
                 Ok((
                     SequentialValueFunction { value_net },
-                    ActorCriticKind::Paralell(ParalellActorCriticLM {
+                    CandleActorCriticKind::Paralell(ParalellActorCriticLM {
                         optimizer_with_grad,
                     }),
                 ))
@@ -74,11 +82,47 @@ impl LearningModuleBuilder {
                     OptimizerWithMaxGrad::new(value_optimizer, *value_max_grad_norm, critic_varmap);
                 Ok((
                     SequentialValueFunction { value_net },
-                    ActorCriticKind::Decoupled(DecoupledActorCriticLM {
+                    CandleActorCriticKind::Decoupled(DecoupledActorCriticLM {
                         policy_optimizer_with_grad,
                         value_optimizer_with_grad,
                     }),
                 ))
+            }
+        }
+    }
+
+    pub fn build_burn<B: AutodiffBackend, D: BurnPolicy<B>>(
+        &self,
+        distr: D,
+    ) -> BurnActorCriticLMKind<B, D> {
+        match &self.learning_module_type {
+            LearningModuleType::Paralell {
+                value_layers,
+                // TODO: should we consider this
+                max_grad_norm: _max_grad_norm,
+            } => {
+                let value_layers = &[&value_layers[..], &[1]].concat();
+                let value_net: Sequential<B> = Sequential::build(value_layers);
+                let model = ParalellActorModel::new(distr, value_net);
+                BurnActorCriticLMKind::Paralell(BurnParalellActorCriticLM::new(
+                    model,
+                    AdamWConfig::new().init(),
+                ))
+            }
+            LearningModuleType::Decoupled {
+                value_layers,
+                // TODO: should we consider this
+                policy_max_grad_norm: _policy_max_grad_norm,
+                value_max_grad_norm: _value_max_grad_norm,
+            } => {
+                let value_layers = &[&value_layers[..], &[1]].concat();
+                let value_net: Sequential<B> = Sequential::build(value_layers);
+                BurnActorCriticLMKind::Decoupled(BurnDecoupledActorCriticLM {
+                    policy: distr,
+                    value_net,
+                    policy_optimizer: AdamWConfig::new().init(),
+                    value_net_optimizer: AdamWConfig::new().init(),
+                })
             }
         }
     }

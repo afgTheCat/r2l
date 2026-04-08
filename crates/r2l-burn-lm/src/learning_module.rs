@@ -74,13 +74,13 @@ impl<B: Backend, M: Module<B>> ParalellActorModel<B, M> {
     }
 }
 
-pub struct ParalellActorCriticLM<B: AutodiffBackend, M: BurnPolicy<B>> {
+pub struct BurnParalellActorCriticLM<B: AutodiffBackend, M: BurnPolicy<B>> {
     pub model: ParalellActorModel<B, M>,
     // NOTE:the optimizer needs to be optimizing both the distr and the value net at the same time
     pub optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ParalellActorCriticLM<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> BurnParalellActorCriticLM<B, M> {
     pub fn new(
         model: ParalellActorModel<B, M>,
         optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
@@ -93,7 +93,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ParalellActorCriticLM<B, M> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for ParalellActorCriticLM<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for BurnParalellActorCriticLM<B, M> {
     type Losses = BurnPolicyValuesLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -110,7 +110,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for ParalellActorCriti
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for ParalellActorCriticLM<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for BurnParalellActorCriticLM<B, M> {
     type Tensor = Tensor<B, 1>;
 
     fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -120,7 +120,9 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for ParalellActorCritic
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for ParalellActorCriticLM<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule
+    for BurnParalellActorCriticLM<B, D>
+{
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
     type Policy = D;
@@ -143,14 +145,14 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for ParalellAc
     }
 }
 
-pub struct DecoupledActorCriticLM<B: AutodiffBackend, M: BurnPolicy<B>> {
+pub struct BurnDecoupledActorCriticLM<B: AutodiffBackend, M: BurnPolicy<B>> {
     pub policy: M,
     pub value_net: Sequential<B>,
     pub policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
     pub value_net_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> DecoupledActorCriticLM<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> BurnDecoupledActorCriticLM<B, M> {
     pub fn new(
         policy: M,
         value_net: Sequential<B>,
@@ -173,7 +175,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> DecoupledActorCriticLM<B, M> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for DecoupledActorCriticLM<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for BurnDecoupledActorCriticLM<B, M> {
     type Losses = BurnPolicyValuesLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -197,7 +199,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for DecoupledActorCrit
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for DecoupledActorCriticLM<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for BurnDecoupledActorCriticLM<B, M> {
     type Tensor = Tensor<B, 1>;
 
     fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -207,7 +209,9 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for DecoupledActorCriti
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for DecoupledActorCriticLM<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule
+    for BurnDecoupledActorCriticLM<B, D>
+{
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
     type Policy = D;
@@ -230,12 +234,12 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for DecoupledA
     }
 }
 
-pub enum ActorCriticLMKind<B: AutodiffBackend, D: BurnPolicy<B>> {
-    Paralell(ParalellActorCriticLM<B, D>),
-    Decoupled(DecoupledActorCriticLM<B, D>),
+pub enum BurnActorCriticLMKind<B: AutodiffBackend, D: BurnPolicy<B>> {
+    Paralell(BurnParalellActorCriticLM<B, D>),
+    Decoupled(BurnDecoupledActorCriticLM<B, D>),
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> ActorCriticLMKind<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnActorCriticLMKind<B, D> {
     pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
         match self {
             Self::Paralell(lm) => lm.set_grad_clipping(grad_clipping),
@@ -244,7 +248,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> ActorCriticLMKind<B, D> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for ActorCriticLMKind<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for BurnActorCriticLMKind<B, M> {
     type Losses = BurnPolicyValuesLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -255,7 +259,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for ActorCriticLMKind<
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for ActorCriticLMKind<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for BurnActorCriticLMKind<B, M> {
     type Tensor = Tensor<B, 1>;
 
     fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -266,7 +270,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for ActorCriticLMKind<B
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for ActorCriticLMKind<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for BurnActorCriticLMKind<B, D> {
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
     type Policy = D;

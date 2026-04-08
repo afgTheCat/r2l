@@ -12,7 +12,6 @@ use r2l_candle_lm::distributions::{
     categorical_distribution::CategoricalDistribution as CandleCategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution as CandleDiagGaussianDistribution,
 };
-use r2l_core::env::{EnvironmentDescription, Space};
 
 pub enum DistributionType {
     Dynamic,

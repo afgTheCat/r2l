@@ -3,12 +3,12 @@ use r2l_candle_lm::learning_module::{
 };
 use r2l_core::policies::LearningModule;
 
-pub enum ActorCriticKind {
+pub enum CandleActorCriticKind {
     Decoupled(DecoupledActorCriticLM),
     Paralell(ParalellActorCriticLM),
 }
 
-impl ActorCriticKind {
+impl CandleActorCriticKind {
     pub fn policy_learning_rate(&self) -> f64 {
         match self {
             Self::Decoupled(decoupled) => decoupled.policy_learning_rate(),
@@ -24,7 +24,7 @@ impl ActorCriticKind {
     }
 }
 
-impl LearningModule for ActorCriticKind {
+impl LearningModule for CandleActorCriticKind {
     type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {

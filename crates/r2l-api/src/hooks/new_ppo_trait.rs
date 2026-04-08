@@ -8,21 +8,21 @@ use r2l_agents::{
     HookResult,
     on_policy_algorithms::ppo::{PPOBatchData, PPOHook, PPOParams},
 };
-use r2l_burn_lm::learning_module::{ActorCriticLMKind, BurnPolicy, BurnPolicyValuesLosses};
+use r2l_burn_lm::learning_module::{BurnActorCriticLMKind, BurnPolicy, BurnPolicyValuesLosses};
 use r2l_candle_lm::learning_module::CandlePolicyValuesLosses;
 use r2l_core::{
     distributions::Policy, policies::OnPolicyLearningModule, sampler::buffer::TrajectoryContainer,
 };
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<ActorCriticLMKind<B, D>>
-    for StandardPPOHook<ActorCriticLMKind<B, D>>
+impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
+    for StandardPPOHook<BurnActorCriticLMKind<B, D>>
 {
     fn before_learning_hook<
         T: TrajectoryContainer<Tensor = burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
     >(
         &mut self,
         _params: &mut PPOParams,
-        module: &mut ActorCriticLMKind<B, D>,
+        module: &mut BurnActorCriticLMKind<B, D>,
         _buffers: &[T],
         advantages: &mut r2l_core::utils::rollout_buffer::Advantages,
         _returns: &mut r2l_core::utils::rollout_buffer::Returns,
@@ -42,7 +42,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<ActorCriticLMKind<B, D>>
     >(
         &mut self,
         _params: &mut PPOParams,
-        module: &mut ActorCriticLMKind<B, D>,
+        module: &mut BurnActorCriticLMKind<B, D>,
         buffers: &[T],
     ) -> anyhow::Result<HookResult> {
         self.current_epoch += 1;
@@ -74,7 +74,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<ActorCriticLMKind<B, D>>
     fn batch_hook(
         &mut self,
         params: &mut PPOParams,
-        module: &mut ActorCriticLMKind<B, D>,
+        module: &mut BurnActorCriticLMKind<B, D>,
         losses: &mut BurnPolicyValuesLosses<B>,
         data: &PPOBatchData<burn::Tensor<B, 1>>,
     ) -> anyhow::Result<HookResult> {

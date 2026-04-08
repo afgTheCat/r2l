@@ -1,6 +1,6 @@
 use crate::agents::AgentBuilder;
 use crate::hooks::ppo::StandardPPOHook;
-use crate::learning_module::ActorCriticKind;
+use crate::learning_module::CandleActorCriticKind;
 use crate::{
     builders::{
         distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
@@ -25,7 +25,7 @@ use r2l_core::{
 
 pub struct R2lCandleLearningModule {
     pub policy: CandleDistributionKind,
-    pub actor_critic: ActorCriticKind,
+    pub actor_critic: CandleActorCriticKind,
     pub value_function: SequentialValueFunction,
     pub device: Device,
 }
