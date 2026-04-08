@@ -3,14 +3,10 @@ pub mod candle;
 pub mod unified;
 
 use crate::{
-    agents::{
-        AgentBuilder,
-        ppo::{
-            burn::{BurnBackend, BurnPPO, PPOBurnLearningModuleBuilder},
-            candle::{CandlePPO, PPOCandleLearningModuleBuilder},
-        },
+    agents::ppo::{
+        burn::{BurnBackend, BurnPPO},
+        candle::CandlePPO,
     },
-    builders::distribution::ActionSpaceType,
 };
 use ::burn::backend::NdArray;
 use r2l_burn_lm::distributions::DistributionKind;
@@ -21,6 +17,7 @@ use r2l_core::{
     sampler::buffer::{TrajectoryContainer, wrapper::BufferWrapper},
     tensor::R2lBuffer,
 };
+pub use unified::{PPOBackend, UnifiedPPOLearningModuleBuilder};
 
 pub enum BurnOrCandlePPOActor {
     Burn(DistributionKind<NdArray>),
@@ -104,31 +101,4 @@ impl Agent for BurnOrCandlePPO {
     }
 }
 
-pub enum PPOLearningModuleBuilder {
-    Burn(PPOBurnLearningModuleBuilder),
-    Candle(PPOCandleLearningModuleBuilder),
-}
-
-impl AgentBuilder for PPOLearningModuleBuilder {
-    type Agent = BurnOrCandlePPO;
-
-    fn build(
-        self,
-        observation_size: usize,
-        action_size: usize,
-        action_space: ActionSpaceType,
-    ) -> anyhow::Result<Self::Agent> {
-        match self {
-            Self::Burn(builder) => Ok(BurnOrCandlePPO::Burn(builder.build(
-                observation_size,
-                action_size,
-                action_space,
-            )?)),
-            Self::Candle(builer) => Ok(BurnOrCandlePPO::Candle(builer.build(
-                observation_size,
-                action_size,
-                action_space,
-            )?)),
-        }
-    }
-}
+pub type PPOLearningModuleBuilder = UnifiedPPOLearningModuleBuilder;
