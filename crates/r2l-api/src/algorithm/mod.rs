@@ -6,6 +6,7 @@ use r2l_core::{
     env_builder::EnvBuilderTrait,
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     sampler::{
+        Location,
         FinalSampler,
         buffer::{StepTrajectoryBound, TrajectoryBound},
     },
@@ -30,9 +31,43 @@ impl<
     A: Agent,
     AB: AgentBuilder<Agent = A>,
     EB: EnvBuilderTrait,
+> OnPolicyAlgorightmBuilder<A, AB, EB>
+{
+    pub fn with_bound<BD2: TrajectoryBound<Tensor = EB::Tensor>>(
+        self,
+        trajectory_bound: BD2,
+    ) -> OnPolicyAlgorightmBuilder<A, AB, EB, BD2> {
+        let OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            agent_builder,
+            learning_schedule,
+            ..
+        } = self;
+        OnPolicyAlgorightmBuilder {
+            sampler_builder: sampler_builder.with_bound(trajectory_bound),
+            agent_builder,
+            learning_schedule,
+        }
+    }
+}
+
+impl<
+    A: Agent,
+    AB: AgentBuilder<Agent = A>,
+    EB: EnvBuilderTrait,
     BD: TrajectoryBound<Tensor = EB::Tensor>,
 > OnPolicyAlgorightmBuilder<A, AB, EB, BD>
 {
+    pub fn with_location(mut self, location: Location) -> Self {
+        self.sampler_builder = self.sampler_builder.with_location(location);
+        self
+    }
+
+    pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
+        self.learning_schedule = learning_schedule;
+        self
+    }
+
     pub fn build(
         self,
     ) -> anyhow::Result<

@@ -6,11 +6,7 @@ use std::sync::mpsc::Sender;
 use r2l_core::{
     agents::Agent,
     env_builder::EnvBuilderTrait,
-    on_policy_algorithm::LearningSchedule,
-    sampler::{
-        Location,
-        buffer::TrajectoryBound,
-    },
+    sampler::buffer::TrajectoryBound,
 };
 
 use crate::{
@@ -18,30 +14,6 @@ use crate::{
     algorithm::OnPolicyAlgorightmBuilder,
     hooks::ppo::PPOStats,
 };
-
-impl<A, M, EB> OnPolicyAlgorightmBuilder<A, PPOAgentBuilder<M>, EB>
-where
-    A: Agent,
-    EB: EnvBuilderTrait,
-    PPOAgentBuilder<M>: AgentBuilder<Agent = A>,
-{
-    pub fn with_bound<BD2: TrajectoryBound<Tensor = EB::Tensor>>(
-        self,
-        trajectory_bound: BD2,
-    ) -> OnPolicyAlgorightmBuilder<A, PPOAgentBuilder<M>, EB, BD2> {
-        let OnPolicyAlgorightmBuilder {
-            sampler_builder,
-            agent_builder,
-            learning_schedule,
-            ..
-        } = self;
-        OnPolicyAlgorightmBuilder {
-            sampler_builder: sampler_builder.with_bound(trajectory_bound),
-            agent_builder,
-            learning_schedule,
-        }
-    }
-}
 
 impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, PPOAgentBuilder<M>, EB, BD>
 where
@@ -114,16 +86,6 @@ where
 
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
         self.agent_builder.ppo_params.sample_size = sample_size;
-        self
-    }
-
-    pub fn with_location(mut self, location: Location) -> Self {
-        self.sampler_builder = self.sampler_builder.with_location(location);
-        self
-    }
-
-    pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
-        self.learning_schedule = learning_schedule;
         self
     }
 }
