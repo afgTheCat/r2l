@@ -222,15 +222,31 @@ impl Default for PPOBackend {
     }
 }
 
-pub struct PPOAgentBuilder {
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PPOBurn;
+
+#[derive(Debug, Clone)]
+pub struct PPOCandle {
+    pub device: Device,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PPOUnified {
+    pub backend: PPOBackend,
+}
+
+pub struct PPOAgentBuilder<M = PPOUnified> {
     pub ppo_params: PPOParams,
     pub distribution_builder: DistributionBuilder,
     pub hook_builder: StandardPPOHookBuilder,
     pub actor_critic_type: LearningModuleBuilder,
-    pub backend: PPOBackend,
+    pub mode: M,
 }
 
-impl Default for PPOAgentBuilder {
+pub type PPOBurnLearningModuleBuilder = PPOAgentBuilder<PPOBurn>;
+pub type PPOCandleLearningModuleBuilder = PPOAgentBuilder<PPOCandle>;
+
+impl Default for PPOAgentBuilder<PPOUnified> {
     fn default() -> Self {
         Self {
             hook_builder: StandardPPOHookBuilder::default(),
@@ -252,22 +268,12 @@ impl Default for PPOAgentBuilder {
                     weight_decay: 1e-4,
                 },
             },
-            backend: PPOBackend::default(),
+            mode: PPOUnified::default(),
         }
     }
 }
 
-impl PPOAgentBuilder {
-    pub fn with_backend(mut self, backend: PPOBackend) -> Self {
-        self.backend = backend;
-        self
-    }
-
-    pub fn with_candle_device(mut self, device: Device) -> Self {
-        self.backend = PPOBackend::Candle(device);
-        self
-    }
-
+impl<M> PPOAgentBuilder<M> {
     fn build_candle_lm(
         &self,
         observation_size: usize,
@@ -329,7 +335,46 @@ impl PPOAgentBuilder {
     }
 }
 
-impl AgentBuilder for PPOAgentBuilder {
+impl PPOAgentBuilder<PPOUnified> {
+    pub fn with_backend(mut self, backend: PPOBackend) -> Self {
+        self.mode.backend = backend;
+        self
+    }
+
+    pub fn with_burn(self) -> PPOAgentBuilder<PPOBurn> {
+        PPOAgentBuilder {
+            ppo_params: self.ppo_params,
+            distribution_builder: self.distribution_builder,
+            hook_builder: self.hook_builder,
+            actor_critic_type: self.actor_critic_type,
+            mode: PPOBurn,
+        }
+    }
+
+    pub fn with_candle_device(self, device: Device) -> PPOAgentBuilder<PPOCandle> {
+        PPOAgentBuilder {
+            ppo_params: self.ppo_params,
+            distribution_builder: self.distribution_builder,
+            hook_builder: self.hook_builder,
+            actor_critic_type: self.actor_critic_type,
+            mode: PPOCandle { device },
+        }
+    }
+}
+
+impl Default for PPOAgentBuilder<PPOBurn> {
+    fn default() -> Self {
+        PPOAgentBuilder::<PPOUnified>::default().with_burn()
+    }
+}
+
+impl Default for PPOAgentBuilder<PPOCandle> {
+    fn default() -> Self {
+        PPOAgentBuilder::<PPOUnified>::default().with_candle_device(Device::Cpu)
+    }
+}
+
+impl AgentBuilder for PPOAgentBuilder<PPOUnified> {
     type Agent = BurnOrCandlePPO;
 
     fn build(
@@ -338,7 +383,7 @@ impl AgentBuilder for PPOAgentBuilder {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<Self::Agent> {
-        match self.backend.clone() {
+        match self.mode.backend.clone() {
             PPOBackend::Burn => Ok(BurnOrCandlePPO::Burn(self.build_burn_agent(
                 observation_size,
                 action_size,
@@ -351,26 +396,7 @@ impl AgentBuilder for PPOAgentBuilder {
     }
 }
 
-pub struct PPOBurnLearningModuleBuilder {
-    pub ppo_params: PPOParams,
-    pub distribution_builder: DistributionBuilder,
-    pub hook_builder: StandardPPOHookBuilder,
-    pub actor_critic_type: LearningModuleBuilder,
-}
-
-impl Default for PPOBurnLearningModuleBuilder {
-    fn default() -> Self {
-        let builder = PPOAgentBuilder::default().with_backend(PPOBackend::Burn);
-        Self {
-            ppo_params: builder.ppo_params,
-            distribution_builder: builder.distribution_builder,
-            hook_builder: builder.hook_builder,
-            actor_critic_type: builder.actor_critic_type,
-        }
-    }
-}
-
-impl AgentBuilder for PPOBurnLearningModuleBuilder {
+impl AgentBuilder for PPOAgentBuilder<PPOBurn> {
     type Agent = BurnPPO<BurnBackend>;
 
     fn build(
@@ -379,43 +405,11 @@ impl AgentBuilder for PPOBurnLearningModuleBuilder {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<Self::Agent> {
-        PPOAgentBuilder {
-            ppo_params: self.ppo_params,
-            distribution_builder: self.distribution_builder,
-            hook_builder: self.hook_builder,
-            actor_critic_type: self.actor_critic_type,
-            backend: PPOBackend::Burn,
-        }
-        .build_burn_agent(observation_size, action_size, action_space)
+        self.build_burn_agent(observation_size, action_size, action_space)
     }
 }
 
-pub struct PPOCandleLearningModuleBuilder {
-    pub ppo_params: PPOParams,
-    pub distribution_builder: DistributionBuilder,
-    pub hook_builder: StandardPPOHookBuilder,
-    pub actor_critic_type: LearningModuleBuilder,
-    pub device: Device,
-}
-
-impl Default for PPOCandleLearningModuleBuilder {
-    fn default() -> Self {
-        let builder = PPOAgentBuilder::default().with_candle_device(Device::Cpu);
-        let device = match builder.backend {
-            PPOBackend::Candle(device) => device,
-            PPOBackend::Burn => Device::Cpu,
-        };
-        Self {
-            ppo_params: builder.ppo_params,
-            distribution_builder: builder.distribution_builder,
-            hook_builder: builder.hook_builder,
-            actor_critic_type: builder.actor_critic_type,
-            device,
-        }
-    }
-}
-
-impl AgentBuilder for PPOCandleLearningModuleBuilder {
+impl AgentBuilder for PPOAgentBuilder<PPOCandle> {
     type Agent = CandlePPO;
 
     fn build(
@@ -424,13 +418,7 @@ impl AgentBuilder for PPOCandleLearningModuleBuilder {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<Self::Agent> {
-        PPOAgentBuilder {
-            ppo_params: self.ppo_params,
-            distribution_builder: self.distribution_builder,
-            hook_builder: self.hook_builder,
-            actor_critic_type: self.actor_critic_type,
-            backend: PPOBackend::Candle(self.device.clone()),
-        }
-        .build_candle_with_device(observation_size, action_size, action_space, self.device)
+        let device = self.mode.device.clone();
+        self.build_candle_with_device(observation_size, action_size, action_space, device)
     }
 }
