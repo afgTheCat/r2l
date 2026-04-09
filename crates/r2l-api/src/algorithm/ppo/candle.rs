@@ -1,5 +1,5 @@
 use crate::{
-    agents::ppo::candle::{CandlePPO, PPOCandleLearningModuleBuilder},
+    agents::ppo::{CandlePPO, PPOCandleLearningModuleBuilder},
     algorithm::OnPolicyAlgorightmBuilder,
     hooks::ppo::PPOStats,
     sampler::SamplerBuilder,

@@ -1,9 +1,8 @@
-use crate::agents::ppo::burn::BurnBackend;
 use crate::algorithm::LearningSchedule;
 use crate::hooks::ppo::PPOStats;
 use crate::sampler::SamplerBuilder;
 use crate::{
-    agents::ppo::burn::{BurnPPO, PPOBurnLearningModuleBuilder},
+    agents::ppo::{BurnBackend, BurnPPO, PPOBurnLearningModuleBuilder},
     algorithm::OnPolicyAlgorightmBuilder,
 };
 use r2l_core::sampler::Location;
