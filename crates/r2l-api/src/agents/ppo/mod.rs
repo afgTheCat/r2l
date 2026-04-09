@@ -322,7 +322,7 @@ impl PPOAgentBuilder {
             action_size,
             action_space,
         )?;
-        let lm = self.actor_critic_type.build_burn::<BurnBackend, _>(distr);
+        let lm = self.actor_critic_type.build_burn(observation_size, distr);
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
         Ok(BurnPPO(PPO { lm, hooks, params }))

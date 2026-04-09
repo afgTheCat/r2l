@@ -93,6 +93,7 @@ impl LearningModuleBuilder {
 
     pub fn build_burn<B: AutodiffBackend, D: BurnPolicy<B>>(
         &self,
+        observation_size: usize,
         distr: D,
     ) -> BurnActorCriticLMKind<B, D> {
         match &self.learning_module_type {
@@ -101,7 +102,7 @@ impl LearningModuleBuilder {
                 // TODO: should we consider this
                 max_grad_norm: _max_grad_norm,
             } => {
-                let value_layers = &[&value_layers[..], &[1]].concat();
+                let value_layers = &[&[observation_size][..], &value_layers[..], &[1]].concat();
                 let value_net: Sequential<B> = Sequential::build(value_layers);
                 let model = ParalellActorModel::new(distr, value_net);
                 BurnActorCriticLMKind::Paralell(BurnParalellActorCriticLM::new(
@@ -115,7 +116,7 @@ impl LearningModuleBuilder {
                 policy_max_grad_norm: _policy_max_grad_norm,
                 value_max_grad_norm: _value_max_grad_norm,
             } => {
-                let value_layers = &[&value_layers[..], &[1]].concat();
+                let value_layers = &[&[observation_size][..], &value_layers[..], &[1]].concat();
                 let value_net: Sequential<B> = Sequential::build(value_layers);
                 BurnActorCriticLMKind::Decoupled(BurnDecoupledActorCriticLM {
                     policy: distr,
