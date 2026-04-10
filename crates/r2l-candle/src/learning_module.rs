@@ -1,10 +1,13 @@
-use crate::{optimizer::OptimizerWithMaxGrad, thread_safe_sequential::ThreadSafeSequential};
+use crate::{
+    distributions::CandleDistributionKind, optimizer::OptimizerWithMaxGrad,
+    thread_safe_sequential::ThreadSafeSequential,
+};
 use anyhow::{Ok, Result};
-use candle_core::Tensor as CandleTensor;
+use candle_core::{Device, Tensor as CandleTensor};
 use candle_nn::{Module, Optimizer};
 use r2l_core::{
     losses::PolicyValuesLosses,
-    policies::{LearningModule, ValueFunction},
+    policies::{LearningModule, OnPolicyLearningModule, ValueFunction},
 };
 
 pub struct CandlePolicyValuesLosses {
@@ -192,5 +195,61 @@ impl LearningModule for CandleActorCriticKind {
             Self::Decoupled(lm) => lm.update(losses),
             Self::Paralell(lm) => lm.update(losses),
         }
+    }
+}
+
+pub struct R2lCandleLearningModule {
+    pub policy: CandleDistributionKind,
+    pub actor_critic: CandleActorCriticKind,
+    pub value_function: SequentialValueFunction,
+    pub device: Device,
+}
+
+impl R2lCandleLearningModule {
+    pub fn set_grad_clipping(&mut self, gradient_clipping: Option<f32>) {
+        self.actor_critic.set_grad_clipping(gradient_clipping);
+    }
+
+    pub fn policy_learning_rate(&self) -> f64 {
+        self.actor_critic.policy_learning_rate()
+    }
+}
+
+impl ValueFunction for R2lCandleLearningModule {
+    type Tensor = CandleTensor;
+
+    fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+        self.value_function.calculate_values(observations)
+    }
+}
+
+impl LearningModule for R2lCandleLearningModule {
+    type Losses = CandlePolicyValuesLosses;
+
+    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
+        self.actor_critic.update(losses)
+    }
+}
+
+impl OnPolicyLearningModule for R2lCandleLearningModule {
+    type LearningTensor = CandleTensor;
+    type InferenceTensor = CandleTensor;
+    type Policy = CandleDistributionKind;
+    type InferencePolicy = CandleDistributionKind;
+
+    fn get_inference_policy(&self) -> Self::InferencePolicy {
+        self.policy.clone()
+    }
+
+    fn get_policy(&self) -> &Self::Policy {
+        &self.policy
+    }
+
+    fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
+        CandleTensor::from_slice(slice, slice.len(), &self.device).unwrap()
+    }
+
+    fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
+        t.clone()
     }
 }

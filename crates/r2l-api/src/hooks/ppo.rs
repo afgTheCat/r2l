@@ -1,4 +1,3 @@
-use crate::agents::ppo::R2lCandleLearningModule;
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
 use r2l_agents::{
@@ -6,7 +5,7 @@ use r2l_agents::{
     on_policy_algorithms::ppo::{PPOBatchData, PPOHook, PPOParams},
 };
 use r2l_burn::learning_module::{BurnActorCriticLMKind, BurnPolicy, BurnPolicyValuesLosses};
-use r2l_candle::learning_module::CandlePolicyValuesLosses;
+use r2l_candle::learning_module::{CandlePolicyValuesLosses, R2lCandleLearningModule};
 use r2l_core::{
     distributions::Policy, policies::OnPolicyLearningModule, sampler::buffer::TrajectoryContainer,
 };

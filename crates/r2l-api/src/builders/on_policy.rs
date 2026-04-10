@@ -10,8 +10,9 @@ use r2l_core::{
 };
 
 use crate::{
-    agents::AgentBuilder,
-    builders::{policy_distribution::ActionSpaceType, sampler::SamplerBuilder},
+    builders::{
+        agent::AgentBuilder, policy_distribution::ActionSpaceType, sampler::SamplerBuilder,
+    },
     hooks::on_policy::DefaultOnPolicyAlgorightmsHooks,
 };
 

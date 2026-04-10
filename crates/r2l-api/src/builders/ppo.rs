@@ -1,4 +1,7 @@
-use crate::hooks::ppo::{PPOStats, StandardPPOHook, StandardPPOHookReporter, TargetKl};
+use crate::{
+    builders::agent::AgentBuilder,
+    hooks::ppo::{PPOStats, StandardPPOHook, StandardPPOHookReporter, TargetKl},
+};
 use r2l_core::{
     agents::Agent,
     env_builder::EnvBuilderTrait,
@@ -8,13 +11,10 @@ use r2l_core::{
 use std::{marker::PhantomData, sync::mpsc::Sender};
 
 use crate::{
-    agents::{
-        AgentBuilder,
-        ppo::{
-            BurnBackend, BurnOrCandlePPO, BurnPPO, CandlePPO, PPOAgentBuilder,
-            PPOBurnLearningModuleBuilder, PPOBurnOrCandleLearningModuleBuilder,
-            PPOCandleLearningModuleBuilder,
-        },
+    agents::ppo::{BurnBackend, BurnOrCandlePPO, BurnPPO, CandlePPO},
+    builders::agent::{
+        PPOAgentBuilder, PPOBurnLearningModuleBuilder, PPOBurnOrCandleLearningModuleBuilder,
+        PPOCandleLearningModuleBuilder,
     },
     builders::{on_policy::OnPolicyAlgorightmBuilder, sampler::SamplerBuilder},
 };
