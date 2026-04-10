@@ -1,4 +1,4 @@
-use crate::hooks::ppo::{PPOStats, StandardPPOHook, StandardPPOHookReporter, TargetKl};
+use crate::hooks::ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPOStats, TargetKl};
 use std::{marker::PhantomData, sync::mpsc::Sender};
 
 #[derive(Debug, Clone)]
@@ -90,8 +90,8 @@ impl StandardPPOHookBuilder {
         self.gradient_clipping
     }
 
-    pub fn build<T>(self) -> StandardPPOHook<T> {
-        StandardPPOHook {
+    pub fn build<T>(self) -> DefaultPPOHook<T> {
+        DefaultPPOHook {
             normalize_advantage: self.normalize_advantage,
             total_epochs: self.total_epochs,
             entropy_coeff: self.entropy_coeff,
@@ -102,7 +102,7 @@ impl StandardPPOHookBuilder {
             }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
-            reporter: self.tx.map(|tx| StandardPPOHookReporter {
+            reporter: self.tx.map(|tx| DefaultPPOHookReporter {
                 report: PPOStats::default(),
                 tx,
             }),

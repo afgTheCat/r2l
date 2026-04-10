@@ -1,4 +1,5 @@
 use crate::{
+    BurnBackend,
     builders::{
         agent::AgentBuilder,
         on_policy::OnPolicyAlgorightmBuilder,
@@ -17,7 +18,7 @@ use r2l_core::{
 };
 use std::sync::mpsc::Sender;
 
-use crate::agents::ppo::{BurnBackend, BurnOrCandlePPO, BurnPPO, CandlePPO};
+use crate::agents::ppo::{BurnOrCandlePPO, BurnPPO, CandlePPO};
 
 impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, PPOAgentBuilder<M>, EB, BD>
 where

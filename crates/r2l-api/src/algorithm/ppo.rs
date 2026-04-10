@@ -1,5 +1,6 @@
 use crate::{
-    agents::ppo::{BurnBackend, BurnOrCandlePPO, BurnPPO, CandlePPO},
+    BurnBackend,
+    agents::ppo::{BurnOrCandlePPO, BurnPPO, CandlePPO},
     hooks::on_policy::DefaultOnPolicyAlgorightmsHooks,
 };
 use r2l_core::{

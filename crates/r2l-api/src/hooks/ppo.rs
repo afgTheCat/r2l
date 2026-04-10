@@ -45,12 +45,12 @@ impl TargetKl {
     }
 }
 
-pub struct StandardPPOHookReporter {
+pub struct DefaultPPOHookReporter {
     pub report: PPOStats,
     pub tx: Sender<PPOStats>,
 }
 
-pub struct StandardPPOHook<T = ()> {
+pub struct DefaultPPOHook<T = ()> {
     pub normalize_advantage: bool,
     pub total_epochs: usize,
     pub entropy_coeff: f32,
@@ -58,12 +58,12 @@ pub struct StandardPPOHook<T = ()> {
     pub target_kl: Option<TargetKl>,
     pub gradient_clipping: Option<f32>,
     pub current_epoch: usize,
-    pub reporter: Option<StandardPPOHookReporter>,
+    pub reporter: Option<DefaultPPOHookReporter>,
     pub(crate) _lm: PhantomData<T>,
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
-    for StandardPPOHook<BurnActorCriticLMKind<B, D>>
+    for DefaultPPOHook<BurnActorCriticLMKind<B, D>>
 {
     fn before_learning_hook<
         T: TrajectoryContainer<Tensor = burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
@@ -101,7 +101,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
         };
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
-            if let Some(StandardPPOHookReporter { report, tx }) = &mut self.reporter {
+            if let Some(DefaultPPOHookReporter { report, tx }) = &mut self.reporter {
                 let mut total_rewards: f32 = 0.;
                 let mut total_episodes: usize = 0;
                 for buffer in buffers {
@@ -140,7 +140,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
                 / ratio.len() as f32
         };
 
-        if let Some(StandardPPOHookReporter { report, .. }) = &mut self.reporter {
+        if let Some(DefaultPPOHookReporter { report, .. }) = &mut self.reporter {
             let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
             let clip_fraction = ratio
                 .iter()
@@ -171,7 +171,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
     }
 }
 
-impl PPOHook<R2lCandleLearningModule> for StandardPPOHook<R2lCandleLearningModule> {
+impl PPOHook<R2lCandleLearningModule> for DefaultPPOHook<R2lCandleLearningModule> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = candle_core::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -202,7 +202,7 @@ impl PPOHook<R2lCandleLearningModule> for StandardPPOHook<R2lCandleLearningModul
         };
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
-            if let Some(StandardPPOHookReporter { report, tx }) = &mut self.reporter {
+            if let Some(DefaultPPOHookReporter { report, tx }) = &mut self.reporter {
                 let mut total_rewards: f32 = 0.;
                 let mut total_episodes: usize = 0;
                 for buffer in buffers {
@@ -238,7 +238,7 @@ impl PPOHook<R2lCandleLearningModule> for StandardPPOHook<R2lCandleLearningModul
             .sub(&log_ratio)?
             .mean_all()?
             .to_scalar::<f32>()?;
-        if let Some(StandardPPOHookReporter { report, .. }) = &mut self.reporter {
+        if let Some(DefaultPPOHookReporter { report, .. }) = &mut self.reporter {
             let clip_fraction = (&data.ratio - 1.)?
                 .abs()?
                 .gt(params.clip_range)?

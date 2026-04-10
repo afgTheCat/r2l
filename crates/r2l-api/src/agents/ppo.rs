@@ -1,8 +1,4 @@
-use burn::{
-    backend::{Autodiff, NdArray},
-    module::AutodiffModule,
-    tensor::backend::AutodiffBackend,
-};
+use burn::{backend::NdArray, module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::ppo::PPO;
 use r2l_burn::{distributions::DistributionKind, learning_module::BurnActorCriticLMKind};
 use r2l_candle::{distributions::CandleDistributionKind, learning_module::R2lCandleLearningModule};
@@ -13,14 +9,12 @@ use r2l_core::{
     tensor::R2lBuffer,
 };
 
-use crate::hooks::ppo::StandardPPOHook;
-
-pub type BurnBackend = Autodiff<NdArray>;
+use crate::{BurnBackend, hooks::ppo::DefaultPPOHook};
 
 pub struct BurnPPO<B: AutodiffBackend>(
     pub  PPO<
         BurnActorCriticLMKind<B, DistributionKind<B>>,
-        StandardPPOHook<BurnActorCriticLMKind<B, DistributionKind<B>>>,
+        DefaultPPOHook<BurnActorCriticLMKind<B, DistributionKind<B>>>,
     >,
 );
 
@@ -44,7 +38,7 @@ impl<B: AutodiffBackend> Agent for BurnPPO<B> {
     }
 }
 
-pub struct CandlePPO(pub PPO<R2lCandleLearningModule, StandardPPOHook<R2lCandleLearningModule>>);
+pub struct CandlePPO(pub PPO<R2lCandleLearningModule, DefaultPPOHook<R2lCandleLearningModule>>);
 
 impl Agent for CandlePPO {
     type Tensor = candle_core::Tensor;
@@ -66,6 +60,7 @@ impl Agent for CandlePPO {
     }
 }
 
+// TODO: debatable if we need this
 #[derive(Clone)]
 pub enum BurnOrCandlePPOActor {
     Burn(DistributionKind<NdArray>),
