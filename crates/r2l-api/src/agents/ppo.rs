@@ -212,43 +212,38 @@ impl Agent for BurnOrCandlePPO {
 }
 
 #[derive(Debug, Clone)]
-pub enum PPOBackend {
+pub enum DynamicBackend {
     Burn,
     Candle(Device),
 }
 
-impl Default for PPOBackend {
+impl Default for DynamicBackend {
     fn default() -> Self {
         Self::Burn
     }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct PPOBurn;
+pub struct PPOBurnBackend;
 
 #[derive(Debug, Clone)]
-pub struct PPOCandle {
+pub struct PPOCandleBackend {
     pub device: Device,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct PPOUnified {
-    pub backend: PPOBackend,
-}
-
-pub struct PPOAgentBuilder<M = PPOUnified> {
+pub struct PPOAgentBuilder<M = DynamicBackend> {
     pub ppo_params: PPOParams,
     pub distribution_builder: DistributionBuilder,
     pub hook_builder: StandardPPOHookBuilder,
     pub actor_critic_type: LearningModuleBuilder,
-    pub mode: M,
+    pub backend: M,
 }
 
-pub type PPOBurnLearningModuleBuilder = PPOAgentBuilder<PPOBurn>;
-pub type PPOCandleLearningModuleBuilder = PPOAgentBuilder<PPOCandle>;
-pub type PPOBurnOrCandleLearningModuleBuilder = PPOAgentBuilder<PPOUnified>;
+pub type PPOBurnLearningModuleBuilder = PPOAgentBuilder<PPOBurnBackend>;
+pub type PPOCandleLearningModuleBuilder = PPOAgentBuilder<PPOCandleBackend>;
+pub type PPOBurnOrCandleLearningModuleBuilder = PPOAgentBuilder<DynamicBackend>;
 
-impl Default for PPOAgentBuilder<PPOUnified> {
+impl Default for PPOAgentBuilder<DynamicBackend> {
     fn default() -> Self {
         Self {
             hook_builder: StandardPPOHookBuilder::default(),
@@ -270,7 +265,7 @@ impl Default for PPOAgentBuilder<PPOUnified> {
                     weight_decay: 1e-4,
                 },
             },
-            mode: PPOUnified::default(),
+            backend: DynamicBackend::default(),
         }
     }
 }
@@ -337,46 +332,46 @@ impl<M> PPOAgentBuilder<M> {
     }
 }
 
-impl PPOAgentBuilder<PPOUnified> {
-    pub fn with_backend(mut self, backend: PPOBackend) -> Self {
-        self.mode.backend = backend;
+impl PPOAgentBuilder<DynamicBackend> {
+    pub fn with_backend(mut self, backend: DynamicBackend) -> Self {
+        self.backend = backend;
         self
     }
 
-    pub fn with_burn(self) -> PPOAgentBuilder<PPOBurn> {
+    pub fn with_burn(self) -> PPOAgentBuilder<PPOBurnBackend> {
         PPOAgentBuilder {
             ppo_params: self.ppo_params,
             distribution_builder: self.distribution_builder,
             hook_builder: self.hook_builder,
             actor_critic_type: self.actor_critic_type,
-            mode: PPOBurn,
+            backend: PPOBurnBackend,
         }
     }
 
-    pub fn with_candle_device(self, device: Device) -> PPOAgentBuilder<PPOCandle> {
+    pub fn with_candle(self, device: Device) -> PPOAgentBuilder<PPOCandleBackend> {
         PPOAgentBuilder {
             ppo_params: self.ppo_params,
             distribution_builder: self.distribution_builder,
             hook_builder: self.hook_builder,
             actor_critic_type: self.actor_critic_type,
-            mode: PPOCandle { device },
+            backend: PPOCandleBackend { device },
         }
     }
 }
 
-impl Default for PPOAgentBuilder<PPOBurn> {
+impl Default for PPOAgentBuilder<PPOBurnBackend> {
     fn default() -> Self {
-        PPOAgentBuilder::<PPOUnified>::default().with_burn()
+        PPOAgentBuilder::<DynamicBackend>::default().with_burn()
     }
 }
 
-impl Default for PPOAgentBuilder<PPOCandle> {
+impl Default for PPOAgentBuilder<PPOCandleBackend> {
     fn default() -> Self {
-        PPOAgentBuilder::<PPOUnified>::default().with_candle_device(Device::Cpu)
+        PPOAgentBuilder::<DynamicBackend>::default().with_candle(Device::Cpu)
     }
 }
 
-impl AgentBuilder for PPOAgentBuilder<PPOUnified> {
+impl AgentBuilder for PPOAgentBuilder<DynamicBackend> {
     type Agent = BurnOrCandlePPO;
 
     fn build(
@@ -385,20 +380,20 @@ impl AgentBuilder for PPOAgentBuilder<PPOUnified> {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<Self::Agent> {
-        match self.mode.backend.clone() {
-            PPOBackend::Burn => Ok(BurnOrCandlePPO::Burn(self.build_burn_agent(
+        match self.backend.clone() {
+            DynamicBackend::Burn => Ok(BurnOrCandlePPO::Burn(self.build_burn_agent(
                 observation_size,
                 action_size,
                 action_space,
             )?)),
-            PPOBackend::Candle(device) => Ok(BurnOrCandlePPO::Candle(
+            DynamicBackend::Candle(device) => Ok(BurnOrCandlePPO::Candle(
                 self.build_candle_with_device(observation_size, action_size, action_space, device)?,
             )),
         }
     }
 }
 
-impl AgentBuilder for PPOAgentBuilder<PPOBurn> {
+impl AgentBuilder for PPOAgentBuilder<PPOBurnBackend> {
     type Agent = BurnPPO<BurnBackend>;
 
     fn build(
@@ -411,7 +406,7 @@ impl AgentBuilder for PPOAgentBuilder<PPOBurn> {
     }
 }
 
-impl AgentBuilder for PPOAgentBuilder<PPOCandle> {
+impl AgentBuilder for PPOAgentBuilder<PPOCandleBackend> {
     type Agent = CandlePPO;
 
     fn build(
@@ -420,7 +415,7 @@ impl AgentBuilder for PPOAgentBuilder<PPOCandle> {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<Self::Agent> {
-        let device = self.mode.device.clone();
+        let device = self.backend.device.clone();
         self.build_candle_with_device(observation_size, action_size, action_space, device)
     }
 }

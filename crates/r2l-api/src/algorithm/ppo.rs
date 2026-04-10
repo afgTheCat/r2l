@@ -151,7 +151,7 @@ impl<EB: EnvBuilderTrait> PPOAlgorithmBuilder<EB> {
         OnPolicyAlgorightmBuilder {
             sampler_builder,
             learning_schedule,
-            agent_builder: agent_builder.with_candle_device(device),
+            agent_builder: agent_builder.with_candle(device),
         }
     }
 

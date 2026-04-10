@@ -15,7 +15,6 @@ cuda = [
 
 [dependencies]
 r2l-core = { workspace = true }
-# r2l-buffer = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
 either = { workspace = true }

@@ -1,6 +1,6 @@
 use crate::sequential::Sequential;
 use burn::{
-    grad_clipping::{self, GradientClipping},
+    grad_clipping::GradientClipping,
     module::{AutodiffModule, Module, ModuleDisplay},
     optim::{AdamW, GradientsParams, Optimizer, adaptor::OptimizerAdaptor},
     prelude::Backend,

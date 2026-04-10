@@ -1,0 +1,71 @@
+PPO naming concerns
+
+1. `actor_critic_type`
+- Concern: this is not a type, it is a builder/config object.
+- Suggested names: `actor_critic_builder`, `learning_module_builder`, `module_builder`
+
+2. `mode` in `PPOAgentBuilder<M>`
+- Concern: too vague for a field that selects the build path.
+- Suggested names: `kind`, `builder_kind`, `backend_marker`
+
+3. `PPOUnified`
+- Concern: "unified" describes the refactor goal, not the semantic role.
+- Suggested names: `RuntimeKind`, `DynamicBackend`, `AnyBackend`
+
+4. `PPOBurn`
+- Concern: this is a type-level marker, not a PPO.
+- Suggested names: `BurnKind`, `BurnMode`, `BurnBackendOnly`
+
+5. `PPOCandle`
+- Concern: same issue as `PPOBurn`; it is a marker/config, not a PPO.
+- Suggested names: `CandleKind`, `CandleMode`, `CandleConfig`
+
+6. `PPOBurnOrCandleLearningModuleBuilder`
+- Concern: accurate but heavy, and it says `LearningModuleBuilder` while it builds the whole agent path.
+- Suggested names: `RuntimePPOAgentBuilder`, `DynamicPPOAgentBuilder`
+
+7. `PPOBurnLearningModuleBuilder`
+- Concern: name implies learning-module-only responsibility.
+- Suggested names: `BurnPPOAgentBuilder`
+
+8. `PPOCandleLearningModuleBuilder`
+- Concern: same issue as the Burn variant.
+- Suggested names: `CandlePPOAgentBuilder`
+
+9. `build_burn_agent`
+- Concern: asymmetrical with Candle naming and slightly verbose.
+- Suggested names: `build_burn`
+
+10. `build_candle_with_device`
+- Concern: the device is already part of the Candle-specific build path.
+- Suggested names: `build_candle`
+
+11. `build_candle_lm`
+- Concern: `lm` is terse and internal-sounding.
+- Suggested names: `build_candle_module`
+
+12. `distribution_builder`
+- Concern: maybe fine, but if this always builds policy-side structure then `policy_builder` may be clearer.
+- Suggested names: `policy_builder`
+
+Suggested overall naming direction
+
+- Use `Builder` for concrete builders.
+- Use `Kind` for type-level selectors/markers.
+- Use `Backend` only for the real runtime enum.
+
+Example target naming set
+
+- `PPOAgentBuilder<M>`
+- `RuntimeKind`
+- `BurnKind`
+- `CandleKind`
+- `kind`
+- `BurnPPOAgentBuilder`
+- `CandlePPOAgentBuilder`
+- `RuntimePPOAgentBuilder`
+- `actor_critic_builder`
+
+Main concern to fix first
+
+- `actor_critic_type` is currently the most misleading name.
