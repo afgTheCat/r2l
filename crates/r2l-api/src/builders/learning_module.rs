@@ -9,12 +9,13 @@ use r2l_burn_lm::{
     sequential::Sequential,
 };
 use r2l_candle_lm::{
-    learning_module::{DecoupledActorCriticLM, ParalellActorCriticLM, SequentialValueFunction},
+    learning_module::{
+        CandleActorCriticKind, DecoupledActorCriticLM, ParalellActorCriticLM,
+        SequentialValueFunction,
+    },
     optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::build_sequential,
 };
-
-use crate::learning_module::CandleActorCriticKind;
 
 pub enum LearningModuleType {
     Paralell {

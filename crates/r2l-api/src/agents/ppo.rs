@@ -10,7 +10,7 @@ use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
 use r2l_burn_lm::{distributions::DistributionKind, learning_module::BurnActorCriticLMKind};
 use r2l_candle_lm::{
     distributions::CandleDistributionKind,
-    learning_module::{CandlePolicyValuesLosses, SequentialValueFunction},
+    learning_module::{CandleActorCriticKind, CandlePolicyValuesLosses, SequentialValueFunction},
 };
 use r2l_core::policies::OnPolicyLearningModule;
 use r2l_core::{
@@ -28,7 +28,6 @@ use crate::{
         learning_module::{LearningModuleBuilder, LearningModuleType},
     },
     hooks::ppo::{StandardPPOHook, StandardPPOHookBuilder},
-    learning_module::CandleActorCriticKind,
 };
 
 pub type BurnBackend = Autodiff<NdArray>;

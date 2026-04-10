@@ -1,10 +1,67 @@
-// TODO: we should make Evaluator + Noramlizer not depend on candle
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
-use candle_core::{Device, Result, Tensor};
-use r2l_core::distributions::Actor;
-use r2l_core::sampler::PreprocessorY;
-use r2l_core::sampler::buffer::EditableTrajectoryContainer;
-use r2l_core::{distributions::Policy, env::Env};
+use candle_core::{DType, Device, Result, Tensor};
+use r2l_core::{
+    distributions::Actor,
+    env::{Env, EnvironmentDescription},
+    env_builder::EnvBuilderTrait,
+    sampler::{PreprocessorY, buffer::EditableTrajectoryContainer},
+};
+use std::sync::{Arc, Mutex};
+
+pub struct EvaluatorOptions {
+    pub eval_episodes: usize,
+    pub eval_freq: usize,
+    pub eval_step: usize,
+    pub results: Arc<Mutex<Vec<Vec<f32>>>>,
+}
+
+impl Default for EvaluatorOptions {
+    fn default() -> Self {
+        Self {
+            eval_episodes: 10,
+            eval_freq: 10000,
+            eval_step: 1000,
+            results: Arc::new(Mutex::new(vec![vec![]])),
+        }
+    }
+}
+
+impl EvaluatorOptions {
+    pub fn new(
+        eval_episodes: usize,
+        eval_freq: usize,
+        eval_steps: usize,
+    ) -> (Self, Arc<Mutex<Vec<Vec<f32>>>>) {
+        let results = Arc::new(Mutex::new(vec![vec![]]));
+        (
+            Self {
+                // device,
+                eval_episodes,
+                eval_freq,
+                eval_step: eval_steps,
+                results: results.clone(),
+            },
+            results,
+        )
+    }
+
+    pub fn build<EB: EnvBuilderTrait>(
+        &self,
+        env_builder: &EB,
+        n_envs: usize,
+        device: Device,
+    ) -> Evaluator<EB::Env> {
+        let env = env_builder.build_env().unwrap();
+        Evaluator::new(
+            env,
+            self.eval_episodes,
+            self.eval_freq * n_envs,
+            self.eval_step,
+            self.results.clone(),
+            device,
+        )
+    }
+}
 
 pub struct EnvNormalizer {
     pub obs_rms: RunningMeanStd,
@@ -91,6 +148,92 @@ impl<B: EditableTrajectoryContainer<Tensor = Tensor>, E: Env<Tensor = Tensor>>
     fn preprocess_states(&mut self, policy: &dyn Actor<Tensor = Tensor>, buffers: &mut [B]) {
         let n_envs = buffers.len();
         self.evaluate(policy, n_envs).unwrap();
+    }
+}
+
+pub struct NormalizerOptions {
+    pub epsilon: f32,
+    pub gamma: f32,
+    pub clip_obs: f32,
+    pub clip_rew: f32,
+}
+
+impl Default for NormalizerOptions {
+    fn default() -> Self {
+        Self {
+            clip_obs: 10.,
+            clip_rew: 10.,
+            epsilon: 1e-8,
+            gamma: 0.99,
+        }
+    }
+}
+
+impl NormalizerOptions {
+    pub fn new(epsilon: f32, gamma: f32, clip_obs: f32, clip_rew: f32) -> Self {
+        Self {
+            epsilon,
+            gamma,
+            clip_obs,
+            clip_rew,
+        }
+    }
+
+    pub fn build<T>(
+        &self,
+        env_description: EnvironmentDescription<T>,
+        n_envs: usize,
+        device: &Device,
+    ) -> EnvNormalizer {
+        let obs_rms = RunningMeanStd::new(env_description.observation_size(), device.clone());
+        let ret_rms = RunningMeanStd::new((), device.clone());
+        let returns = Tensor::zeros(n_envs, DType::F32, device).unwrap();
+        EnvNormalizer::new(
+            obs_rms,
+            ret_rms,
+            returns,
+            self.epsilon,
+            self.gamma,
+            self.clip_obs,
+            self.clip_rew,
+        )
+    }
+}
+
+#[derive(Default)]
+pub struct EvaluatorNormalizerOptions {
+    pub evaluator_options: Option<EvaluatorOptions>,
+    pub normalizer_options: Option<NormalizerOptions>,
+    pub device: Option<Device>,
+}
+
+impl EvaluatorNormalizerOptions {
+    pub fn evaluator(eval_options: EvaluatorOptions, device: Device) -> Self {
+        Self {
+            evaluator_options: Some(eval_options),
+            normalizer_options: None,
+            device: Some(device),
+        }
+    }
+
+    pub fn normalizer(norm_options: NormalizerOptions, device: Device) -> Self {
+        Self {
+            evaluator_options: None,
+            normalizer_options: Some(norm_options),
+            device: Some(device),
+        }
+    }
+
+    pub fn eval_normalizer(
+        eval_options: EvaluatorOptions,
+        norm_options: NormalizerOptions,
+        device: Device,
+    ) -> Self {
+        Self {
+            evaluator_options: Some(eval_options),
+            normalizer_options: Some(norm_options),
+            device: Some(device),
+        }
     }
 }
 

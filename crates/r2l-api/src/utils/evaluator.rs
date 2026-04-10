@@ -1,6 +1,6 @@
 use candle_core::{Device, Result};
 use r2l_core::{
-    distributions::{Actor, Policy},
+    distributions::Actor,
     env::{Env, SnapShot},
     rng::RNG,
     sampler::buffer::variable_size::VariableSizedStateBuffer,
