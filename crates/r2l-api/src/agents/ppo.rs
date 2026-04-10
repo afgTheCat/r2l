@@ -7,8 +7,8 @@ use candle_core::Tensor;
 use candle_core::{DType, Device};
 use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
-use r2l_burn_lm::{distributions::DistributionKind, learning_module::BurnActorCriticLMKind};
-use r2l_candle_lm::{
+use r2l_burn::{distributions::DistributionKind, learning_module::BurnActorCriticLMKind};
+use r2l_candle::{
     distributions::CandleDistributionKind,
     learning_module::{CandleActorCriticKind, CandlePolicyValuesLosses, SequentialValueFunction},
 };

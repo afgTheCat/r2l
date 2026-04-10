@@ -20,8 +20,8 @@ r2l-core = { workspace = true }
 r2l-gym = { workspace = true }
 r2l-agents = { workspace = true }
 r2l-api = { workspace = true }
-r2l-candle-lm = { workspace = true }
-r2l-burn-lm = { workspace = true }
+r2l-candle = { workspace = true }
+r2l-burn = { workspace = true }
 candle-core = { workspace = true }
 burn = { workspace = true }
 rand = "0.9.0"

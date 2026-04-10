@@ -13,8 +13,8 @@ r2l-agents = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
 burn = { workspace = true }
-r2l-candle-lm = { workspace = true }
-r2l-burn-lm = { workspace = true }
+r2l-candle = { workspace = true }
+r2l-burn = { workspace = true }
 crossbeam = { workspace = true }
 # r2l-buffer = { workspace = true }
 ringbuffer = "0.16.0"
@@ -26,7 +26,7 @@ derive_more = "2.0.1"
 test-utils = []
 cuda = [
   "r2l-core/cuda",
-  "r2l-candle-lm/cuda",
+  "r2l-candle/cuda",
   "candle-core/cuda",
   "candle-nn/cuda",
 ]

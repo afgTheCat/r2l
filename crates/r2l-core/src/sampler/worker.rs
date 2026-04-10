@@ -1,5 +1,5 @@
 use crate::{
-    distributions::{Actor, Policy},
+    distributions::Actor,
     env::{Env, EnvironmentDescription, SnapShot},
     rng::RNG,
     sampler::{

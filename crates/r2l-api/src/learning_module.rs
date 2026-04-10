@@ -1,14 +1,14 @@
 use burn::{optim::AdamWConfig, tensor::backend::AutodiffBackend};
 use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
-use r2l_burn_lm::{
+use r2l_burn::{
     learning_module::{
         BurnActorCriticLMKind, BurnDecoupledActorCriticLM, BurnParalellActorCriticLM, BurnPolicy,
         ParalellActorModel,
     },
     sequential::Sequential,
 };
-use r2l_candle_lm::{
+use r2l_candle::{
     learning_module::{
         CandleActorCriticKind, DecoupledActorCriticLM, ParalellActorCriticLM,
         SequentialValueFunction,

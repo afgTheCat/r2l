@@ -2,12 +2,12 @@ use anyhow::Result;
 use burn::tensor::backend::AutodiffBackend;
 use candle_core::Device;
 use candle_nn::VarBuilder;
-use r2l_burn_lm::distributions::{
+use r2l_burn::distributions::{
     DistributionKind,
     categorical_distribution::CategoricalDistribution as BurnCategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution as BurnDiagGaussianDistribution,
 };
-use r2l_candle_lm::distributions::{
+use r2l_candle::distributions::{
     CandleDistributionKind,
     categorical_distribution::CategoricalDistribution as CandleCategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution as CandleDiagGaussianDistribution,

@@ -11,8 +11,8 @@ This repository is a Rust workspace for reinforcement learning libraries and exa
 - `crates/r2l-agents`: agent-related abstractions and implementations
 - `crates/r2l-macros`: procedural macros
 - `crates/r2l-examples`: runnable examples and integration demos
-- `crates/r2l-candle-lm`: Candle-based LM integrations
-- `crates/r2l-burn-lm`: Burn-based LM integrations
+- `crates/r2l-candle`: Candle-based LM integrations
+- `crates/r2l-burn`: Burn-based LM integrations
 - `crates/r2l-api`: shared API-facing types and interfaces
 
 ## Working Style

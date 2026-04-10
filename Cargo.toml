@@ -5,8 +5,8 @@ members = [
   "crates/r2l-macros",
   "crates/r2l-examples",
   "crates/r2l-agents",
-  "crates/r2l-candle-lm",
-  "crates/r2l-burn-lm",
+  "crates/r2l-candle",
+  "crates/r2l-burn",
 ]
 resolver = "3"
 
@@ -16,8 +16,8 @@ r2l-core = { path = "crates/r2l-core", version = "0.0.1" }
 r2l-gym = { path = "crates/r2l-gym", version = "0.0.1" }
 r2l-agents = { path = "crates/r2l-agents", version = "0.0.1" }
 r2l-api = { path = "crates/r2l-api", version = "0.0.1" }
-r2l-candle-lm = { path = "crates/r2l-candle-lm" }
-r2l-burn-lm = { path = "crates/r2l-burn-lm" }
+r2l-candle = { path = "crates/r2l-candle" }
+r2l-burn = { path = "crates/r2l-burn" }
 candle-core = { version = "0.9.2" }
 burn = { version = "0.20.1", features = ["ndarray", "autodiff"] }
 candle-nn = { version = "0.9.2" }

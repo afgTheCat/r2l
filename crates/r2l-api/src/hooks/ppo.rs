@@ -5,8 +5,8 @@ use r2l_agents::{
     HookResult,
     on_policy_algorithms::ppo::{PPOBatchData, PPOHook, PPOParams},
 };
-use r2l_burn_lm::learning_module::{BurnActorCriticLMKind, BurnPolicy, BurnPolicyValuesLosses};
-use r2l_candle_lm::learning_module::CandlePolicyValuesLosses;
+use r2l_burn::learning_module::{BurnActorCriticLMKind, BurnPolicy, BurnPolicyValuesLosses};
+use r2l_candle::learning_module::CandlePolicyValuesLosses;
 use r2l_core::{
     distributions::Policy, policies::OnPolicyLearningModule, sampler::buffer::TrajectoryContainer,
 };
