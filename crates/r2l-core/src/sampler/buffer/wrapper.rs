@@ -111,7 +111,7 @@ impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S
     }
 
     fn actions(&self) -> TensorIter<'_, T> {
-        TensorIter::new(self.data.next_states().map(cast_ref))
+        TensorIter::new(self.data.actions().map(cast_ref))
     }
 
     fn rewards(&self) -> F32Iter<'_> {
