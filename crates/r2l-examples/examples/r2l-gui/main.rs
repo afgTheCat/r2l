@@ -5,7 +5,8 @@ mod table;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l_api::{algorithm::ppo::burn::PPOBurnAlgorithmBuiler, hooks::ppo::PPOStats};
+use r2l_api::algorithm::ppo::PPOAlgorithmBuilder;
+use r2l_api::{algorithm::ppo::PPOBurnAlgorithmBuiler, hooks::ppo::PPOStats};
 use r2l_core::on_policy_algorithm::LearningSchedule;
 use r2l_core::sampler::{Location, buffer::StepTrajectoryBound};
 use r2l_examples::EventBox;
@@ -118,7 +119,8 @@ pub fn train_ppo(
     clip_range: f32,
 ) -> anyhow::Result<()> {
     // TODO: The generic here is ugly
-    let ppo_builder = PPOBurnAlgorithmBuiler::<GymEnvBuilder>::new(ENV_NAME, 10)
+    let ppo_builder = PPOAlgorithmBuilder::<GymEnvBuilder>::new(ENV_NAME, 10)
+        .with_burn()
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))

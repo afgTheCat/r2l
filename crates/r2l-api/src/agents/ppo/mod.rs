@@ -138,6 +138,7 @@ impl Agent for CandlePPO {
     }
 }
 
+#[derive(Clone)]
 pub enum BurnOrCandlePPOActor {
     Burn(DistributionKind<NdArray>),
     Candle(CandleDistributionKind),
@@ -245,6 +246,7 @@ pub struct PPOAgentBuilder<M = PPOUnified> {
 
 pub type PPOBurnLearningModuleBuilder = PPOAgentBuilder<PPOBurn>;
 pub type PPOCandleLearningModuleBuilder = PPOAgentBuilder<PPOCandle>;
+pub type PPOBurnOrCandleLearningModuleBuilder = PPOAgentBuilder<PPOUnified>;
 
 impl Default for PPOAgentBuilder<PPOUnified> {
     fn default() -> Self {

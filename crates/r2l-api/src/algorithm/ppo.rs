@@ -1,18 +1,23 @@
-pub mod burn;
-pub mod candle;
-
-use std::sync::mpsc::Sender;
-
 use r2l_core::{
     agents::Agent,
     env_builder::EnvBuilderTrait,
-    sampler::buffer::TrajectoryBound,
+    on_policy_algorithm::LearningSchedule,
+    sampler::buffer::{StepTrajectoryBound, TrajectoryBound},
 };
+use std::sync::mpsc::Sender;
 
 use crate::{
-    agents::{AgentBuilder, ppo::PPOAgentBuilder},
+    agents::{
+        AgentBuilder,
+        ppo::{
+            BurnBackend, BurnOrCandlePPO, BurnPPO, CandlePPO, PPOAgentBuilder,
+            PPOBurnLearningModuleBuilder, PPOBurnOrCandleLearningModuleBuilder,
+            PPOCandleLearningModuleBuilder,
+        },
+    },
     algorithm::OnPolicyAlgorightmBuilder,
     hooks::ppo::PPOStats,
+    sampler::SamplerBuilder,
 };
 
 impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, PPOAgentBuilder<M>, EB, BD>
@@ -87,5 +92,79 @@ where
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
         self.agent_builder.ppo_params.sample_size = sample_size;
         self
+    }
+}
+
+pub type PPOCandleAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+    OnPolicyAlgorightmBuilder<CandlePPO, PPOCandleLearningModuleBuilder, EB, BD>;
+
+impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuiler<EB> {
+    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+        OnPolicyAlgorightmBuilder {
+            sampler_builder: SamplerBuilder::new(builder, n_envs),
+            agent_builder: PPOCandleLearningModuleBuilder::default(),
+            learning_schedule: LearningSchedule::RolloutBound {
+                total_rollouts: 300,
+                current_rollout: 0,
+            },
+        }
+    }
+}
+
+pub type PPOBurnAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+    OnPolicyAlgorightmBuilder<BurnPPO<BurnBackend>, PPOBurnLearningModuleBuilder, EB, BD>;
+
+impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuiler<EB> {
+    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+        OnPolicyAlgorightmBuilder {
+            sampler_builder: SamplerBuilder::new(builder, n_envs),
+            agent_builder: PPOBurnLearningModuleBuilder::default(),
+            learning_schedule: LearningSchedule::RolloutBound {
+                total_rollouts: 300,
+                current_rollout: 0,
+            },
+        }
+    }
+}
+
+pub type PPOAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+    OnPolicyAlgorightmBuilder<BurnOrCandlePPO, PPOBurnOrCandleLearningModuleBuilder, EB, BD>;
+
+impl<EB: EnvBuilderTrait> PPOAlgorithmBuilder<EB> {
+    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+        OnPolicyAlgorightmBuilder {
+            sampler_builder: SamplerBuilder::new(builder, n_envs),
+            agent_builder: PPOBurnOrCandleLearningModuleBuilder::default(),
+            learning_schedule: LearningSchedule::RolloutBound {
+                total_rollouts: 300,
+                current_rollout: 0,
+            },
+        }
+    }
+
+    pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuiler<EB> {
+        let OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder,
+        } = self;
+        OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder: agent_builder.with_candle_device(device),
+        }
+    }
+
+    pub fn with_burn(self) -> PPOBurnAlgorithmBuiler<EB> {
+        let OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder,
+        } = self;
+        OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder: agent_builder.with_burn(),
+        }
     }
 }
