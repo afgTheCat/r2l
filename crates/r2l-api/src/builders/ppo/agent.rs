@@ -5,16 +5,24 @@ use r2l_candle::learning_module::R2lCandleLearningModule;
 
 use crate::{
     BurnBackend,
-    agents::ppo::{BurnOrCandlePPO, BurnPPO, CandlePPO},
+    agents::ppo::{BurnPPO, CandlePPO},
     builders::{
-        agent::{AgentBuilder, DynamicBackend, PPOBurnBackend, PPOCandleBackend},
+        agent::AgentBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
         policy_distribution::{ActionSpaceType, DistributionType, PolicyDistributionBuilder},
         ppo::hook::StandardPPOHookBuilder,
     },
 };
 
-pub struct PPOAgentBuilder<M = DynamicBackend> {
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PPOBurnBackend;
+
+#[derive(Debug, Clone)]
+pub struct PPOCandleBackend {
+    pub device: Device,
+}
+
+pub struct PPOAgentBuilder<M = PPOCandleBackend> {
     pub ppo_params: PPOParams,
     pub distribution_builder: PolicyDistributionBuilder,
     pub hook_builder: StandardPPOHookBuilder,
@@ -24,34 +32,6 @@ pub struct PPOAgentBuilder<M = DynamicBackend> {
 
 pub type PPOBurnLearningModuleBuilder = PPOAgentBuilder<PPOBurnBackend>;
 pub type PPOCandleLearningModuleBuilder = PPOAgentBuilder<PPOCandleBackend>;
-pub type PPOBurnOrCandleLearningModuleBuilder = PPOAgentBuilder<DynamicBackend>;
-
-impl Default for PPOAgentBuilder<DynamicBackend> {
-    fn default() -> Self {
-        Self {
-            hook_builder: StandardPPOHookBuilder::default(),
-            ppo_params: PPOParams::default(),
-            distribution_builder: PolicyDistributionBuilder {
-                hidden_layers: vec![64, 64],
-                distribution_type: DistributionType::Dynamic,
-            },
-            actor_critic_type: LearningModuleBuilder {
-                learning_module_type: LearningModuleType::Paralell {
-                    value_layers: vec![64, 64],
-                    max_grad_norm: None,
-                },
-                params: ParamsAdamW {
-                    lr: 3e-4,
-                    beta1: 0.9,
-                    beta2: 0.999,
-                    eps: 1e-5,
-                    weight_decay: 1e-4,
-                },
-            },
-            backend: DynamicBackend::default(),
-        }
-    }
-}
 
 impl<M> PPOAgentBuilder<M> {
     fn build_candle_lm(
@@ -115,10 +95,32 @@ impl<M> PPOAgentBuilder<M> {
     }
 }
 
-impl PPOAgentBuilder<DynamicBackend> {
-    pub fn with_backend(mut self, backend: DynamicBackend) -> Self {
-        self.backend = backend;
+impl PPOAgentBuilder<PPOCandleBackend> {
+    pub fn with_burn(self) -> PPOAgentBuilder<PPOBurnBackend> {
+        PPOAgentBuilder {
+            ppo_params: self.ppo_params,
+            distribution_builder: self.distribution_builder,
+            hook_builder: self.hook_builder,
+            actor_critic_type: self.actor_critic_type,
+            backend: PPOBurnBackend,
+        }
+    }
+
+    pub fn with_candle(mut self, device: Device) -> PPOAgentBuilder<PPOCandleBackend> {
+        self.backend = PPOCandleBackend { device };
         self
+    }
+}
+
+impl PPOAgentBuilder<PPOBurnBackend> {
+    pub fn with_candle(self, device: Device) -> PPOAgentBuilder<PPOCandleBackend> {
+        PPOAgentBuilder {
+            ppo_params: self.ppo_params,
+            distribution_builder: self.distribution_builder,
+            hook_builder: self.hook_builder,
+            actor_critic_type: self.actor_critic_type,
+            backend: PPOCandleBackend { device },
+        }
     }
 
     pub fn with_burn(self) -> PPOAgentBuilder<PPOBurnBackend> {
@@ -130,48 +132,60 @@ impl PPOAgentBuilder<DynamicBackend> {
             backend: PPOBurnBackend,
         }
     }
-
-    pub fn with_candle(self, device: Device) -> PPOAgentBuilder<PPOCandleBackend> {
-        PPOAgentBuilder {
-            ppo_params: self.ppo_params,
-            distribution_builder: self.distribution_builder,
-            hook_builder: self.hook_builder,
-            actor_critic_type: self.actor_critic_type,
-            backend: PPOCandleBackend { device },
-        }
-    }
 }
 
 impl Default for PPOAgentBuilder<PPOBurnBackend> {
     fn default() -> Self {
-        PPOAgentBuilder::<DynamicBackend>::default().with_burn()
+        Self {
+            hook_builder: StandardPPOHookBuilder::default(),
+            ppo_params: PPOParams::default(),
+            distribution_builder: PolicyDistributionBuilder {
+                hidden_layers: vec![64, 64],
+                distribution_type: DistributionType::Dynamic,
+            },
+            actor_critic_type: LearningModuleBuilder {
+                learning_module_type: LearningModuleType::Paralell {
+                    value_layers: vec![64, 64],
+                    max_grad_norm: None,
+                },
+                params: ParamsAdamW {
+                    lr: 3e-4,
+                    beta1: 0.9,
+                    beta2: 0.999,
+                    eps: 1e-5,
+                    weight_decay: 1e-4,
+                },
+            },
+            backend: PPOBurnBackend,
+        }
     }
 }
 
 impl Default for PPOAgentBuilder<PPOCandleBackend> {
     fn default() -> Self {
-        PPOAgentBuilder::<DynamicBackend>::default().with_candle(Device::Cpu)
-    }
-}
-
-impl AgentBuilder for PPOAgentBuilder<DynamicBackend> {
-    type Agent = BurnOrCandlePPO;
-
-    fn build(
-        self,
-        observation_size: usize,
-        action_size: usize,
-        action_space: ActionSpaceType,
-    ) -> anyhow::Result<Self::Agent> {
-        match self.backend.clone() {
-            DynamicBackend::Burn => Ok(BurnOrCandlePPO::Burn(self.build_burn_agent(
-                observation_size,
-                action_size,
-                action_space,
-            )?)),
-            DynamicBackend::Candle(device) => Ok(BurnOrCandlePPO::Candle(
-                self.build_candle_with_device(observation_size, action_size, action_space, device)?,
-            )),
+        Self {
+            hook_builder: StandardPPOHookBuilder::default(),
+            ppo_params: PPOParams::default(),
+            distribution_builder: PolicyDistributionBuilder {
+                hidden_layers: vec![64, 64],
+                distribution_type: DistributionType::Dynamic,
+            },
+            actor_critic_type: LearningModuleBuilder {
+                learning_module_type: LearningModuleType::Paralell {
+                    value_layers: vec![64, 64],
+                    max_grad_norm: None,
+                },
+                params: ParamsAdamW {
+                    lr: 3e-4,
+                    beta1: 0.9,
+                    beta2: 0.999,
+                    eps: 1e-5,
+                    weight_decay: 1e-4,
+                },
+            },
+            backend: PPOCandleBackend {
+                device: Device::Cpu,
+            },
         }
     }
 }

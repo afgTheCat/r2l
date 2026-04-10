@@ -1,6 +1,6 @@
 use crate::{
     BurnBackend,
-    agents::ppo::{BurnOrCandlePPO, BurnPPO, CandlePPO},
+    agents::ppo::{BurnPPO, CandlePPO},
     hooks::on_policy::DefaultOnPolicyAlgorightmsHooks,
 };
 use r2l_core::{
@@ -27,11 +27,4 @@ pub type PPOCandleAlgorithm<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>
     >;
 
 pub type PPOAlgorithm<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    OnPolicyAlgorithm<
-        BurnOrCandlePPO,
-        FinalSampler<<EB as EnvBuilderTrait>::Env, BD>,
-        DefaultOnPolicyAlgorightmsHooks<
-            BurnOrCandlePPO,
-            FinalSampler<<EB as EnvBuilderTrait>::Env, BD>,
-        >,
-    >;
+    PPOCandleAlgorithm<EB, BD>;
