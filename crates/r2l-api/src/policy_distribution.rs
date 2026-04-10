@@ -13,24 +13,24 @@ use r2l_candle::distributions::{
     diagonal_distribution::DiagGaussianDistribution as CandleDiagGaussianDistribution,
 };
 
-pub enum DistributionType {
-    Dynamic,
-    CategoricalDistribution,
-    DiagGaussianDistribution,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum ActionSpaceType {
     Discrete,
     Continous,
 }
 
-pub struct DistributionBuilder {
+pub enum DistributionType {
+    Dynamic,
+    CategoricalDistribution,
+    DiagGaussianDistribution,
+}
+
+pub struct PolicyDistributionBuilder {
     pub hidden_layers: Vec<usize>,
     pub distribution_type: DistributionType,
 }
 
-impl DistributionBuilder {
+impl PolicyDistributionBuilder {
     pub fn build_burn<B: AutodiffBackend>(
         &self,
         observation_size: usize,

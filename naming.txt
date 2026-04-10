@@ -69,3 +69,52 @@ Example target naming set
 Main concern to fix first
 
 - `actor_critic_type` is currently the most misleading name.
+
+
+r2l-api file naming concerns
+
+1. `crates/r2l-api/src/distribution.rs`
+- Concern: too vague. The file mainly contains `DistributionBuilder` and action-space-driven backend construction logic, not the general concept of "distribution".
+- Suggested names: `distribution_builder.rs`, `policy_distribution.rs`
+
+2. `crates/r2l-api/src/learning_module.rs`
+- Concern: the file is primarily builder/assembly code, not just learning module definitions.
+- Suggested names: `learning_module_builder.rs`
+
+3. `crates/r2l-api/src/sampler.rs`
+- Concern: this file mostly contains `SamplerBuilder`.
+- Suggested names: `sampler_builder.rs`
+
+4. `crates/r2l-api/src/algorithm/mod.rs`
+- Concern: singular `algorithm` is a bit awkward for a module containing builder infrastructure and PPO-specific entrypoints.
+- Suggested names: `algorithms/mod.rs`
+
+5. `crates/r2l-api/src/algorithm/ppo.rs`
+- Concern: this file is mostly PPO builder/config orchestration, not PPO core logic.
+- Suggested names: `algorithms/ppo_builder.rs`
+
+6. `crates/r2l-api/src/agents/ppo.rs`
+- Concern: mixed contents: PPO agent wrappers plus builder types.
+- Suggested names: `agents/ppo_agent.rs`, `agents/ppo_builder.rs`
+
+7. `crates/r2l-api/src/hooks/ppo.rs`
+- Concern: contains several PPO hook-related types, not just one hook.
+- Suggested names: `hooks/ppo_hooks.rs`
+
+8. `crates/r2l-api/src/hooks/sampler.rs`
+- Concern: name is misleading; the file is really about evaluator/normalizer preprocessing around sampler data.
+- Suggested names: `hooks/env_preprocessing.rs`, `hooks/sampler_preprocessors.rs`
+
+9. `crates/r2l-api/src/utils/evaluator.rs`
+- Concern: `evaluator` is generic in an RL codebase.
+- Suggested names: `utils/policy_evaluator.rs`
+
+10. `crates/r2l-api/src/utils/running_mean.rs`
+- Concern: the main type is `RunningMeanStd`, so the file name is underspecified.
+- Suggested names: `utils/running_mean_std.rs`
+
+Additional note
+
+- `distribution` on its own is probably too vague/inaccurate for `r2l-api`.
+- In `r2l-api`, I would expect a file named `distribution.rs` to define shared API-level distribution abstractions.
+- The current file is really about constructing backend-specific policy distributions, so `distribution_builder.rs` is a better fit.

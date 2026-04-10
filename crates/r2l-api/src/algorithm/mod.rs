@@ -11,7 +11,7 @@ use r2l_core::{
     },
 };
 
-use crate::{agents::AgentBuilder, distribution::ActionSpaceType, sampler::SamplerBuilder};
+use crate::{agents::AgentBuilder, policy_distribution::ActionSpaceType, sampler::SamplerBuilder};
 
 pub struct OnPolicyAlgorightmBuilder<
     A: Agent,

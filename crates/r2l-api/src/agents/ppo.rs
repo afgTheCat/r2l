@@ -23,9 +23,9 @@ use r2l_core::{
 
 use crate::{
     agents::AgentBuilder,
-    distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
     hooks::ppo::{StandardPPOHook, StandardPPOHookBuilder},
     learning_module::{LearningModuleBuilder, LearningModuleType},
+    policy_distribution::{ActionSpaceType, DistributionType, PolicyDistributionBuilder},
 };
 
 pub type BurnBackend = Autodiff<NdArray>;
@@ -230,7 +230,7 @@ pub struct PPOCandleBackend {
 
 pub struct PPOAgentBuilder<M = DynamicBackend> {
     pub ppo_params: PPOParams,
-    pub distribution_builder: DistributionBuilder,
+    pub distribution_builder: PolicyDistributionBuilder,
     pub hook_builder: StandardPPOHookBuilder,
     pub actor_critic_type: LearningModuleBuilder,
     pub backend: M,
@@ -245,7 +245,7 @@ impl Default for PPOAgentBuilder<DynamicBackend> {
         Self {
             hook_builder: StandardPPOHookBuilder::default(),
             ppo_params: PPOParams::default(),
-            distribution_builder: DistributionBuilder {
+            distribution_builder: PolicyDistributionBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,
             },

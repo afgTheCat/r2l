@@ -1,6 +1,6 @@
 pub mod ppo;
 
-use crate::distribution::ActionSpaceType;
+use crate::policy_distribution::ActionSpaceType;
 use r2l_core::agents::Agent;
 
 pub trait AgentBuilder {
