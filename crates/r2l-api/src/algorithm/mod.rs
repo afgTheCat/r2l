@@ -6,15 +6,12 @@ use r2l_core::{
     env_builder::EnvBuilderTrait,
     on_policy_algorithm::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule, OnPolicyAlgorithm},
     sampler::{
-        Location,
-        FinalSampler,
+        FinalSampler, Location,
         buffer::{StepTrajectoryBound, TrajectoryBound},
     },
 };
 
-use crate::{
-    agents::AgentBuilder, builders::distribution::ActionSpaceType, sampler::SamplerBuilder,
-};
+use crate::{agents::AgentBuilder, distribution::ActionSpaceType, sampler::SamplerBuilder};
 
 pub struct OnPolicyAlgorightmBuilder<
     A: Agent,
@@ -27,11 +24,8 @@ pub struct OnPolicyAlgorightmBuilder<
     pub agent_builder: AB,
 }
 
-impl<
-    A: Agent,
-    AB: AgentBuilder<Agent = A>,
-    EB: EnvBuilderTrait,
-> OnPolicyAlgorightmBuilder<A, AB, EB>
+impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilderTrait>
+    OnPolicyAlgorightmBuilder<A, AB, EB>
 {
     pub fn with_bound<BD2: TrajectoryBound<Tensor = EB::Tensor>>(
         self,

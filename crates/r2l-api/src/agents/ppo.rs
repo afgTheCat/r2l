@@ -23,11 +23,9 @@ use r2l_core::{
 
 use crate::{
     agents::AgentBuilder,
-    builders::{
-        distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
-        learning_module::{LearningModuleBuilder, LearningModuleType},
-    },
+    distribution::{ActionSpaceType, DistributionBuilder, DistributionType},
     hooks::ppo::{StandardPPOHook, StandardPPOHookBuilder},
+    learning_module::{LearningModuleBuilder, LearningModuleType},
 };
 
 pub type BurnBackend = Autodiff<NdArray>;
