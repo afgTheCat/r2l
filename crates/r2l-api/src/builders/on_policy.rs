@@ -85,10 +85,7 @@ impl<
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
-        let hooks = DefaultOnPolicyAlgorightmsHooks::new(LearningSchedule::RolloutBound {
-            total_rollouts: 300,
-            current_rollout: 0,
-        });
+        let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.learning_schedule);
         Ok(OnPolicyAlgorithm {
             sampler,
             agent,
