@@ -9,7 +9,6 @@ readme = "README.md"
 
 [dependencies]
 r2l-core = { workspace = true }
-r2l-gym = { workspace = true }
 r2l-agents = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }

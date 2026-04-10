@@ -10,9 +10,5 @@ readme = "README.md"
 
 [dependencies]
 r2l-core = { workspace = true }
-r2l-candle-lm = { workspace = true }
-r2l-burn-lm = { workspace = true }
-r2l-macros = { workspace = true }
-candle-nn = { workspace = true }
 anyhow = { workspace = true }
 rand = { workspace = true }
