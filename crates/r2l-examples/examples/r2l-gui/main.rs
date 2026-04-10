@@ -5,7 +5,7 @@ mod table;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l_api::algorithm::ppo::PPOAlgorithmBuilder;
+use r2l_api::builders::ppo::PPOAlgorithmBuilder;
 use r2l_api::hooks::ppo::PPOStats;
 use r2l_core::on_policy_algorithm::LearningSchedule;
 use r2l_core::sampler::{Location, buffer::StepTrajectoryBound};
