@@ -75,6 +75,7 @@ impl<B: Backend, M: Module<B>> ParalellActorModel<B, M> {
 }
 
 pub struct BurnParalellActorCriticLM<B: AutodiffBackend, M: BurnPolicy<B>> {
+    pub lr: f64,
     pub model: ParalellActorModel<B, M>,
     // NOTE:the optimizer needs to be optimizing both the distr and the value net at the same time
     pub optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
@@ -84,8 +85,13 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> BurnParalellActorCriticLM<B, M> {
     pub fn new(
         model: ParalellActorModel<B, M>,
         optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
+        lr: f64,
     ) -> Self {
-        Self { model, optimizer }
+        Self {
+            lr,
+            model,
+            optimizer,
+        }
     }
 
     pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
@@ -104,7 +110,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for BurnParalellActorC
         };
         let grads = loss.backward();
         let grads = GradientsParams::from_grads(grads, &self.model);
-        let new_model = self.optimizer.step(3e-4, self.model.clone(), grads);
+        let new_model = self.optimizer.step(self.lr, self.model.clone(), grads);
         self.model = new_model;
         Ok(())
     }
@@ -149,7 +155,9 @@ pub struct BurnDecoupledActorCriticLM<B: AutodiffBackend, M: BurnPolicy<B>> {
     pub policy: M,
     pub value_net: Sequential<B>,
     pub policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
+    pub policy_lr: f64,
     pub value_net_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
+    pub value_lr: f64,
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> BurnDecoupledActorCriticLM<B, M> {
@@ -157,13 +165,17 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> BurnDecoupledActorCriticLM<B, M> {
         policy: M,
         value_net: Sequential<B>,
         policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
+        policy_lr: f64,
         value_net_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
+        value_lr: f64,
     ) -> Self {
         Self {
             policy,
             value_net,
             policy_optimizer,
+            policy_lr,
             value_net_optimizer,
+            value_lr,
         }
     }
 
@@ -181,10 +193,9 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for BurnDecoupledActor
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         let policy_grads = losses.policy_loss.backward();
         let policy_grads = GradientsParams::from_grads(policy_grads, &self.policy);
-        // TODO: learning rate is hardcoded here
         self.policy = self
             .policy_optimizer
-            .step(3e-4, self.policy.clone(), policy_grads);
+            .step(self.policy_lr, self.policy.clone(), policy_grads);
         let value_loss = if let Some(vf_coeff) = losses.vf_coeff {
             losses.value_loss * vf_coeff
         } else {
@@ -192,9 +203,9 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for BurnDecoupledActor
         };
         let value_grads = value_loss.backward();
         let value_grads = GradientsParams::from_grads(value_grads, &self.value_net);
-        self.value_net = self
-            .value_net_optimizer
-            .step(3e-4, self.value_net.clone(), value_grads);
+        self.value_net =
+            self.value_net_optimizer
+                .step(self.value_lr, self.value_net.clone(), value_grads);
         Ok(())
     }
 }

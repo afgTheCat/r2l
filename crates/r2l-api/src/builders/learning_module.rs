@@ -108,7 +108,13 @@ impl LearningModuleBuilder {
                 let model = ParalellActorModel::new(distr, value_net);
                 BurnActorCriticLMKind::Paralell(BurnParalellActorCriticLM::new(
                     model,
-                    AdamWConfig::new().init(),
+                    AdamWConfig::new()
+                        .with_beta_1(self.params.beta1 as f32)
+                        .with_beta_2(self.params.beta2 as f32)
+                        .with_epsilon(self.params.eps as f32)
+                        .with_weight_decay(self.params.weight_decay as f32)
+                        .init(),
+                    self.params.lr,
                 ))
             }
             LearningModuleType::Decoupled {
@@ -119,12 +125,24 @@ impl LearningModuleBuilder {
             } => {
                 let value_layers = &[&[observation_size][..], &value_layers[..], &[1]].concat();
                 let value_net: Sequential<B> = Sequential::build(value_layers);
-                BurnActorCriticLMKind::Decoupled(BurnDecoupledActorCriticLM {
-                    policy: distr,
+                BurnActorCriticLMKind::Decoupled(BurnDecoupledActorCriticLM::new(
+                    distr,
                     value_net,
-                    policy_optimizer: AdamWConfig::new().init(),
-                    value_net_optimizer: AdamWConfig::new().init(),
-                })
+                    AdamWConfig::new()
+                        .with_beta_1(self.params.beta1 as f32)
+                        .with_beta_2(self.params.beta2 as f32)
+                        .with_epsilon(self.params.eps as f32)
+                        .with_weight_decay(self.params.weight_decay as f32)
+                        .init(),
+                    self.params.lr,
+                    AdamWConfig::new()
+                        .with_beta_1(self.params.beta1 as f32)
+                        .with_beta_2(self.params.beta2 as f32)
+                        .with_epsilon(self.params.eps as f32)
+                        .with_weight_decay(self.params.weight_decay as f32)
+                        .init(),
+                    self.params.lr,
+                ))
             }
         }
     }

@@ -5,6 +5,7 @@ use crate::{
     builders::{
         a2c::agent::{A2CAgentBuilder, A2CBurnLearningModuleBuilder, A2CCandleLearningModuleBuilder},
         agent::AgentBuilder,
+        learning_module::LearningModuleType,
         on_policy::OnPolicyAlgorightmBuilder,
         sampler::SamplerBuilder,
     },
@@ -36,6 +37,62 @@ where
 
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
         self.agent_builder.a2c_params.sample_size = sample_size;
+        self
+    }
+
+    pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
+        self.agent_builder.actor_critic_type.params.lr = learning_rate;
+        self
+    }
+
+    pub fn with_beta1(mut self, beta1: f64) -> Self {
+        self.agent_builder.actor_critic_type.params.beta1 = beta1;
+        self
+    }
+
+    pub fn with_beta2(mut self, beta2: f64) -> Self {
+        self.agent_builder.actor_critic_type.params.beta2 = beta2;
+        self
+    }
+
+    pub fn with_epsilon(mut self, epsilon: f64) -> Self {
+        self.agent_builder.actor_critic_type.params.eps = epsilon;
+        self
+    }
+
+    pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
+        self.agent_builder.actor_critic_type.params.weight_decay = weight_decay;
+        self
+    }
+
+    pub fn with_parallel(
+        mut self,
+        value_layers: Vec<usize>,
+        max_grad_norm: Option<f32>,
+    ) -> Self {
+        self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Paralell {
+            value_layers,
+            max_grad_norm,
+        };
+        self
+    }
+
+    pub fn with_decoupled(
+        mut self,
+        value_layers: Vec<usize>,
+        policy_max_grad_norm: Option<f32>,
+        value_max_grad_norm: Option<f32>,
+    ) -> Self {
+        self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Decoupled {
+            value_layers,
+            policy_max_grad_norm,
+            value_max_grad_norm,
+        };
+        self
+    }
+
+    pub fn with_learning_module_type(mut self, learning_module_type: LearningModuleType) -> Self {
+        self.agent_builder.actor_critic_type.learning_module_type = learning_module_type;
         self
     }
 }
