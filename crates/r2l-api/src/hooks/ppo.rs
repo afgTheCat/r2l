@@ -110,7 +110,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
                 }
                 report.avarage_reward = total_rewards / total_episodes as f32;
                 report.std = module.get_policy().std().unwrap();
-                report.learning_rate = 3e-4;
+                report.learning_rate = module.policy_learning_rate();
                 tx.send(std::mem::take(report)).unwrap();
             }
             Ok(HookResult::Break)

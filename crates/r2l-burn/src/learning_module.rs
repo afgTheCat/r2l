@@ -97,6 +97,10 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> BurnParalellActorCriticLM<B, M> {
     pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
         self.optimizer = self.optimizer.clone().with_grad_clipping(grad_clipping);
     }
+
+    pub fn policy_learning_rate(&self) -> f64 {
+        self.lr
+    }
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for BurnParalellActorCriticLM<B, M> {
@@ -185,6 +189,10 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> BurnDecoupledActorCriticLM<B, M> {
             .clone()
             .with_grad_clipping(grad_clipping);
     }
+
+    pub fn policy_learning_rate(&self) -> f64 {
+        self.policy_lr
+    }
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for BurnDecoupledActorCriticLM<B, M> {
@@ -255,6 +263,13 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> BurnActorCriticLMKind<B, D> {
         match self {
             Self::Paralell(lm) => lm.set_grad_clipping(grad_clipping),
             Self::Decoupled(lm) => lm.set_grad_clipping(grad_clipping),
+        }
+    }
+
+    pub fn policy_learning_rate(&self) -> f64 {
+        match self {
+            Self::Paralell(lm) => lm.policy_learning_rate(),
+            Self::Decoupled(lm) => lm.policy_learning_rate(),
         }
     }
 }
