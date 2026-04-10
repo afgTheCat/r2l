@@ -1,7 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_api::builders::ppo::PPOAlgorithmBuilder;
 use r2l_api::hooks::ppo::PPOStats;
-use r2l_core::on_policy_algorithm::LearningSchedule;
+use r2l_api::{builders::ppo::PPOAlgorithmBuilder, hooks::on_policy::LearningSchedule};
 use r2l_core::sampler::Location;
 use r2l_core::sampler::buffer::StepTrajectoryBound;
 use r2l_examples::EventBox;

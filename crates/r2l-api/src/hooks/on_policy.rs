@@ -1,10 +1,31 @@
 use anyhow::Result;
 use r2l_core::{
     agents::Agent,
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithmHooks},
+    on_policy_algorithm::OnPolicyAlgorithmHooks,
     sampler::{Sampler, buffer::TrajectoryContainer},
 };
 use std::marker::PhantomData;
+
+#[derive(Debug, Clone, Copy)]
+pub enum LearningSchedule {
+    RolloutBound {
+        total_rollouts: usize,
+        current_rollout: usize,
+    },
+    TotalStepBound {
+        total_steps: usize,
+        current_step: usize,
+    },
+}
+
+impl LearningSchedule {
+    pub fn total_step_bound(total_steps: usize) -> Self {
+        Self::TotalStepBound {
+            total_steps,
+            current_step: 0,
+        }
+    }
+}
 
 pub struct DefaultOnPolicyAlgorightmsHooks<A: Agent, S: Sampler> {
     rollout_idx: usize,

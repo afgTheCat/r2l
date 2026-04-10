@@ -1,11 +1,13 @@
 use crate::{
     builders::agent::AgentBuilder,
-    hooks::ppo::{PPOStats, StandardPPOHook, StandardPPOHookReporter, TargetKl},
+    hooks::{
+        on_policy::LearningSchedule,
+        ppo::{PPOStats, StandardPPOHook, StandardPPOHookReporter, TargetKl},
+    },
 };
 use r2l_core::{
     agents::Agent,
     env_builder::EnvBuilderTrait,
-    on_policy_algorithm::LearningSchedule,
     sampler::buffer::{StepTrajectoryBound, TrajectoryBound},
 };
 use std::{marker::PhantomData, sync::mpsc::Sender};

@@ -2,7 +2,7 @@ use r2l_core::{
     agents::Agent,
     env::Space,
     env_builder::EnvBuilderTrait,
-    on_policy_algorithm::{LearningSchedule, OnPolicyAlgorithm},
+    on_policy_algorithm::OnPolicyAlgorithm,
     sampler::{
         FinalSampler, Location,
         buffer::{StepTrajectoryBound, TrajectoryBound},
@@ -13,7 +13,7 @@ use crate::{
     builders::{
         agent::AgentBuilder, policy_distribution::ActionSpaceType, sampler::SamplerBuilder,
     },
-    hooks::on_policy::DefaultOnPolicyAlgorightmsHooks,
+    hooks::on_policy::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule},
 };
 
 pub struct OnPolicyAlgorightmBuilder<
