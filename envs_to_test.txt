@@ -1,0 +1,228 @@
+Envs to test for PPO/A2C
+Date collected: 2026-04-11
+
+Scope:
+- Focused on easy to medium Gym/Gymnasium environments.
+- Chosen to stay around Pendulum-v1 difficulty or slightly above.
+- If an SB3/RL Zoo reference exists, the main hyperparameters are listed.
+
+Notes:
+- The SB3 references below are from Stable-Baselines3 / RL Zoo model cards.
+- For LunarLander and LunarLanderContinuous, the public SB3 references I found are on -v2 env IDs as of 2026-04-11.
+- If your local Gymnasium install uses -v3 for LunarLander, treat the SB3 -v2 settings as a starting point, not a guaranteed exact match.
+
+Recommended order
+1. CartPole-v1
+2. Pendulum-v1
+3. Acrobot-v1
+4. MountainCar-v0
+5. MountainCarContinuous-v0
+6. LunarLander-v2 or LunarLander-v3
+7. LunarLanderContinuous-v2 or LunarLanderContinuous-v3
+
+1. CartPole-v1
+- Difficulty: easy
+- Action space: discrete
+- Why test it: very fast sanity check, should expose obvious regressions quickly
+- PPO SB3 reference:
+  batch_size=256
+  clip_range=lin_0.2
+  ent_coef=0.0
+  gae_lambda=0.8
+  gamma=0.98
+  learning_rate=lin_0.001
+  n_envs=8
+  n_epochs=20
+  n_steps=32
+  n_timesteps=100000
+  normalize=False
+  source=https://huggingface.co/sb3/ppo-CartPole-v1
+- A2C SB3 reference:
+  ent_coef=0.0
+  n_envs=8
+  n_timesteps=500000
+  policy=MlpPolicy
+  normalize=False
+  source=https://huggingface.co/sb3/a2c-CartPole-v1
+
+2. Pendulum-v1
+- Difficulty: easy to easy-medium
+- Action space: continuous
+- Why test it: good first continuous-control check; you are already using it
+- PPO SB3 reference:
+  clip_range=0.2
+  ent_coef=0.0
+  gae_lambda=0.95
+  gamma=0.9
+  learning_rate=0.001
+  n_envs=4
+  n_epochs=10
+  n_steps=1024
+  n_timesteps=100000
+  use_sde=True
+  sde_sample_freq=4
+  normalize=False
+  source=https://huggingface.co/sb3/ppo-Pendulum-v1
+- A2C SB3 reference:
+  ent_coef=0.0
+  gae_lambda=0.9
+  gamma=0.99
+  learning_rate=lin_7e-4
+  max_grad_norm=0.5
+  n_envs=8
+  n_steps=8
+  n_timesteps=1000000
+  normalize=True
+  normalize_advantage=False
+  policy_kwargs=dict(log_std_init=-2, ortho_init=False)
+  use_rms_prop=True
+  use_sde=True
+  vf_coef=0.4
+  source=https://huggingface.co/sb3/a2c-Pendulum-v1
+
+3. Acrobot-v1
+- Difficulty: easy-medium
+- Action space: discrete
+- Why test it: still lightweight, but less trivial than CartPole
+- PPO SB3 reference:
+  ent_coef=0.0
+  gae_lambda=0.94
+  gamma=0.99
+  n_envs=16
+  n_epochs=4
+  n_steps=256
+  n_timesteps=1000000
+  normalize=True
+  normalize_kwargs={norm_obs=True, norm_reward=False}
+  source=https://huggingface.co/sb3/ppo-Acrobot-v1
+- A2C SB3 reference:
+  ent_coef=0.0
+  n_envs=16
+  n_timesteps=500000
+  normalize=True
+  normalize_kwargs={norm_obs=True, norm_reward=False}
+  source=https://huggingface.co/sb3/a2c-Acrobot-v1
+
+4. MountainCar-v0
+- Difficulty: easy-medium
+- Action space: discrete
+- Why test it: sparse rewards; useful for checking whether learning is merely stable or actually effective
+- PPO SB3 reference:
+  ent_coef=0.0
+  gae_lambda=0.98
+  gamma=0.99
+  n_envs=16
+  n_epochs=4
+  n_steps=16
+  n_timesteps=1000000
+  normalize=True
+  normalize_kwargs={norm_obs=True, norm_reward=False}
+  source=https://huggingface.co/sb3/ppo-MountainCar-v0
+- A2C SB3 reference:
+  ent_coef=0.0
+  n_envs=16
+  n_timesteps=1000000
+  normalize=True
+  normalize_kwargs={norm_obs=True, norm_reward=False}
+  env_kwargs={goal_velocity=0}
+  source=https://huggingface.co/sb3/a2c-MountainCar-v0
+
+5. MountainCarContinuous-v0
+- Difficulty: medium
+- Action space: continuous
+- Why test it: sparse reward plus continuous actions; a useful step up from Pendulum
+- PPO SB3 reference:
+  batch_size=256
+  clip_range=0.1
+  ent_coef=0.00429
+  gae_lambda=0.9
+  gamma=0.9999
+  learning_rate=7.77e-05
+  max_grad_norm=5
+  n_envs=1
+  n_epochs=10
+  n_steps=8
+  n_timesteps=20000
+  normalize=True
+  policy_kwargs=dict(log_std_init=-3.29, ortho_init=False)
+  use_sde=True
+  vf_coef=0.19
+  source=https://huggingface.co/sb3/ppo-MountainCarContinuous-v0
+- A2C SB3 reference:
+  ent_coef=0.0
+  n_envs=4
+  n_steps=100
+  n_timesteps=100000
+  normalize=True
+  policy_kwargs=dict(log_std_init=0.0, ortho_init=False)
+  sde_sample_freq=16
+  use_sde=True
+  normalize_kwargs={norm_obs=True, norm_reward=False}
+  source=https://huggingface.co/sb3/a2c-MountainCarContinuous-v0
+
+6. LunarLander-v2 or LunarLander-v3
+- Difficulty: medium
+- Action space: discrete
+- Why test it: stronger medium-difficulty check; involves longer credit assignment than the classic control tasks
+- Extra note: requires Box2D
+- PPO SB3 reference:
+  batch_size=64
+  ent_coef=0.01
+  gae_lambda=0.98
+  gamma=0.999
+  n_envs=16
+  n_epochs=4
+  n_steps=1024
+  n_timesteps=1000000
+  normalize=False
+  source=https://huggingface.co/sb3/ppo-LunarLander-v2
+- A2C SB3 reference:
+  ent_coef=1e-05
+  gamma=0.995
+  learning_rate=lin_0.00083
+  n_envs=8
+  n_steps=5
+  n_timesteps=200000
+  normalize=False
+  source=https://huggingface.co/sb3/a2c-LunarLander-v2
+
+7. LunarLanderContinuous-v2 or LunarLanderContinuous-v3
+- Difficulty: medium to medium-hard
+- Action space: continuous
+- Why test it: optional step beyond Pendulum; useful once PPO/A2C look healthy on the earlier set
+- Extra note: requires Box2D
+- PPO SB3 reference:
+  batch_size=64
+  ent_coef=0.01
+  gae_lambda=0.98
+  gamma=0.999
+  n_envs=16
+  n_epochs=4
+  n_steps=1024
+  n_timesteps=1000000
+  normalize=False
+  source=https://huggingface.co/sb3/ppo-LunarLanderContinuous-v2
+- A2C SB3 reference:
+  ent_coef=0.0
+  gae_lambda=0.9
+  gamma=0.99
+  learning_rate=lin_7e-4
+  max_grad_norm=0.5
+  n_envs=4
+  n_steps=8
+  n_timesteps=5000000
+  normalize=True
+  normalize_advantage=False
+  policy_kwargs=dict(log_std_init=-2, ortho_init=False)
+  use_rms_prop=True
+  use_sde=True
+  vf_coef=0.4
+  normalize_kwargs={norm_obs=True, norm_reward=False}
+  source=https://huggingface.co/sb3/a2c-LunarLanderContinuous-v2
+
+Practical shortlist if you want the smallest useful sweep
+- CartPole-v1
+- Pendulum-v1
+- Acrobot-v1
+- MountainCarContinuous-v0
+- LunarLander-v2 or LunarLander-v3
