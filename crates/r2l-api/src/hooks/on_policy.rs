@@ -25,6 +25,13 @@ impl LearningSchedule {
             current_step: 0,
         }
     }
+
+    pub fn rollout_bound(total_rollouts: usize) -> Self {
+        Self::RolloutBound {
+            total_rollouts,
+            current_rollout: 0,
+        }
+    }
 }
 
 pub struct DefaultOnPolicyAlgorightmsHooks<A: Agent, S: Sampler> {

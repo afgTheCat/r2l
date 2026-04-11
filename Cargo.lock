@@ -6046,6 +6046,7 @@ dependencies = [
  "r2l-burn",
  "r2l-candle",
  "r2l-core",
+ "r2l-gym",
  "rand 0.10.0",
  "ringbuffer",
 ]

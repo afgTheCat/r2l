@@ -119,11 +119,7 @@ where
         self
     }
 
-    pub fn with_parallel(
-        mut self,
-        value_layers: Vec<usize>,
-        max_grad_norm: Option<f32>,
-    ) -> Self {
+    pub fn with_parallel(mut self, value_layers: Vec<usize>, max_grad_norm: Option<f32>) -> Self {
         self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Paralell {
             value_layers,
             max_grad_norm,
