@@ -43,10 +43,10 @@ impl<B: Backend> Policy for DistributionKind<B> {
         }
     }
 
-    fn entropy(&self) -> anyhow::Result<Self::Tensor> {
+    fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
         match self {
-            Self::Categorical(cat) => cat.entropy(),
-            Self::Diag(diag) => diag.entropy(),
+            Self::Categorical(cat) => cat.entropy(states),
+            Self::Diag(diag) => diag.entropy(states),
         }
     }
 

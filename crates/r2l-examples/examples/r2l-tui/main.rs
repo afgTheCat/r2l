@@ -174,7 +174,10 @@ impl App {
             ]),
             Row::new(vec![
                 "Standard deviation".into(),
-                ppo_progress.std.to_string(),
+                ppo_progress
+                    .std
+                    .map(|std| std.to_string())
+                    .unwrap_or_else(|| "n/a".to_string()),
             ]),
         ];
         Table::new(rows, widths).block(block)

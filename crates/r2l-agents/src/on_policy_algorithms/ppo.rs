@@ -30,6 +30,8 @@ impl Default for PPOParams {
 }
 
 pub struct PPOBatchData<T: R2lTensor> {
+    pub observations: Vec<T>,
+    pub actions: Vec<T>,
     pub logp: T,
     pub values_pred: T,
     pub logp_diff: T,
@@ -104,6 +106,8 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
             let policy_loss = ratio_adv.minimum(&clipped_adv)?.neg()?.mean()?;
             let mut losses = Module::Losses::losses(policy_loss, value_loss);
             let ppo_data = PPOBatchData {
+                observations,
+                actions,
                 logp,
                 values_pred,
                 logp_diff,

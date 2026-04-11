@@ -118,3 +118,7 @@ Additional note
 - `distribution` on its own is probably too vague/inaccurate for `r2l-api`.
 - In `r2l-api`, I would expect a file named `distribution.rs` to define shared API-level distribution abstractions.
 - The current file is really about constructing backend-specific policy distributions, so `distribution_builder.rs` is a better fit.
+
+
+
+One crucial thing: observation vs states. Maybe I should just drop the observation thing alltogether

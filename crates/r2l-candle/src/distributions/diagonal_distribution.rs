@@ -75,7 +75,7 @@ impl Policy for DiagGaussianDistribution {
         Ok(log_probs)
     }
 
-    fn entropy(&self) -> Result<CandleTensor> {
+    fn entropy(&self, _states: &[CandleTensor]) -> Result<CandleTensor> {
         let log_2pi_plus_1_div_2 = CandleTensor::full(
             0.5 * ((2. * f32::consts::PI).ln() + 1.),
             self.log_std.shape(),

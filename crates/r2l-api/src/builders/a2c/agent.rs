@@ -4,16 +4,14 @@ use r2l_agents::on_policy_algorithms::a2c::{A2C, A2CParams};
 use r2l_candle::learning_module::R2lCandleLearningModule;
 
 use crate::{
-    agents::{
-        a2c::{BurnA2C, CandleA2C},
-    },
+    BurnBackend,
+    agents::a2c::{BurnA2C, CandleA2C},
     builders::{
+        a2c::hook::DefaultA2CHookBuilder,
         agent::AgentBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
         policy_distribution::{ActionSpaceType, DistributionType, PolicyDistributionBuilder},
-        a2c::hook::DefaultA2CHookBuilder,
     },
-    BurnBackend,
 };
 
 #[derive(Debug, Clone, Copy, Default)]

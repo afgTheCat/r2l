@@ -1,16 +1,16 @@
 use crate::{
-    agents::{
-        a2c::{BurnA2C, CandleA2C},
-    },
+    BurnBackend,
+    agents::a2c::{BurnA2C, CandleA2C},
     builders::{
-        a2c::agent::{A2CAgentBuilder, A2CBurnLearningModuleBuilder, A2CCandleLearningModuleBuilder},
+        a2c::agent::{
+            A2CAgentBuilder, A2CBurnLearningModuleBuilder, A2CCandleLearningModuleBuilder,
+        },
         agent::AgentBuilder,
         learning_module::LearningModuleType,
         on_policy::OnPolicyAlgorightmBuilder,
         sampler::SamplerBuilder,
     },
     hooks::on_policy::LearningSchedule,
-    BurnBackend,
 };
 use r2l_core::{
     agents::Agent,
@@ -65,11 +65,7 @@ where
         self
     }
 
-    pub fn with_parallel(
-        mut self,
-        value_layers: Vec<usize>,
-        max_grad_norm: Option<f32>,
-    ) -> Self {
+    pub fn with_parallel(mut self, value_layers: Vec<usize>, max_grad_norm: Option<f32>) -> Self {
         self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Paralell {
             value_layers,
             max_grad_norm,
@@ -113,10 +109,8 @@ impl<EB: EnvBuilderTrait> A2CBurnAlgorithmBuilder<EB> {
     }
 }
 
-pub type A2CCandleAlgorithmBuilder<
-    EB,
-    BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>,
-> = OnPolicyAlgorightmBuilder<CandleA2C, A2CCandleLearningModuleBuilder, EB, BD>;
+pub type A2CCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+    OnPolicyAlgorightmBuilder<CandleA2C, A2CCandleLearningModuleBuilder, EB, BD>;
 
 impl<EB: EnvBuilderTrait> A2CCandleAlgorithmBuilder<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {

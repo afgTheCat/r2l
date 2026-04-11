@@ -64,7 +64,13 @@ impl UpdateTable {
             5 => select_row_or_col!("approx_kl".to_owned(), format!("{:?}", approx_kl)),
             6 => select_row_or_col!("explained_variance".to_owned(), format!("To be added")),
             7 => select_row_or_col!("progress".to_owned(), format!("To be added")),
-            8 => select_row_or_col!("std".to_owned(), format!("{:?}", self.progress.std)),
+            8 => select_row_or_col!(
+                "std".to_owned(),
+                self.progress
+                    .std
+                    .map(|std| std.to_string())
+                    .unwrap_or_else(|| "n/a".to_string())
+            ),
             9 => select_row_or_col!(
                 "avarage_reward".to_owned(),
                 format!("{:?}", self.progress.avarage_reward)

@@ -1,8 +1,12 @@
 use crate::sequential::Sequential;
+use anyhow::bail;
 use burn::{
     module::Module,
     prelude::Backend,
-    tensor::{Tensor as BurnTensor, TensorData, activation::softmax},
+    tensor::{
+        Tensor as BurnTensor, TensorData,
+        activation::{log_softmax, softmax},
+    },
 };
 use r2l_core::distributions::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
@@ -54,20 +58,22 @@ impl<B: Backend> Policy for CategoricalDistribution<B> {
         let states: BurnTensor<B, 2> = BurnTensor::stack(states.to_vec(), 0);
         let actions: BurnTensor<B, 2> = BurnTensor::stack(actions.to_vec(), 0);
         let logits = self.logits.forward(states);
-        let log_probs = softmax(logits, 1);
+        let log_probs = log_softmax(logits, 1);
         let log_probs = (actions * log_probs).sum_dim(1);
         Ok(log_probs.squeeze())
     }
 
+    fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+        let states: BurnTensor<B, 2> = BurnTensor::stack(states.to_vec(), 0);
+        let logits = self.logits.forward(states);
+        let probs = softmax(logits.clone(), 1);
+        let log_probs = log_softmax(logits, 1);
+        let entropy_per_state = (probs * log_probs).neg().sum_dim(1);
+        let entropy = entropy_per_state.mean();
+        Ok(entropy)
+    }
+
     fn std(&self) -> anyhow::Result<f32> {
-        todo!()
-    }
-
-    fn entropy(&self) -> anyhow::Result<Self::Tensor> {
-        todo!()
-    }
-
-    fn resample_noise(&mut self) -> anyhow::Result<()> {
-        todo!()
+        bail!("standard deviation is not defined for categorical distributions")
     }
 }

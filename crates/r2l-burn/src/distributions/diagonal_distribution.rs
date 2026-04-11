@@ -69,7 +69,7 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         Ok(log_probs.sum_dim(1).squeeze())
     }
 
-    fn entropy(&self) -> Result<Self::Tensor> {
+    fn entropy(&self, _states: &[Self::Tensor]) -> Result<Self::Tensor> {
         let device: <B as Backend>::Device = Default::default();
         let log_std = self.log_std.val();
         let entropy_per_dim = log_std.clone()

@@ -1,5 +1,5 @@
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
-use anyhow::Result;
+use anyhow::{Result, bail};
 use candle_core::{Device, Error, Tensor as CandleTensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
@@ -72,11 +72,17 @@ impl Policy for CategoricalDistribution {
         Ok(log_probs)
     }
 
-    fn std(&self) -> Result<f32> {
-        todo!()
+    fn entropy(&self, states: &[CandleTensor]) -> Result<CandleTensor> {
+        let states = CandleTensor::stack(states, 0)?;
+        let logits = self.logits.forward(&states)?;
+        let probs = softmax(&logits, 1)?;
+        let log_probs = log_softmax(&logits, 1)?;
+        let entropy_per_state = probs.mul(&log_probs)?.neg()?.sum(1)?;
+        let entropy = entropy_per_state.mean_all()?;
+        Ok(entropy)
     }
 
-    fn entropy(&self) -> Result<CandleTensor> {
-        todo!()
+    fn std(&self) -> Result<f32> {
+        bail!("standard deviation is not defined for categorical distributions")
     }
 }

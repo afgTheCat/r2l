@@ -16,7 +16,7 @@ pub trait Policy: Actor {
 
     fn std(&self) -> Result<f32>;
 
-    fn entropy(&self) -> Result<Self::Tensor>;
+    fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor>;
 
     fn resample_noise(&mut self) -> Result<()> {
         Ok(())

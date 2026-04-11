@@ -23,7 +23,7 @@ pub struct BatchStats {
 #[derive(Default, Debug, Clone)]
 pub struct PPOStats {
     pub batch_stats: Vec<BatchStats>,
-    pub std: f32,
+    pub std: Option<f32>,
     pub avarage_reward: f32,
     pub learning_rate: f64,
 }
@@ -108,8 +108,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
                     total_rewards += buffer.rewards().sum::<f32>();
                     total_episodes += buffer.dones().filter(|done| *done).count();
                 }
-                report.avarage_reward = total_rewards / total_episodes as f32;
-                report.std = module.get_policy().std().unwrap();
+                report.avarage_reward = total_rewards / total_episodes.min(1) as f32;
+                report.std = module.get_policy().std().ok();
                 report.learning_rate = module.policy_learning_rate();
                 tx.send(std::mem::take(report)).unwrap();
             }
@@ -127,7 +127,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
         data: &PPOBatchData<burn::Tensor<B, 1>>,
     ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy = module.get_policy().entropy().unwrap();
+        let entropy = module.get_policy().entropy(&data.observations).unwrap();
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         let approx_kl = {
             let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
@@ -210,7 +210,7 @@ impl PPOHook<R2lCandleLearningModule> for DefaultPPOHook<R2lCandleLearningModule
                     total_episodes += buffer.dones().filter(|x| *x).count();
                 }
                 report.avarage_reward = total_rewards / total_episodes as f32;
-                report.std = module.get_policy().std().unwrap();
+                report.std = module.get_policy().std().ok();
                 report.learning_rate = module.policy_learning_rate();
                 tx.send(std::mem::take(report)).unwrap();
             }
@@ -228,7 +228,7 @@ impl PPOHook<R2lCandleLearningModule> for DefaultPPOHook<R2lCandleLearningModule
         data: &PPOBatchData<candle_core::Tensor>,
     ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy = module.get_policy().entropy().unwrap();
+        let entropy = module.get_policy().entropy(&data.observations).unwrap();
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
         let ratio = data.ratio.detach();

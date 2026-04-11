@@ -34,10 +34,10 @@ impl Policy for CandleDistributionKind {
         }
     }
 
-    fn entropy(&self) -> Result<Self::Tensor> {
+    fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor> {
         match self {
-            Self::Categorical(cat) => cat.entropy(),
-            Self::DiagGaussian(diag) => diag.entropy(),
+            Self::Categorical(cat) => cat.entropy(states),
+            Self::DiagGaussian(diag) => diag.entropy(states),
         }
     }
 

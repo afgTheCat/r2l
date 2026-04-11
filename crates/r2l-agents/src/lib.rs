@@ -49,7 +49,7 @@ impl BatchIndexIterator {
 
     fn iter(&mut self) -> Option<Vec<(usize, usize)>> {
         let total_size = self.indicies.len();
-        if self.sample_size + self.current >= total_size {
+        if self.sample_size + self.current > total_size {
             return None;
         }
         let batch_indicies = &self.indicies[self.current..self.current + self.sample_size];

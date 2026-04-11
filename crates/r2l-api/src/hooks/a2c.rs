@@ -1,10 +1,7 @@
 use std::marker::PhantomData;
 
 use burn::tensor::backend::AutodiffBackend;
-use r2l_agents::{
-    HookResult,
-    on_policy_algorithms::a2c::A2CHook,
-};
+use r2l_agents::{HookResult, on_policy_algorithms::a2c::A2CHook};
 use r2l_burn::learning_module::{BurnActorCriticLMKind, BurnPolicy};
 use r2l_candle::learning_module::R2lCandleLearningModule;
 
