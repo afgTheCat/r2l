@@ -12,11 +12,8 @@ use crate::{
     },
     hooks::on_policy::LearningSchedule,
 };
-use r2l_core::{
-    agents::Agent,
-    env_builder::EnvBuilderTrait,
-    sampler::{StepTrajectoryBound, TrajectoryBound},
-};
+use r2l_core::{agents::Agent, env_builder::EnvBuilderTrait};
+use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
 impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, A2CAgentBuilder<M>, EB, BD>
 where

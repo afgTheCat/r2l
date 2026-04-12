@@ -1,9 +1,5 @@
-use r2l_core::{
-    buffers::{ExpandableTrajectoryContainer, Memory, variable_sized::VariableSizedStateBuffer},
-    env_builder::{EnvBuilder, EnvBuilderTrait},
-    sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound},
-    tensor::R2lTensor,
-};
+use r2l_core::env_builder::{EnvBuilder, EnvBuilderTrait};
+use r2l_sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound};
 
 pub struct SamplerBuilder<
     EB: EnvBuilderTrait,

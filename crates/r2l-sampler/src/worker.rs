@@ -1,15 +1,16 @@
-use crate::{
+use bimodal_array::ElementHandle;
+use crossbeam::channel::{Receiver, Sender};
+use r2l_core::{
     buffers::{ExpandableTrajectoryContainer, Memory},
     distributions::Actor,
     env::{Env, EnvironmentDescription, SnapShot},
     rng::RNG,
-    sampler::RolloutMode,
     tensor::R2lTensor,
 };
-use bimodal_array::ElementHandle;
-use crossbeam::channel::{Receiver, Sender};
 use rand::RngExt;
 use std::collections::HashMap;
+
+use crate::RolloutMode;
 
 pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
     pub env: E,

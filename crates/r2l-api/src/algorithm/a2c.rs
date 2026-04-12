@@ -1,8 +1,5 @@
-use r2l_core::{
-    env_builder::EnvBuilderTrait,
-    on_policy_algorithm::OnPolicyAlgorithm,
-    sampler::{FinalSampler, StepTrajectoryBound},
-};
+use r2l_core::{env_builder::EnvBuilderTrait, on_policy_algorithm::OnPolicyAlgorithm};
+use r2l_sampler::{FinalSampler, StepTrajectoryBound};
 
 use crate::{
     BurnBackend,

@@ -11,11 +11,8 @@ use crate::{
     },
     hooks::{on_policy::LearningSchedule, ppo::PPOStats},
 };
-use r2l_core::{
-    agents::Agent,
-    env_builder::EnvBuilderTrait,
-    sampler::{StepTrajectoryBound, TrajectoryBound},
-};
+use r2l_core::{agents::Agent, env_builder::EnvBuilderTrait};
+use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 use std::sync::mpsc::Sender;
 
 use crate::agents::ppo::{BurnPPO, CandlePPO};

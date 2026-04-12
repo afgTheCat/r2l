@@ -10,6 +10,7 @@ readme = "README.md"
 [dependencies]
 r2l-core = { workspace = true }
 r2l-agents = { workspace = true }
+r2l-sampler = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
 burn = { workspace = true }

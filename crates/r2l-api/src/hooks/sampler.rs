@@ -5,8 +5,8 @@ use r2l_core::{
     distributions::Actor,
     env::{Env, EnvironmentDescription},
     env_builder::EnvBuilderTrait,
-    sampler::PreprocessorY,
 };
+use r2l_sampler::PreprocessorY;
 use std::sync::{Arc, Mutex};
 
 pub struct EvaluatorOptions {

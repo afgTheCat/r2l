@@ -1,10 +1,7 @@
 use r2l_core::{
-    agents::Agent,
-    env::Space,
-    env_builder::EnvBuilderTrait,
-    on_policy_algorithm::OnPolicyAlgorithm,
-    sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound},
+    agents::Agent, env::Space, env_builder::EnvBuilderTrait, on_policy_algorithm::OnPolicyAlgorithm,
 };
+use r2l_sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
     builders::{

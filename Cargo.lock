@@ -6047,6 +6047,7 @@ dependencies = [
  "r2l-candle",
  "r2l-core",
  "r2l-gym",
+ "r2l-sampler",
  "rand 0.10.0",
  "ringbuffer",
 ]
@@ -6140,6 +6141,13 @@ dependencies = [
 [[package]]
 name = "r2l-sampler"
 version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bimodal-array",
+ "crossbeam",
+ "r2l-core",
+ "rand 0.10.0",
+]
 
 [[package]]
 name = "rand"

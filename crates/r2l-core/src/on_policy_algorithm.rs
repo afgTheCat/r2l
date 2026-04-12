@@ -1,7 +1,9 @@
-use crate::buffers::BufferWrapper;
+use crate::agents::Agent;
 use crate::buffers::TrajectoryContainer;
-use crate::sampler::ActorWrapper;
-use crate::{agents::Agent, sampler::Sampler};
+use crate::distributions::Actor;
+use crate::tensor::R2lTensor;
+use crate::utils::actor_wrapper::ActorWrapper;
+use crate::utils::buffer_wrapper::BufferWrapper;
 use anyhow::Result;
 
 macro_rules! break_on_hook_res {
@@ -10,6 +12,18 @@ macro_rules! break_on_hook_res {
             break;
         }
     };
+}
+
+pub trait Sampler {
+    type Tensor: R2lTensor;
+    type TrajectoryContainer: TrajectoryContainer<Tensor = Self::Tensor>;
+
+    fn collect_rollouts<P: Actor<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        policy: P,
+    ) -> impl AsRef<[Self::TrajectoryContainer]>;
+
+    fn shutdown(&mut self) {}
 }
 
 pub trait OnPolicyAlgorithmHooks {

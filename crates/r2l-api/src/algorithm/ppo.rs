@@ -3,11 +3,8 @@ use crate::{
     agents::ppo::{BurnPPO, CandlePPO},
     hooks::on_policy::DefaultOnPolicyAlgorightmsHooks,
 };
-use r2l_core::{
-    env_builder::EnvBuilderTrait,
-    on_policy_algorithm::OnPolicyAlgorithm,
-    sampler::{FinalSampler, StepTrajectoryBound},
-};
+use r2l_core::{env_builder::EnvBuilderTrait, on_policy_algorithm::OnPolicyAlgorithm};
+use r2l_sampler::{FinalSampler, StepTrajectoryBound};
 
 pub type PPOBurnAlgorithm<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
     OnPolicyAlgorithm<
