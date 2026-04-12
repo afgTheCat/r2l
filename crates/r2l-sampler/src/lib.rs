@@ -105,9 +105,7 @@ pub trait PreprocessorY<T: R2lTensor, B: TrajectoryContainer<Tensor = T>> {
 }
 
 // BD: collection method should probably be an enum!
-// TODO: this feels more like a builder to me, we will probably need a new version
 pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
-    preprocessor: Option<Box<dyn PreprocessorY<E::Tensor, BD::Container>>>,
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,
     rollout_mode: RolloutMode,
@@ -159,7 +157,6 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
             }
         };
         Self {
-            preprocessor,
             all_buffers,
             worker_pool,
             rollout_mode: collection_method.method(),
@@ -181,22 +178,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E
     ) -> impl AsRef<[Self::TrajectoryContainer]> {
         self.worker_pool.set_policy(policy.clone());
         let rollout_mode = self.rollout_mode;
-        if let Some(pre_processor) = &mut self.preprocessor {
-            let mut current_step = 0;
-            // TODO: with the new implementation, this might became trivial
-            let RolloutMode::StepBound { n_steps: steps } = rollout_mode else {
-                panic!("pre processors currently only support rollout bounds");
-            };
-            while current_step < steps {
-                let mut buffers = self.all_buffers.lock().unwrap();
-                pre_processor.preprocess_states(&policy, buffers.as_mut());
-                drop(buffers);
-                self.worker_pool.single_step();
-                current_step += 1;
-            }
-        } else {
-            self.worker_pool.collect(rollout_mode);
-        }
+        self.worker_pool.collect(rollout_mode);
         self.all_buffers.lock().unwrap()
     }
 

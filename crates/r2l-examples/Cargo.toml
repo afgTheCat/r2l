@@ -26,6 +26,7 @@ candle-core = { workspace = true }
 burn = { workspace = true }
 rand = "0.9.0"
 anyhow = { workspace = true }
+r2l-sampler = { workspace = true }
 
 [[example]]
 name = "r2l-tui"

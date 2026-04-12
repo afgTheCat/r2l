@@ -4,8 +4,8 @@ use r2l_api::{
     builders::ppo::algorithm::PPOAlgorithmBuilder,
     hooks::{on_policy::LearningSchedule, ppo::PPOStats},
 };
-use r2l_core::sampler::buffer::StepTrajectoryBound;
 use r2l_gym::GymEnvBuilder;
+use r2l_sampler::StepTrajectoryBound;
 use std::{
     sync::mpsc::{self, Receiver, Sender},
     thread,
