@@ -1,10 +1,9 @@
+use crate::hooks::ppo::DefaultPPOHook;
 use burn::{module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::ppo::PPO;
 use r2l_burn::{distributions::DistributionKind, learning_module::BurnActorCriticLMKind};
 use r2l_candle::{distributions::CandleDistributionKind, learning_module::R2lCandleLearningModule};
 use r2l_core::{agents::Agent, sampler::buffer::TrajectoryContainer};
-
-use crate::hooks::ppo::DefaultPPOHook;
 
 pub struct BurnPPO<B: AutodiffBackend>(
     pub  PPO<
