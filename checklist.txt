@@ -1,14 +1,8 @@
 Burn follow-ups
 
-- API PPO hook: KL early stop currently breaks only the current batch loop, not the remaining PPO epochs for the rollout update.
-- API PPO hook: avoid dividing average reward by zero when no episodes terminate in the rollout buffers.
-- Add PPO `clip_range_vf` support.
-  This needs old value predictions from rollout time plus clipped critic loss handling.
 - Tighten the `DiagGaussianDistribution` `log_std` shape contract in `crates/r2l-burn/src/distributions/diagonal_distribution.rs`.
   It is typed as `Tensor<B, 2>`, but some construction paths create it from a 1D shape / action-size vector.
   This currently compiles and works with the existing arithmetic, but the convention is loose and should be made explicit later.
-- sampler_hooks_2 should also be redone
-- better error handling! Currently the burn ppo does depend on candle's error for some reason
-- readd vpg
-- So I am rather happy about the hooks builder. I am also happy with how the OnPolicyAlgorithm looks right now. What we want is one good builder for PPO and to hook it up with the GUI and the TUI implementations.
-- Maybe we want the Buffer to be indexable for minibatching?
+- sampler_hooks_2 should also be redone -> Next release
+- better error handling! Currently the burn ppo does depend on candle's error for some reason -> Next release
+- Maybe we want the Buffer to be indexable for minibatching? -> Next release
