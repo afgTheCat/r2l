@@ -9,11 +9,12 @@ pub struct StandardPPOHookBuilder {
     vf_coeff: Option<f32>,
     target_kl: Option<f32>,
     gradient_clipping: Option<f32>,
+    n_envs: usize,
     tx: Option<Sender<PPOStats>>,
 }
 
-impl Default for StandardPPOHookBuilder {
-    fn default() -> Self {
+impl StandardPPOHookBuilder {
+    pub fn new(n_envs: usize) -> Self {
         Self {
             normalize_advantage: true,
             total_epochs: 10,
@@ -21,14 +22,9 @@ impl Default for StandardPPOHookBuilder {
             vf_coeff: None,
             target_kl: None,
             gradient_clipping: None,
+            n_envs,
             tx: None,
         }
-    }
-}
-
-impl StandardPPOHookBuilder {
-    pub fn new() -> Self {
-        Self::default()
     }
 
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
@@ -102,10 +98,9 @@ impl StandardPPOHookBuilder {
             }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
-            reporter: self.tx.map(|tx| DefaultPPOHookReporter {
-                report: PPOStats::default(),
-                tx,
-            }),
+            reporter: self
+                .tx
+                .map(|tx| DefaultPPOHookReporter::new(tx, self.n_envs)),
             _lm: PhantomData,
         }
     }

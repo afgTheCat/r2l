@@ -46,8 +46,51 @@ impl TargetKl {
 }
 
 pub struct DefaultPPOHookReporter {
-    pub report: PPOStats,
-    pub tx: Sender<PPOStats>,
+    report: PPOStats,
+    tx: Sender<PPOStats>,
+    unfinished_episode_rewards: Vec<f32>,
+    latest_average_reward: f32,
+}
+
+impl DefaultPPOHookReporter {
+    pub fn new(tx: Sender<PPOStats>, n_envs: usize) -> Self {
+        Self {
+            report: PPOStats::default(),
+            tx,
+            unfinished_episode_rewards: vec![0.; n_envs],
+            latest_average_reward: 0.,
+        }
+    }
+}
+
+impl DefaultPPOHookReporter {
+    fn update_average_reward<T: TrajectoryContainer>(&mut self, buffers: &[T]) {
+        let mut completed_episode_rewards = vec![];
+        for (running_reward, buffer) in self
+            .unfinished_episode_rewards
+            .iter_mut()
+            .zip(buffers.iter())
+        {
+            for (reward, done) in buffer.rewards().zip(buffer.dones()) {
+                *running_reward += reward;
+                if done {
+                    completed_episode_rewards.push(*running_reward);
+                    *running_reward = 0.;
+                }
+            }
+        }
+
+        if !completed_episode_rewards.is_empty() {
+            self.latest_average_reward = completed_episode_rewards.iter().sum::<f32>()
+                / completed_episode_rewards.len() as f32;
+        }
+        self.report.avarage_reward = self.latest_average_reward;
+    }
+
+    fn send_report(&mut self) {
+        self.tx.send(std::mem::take(&mut self.report)).unwrap();
+        self.report.avarage_reward = self.latest_average_reward;
+    }
 }
 
 pub struct DefaultPPOHook<T = ()> {
@@ -101,17 +144,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
         };
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
-            if let Some(DefaultPPOHookReporter { report, tx }) = &mut self.reporter {
-                let mut total_rewards: f32 = 0.;
-                let mut total_episodes: usize = 0;
-                for buffer in buffers {
-                    total_rewards += buffer.rewards().sum::<f32>();
-                    total_episodes += buffer.dones().filter(|done| *done).count();
-                }
-                report.avarage_reward = total_rewards / total_episodes.min(1) as f32;
-                report.std = module.get_policy().std().ok();
-                report.learning_rate = module.policy_learning_rate();
-                tx.send(std::mem::take(report)).unwrap();
+            if let Some(reporter) = &mut self.reporter {
+                reporter.update_average_reward(buffers);
+                reporter.report.std = module.get_policy().std().ok();
+                reporter.report.learning_rate = module.policy_learning_rate();
+                reporter.send_report();
             }
             Ok(HookResult::Break)
         } else {
@@ -202,17 +239,11 @@ impl PPOHook<R2lCandleLearningModule> for DefaultPPOHook<R2lCandleLearningModule
         };
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
-            if let Some(DefaultPPOHookReporter { report, tx }) = &mut self.reporter {
-                let mut total_rewards: f32 = 0.;
-                let mut total_episodes: usize = 0;
-                for buffer in buffers {
-                    total_rewards += buffer.rewards().sum::<f32>();
-                    total_episodes += buffer.dones().filter(|x| *x).count();
-                }
-                report.avarage_reward = total_rewards / total_episodes as f32;
-                report.std = module.get_policy().std().ok();
-                report.learning_rate = module.policy_learning_rate();
-                tx.send(std::mem::take(report)).unwrap();
+            if let Some(reporter) = &mut self.reporter {
+                reporter.update_average_reward(buffers);
+                reporter.report.std = module.get_policy().std().ok();
+                reporter.report.learning_rate = module.policy_learning_rate();
+                reporter.send_report();
             }
             Ok(HookResult::Break)
         } else {

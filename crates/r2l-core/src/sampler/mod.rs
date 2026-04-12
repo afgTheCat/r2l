@@ -47,6 +47,7 @@ pub trait PreprocessorY<T: R2lTensor, B: TrajectoryContainer<Tensor = T>> {
 }
 
 // BD: collection method should probably be an enum!
+// TODO: this feels more like a builder to me, we will probably need a new version
 pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
     preprocessor: Option<Box<dyn PreprocessorY<E::Tensor, BD::Container>>>,
     all_buffers: ArrayHandle<BD::Container>,

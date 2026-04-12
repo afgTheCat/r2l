@@ -1,10 +1,11 @@
 use crate::builders::policy_distribution::ActionSpaceType;
 use r2l_core::agents::Agent;
 
+// TODO: I am not even sure if we need this trait
 pub trait AgentBuilder {
     type Agent: Agent;
 
-    // TODO: the arguments to this funciton may not be final
+    // TODO: This API is heavily in progress
     fn build(
         self,
         observation_size: usize,

@@ -154,7 +154,7 @@ impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuiler<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
         OnPolicyAlgorightmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
-            agent_builder: PPOCandleLearningModuleBuilder::default(),
+            agent_builder: PPOCandleLearningModuleBuilder::new(n_envs),
             learning_schedule: LearningSchedule::RolloutBound {
                 total_rollouts: 300,
                 current_rollout: 0,
@@ -190,19 +190,6 @@ impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuiler<EB> {
             sampler_builder,
             learning_schedule,
             agent_builder: agent_builder.with_burn(),
-        }
-    }
-}
-
-impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuiler<EB> {
-    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
-        OnPolicyAlgorightmBuilder {
-            sampler_builder: SamplerBuilder::new(builder, n_envs),
-            agent_builder: PPOBurnLearningModuleBuilder::default(),
-            learning_schedule: LearningSchedule::RolloutBound {
-                total_rollouts: 300,
-                current_rollout: 0,
-            },
         }
     }
 }

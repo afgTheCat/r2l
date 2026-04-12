@@ -134,37 +134,10 @@ impl PPOAgentBuilder<PPOBurnBackend> {
     }
 }
 
-impl Default for PPOAgentBuilder<PPOBurnBackend> {
-    fn default() -> Self {
+impl PPOCandleLearningModuleBuilder {
+    pub fn new(n_envs: usize) -> Self {
         Self {
-            hook_builder: StandardPPOHookBuilder::default(),
-            ppo_params: PPOParams::default(),
-            distribution_builder: PolicyDistributionBuilder {
-                hidden_layers: vec![64, 64],
-                distribution_type: DistributionType::Dynamic,
-            },
-            actor_critic_type: LearningModuleBuilder {
-                learning_module_type: LearningModuleType::Paralell {
-                    value_layers: vec![64, 64],
-                    max_grad_norm: None,
-                },
-                params: ParamsAdamW {
-                    lr: 3e-4,
-                    beta1: 0.9,
-                    beta2: 0.999,
-                    eps: 1e-5,
-                    weight_decay: 1e-4,
-                },
-            },
-            backend: PPOBurnBackend,
-        }
-    }
-}
-
-impl Default for PPOAgentBuilder<PPOCandleBackend> {
-    fn default() -> Self {
-        Self {
-            hook_builder: StandardPPOHookBuilder::default(),
+            hook_builder: StandardPPOHookBuilder::new(n_envs),
             ppo_params: PPOParams::default(),
             distribution_builder: PolicyDistributionBuilder {
                 hidden_layers: vec![64, 64],
