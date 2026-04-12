@@ -1,7 +1,7 @@
 use r2l_core::{
     env_builder::EnvBuilderTrait,
     on_policy_algorithm::OnPolicyAlgorithm,
-    sampler::{FinalSampler, buffer::StepTrajectoryBound},
+    sampler::{FinalSampler, StepTrajectoryBound},
 };
 
 use crate::{

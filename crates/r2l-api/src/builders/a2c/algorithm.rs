@@ -15,7 +15,7 @@ use crate::{
 use r2l_core::{
     agents::Agent,
     env_builder::EnvBuilderTrait,
-    sampler::buffer::{StepTrajectoryBound, TrajectoryBound},
+    sampler::{StepTrajectoryBound, TrajectoryBound},
 };
 
 impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, A2CAgentBuilder<M>, EB, BD>

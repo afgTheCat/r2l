@@ -79,9 +79,3 @@ pub trait Env {
 }
 
 pub type EnvTensor<E> = <E as Env>::Tensor;
-
-#[derive(Debug, Clone, Copy)]
-pub enum RolloutMode {
-    EpisodeBound { n_episodes: usize },
-    StepBound { n_steps: usize },
-}

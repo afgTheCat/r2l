@@ -7,6 +7,7 @@ members = [
   "crates/r2l-agents",
   "crates/r2l-candle",
   "crates/r2l-burn",
+  "crates/r2l-sampler",
 ]
 resolver = "3"
 

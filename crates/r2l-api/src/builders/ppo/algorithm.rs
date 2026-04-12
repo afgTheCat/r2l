@@ -14,7 +14,7 @@ use crate::{
 use r2l_core::{
     agents::Agent,
     env_builder::EnvBuilderTrait,
-    sampler::buffer::{StepTrajectoryBound, TrajectoryBound},
+    sampler::{StepTrajectoryBound, TrajectoryBound},
 };
 use std::sync::mpsc::Sender;
 

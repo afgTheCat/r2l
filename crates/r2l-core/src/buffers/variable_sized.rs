@@ -1,4 +1,7 @@
-use crate::{sampler::buffer::TrajectoryContainer, tensor::R2lTensor};
+use crate::{
+    buffers::{ExpandableTrajectoryContainer, Memory, TrajectoryContainer},
+    tensor::R2lTensor,
+};
 
 #[derive(Clone)]
 pub struct VariableSizedStateBuffer<T: R2lTensor> {
@@ -58,5 +61,24 @@ impl<T: R2lTensor> TrajectoryContainer for VariableSizedStateBuffer<T> {
 
     fn trancuated(&self) -> impl Iterator<Item = bool> {
         self.trancuated.iter().copied()
+    }
+}
+
+impl<T: R2lTensor> ExpandableTrajectoryContainer for VariableSizedStateBuffer<T> {
+    fn push(&mut self, memory: Memory<Self::Tensor>) {
+        let Memory {
+            state,
+            next_state,
+            action,
+            reward,
+            terminated,
+            trancuated,
+        } = memory;
+        self.states.push(state);
+        self.next_states.push(next_state);
+        self.action.push(action);
+        self.rewards.push(reward);
+        self.terminated.push(terminated);
+        self.trancuated.push(trancuated);
     }
 }

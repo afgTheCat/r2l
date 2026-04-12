@@ -1,13 +1,11 @@
 pub mod on_policy_algorithms;
 
+use r2l_core::buffers::TrajectoryContainer;
 use r2l_core::distributions::Policy;
 use r2l_core::policies::ValueFunction;
 use r2l_core::tensor::R2lTensor;
+use r2l_core::utils::rollout_buffer::{Advantages, Returns};
 use r2l_core::{rng::RNG, utils::rollout_buffer::Logps};
-use r2l_core::{
-    sampler::buffer::TrajectoryContainer,
-    utils::rollout_buffer::{Advantages, Returns},
-};
 use rand::seq::SliceRandom;
 
 pub enum HookResult {

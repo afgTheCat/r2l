@@ -1,10 +1,10 @@
 use anyhow::Result;
 use r2l_core::{
     agents::Agent,
+    buffers::TrajectoryContainer,
     distributions::Policy,
     losses::PolicyValuesLosses,
     policies::OnPolicyLearningModule,
-    sampler::buffer::TrajectoryContainer,
     tensor::R2lTensorMath,
     utils::rollout_buffer::{Advantages, Returns},
 };

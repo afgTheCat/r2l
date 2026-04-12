@@ -6,7 +6,7 @@ use crate::{
 use r2l_core::{
     env_builder::EnvBuilderTrait,
     on_policy_algorithm::OnPolicyAlgorithm,
-    sampler::{FinalSampler, buffer::StepTrajectoryBound},
+    sampler::{FinalSampler, StepTrajectoryBound},
 };
 
 pub type PPOBurnAlgorithm<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =

@@ -3,10 +3,7 @@ use r2l_core::{
     env::Space,
     env_builder::EnvBuilderTrait,
     on_policy_algorithm::OnPolicyAlgorithm,
-    sampler::{
-        FinalSampler, Location,
-        buffer::{StepTrajectoryBound, TrajectoryBound},
-    },
+    sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound},
 };
 
 use crate::{

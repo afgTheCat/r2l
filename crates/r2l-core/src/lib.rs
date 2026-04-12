@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod buffers;
 pub mod distributions;
 pub mod env;
 pub mod env_builder;

@@ -1,14 +1,14 @@
-pub mod buffer;
 pub mod worker;
 
 use crate::{
+    buffers::{
+        ExpandableTrajectoryContainer, TrajectoryContainer, fix_sized::FixedSizeStateBuffer,
+        variable_sized::VariableSizedStateBuffer,
+    },
     distributions::Actor,
     env::Env,
     env_builder::{EnvBuilder, EnvBuilderTrait},
-    sampler::{
-        buffer::{TrajectoryBound, TrajectoryContainer},
-        worker::{ThreadWorker, ThreadWorkers, WorkerPool},
-    },
+    sampler::worker::{ThreadWorker, ThreadWorkers, WorkerPool},
     tensor::R2lTensor,
 };
 use crate::{env::EnvironmentDescription, sampler::worker::Worker};
@@ -22,6 +22,73 @@ use std::sync::Arc;
 pub enum RolloutMode {
     EpisodeBound { n_episodes: usize },
     StepBound { n_steps: usize },
+}
+
+pub trait TrajectoryBound: Send + Sync {
+    type Tensor: R2lTensor;
+    // The caontainer type that is able to work with the given trajectory bound
+    type Container: ExpandableTrajectoryContainer<Tensor = Self::Tensor>;
+
+    fn to_container(&self) -> Self::Container;
+    fn method(&self) -> RolloutMode;
+}
+
+pub struct StepTrajectoryBound<T: R2lTensor> {
+    steps: usize,
+    _phantom: PhantomData<T>,
+}
+
+impl<T: R2lTensor> StepTrajectoryBound<T> {
+    pub fn new(steps: usize) -> Self {
+        Self {
+            steps,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: R2lTensor> TrajectoryBound for StepTrajectoryBound<T> {
+    type Tensor = T;
+    type Container = FixedSizeStateBuffer<T>;
+
+    fn to_container(&self) -> Self::Container {
+        FixedSizeStateBuffer::new(self.steps)
+    }
+
+    fn method(&self) -> RolloutMode {
+        RolloutMode::StepBound {
+            n_steps: self.steps,
+        }
+    }
+}
+
+pub struct EpisodeTrajectoryBound<T: R2lTensor> {
+    episodes: usize,
+    _phantom: PhantomData<T>,
+}
+
+impl<T: R2lTensor> EpisodeTrajectoryBound<T> {
+    pub fn new(episodes: usize) -> Self {
+        Self {
+            episodes,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: R2lTensor> TrajectoryBound for EpisodeTrajectoryBound<T> {
+    type Tensor = T;
+    type Container = VariableSizedStateBuffer<T>;
+
+    fn to_container(&self) -> Self::Container {
+        VariableSizedStateBuffer::new()
+    }
+
+    fn method(&self) -> RolloutMode {
+        RolloutMode::EpisodeBound {
+            n_episodes: self.episodes,
+        }
+    }
 }
 
 pub trait Sampler {

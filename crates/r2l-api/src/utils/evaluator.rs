@@ -1,9 +1,9 @@
 use candle_core::{Device, Result};
 use r2l_core::{
+    buffers::variable_sized::VariableSizedStateBuffer,
     distributions::Actor,
     env::{Env, SnapShot},
     rng::RNG,
-    sampler::buffer::variable_size::VariableSizedStateBuffer,
 };
 use rand::RngExt;
 use std::sync::{Arc, Mutex};

@@ -1,9 +1,8 @@
 use r2l_core::{
+    buffers::{ExpandableTrajectoryContainer, Memory, variable_sized::VariableSizedStateBuffer},
     env_builder::{EnvBuilder, EnvBuilderTrait},
-    sampler::{
-        FinalSampler, Location,
-        buffer::{StepTrajectoryBound, TrajectoryBound},
-    },
+    sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound},
+    tensor::R2lTensor,
 };
 
 pub struct SamplerBuilder<

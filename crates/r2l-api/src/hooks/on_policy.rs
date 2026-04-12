@@ -1,8 +1,7 @@
 use anyhow::Result;
 use r2l_core::{
-    agents::Agent,
-    on_policy_algorithm::OnPolicyAlgorithmHooks,
-    sampler::{Sampler, buffer::TrajectoryContainer},
+    agents::Agent, buffers::TrajectoryContainer, on_policy_algorithm::OnPolicyAlgorithmHooks,
+    sampler::Sampler,
 };
 use std::marker::PhantomData;
 

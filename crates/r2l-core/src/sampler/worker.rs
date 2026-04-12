@@ -1,11 +1,9 @@
 use crate::{
+    buffers::{ExpandableTrajectoryContainer, Memory},
     distributions::Actor,
     env::{Env, EnvironmentDescription, SnapShot},
     rng::RNG,
-    sampler::{
-        RolloutMode,
-        buffer::{ExpandableTrajectoryContainer, Memory},
-    },
+    sampler::RolloutMode,
     tensor::R2lTensor,
 };
 use bimodal_array::ElementHandle;

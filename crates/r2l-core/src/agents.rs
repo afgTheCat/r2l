@@ -1,4 +1,4 @@
-use crate::{distributions::Actor, sampler::buffer::TrajectoryContainer, tensor::R2lTensor};
+use crate::{buffers::TrajectoryContainer, distributions::Actor, tensor::R2lTensor};
 use anyhow::Result;
 
 pub trait Agent {

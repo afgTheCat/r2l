@@ -1,10 +1,11 @@
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 use candle_core::{DType, Device, Result, Tensor};
 use r2l_core::{
+    buffers::EditableTrajectoryContainer,
     distributions::Actor,
     env::{Env, EnvironmentDescription},
     env_builder::EnvBuilderTrait,
-    sampler::{PreprocessorY, buffer::EditableTrajectoryContainer},
+    sampler::PreprocessorY,
 };
 use std::sync::{Arc, Mutex};
 

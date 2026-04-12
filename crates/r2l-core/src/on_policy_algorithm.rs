@@ -1,9 +1,7 @@
+use crate::buffers::BufferWrapper;
+use crate::buffers::TrajectoryContainer;
 use crate::sampler::ActorWrapper;
-use crate::sampler::buffer::wrapper::BufferWrapper;
-use crate::{
-    agents::Agent,
-    sampler::{Sampler, buffer::TrajectoryContainer},
-};
+use crate::{agents::Agent, sampler::Sampler};
 use anyhow::Result;
 
 macro_rules! break_on_hook_res {
