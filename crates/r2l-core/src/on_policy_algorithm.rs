@@ -1,10 +1,11 @@
+use anyhow::Result;
+
 use crate::agents::Agent;
 use crate::buffers::TrajectoryContainer;
 use crate::distributions::Actor;
 use crate::tensor::R2lTensor;
 use crate::utils::actor_wrapper::ActorWrapper;
 use crate::utils::buffer_wrapper::BufferWrapper;
-use anyhow::Result;
 
 macro_rules! break_on_hook_res {
     ($hook_res:expr) => {

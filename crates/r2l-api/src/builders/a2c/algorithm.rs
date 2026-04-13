@@ -1,3 +1,6 @@
+use r2l_core::{agents::Agent, env_builder::EnvBuilderTrait};
+use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
+
 use crate::{
     BurnBackend,
     agents::a2c::{BurnA2C, CandleA2C},
@@ -12,8 +15,6 @@ use crate::{
     },
     hooks::on_policy::LearningSchedule,
 };
-use r2l_core::{agents::Agent, env_builder::EnvBuilderTrait};
-use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
 impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, A2CAgentBuilder<M>, EB, BD>
 where

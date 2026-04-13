@@ -1,9 +1,11 @@
+use std::sync::Arc;
+
+use anyhow::Result;
+
 use crate::{
     env::{Env, EnvironmentDescription},
     tensor::R2lTensor,
 };
-use anyhow::Result;
-use std::sync::Arc;
 
 pub trait EnvBuilderTrait: Sync + Send + 'static {
     type Tensor: R2lTensor;

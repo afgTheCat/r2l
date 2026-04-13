@@ -1,4 +1,3 @@
-use crate::sequential::Sequential;
 use burn::{
     grad_clipping::GradientClipping,
     module::{AutodiffModule, Module, ModuleDisplay},
@@ -11,6 +10,8 @@ use r2l_core::{
     losses::PolicyValuesLosses,
     policies::{LearningModule, OnPolicyLearningModule, ValueFunction},
 };
+
+use crate::sequential::Sequential;
 
 // A series constraints that we need for the policy to work nicely with AdamW
 pub trait BurnPolicy<B: AutodiffBackend>:

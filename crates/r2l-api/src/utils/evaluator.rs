@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use candle_core::{Device, Result};
 use r2l_core::{
     buffers::variable_sized::VariableSizedStateBuffer,
@@ -6,7 +8,6 @@ use r2l_core::{
     rng::RNG,
 };
 use rand::RngExt;
-use std::sync::{Arc, Mutex};
 
 pub struct Evaluator<E: Env> {
     pub env: E,

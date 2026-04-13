@@ -1,3 +1,6 @@
+use std::sync::mpsc::{Receiver, Sender};
+use std::{f64, io, sync::mpsc};
+
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l_api::hooks::ppo::PPOStats;
 use r2l_api::{builders::ppo::algorithm::PPOAlgorithmBuilder, hooks::on_policy::LearningSchedule};
@@ -13,8 +16,6 @@ use ratatui::{
     text::Line,
     widgets::{Axis, Block, Borders, Chart, Dataset, Gauge, GraphType, Row, Table, Widget},
 };
-use std::sync::mpsc::{Receiver, Sender};
-use std::{f64, io, sync::mpsc};
 
 const ENT_COEFF: f32 = 0.001;
 const MAX_GRAD_NORM: f32 = 0.5;

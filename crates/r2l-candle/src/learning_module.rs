@@ -1,13 +1,14 @@
-use crate::{
-    distributions::CandleDistributionKind, optimizer::OptimizerWithMaxGrad,
-    thread_safe_sequential::ThreadSafeSequential,
-};
 use anyhow::{Ok, Result};
 use candle_core::{Device, Tensor as CandleTensor};
 use candle_nn::{Module, Optimizer};
 use r2l_core::{
     losses::PolicyValuesLosses,
     policies::{LearningModule, OnPolicyLearningModule, ValueFunction},
+};
+
+use crate::{
+    distributions::CandleDistributionKind, optimizer::OptimizerWithMaxGrad,
+    thread_safe_sequential::ThreadSafeSequential,
 };
 
 pub struct CandlePolicyValuesLosses {

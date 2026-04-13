@@ -1,8 +1,9 @@
-use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorMath};
 use burn::{
     prelude::Backend,
     tensor::{Tensor as BurnTensor, TensorData, backend::AutodiffBackend},
 };
+
+use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorMath};
 
 impl<B: Backend> From<R2lBuffer> for BurnTensor<B, 1> {
     fn from(value: R2lBuffer) -> Self {

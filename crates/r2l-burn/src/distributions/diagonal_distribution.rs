@@ -1,11 +1,13 @@
-use crate::sequential::Sequential;
+use std::f32;
+
 use anyhow::Result;
 use burn::module::{Module, Param};
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor as BurnTensor};
 use r2l_core::distributions::{Actor, Policy};
-use std::f32;
+
+use crate::sequential::Sequential;
 
 #[derive(Debug, Module)]
 pub struct DiagGaussianDistribution<B: Backend> {

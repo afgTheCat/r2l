@@ -1,15 +1,16 @@
 // Testing the capabilities according to model garden
 
+use std::{
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
+};
+
 use r2l_api::{
     builders::ppo::algorithm::PPOAlgorithmBuilder,
     hooks::{on_policy::LearningSchedule, ppo::PPOStats},
 };
 use r2l_gym::GymEnvBuilder;
 use r2l_sampler::StepTrajectoryBound;
-use std::{
-    sync::mpsc::{self, Receiver, Sender},
-    thread,
-};
 
 struct PPOTestConfig {
     env_name: &'static str,

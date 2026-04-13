@@ -2,12 +2,13 @@
 pub mod categorical_distribution;
 pub mod diagonal_distribution;
 
+use std::{f32, fmt::Debug};
+
 use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
 use r2l_core::distributions::{Actor, Policy};
-use std::{f32, fmt::Debug};
 
 #[derive(Debug, Clone)]
 pub enum CandleDistributionKind {

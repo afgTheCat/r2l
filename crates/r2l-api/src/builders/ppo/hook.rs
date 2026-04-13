@@ -1,5 +1,6 @@
-use crate::hooks::ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPOStats, TargetKl};
 use std::{marker::PhantomData, sync::mpsc::Sender};
+
+use crate::hooks::ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPOStats, TargetKl};
 
 #[derive(Debug, Clone)]
 pub struct StandardPPOHookBuilder {

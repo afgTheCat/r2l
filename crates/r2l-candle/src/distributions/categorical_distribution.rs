@@ -1,4 +1,3 @@
-use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 use anyhow::{Result, bail};
 use candle_core::{Device, Error, Tensor as CandleTensor};
 use candle_nn::VarBuilder;
@@ -7,6 +6,8 @@ use candle_nn::{Module, ops::softmax};
 use r2l_core::distributions::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
+
+use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 
 #[derive(Clone, Debug)]
 pub struct CategoricalDistribution {

@@ -1,3 +1,5 @@
+use std::{marker::PhantomData, sync::mpsc::Sender};
+
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
 use r2l_agents::{
@@ -9,7 +11,6 @@ use r2l_candle::learning_module::{CandlePolicyValuesLosses, R2lCandleLearningMod
 use r2l_core::{
     buffers::TrajectoryContainer, distributions::Policy, policies::OnPolicyLearningModule,
 };
-use std::{marker::PhantomData, sync::mpsc::Sender};
 
 #[derive(Debug, Clone)]
 pub struct BatchStats {

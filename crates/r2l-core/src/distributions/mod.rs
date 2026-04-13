@@ -1,5 +1,6 @@
-use crate::tensor::R2lTensor;
 use anyhow::Result;
+
+use crate::tensor::R2lTensor;
 
 pub trait Actor: Send + 'static {
     type Tensor: R2lTensor;

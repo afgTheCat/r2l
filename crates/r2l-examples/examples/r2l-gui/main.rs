@@ -3,6 +3,10 @@
 
 mod table;
 
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
+use std::time::Duration;
+
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
 use r2l_api::builders::ppo::algorithm::PPOAlgorithmBuilder;
@@ -12,9 +16,6 @@ use r2l_api::hooks::ppo::PPOStats;
 use r2l_examples::EventBox;
 use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{Location, StepTrajectoryBound};
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
-use std::time::Duration;
 
 use crate::table::UpdateTable;
 

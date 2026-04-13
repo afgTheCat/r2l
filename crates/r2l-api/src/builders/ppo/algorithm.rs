@@ -1,3 +1,9 @@
+use std::sync::mpsc::Sender;
+
+use r2l_core::{agents::Agent, env_builder::EnvBuilderTrait};
+use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
+
+use crate::agents::ppo::{BurnPPO, CandlePPO};
 use crate::{
     BurnBackend,
     builders::{
@@ -11,11 +17,6 @@ use crate::{
     },
     hooks::{on_policy::LearningSchedule, ppo::PPOStats},
 };
-use r2l_core::{agents::Agent, env_builder::EnvBuilderTrait};
-use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
-use std::sync::mpsc::Sender;
-
-use crate::agents::ppo::{BurnPPO, CandlePPO};
 
 impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, PPOAgentBuilder<M>, EB, BD>
 where

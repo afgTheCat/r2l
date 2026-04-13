@@ -1,6 +1,7 @@
+use std::fmt::Debug;
+
 use candle_core::{Result, Tensor, backprop::GradStore};
 use candle_nn::{AdamW, Optimizer, VarMap};
-use std::fmt::Debug;
 
 fn clip_grad(t: &Tensor, varmap: &VarMap, max_norm: f32) -> Result<GradStore> {
     let mut total_norm_squared = 0.0f32;

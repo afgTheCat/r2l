@@ -75,9 +75,10 @@ impl RunningMeanStd {
 
 #[cfg(test)]
 mod test {
-    use crate::utils::running_mean::{RunningMeanStd, biased_var};
     use candle_core::{Device, Result, Tensor};
     use rand::{RngExt, rng};
+
+    use crate::utils::running_mean::{RunningMeanStd, biased_var};
 
     #[test]
     fn test_biased_var() -> Result<()> {

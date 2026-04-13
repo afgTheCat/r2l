@@ -1,5 +1,6 @@
-use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorMath};
 use candle_core::{Device, Tensor as CandleTensor};
+
+use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorMath};
 
 impl From<R2lBuffer> for CandleTensor {
     fn from(val: R2lBuffer) -> Self {

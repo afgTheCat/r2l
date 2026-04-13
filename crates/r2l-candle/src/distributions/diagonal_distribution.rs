@@ -1,9 +1,11 @@
-use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
+use std::f32;
+
 use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use candle_nn::{Module, VarBuilder};
 use r2l_core::distributions::{Actor, Policy};
-use std::f32;
+
+use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 
 // TODO: we may want to resample the noise better than it is now
 #[derive(Debug, Clone)]

@@ -1,5 +1,6 @@
-use crate::hooks::a2c::DefaultA2CHook;
 use std::marker::PhantomData;
+
+use crate::hooks::a2c::DefaultA2CHook;
 
 #[derive(Debug, Clone, Default)]
 pub struct DefaultA2CHookBuilder;

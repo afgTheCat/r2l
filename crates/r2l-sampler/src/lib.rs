@@ -1,5 +1,8 @@
 pub mod worker;
 
+use std::marker::PhantomData;
+use std::sync::Arc;
+
 use bimodal_array::ArrayHandle;
 use bimodal_array::bimodal_array;
 use r2l_core::buffers::ExpandableTrajectoryContainer;
@@ -13,8 +16,6 @@ use r2l_core::env_builder::EnvBuilder;
 use r2l_core::env_builder::EnvBuilderTrait;
 use r2l_core::on_policy_algorithm::Sampler;
 use r2l_core::tensor::R2lTensor;
-use std::marker::PhantomData;
-use std::sync::Arc;
 
 use crate::worker::ThreadWorker;
 use crate::worker::ThreadWorkers;
@@ -115,7 +116,6 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
     pub fn build<EB: EnvBuilderTrait<Env = E>>(
         env_builder: EnvBuilder<EB>,
         collection_method: BD,
-        preprocessor: Option<Box<dyn PreprocessorY<E::Tensor, BD::Container>>>,
         location: Location,
     ) -> Self {
         let num_envs = env_builder.num_envs();

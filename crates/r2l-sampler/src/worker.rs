@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bimodal_array::ElementHandle;
 use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
@@ -8,7 +10,6 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 use rand::RngExt;
-use std::collections::HashMap;
 
 use crate::RolloutMode;
 

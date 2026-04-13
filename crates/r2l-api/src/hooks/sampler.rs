@@ -1,4 +1,5 @@
-use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
+use std::sync::{Arc, Mutex};
+
 use candle_core::{DType, Device, Result, Tensor};
 use r2l_core::{
     buffers::EditableTrajectoryContainer,
@@ -7,7 +8,8 @@ use r2l_core::{
     env_builder::EnvBuilderTrait,
 };
 use r2l_sampler::PreprocessorY;
-use std::sync::{Arc, Mutex};
+
+use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 
 pub struct EvaluatorOptions {
     pub eval_episodes: usize,

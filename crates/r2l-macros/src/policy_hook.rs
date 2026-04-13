@@ -207,9 +207,10 @@ impl ToTokens for PolicyTrait {
 
 #[cfg(test)]
 mod test {
-    use super::PolicyTrait;
     use quote::ToTokens;
     use syn::parse_quote;
+
+    use super::PolicyTrait;
 
     #[test]
     fn building_it() {

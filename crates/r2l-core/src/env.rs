@@ -1,6 +1,8 @@
-use crate::tensor::R2lTensor;
-use anyhow::Result;
 use std::fmt::Debug;
+
+use anyhow::Result;
+
+use crate::tensor::R2lTensor;
 
 #[derive(Debug, Clone)]
 pub enum Space<T> {

@@ -1,4 +1,3 @@
-use crate::sequential::Sequential;
 use anyhow::bail;
 use burn::{
     module::Module,
@@ -11,6 +10,8 @@ use burn::{
 use r2l_core::distributions::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
+
+use crate::sequential::Sequential;
 
 #[derive(Debug, Module)]
 pub struct CategoricalDistribution<B: Backend> {

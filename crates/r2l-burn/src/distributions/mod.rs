@@ -1,9 +1,10 @@
+use burn::{Tensor as BurnTensor, module::Module, prelude::Backend};
+use r2l_core::distributions::{Actor, Policy};
+
 use crate::distributions::{
     categorical_distribution::CategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution,
 };
-use burn::{Tensor as BurnTensor, module::Module, prelude::Backend};
-use r2l_core::distributions::{Actor, Policy};
 pub mod categorical_distribution;
 pub mod diagonal_distribution;
 

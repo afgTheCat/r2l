@@ -1,10 +1,9 @@
 pub mod fix_sized;
 pub mod variable_sized;
 
-use crate::buffers::fix_sized::FixedSizeStateBuffer;
-use crate::tensor::R2lTensor;
 use itertools::izip;
-use std::marker::PhantomData;
+
+use crate::tensor::R2lTensor;
 
 #[derive(Debug)]
 pub struct Memory<T> {

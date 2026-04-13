@@ -1,10 +1,11 @@
+use std::marker::PhantomData;
+
 use crate::{
     buffers::{
         ExpandableTrajectoryContainer, Memory, TrajectoryContainer, fix_sized::FixedSizeStateBuffer,
     },
     tensor::R2lTensor,
 };
-use std::marker::PhantomData;
 
 struct F32Iter<'a> {
     iter: Box<dyn Iterator<Item = f32> + 'a>,

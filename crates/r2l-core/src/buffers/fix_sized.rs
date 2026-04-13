@@ -1,9 +1,10 @@
+use ringbuffer::AllocRingBuffer;
+use ringbuffer::RingBuffer;
+
 use crate::{
     buffers::{ExpandableTrajectoryContainer, Memory, TrajectoryContainer},
     tensor::R2lTensor,
 };
-use ringbuffer::AllocRingBuffer;
-use ringbuffer::RingBuffer;
 
 pub struct FixedSizeStateBuffer<T: R2lTensor> {
     pub len: usize,

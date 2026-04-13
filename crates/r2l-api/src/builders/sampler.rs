@@ -49,6 +49,6 @@ impl<EB: EnvBuilderTrait, BD: TrajectoryBound<Tensor = EB::Tensor>> SamplerBuild
     }
 
     pub fn build(self) -> FinalSampler<EB::Env, BD> {
-        FinalSampler::build(self.env_builder, self.trajectory_bound, None, self.location)
+        FinalSampler::build(self.env_builder, self.trajectory_bound, self.location)
     }
 }
