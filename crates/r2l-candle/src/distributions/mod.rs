@@ -11,12 +11,12 @@ use diagonal_distribution::DiagGaussianDistribution;
 use r2l_core::models::{Actor, Policy};
 
 #[derive(Debug, Clone)]
-pub enum CandleDistributionKind {
+pub enum CandlePolicyKind {
     Categorical(CategoricalDistribution),
     DiagGaussian(DiagGaussianDistribution),
 }
 
-impl Actor for CandleDistributionKind {
+impl Actor for CandlePolicyKind {
     type Tensor = CandleTensor;
 
     fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -27,7 +27,7 @@ impl Actor for CandleDistributionKind {
     }
 }
 
-impl Policy for CandleDistributionKind {
+impl Policy for CandlePolicyKind {
     fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.log_probs(states, actions),

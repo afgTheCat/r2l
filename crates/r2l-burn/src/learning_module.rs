@@ -64,20 +64,20 @@ impl<B: AutodiffBackend> BurnPolicyValuesLosses<B> {
 // a model with a value function
 #[derive(Debug, Module)]
 pub struct ParalellActorModel<B: Backend, M: Module<B>> {
-    pub distr: M,
+    pub policy: M,
     pub value_net: Sequential<B>,
 }
 
 impl<B: Backend, M: Module<B>> ParalellActorModel<B, M> {
-    pub fn new(distr: M, value_net: Sequential<B>) -> Self {
-        Self { distr, value_net }
+    pub fn new(policy: M, value_net: Sequential<B>) -> Self {
+        Self { policy, value_net }
     }
 }
 
 pub struct BurnParalellActorCriticLM<B: AutodiffBackend, M: BurnPolicy<B>> {
     pub lr: f64,
     pub model: ParalellActorModel<B, M>,
-    // NOTE:the optimizer needs to be optimizing both the distr and the value net at the same time
+    // NOTE: the optimizer needs to be optimizing both the policy and the value net at the same time
     pub optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
 }
 
@@ -139,11 +139,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule
     type InferencePolicy = D::InnerModule;
 
     fn get_inference_policy(&self) -> Self::InferencePolicy {
-        self.model.distr.valid()
+        self.model.policy.valid()
     }
 
     fn get_policy(&self) -> &Self::Policy {
-        &self.model.distr
+        &self.model.policy
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {

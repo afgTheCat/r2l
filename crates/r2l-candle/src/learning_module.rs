@@ -7,7 +7,7 @@ use r2l_core::{
 };
 
 use crate::{
-    distributions::CandleDistributionKind, optimizer::OptimizerWithMaxGrad,
+    distributions::CandlePolicyKind, optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::ThreadSafeSequential,
 };
 
@@ -200,7 +200,7 @@ impl LearningModule for CandleActorCriticKind {
 }
 
 pub struct R2lCandleLearningModule {
-    pub policy: CandleDistributionKind,
+    pub policy: CandlePolicyKind,
     pub actor_critic: CandleActorCriticKind,
     pub value_function: SequentialValueFunction,
     pub device: Device,
@@ -235,8 +235,8 @@ impl LearningModule for R2lCandleLearningModule {
 impl OnPolicyLearningModule for R2lCandleLearningModule {
     type LearningTensor = CandleTensor;
     type InferenceTensor = CandleTensor;
-    type Policy = CandleDistributionKind;
-    type InferencePolicy = CandleDistributionKind;
+    type Policy = CandlePolicyKind;
+    type InferencePolicy = CandlePolicyKind;
 
     fn get_inference_policy(&self) -> Self::InferencePolicy {
         self.policy.clone()

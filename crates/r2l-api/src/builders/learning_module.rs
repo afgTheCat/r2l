@@ -38,8 +38,8 @@ pub struct LearningModuleBuilder {
 impl LearningModuleBuilder {
     pub fn build_candle(
         &self,
-        distribution_varmap: VarMap,
-        distr_var_builder: VarBuilder,
+        policy_varmap: VarMap,
+        policy_var_builder: VarBuilder,
         observation_size: usize,
         device: &Device,
     ) -> Result<(SequentialValueFunction, CandleActorCriticKind)> {
@@ -50,10 +50,10 @@ impl LearningModuleBuilder {
             } => {
                 let value_layers = &[&value_layers[..], &[1]].concat();
                 let value_net =
-                    build_sequential(observation_size, value_layers, &distr_var_builder, "value")?;
-                let optimizer = AdamW::new(distribution_varmap.all_vars(), self.params.clone())?;
+                    build_sequential(observation_size, value_layers, &policy_var_builder, "value")?;
+                let optimizer = AdamW::new(policy_varmap.all_vars(), self.params.clone())?;
                 let optimizer_with_grad =
-                    OptimizerWithMaxGrad::new(optimizer, *max_grad_norm, distribution_varmap);
+                    OptimizerWithMaxGrad::new(optimizer, *max_grad_norm, policy_varmap);
                 Ok((
                     SequentialValueFunction { value_net },
                     CandleActorCriticKind::Paralell(ParalellActorCriticLM {
@@ -72,12 +72,12 @@ impl LearningModuleBuilder {
                 let value_net =
                     build_sequential(observation_size, value_layers, &critic_vb, "value")?;
                 let policy_optimizer =
-                    AdamW::new(distribution_varmap.all_vars(), self.params.clone())?;
+                    AdamW::new(policy_varmap.all_vars(), self.params.clone())?;
                 let value_optimizer = AdamW::new(critic_varmap.all_vars(), self.params.clone())?;
                 let policy_optimizer_with_grad = OptimizerWithMaxGrad::new(
                     policy_optimizer,
                     *policy_max_grad_norm,
-                    distribution_varmap,
+                    policy_varmap,
                 );
                 let value_optimizer_with_grad =
                     OptimizerWithMaxGrad::new(value_optimizer, *value_max_grad_norm, critic_varmap);
@@ -95,7 +95,7 @@ impl LearningModuleBuilder {
     pub fn build_burn<B: AutodiffBackend, D: BurnPolicy<B>>(
         &self,
         observation_size: usize,
-        distr: D,
+        policy: D,
     ) -> BurnActorCriticLMKind<B, D> {
         match &self.learning_module_type {
             LearningModuleType::Paralell {
@@ -105,7 +105,7 @@ impl LearningModuleBuilder {
             } => {
                 let value_layers = &[&[observation_size][..], &value_layers[..], &[1]].concat();
                 let value_net: Sequential<B> = Sequential::build(value_layers);
-                let model = ParalellActorModel::new(distr, value_net);
+                let model = ParalellActorModel::new(policy, value_net);
                 BurnActorCriticLMKind::Paralell(BurnParalellActorCriticLM::new(
                     model,
                     AdamWConfig::new()
@@ -126,7 +126,7 @@ impl LearningModuleBuilder {
                 let value_layers = &[&[observation_size][..], &value_layers[..], &[1]].concat();
                 let value_net: Sequential<B> = Sequential::build(value_layers);
                 BurnActorCriticLMKind::Decoupled(BurnDecoupledActorCriticLM::new(
-                    distr,
+                    policy,
                     value_net,
                     AdamWConfig::new()
                         .with_beta_1(self.params.beta1 as f32)

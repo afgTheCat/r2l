@@ -10,7 +10,7 @@ use crate::{
         a2c::hook::DefaultA2CHookBuilder,
         agent::AgentBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
-        policy_distribution::{ActionSpaceType, DistributionType, PolicyDistributionBuilder},
+        policy_builder::{ActionSpaceType, DistributionType, PolicyBuilder},
     },
 };
 
@@ -24,7 +24,7 @@ pub struct A2CCandleBackend {
 
 pub struct A2CAgentBuilder<M> {
     pub a2c_params: A2CParams,
-    pub distribution_builder: PolicyDistributionBuilder,
+    pub policy_builder: PolicyBuilder,
     pub hook_builder: DefaultA2CHookBuilder,
     pub actor_critic_type: LearningModuleBuilder,
     pub backend: M,
@@ -38,7 +38,7 @@ impl Default for A2CAgentBuilder<A2CBurnBackend> {
         Self {
             hook_builder: DefaultA2CHookBuilder,
             a2c_params: A2CParams::default(),
-            distribution_builder: PolicyDistributionBuilder {
+            policy_builder: PolicyBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,
             },
@@ -65,7 +65,7 @@ impl Default for A2CAgentBuilder<A2CCandleBackend> {
         Self {
             hook_builder: DefaultA2CHookBuilder,
             a2c_params: A2CParams::default(),
-            distribution_builder: PolicyDistributionBuilder {
+            policy_builder: PolicyBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,
             },
@@ -97,18 +97,18 @@ impl<M> A2CAgentBuilder<M> {
         action_space: ActionSpaceType,
         device: &Device,
     ) -> anyhow::Result<R2lCandleLearningModule> {
-        let distribution_varmap = VarMap::new();
-        let distr_var_builder = VarBuilder::from_varmap(&distribution_varmap, DType::F32, device);
-        let policy = self.distribution_builder.build_candle(
-            &distr_var_builder,
+        let policy_varmap = VarMap::new();
+        let policy_var_builder = VarBuilder::from_varmap(&policy_varmap, DType::F32, device);
+        let policy = self.policy_builder.build_candle(
+            &policy_var_builder,
             device,
             observation_size,
             action_size,
             action_space,
         )?;
         let (value_function, learning_module) = self.actor_critic_type.build_candle(
-            distribution_varmap,
-            distr_var_builder,
+            policy_varmap,
+            policy_var_builder,
             observation_size,
             device,
         )?;
@@ -139,12 +139,12 @@ impl<M> A2CAgentBuilder<M> {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<BurnA2C<BurnBackend>> {
-        let distr = self.distribution_builder.build_burn::<BurnBackend>(
+        let policy = self.policy_builder.build_burn::<BurnBackend>(
             observation_size,
             action_size,
             action_space,
         )?;
-        let lm = self.actor_critic_type.build_burn(observation_size, distr);
+        let lm = self.actor_critic_type.build_burn(observation_size, policy);
         let hooks = self.hook_builder.build();
         let params = self.a2c_params;
         Ok(BurnA2C(A2C { lm, hooks, params }))

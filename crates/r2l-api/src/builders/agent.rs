@@ -1,6 +1,6 @@
 use r2l_core::on_policy::Agent;
 
-use crate::builders::policy_distribution::ActionSpaceType;
+use crate::builders::policy_builder::ActionSpaceType;
 
 // TODO: I am not even sure if we need this trait
 pub trait AgentBuilder {

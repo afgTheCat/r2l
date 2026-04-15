@@ -9,7 +9,7 @@ use crate::{
     builders::{
         agent::AgentBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
-        policy_distribution::{ActionSpaceType, DistributionType, PolicyDistributionBuilder},
+        policy_builder::{ActionSpaceType, DistributionType, PolicyBuilder},
         ppo::hook::StandardPPOHookBuilder,
     },
 };
@@ -24,7 +24,7 @@ pub struct PPOCandleBackend {
 
 pub struct PPOAgentBuilder<M = PPOCandleBackend> {
     pub ppo_params: PPOParams,
-    pub distribution_builder: PolicyDistributionBuilder,
+    pub policy_builder: PolicyBuilder,
     pub hook_builder: StandardPPOHookBuilder,
     pub actor_critic_type: LearningModuleBuilder,
     pub backend: M,
@@ -41,18 +41,18 @@ impl<M> PPOAgentBuilder<M> {
         action_space: ActionSpaceType,
         device: &Device,
     ) -> anyhow::Result<R2lCandleLearningModule> {
-        let distribution_varmap = VarMap::new();
-        let distr_var_builder = VarBuilder::from_varmap(&distribution_varmap, DType::F32, device);
-        let policy = self.distribution_builder.build_candle(
-            &distr_var_builder,
+        let policy_varmap = VarMap::new();
+        let policy_var_builder = VarBuilder::from_varmap(&policy_varmap, DType::F32, device);
+        let policy = self.policy_builder.build_candle(
+            &policy_var_builder,
             device,
             observation_size,
             action_size,
             action_space,
         )?;
         let (value_function, learning_module) = self.actor_critic_type.build_candle(
-            distribution_varmap,
-            distr_var_builder,
+            policy_varmap,
+            policy_var_builder,
             observation_size,
             device,
         )?;
@@ -83,12 +83,12 @@ impl<M> PPOAgentBuilder<M> {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<BurnPPO<BurnBackend>> {
-        let distr = self.distribution_builder.build_burn::<BurnBackend>(
+        let policy = self.policy_builder.build_burn::<BurnBackend>(
             observation_size,
             action_size,
             action_space,
         )?;
-        let lm = self.actor_critic_type.build_burn(observation_size, distr);
+        let lm = self.actor_critic_type.build_burn(observation_size, policy);
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
         Ok(BurnPPO(PPO { lm, hooks, params }))
@@ -99,7 +99,7 @@ impl PPOAgentBuilder<PPOCandleBackend> {
     pub fn with_burn(self) -> PPOAgentBuilder<PPOBurnBackend> {
         PPOAgentBuilder {
             ppo_params: self.ppo_params,
-            distribution_builder: self.distribution_builder,
+            policy_builder: self.policy_builder,
             hook_builder: self.hook_builder,
             actor_critic_type: self.actor_critic_type,
             backend: PPOBurnBackend,
@@ -116,7 +116,7 @@ impl PPOAgentBuilder<PPOBurnBackend> {
     pub fn with_candle(self, device: Device) -> PPOAgentBuilder<PPOCandleBackend> {
         PPOAgentBuilder {
             ppo_params: self.ppo_params,
-            distribution_builder: self.distribution_builder,
+            policy_builder: self.policy_builder,
             hook_builder: self.hook_builder,
             actor_critic_type: self.actor_critic_type,
             backend: PPOCandleBackend { device },
@@ -126,7 +126,7 @@ impl PPOAgentBuilder<PPOBurnBackend> {
     pub fn with_burn(self) -> PPOAgentBuilder<PPOBurnBackend> {
         PPOAgentBuilder {
             ppo_params: self.ppo_params,
-            distribution_builder: self.distribution_builder,
+            policy_builder: self.policy_builder,
             hook_builder: self.hook_builder,
             actor_critic_type: self.actor_critic_type,
             backend: PPOBurnBackend,
@@ -139,7 +139,7 @@ impl CandlePPOAgentBuilder {
         Self {
             hook_builder: StandardPPOHookBuilder::new(n_envs),
             ppo_params: PPOParams::default(),
-            distribution_builder: PolicyDistributionBuilder {
+            policy_builder: PolicyBuilder {
                 hidden_layers: vec![64, 64],
                 distribution_type: DistributionType::Dynamic,
             },

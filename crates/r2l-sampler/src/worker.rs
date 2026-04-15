@@ -23,7 +23,7 @@ pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> 
 
 pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
-    distr: &mut Box<dyn Actor<Tensor = T>>,
+    policy: &mut Box<dyn Actor<Tensor = T>>,
     last_state: Option<T>,
 ) -> Memory<T> {
     let state = if let Some(state) = last_state {
@@ -33,7 +33,7 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
         env.reset(seed).unwrap()
     };
 
-    let action = distr.get_action(state.clone()).unwrap();
+    let action = policy.get_action(state.clone()).unwrap();
     let SnapShot {
         state: mut next_state,
         reward,
@@ -66,7 +66,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
     }
 
     pub fn collect_rollout(&mut self, bound: RolloutMode) {
-        let Some(distr) = &mut self.policy else {
+        let Some(policy) = &mut self.policy else {
             todo!()
         };
         let mut buffer = self.buffer.lock().unwrap();
@@ -74,7 +74,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
             RolloutMode::StepBound { n_steps: steps } => {
                 for _ in 0..steps {
                     let last_state = self.last_state.take();
-                    let memory = step_env(&mut self.env, distr, last_state);
+                    let memory = step_env(&mut self.env, policy, last_state);
                     self.last_state = Some(memory.next_state.clone());
                     buffer.push(memory);
                 }
@@ -84,7 +84,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
                 loop {
                     // TODO: this is a bit awkward.
                     let last_state = self.last_state.take();
-                    let memory = step_env(&mut self.env, distr, last_state);
+                    let memory = step_env(&mut self.env, policy, last_state);
                     let terminates = memory.terminates();
                     self.last_state = Some(memory.next_state.clone());
                     buffer.push(memory);
@@ -133,8 +133,8 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
         loop {
             let command = self.rx.recv().unwrap();
             match command {
-                WorkerCommand::SetPolicy(distr) => {
-                    self.worker.policy = Some(distr);
+                WorkerCommand::SetPolicy(policy) => {
+                    self.worker.policy = Some(policy);
                     self.tx.send(WorkerResult::PolicySet).unwrap();
                 }
                 WorkerCommand::Collect(bound) => {
