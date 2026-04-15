@@ -62,19 +62,11 @@ impl R2lTensorMath for CandleTensor {
 }
 
 impl R2lBuffer {
-    pub fn to_candle_tensor(&self) -> CandleTensor {
-        self.clone().into()
-    }
-
     // TODO: implement this without relying on candle
     pub fn clamp(&self, min: &Self, max: &Self) -> Self {
-        let t = self.to_candle_tensor();
-        let min_t = min.to_candle_tensor();
-        let max_t = max.to_candle_tensor();
+        let t: CandleTensor = self.clone().into();
+        let min_t = min.clone().into();
+        let max_t = max.clone().into();
         (t.clamp(&min_t, &max_t).unwrap()).into()
-    }
-
-    pub fn from_candle_tensor(tensor: &CandleTensor) -> Self {
-        tensor.clone().into()
     }
 }

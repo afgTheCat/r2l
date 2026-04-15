@@ -11,9 +11,9 @@ use r2l_core::buffers::fix_sized::FixedSizeStateBuffer;
 use r2l_core::buffers::variable_sized::VariableSizedStateBuffer;
 use r2l_core::distributions::Actor;
 use r2l_core::env::Env;
+use r2l_core::env::EnvBuilder;
+use r2l_core::env::EnvBuilderTrait;
 use r2l_core::env::EnvironmentDescription;
-use r2l_core::env_builder::EnvBuilder;
-use r2l_core::env_builder::EnvBuilderTrait;
 use r2l_core::on_policy_algorithm::Sampler;
 use r2l_core::tensor::R2lTensor;
 

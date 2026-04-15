@@ -1,4 +1,4 @@
-use r2l_core::{env_builder::EnvBuilderTrait, on_policy_algorithm::OnPolicyAlgorithm};
+use r2l_core::{env::EnvBuilderTrait, on_policy_algorithm::OnPolicyAlgorithm};
 use r2l_sampler::{FinalSampler, StepTrajectoryBound};
 
 use crate::{

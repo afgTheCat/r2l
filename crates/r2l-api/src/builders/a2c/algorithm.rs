@@ -1,4 +1,4 @@
-use r2l_core::{agents::Agent, env_builder::EnvBuilderTrait};
+use r2l_core::{env::EnvBuilderTrait, on_policy_algorithm::Agent};
 use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
 use crate::{

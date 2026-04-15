@@ -1,9 +1,9 @@
 use anyhow::Result;
 use r2l_core::{
-    agents::Agent,
     buffers::TrajectoryContainer,
     distributions::Policy,
     losses::PolicyValuesLosses,
+    on_policy_algorithm::Agent,
     policies::{LearningModule, OnPolicyLearningModule},
     tensor::{R2lTensor, R2lTensorMath},
     utils::rollout_buffer::{Advantages, Logps, Returns},

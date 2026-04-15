@@ -1,6 +1,5 @@
 use anyhow::Result;
 
-use crate::agents::Agent;
 use crate::buffers::TrajectoryContainer;
 use crate::distributions::Actor;
 use crate::tensor::R2lTensor;
@@ -13,6 +12,19 @@ macro_rules! break_on_hook_res {
             break;
         }
     };
+}
+
+pub trait Agent {
+    type Tensor: R2lTensor;
+
+    type Actor: Actor<Tensor = Self::Tensor>;
+
+    fn actor(&self) -> Self::Actor;
+
+    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(&mut self, buffers: &[C])
+    -> Result<()>;
+
+    fn shutdown(&mut self) {}
 }
 
 pub trait Sampler {

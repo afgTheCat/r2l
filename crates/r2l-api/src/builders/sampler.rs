@@ -1,4 +1,4 @@
-use r2l_core::env_builder::{EnvBuilder, EnvBuilderTrait};
+use r2l_core::env::{EnvBuilder, EnvBuilderTrait};
 use r2l_sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound};
 
 pub struct SamplerBuilder<

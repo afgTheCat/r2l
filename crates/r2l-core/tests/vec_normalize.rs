@@ -31,7 +31,7 @@ impl Env for DummyRewardEnv {
         let truncated = self.t == 4;
         let state = Tensor::full(returned_value, (), &Device::Cpu).unwrap();
         let snapshot = SnapShot {
-            state: R2lBuffer::from_candle_tensor(&state),
+            state: R2lBuffer::from(state.clone()),
             reward: returned_value,
             terminated: false,
             trancuated: truncated,
@@ -47,7 +47,7 @@ impl Env for DummyRewardEnv {
             &Device::Cpu,
         )
         .unwrap();
-        let state = R2lBuffer::from_candle_tensor(&state);
+        let state = R2lBuffer::from(state.clone());
         Ok(state)
     }
 
@@ -57,8 +57,8 @@ impl Env for DummyRewardEnv {
         EnvironmentDescription::new(
             Space::Discrete(2),
             Space::Continous {
-                min: Some(R2lBuffer::from_candle_tensor(&min)),
-                max: Some(R2lBuffer::from_candle_tensor(&max)),
+                min: Some(R2lBuffer::from(min.clone())),
+                max: Some(R2lBuffer::from(max.clone())),
                 size: 1,
             },
         )
@@ -67,9 +67,9 @@ impl Env for DummyRewardEnv {
 
 #[test]
 fn test_obs_rms_vec_normalize() -> Result<()> {
-    let env_builders = vec![|_: &Device| DummyRewardEnv::new(0), |_: &Device| {
-        DummyRewardEnv::new(1)
-    }];
+    // let env_builders = vec![|_: &Device| DummyRewardEnv::new(0), |_: &Device| {
+    //     DummyRewardEnv::new(1)
+    // }];
     // let env_pool_builder = VecPoolType::Sequential(SequentialEnvHookTypes::NormalizerOnly {
     //     options: NormalizerOptions::default(),
     // });
