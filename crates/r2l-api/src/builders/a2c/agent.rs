@@ -90,7 +90,7 @@ impl Default for A2CAgentBuilder<A2CCandleBackend> {
 }
 
 impl<M> A2CAgentBuilder<M> {
-    fn build_candle_lm(
+    fn build_candle_module(
         &self,
         observation_size: usize,
         action_size: usize,
@@ -120,20 +120,20 @@ impl<M> A2CAgentBuilder<M> {
         })
     }
 
-    fn build_candle_with_device(
+    fn build_candle(
         self,
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
         device: Device,
     ) -> anyhow::Result<CandleA2C> {
-        let lm = self.build_candle_lm(observation_size, action_size, action_space, &device)?;
+        let lm = self.build_candle_module(observation_size, action_size, action_space, &device)?;
         let hooks = self.hook_builder.build();
         let params = self.a2c_params;
         Ok(CandleA2C(A2C { lm, hooks, params }))
     }
 
-    fn build_burn_agent(
+    fn build_burn(
         self,
         observation_size: usize,
         action_size: usize,
@@ -167,7 +167,7 @@ impl AgentBuilder for A2CAgentBuilder<A2CBurnBackend> {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<Self::Agent> {
-        self.build_burn_agent(observation_size, action_size, action_space)
+        self.build_burn(observation_size, action_size, action_space)
     }
 }
 
@@ -181,6 +181,6 @@ impl AgentBuilder for A2CAgentBuilder<A2CCandleBackend> {
         action_space: ActionSpaceType,
     ) -> anyhow::Result<Self::Agent> {
         let device = self.backend.device.clone();
-        self.build_candle_with_device(observation_size, action_size, action_space, device)
+        self.build_candle(observation_size, action_size, action_space, device)
     }
 }

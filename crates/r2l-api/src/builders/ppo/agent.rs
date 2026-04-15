@@ -30,11 +30,11 @@ pub struct PPOAgentBuilder<M = PPOCandleBackend> {
     pub backend: M,
 }
 
-pub type PPOBurnLearningModuleBuilder = PPOAgentBuilder<PPOBurnBackend>;
-pub type PPOCandleLearningModuleBuilder = PPOAgentBuilder<PPOCandleBackend>;
+pub type BurnPPOAgentBuilder = PPOAgentBuilder<PPOBurnBackend>;
+pub type CandlePPOAgentBuilder = PPOAgentBuilder<PPOCandleBackend>;
 
 impl<M> PPOAgentBuilder<M> {
-    fn build_candle_lm(
+    fn build_candle_module(
         &self,
         observation_size: usize,
         action_size: usize,
@@ -64,20 +64,20 @@ impl<M> PPOAgentBuilder<M> {
         })
     }
 
-    fn build_candle_with_device(
+    fn build_candle(
         self,
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
         device: Device,
     ) -> anyhow::Result<CandlePPO> {
-        let lm = self.build_candle_lm(observation_size, action_size, action_space, &device)?;
+        let lm = self.build_candle_module(observation_size, action_size, action_space, &device)?;
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
         Ok(CandlePPO(PPO { lm, hooks, params }))
     }
 
-    fn build_burn_agent(
+    fn build_burn(
         self,
         observation_size: usize,
         action_size: usize,
@@ -134,7 +134,7 @@ impl PPOAgentBuilder<PPOBurnBackend> {
     }
 }
 
-impl PPOCandleLearningModuleBuilder {
+impl CandlePPOAgentBuilder {
     pub fn new(n_envs: usize) -> Self {
         Self {
             hook_builder: StandardPPOHookBuilder::new(n_envs),
@@ -172,7 +172,7 @@ impl AgentBuilder for PPOAgentBuilder<PPOBurnBackend> {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<Self::Agent> {
-        self.build_burn_agent(observation_size, action_size, action_space)
+        self.build_burn(observation_size, action_size, action_space)
     }
 }
 
@@ -186,6 +186,6 @@ impl AgentBuilder for PPOAgentBuilder<PPOCandleBackend> {
         action_space: ActionSpaceType,
     ) -> anyhow::Result<Self::Agent> {
         let device = self.backend.device.clone();
-        self.build_candle_with_device(observation_size, action_size, action_space, device)
+        self.build_candle(observation_size, action_size, action_space, device)
     }
 }

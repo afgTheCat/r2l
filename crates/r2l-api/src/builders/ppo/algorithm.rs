@@ -11,9 +11,7 @@ use crate::{
         agent::AgentBuilder,
         learning_module::LearningModuleType,
         on_policy::OnPolicyAlgorightmBuilder,
-        ppo::agent::{
-            PPOAgentBuilder, PPOBurnLearningModuleBuilder, PPOCandleLearningModuleBuilder,
-        },
+        ppo::agent::{BurnPPOAgentBuilder, CandlePPOAgentBuilder, PPOAgentBuilder},
         sampler::SamplerBuilder,
     },
     hooks::{on_policy::LearningSchedule, ppo::PPOStats},
@@ -147,13 +145,13 @@ where
 }
 
 pub type PPOCandleAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    OnPolicyAlgorightmBuilder<CandlePPO, PPOCandleLearningModuleBuilder, EB, BD>;
+    OnPolicyAlgorightmBuilder<CandlePPO, CandlePPOAgentBuilder, EB, BD>;
 
 impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuiler<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
         OnPolicyAlgorightmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
-            agent_builder: PPOCandleLearningModuleBuilder::new(n_envs),
+            agent_builder: CandlePPOAgentBuilder::new(n_envs),
             learning_schedule: LearningSchedule::RolloutBound {
                 total_rollouts: 300,
                 current_rollout: 0,
@@ -163,7 +161,7 @@ impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuiler<EB> {
 }
 
 pub type PPOBurnAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    OnPolicyAlgorightmBuilder<BurnPPO<BurnBackend>, PPOBurnLearningModuleBuilder, EB, BD>;
+    OnPolicyAlgorightmBuilder<BurnPPO<BurnBackend>, BurnPPOAgentBuilder, EB, BD>;
 
 impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuiler<EB> {
     pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuiler<EB> {
