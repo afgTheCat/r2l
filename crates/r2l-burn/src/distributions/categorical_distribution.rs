@@ -7,7 +7,7 @@ use burn::{
         activation::{log_softmax, softmax},
     },
 };
-use r2l_core::policies::{Actor, Policy};
+use r2l_core::models::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 

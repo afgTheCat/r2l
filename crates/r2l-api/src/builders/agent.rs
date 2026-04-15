@@ -1,4 +1,4 @@
-use r2l_core::on_policy_algorithm::Agent;
+use r2l_core::on_policy::Agent;
 
 use crate::builders::policy_distribution::ActionSpaceType;
 

@@ -13,7 +13,8 @@ use r2l_burn::learning_module::{BurnActorCriticLMKind, BurnPolicy, BurnPolicyVal
 use r2l_candle::learning_module::{CandlePolicyValuesLosses, R2lCandleLearningModule};
 use r2l_core::{
     buffers::TrajectoryContainer,
-    policies::{OnPolicyLearningModule, Policy},
+    models::Policy,
+    on_policy::OnPolicyLearningModule,
 };
 
 #[derive(Debug, Clone)]

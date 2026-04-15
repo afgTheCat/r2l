@@ -20,7 +20,7 @@ pub struct DefaultA2CHook<T = ()> {
 impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnActorCriticLMKind<B, D>>
     for DefaultA2CHook<BurnActorCriticLMKind<B, D>>
 {
-    fn before_learning_hook<C: TrajectoryContainer<Tensor = <BurnActorCriticLMKind<B, D> as r2l_core::policies::OnPolicyLearningModule>::InferenceTensor>>(
+    fn before_learning_hook<C: TrajectoryContainer<Tensor = <BurnActorCriticLMKind<B, D> as r2l_core::on_policy::OnPolicyLearningModule>::InferenceTensor>>(
             &mut self,
             _params: &mut A2CParams,
             _module: &mut BurnActorCriticLMKind<B, D>,
@@ -34,7 +34,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnActorCriticLMKind<B, D>>
 }
 
 impl A2CHook<R2lCandleLearningModule> for DefaultA2CHook<R2lCandleLearningModule> {
-    fn before_learning_hook<B: TrajectoryContainer<Tensor = <R2lCandleLearningModule as r2l_core::policies::OnPolicyLearningModule>::InferenceTensor>>(
+    fn before_learning_hook<B: TrajectoryContainer<Tensor = <R2lCandleLearningModule as r2l_core::on_policy::OnPolicyLearningModule>::InferenceTensor>>(
             &mut self,
             _params: &mut A2CParams,
             _module: &mut R2lCandleLearningModule,

@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::buffers::TrajectoryContainer;
-use crate::policies::Actor;
+use crate::models::Actor;
 use crate::tensor::R2lTensor;
 use crate::utils::actor_wrapper::ActorWrapper;
 use crate::utils::buffer_wrapper::BufferWrapper;
@@ -21,8 +21,10 @@ pub trait Agent {
 
     fn actor(&self) -> Self::Actor;
 
-    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(&mut self, buffers: &[C])
-    -> Result<()>;
+    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
+        &mut self,
+        buffers: &[C],
+    ) -> Result<()>;
 
     fn shutdown(&mut self) {}
 }
@@ -46,7 +48,7 @@ pub trait OnPolicyAlgorithmHooks {
     fn init_hook(&mut self) -> bool;
 
     fn post_rollout_hook(&mut self, rollouts: &[<Self::S as Sampler>::TrajectoryContainer])
-    -> bool;
+        -> bool;
 
     fn post_training_hook(&mut self, actor: <Self::A as Agent>::Actor) -> bool;
 

@@ -5,7 +5,7 @@ use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{ExpandableTrajectoryContainer, Memory},
     env::{Env, EnvironmentDescription, SnapShot},
-    policies::Actor,
+    models::Actor,
     rng::RNG,
     tensor::R2lTensor,
 };

@@ -4,7 +4,7 @@ use candle_core::{DType, Device, Result, Tensor};
 use r2l_core::{
     buffers::EditableTrajectoryContainer,
     env::{Env, EnvBuilderTrait, EnvironmentDescription},
-    policies::Actor,
+    models::Actor,
 };
 use r2l_sampler::PreprocessorY;
 

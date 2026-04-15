@@ -2,7 +2,7 @@ use burn::{module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::a2c::A2C;
 use r2l_burn::{distributions::DistributionKind, learning_module::BurnActorCriticLMKind};
 use r2l_candle::{distributions::CandleDistributionKind, learning_module::R2lCandleLearningModule};
-use r2l_core::{buffers::TrajectoryContainer, on_policy_algorithm::Agent};
+use r2l_core::{buffers::TrajectoryContainer, on_policy::Agent};
 
 use crate::hooks::a2c::DefaultA2CHook;
 

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::Result;
 
-use crate::{policies::Actor, tensor::R2lTensor};
+use crate::{models::Actor, tensor::R2lTensor};
 
 #[derive(Debug, Clone)]
 pub struct ActorWrapper<A: Actor + Clone, T: R2lTensor> {

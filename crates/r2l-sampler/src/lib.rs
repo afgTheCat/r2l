@@ -13,8 +13,8 @@ use r2l_core::env::Env;
 use r2l_core::env::EnvBuilder;
 use r2l_core::env::EnvBuilderTrait;
 use r2l_core::env::EnvironmentDescription;
-use r2l_core::on_policy_algorithm::Sampler;
-use r2l_core::policies::Actor;
+use r2l_core::models::Actor;
+use r2l_core::on_policy::Sampler;
 use r2l_core::tensor::R2lTensor;
 
 use crate::worker::ThreadWorker;

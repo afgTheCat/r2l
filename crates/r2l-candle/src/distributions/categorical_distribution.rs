@@ -3,7 +3,7 @@ use candle_core::{Device, Error, Tensor as CandleTensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
-use r2l_core::policies::{Actor, Policy};
+use r2l_core::models::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 

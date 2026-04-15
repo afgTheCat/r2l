@@ -2,8 +2,8 @@ use anyhow::{Ok, Result};
 use candle_core::{Device, Tensor as CandleTensor};
 use candle_nn::{Module, Optimizer};
 use r2l_core::{
-    losses::PolicyValuesLosses,
-    policies::{LearningModule, OnPolicyLearningModule, ValueFunction},
+    models::{LearningModule, ValueFunction},
+    on_policy::{OnPolicyLearningModule, PolicyValuesLosses},
 };
 
 use crate::{

@@ -4,7 +4,7 @@ use candle_core::{Device, Result};
 use r2l_core::{
     buffers::variable_sized::VariableSizedStateBuffer,
     env::{Env, SnapShot},
-    policies::Actor,
+    models::Actor,
     rng::RNG,
 };
 use rand::RngExt;

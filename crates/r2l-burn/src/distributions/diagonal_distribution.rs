@@ -5,7 +5,7 @@ use burn::module::{Module, Param};
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor as BurnTensor};
-use r2l_core::policies::{Actor, Policy};
+use r2l_core::models::{Actor, Policy};
 
 use crate::sequential::Sequential;
 

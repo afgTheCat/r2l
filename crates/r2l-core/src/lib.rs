@@ -1,9 +1,8 @@
 pub mod buffers;
 pub mod env;
 pub mod error;
-pub mod losses;
-pub mod on_policy_algorithm;
-pub mod policies;
+pub mod models;
+pub mod on_policy;
 pub mod rng;
 pub mod tensor;
 pub mod utils;

@@ -8,7 +8,7 @@ use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
-use r2l_core::policies::{Actor, Policy};
+use r2l_core::models::{Actor, Policy};
 
 #[derive(Debug, Clone)]
 pub enum CandleDistributionKind {

@@ -5,7 +5,7 @@ pub mod vpg;
 use derive_more::Deref;
 use r2l_core::{
     buffers::TrajectoryContainer,
-    policies::{Policy, ValueFunction},
+    models::{Policy, ValueFunction},
     rng::RNG,
     tensor::R2lTensor,
 };

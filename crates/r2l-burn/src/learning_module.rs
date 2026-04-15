@@ -6,8 +6,8 @@ use burn::{
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_core::{
-    losses::PolicyValuesLosses,
-    policies::{LearningModule, OnPolicyLearningModule, Policy, ValueFunction},
+    models::{LearningModule, Policy, ValueFunction},
+    on_policy::{OnPolicyLearningModule, PolicyValuesLosses},
 };
 
 use crate::sequential::Sequential;
