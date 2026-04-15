@@ -8,9 +8,10 @@ use r2l_core::{
 };
 
 use crate::{
-    BatchIndexIterator, HookResult, buffers_advantages_and_returns,
-    on_policy_algorithms::{Advantages, Returns},
-    sample,
+    HookResult,
+    on_policy_algorithms::{
+        Advantages, BatchIndexIterator, Returns, buffers_advantages_and_returns, sample,
+    },
 };
 
 pub struct A2CParams {

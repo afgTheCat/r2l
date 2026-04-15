@@ -8,9 +8,11 @@ use r2l_core::{
 };
 
 use crate::{
-    BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps,
-    on_policy_algorithms::{Advantages, Logps, Returns},
-    sample,
+    HookResult,
+    on_policy_algorithms::{
+        Advantages, BatchIndexIterator, Logps, Returns, buffers_advantages_and_returns, logps,
+        sample,
+    },
 };
 
 pub struct PPOParams {

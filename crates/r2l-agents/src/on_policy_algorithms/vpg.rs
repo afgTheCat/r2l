@@ -7,10 +7,8 @@ use r2l_core::{
     tensor::R2lTensorMath,
 };
 
-use crate::{
-    BatchIndexIterator, buffers_advantages_and_returns,
-    on_policy_algorithms::{Advantages, Returns},
-    sample,
+use crate::on_policy_algorithms::{
+    Advantages, BatchIndexIterator, Returns, buffers_advantages_and_returns, sample,
 };
 
 pub struct VPGParams {
