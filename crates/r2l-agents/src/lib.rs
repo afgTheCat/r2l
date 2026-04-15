@@ -2,10 +2,11 @@ pub mod on_policy_algorithms;
 
 use r2l_core::buffers::TrajectoryContainer;
 use r2l_core::policies::{Policy, ValueFunction};
+use r2l_core::rng::RNG;
 use r2l_core::tensor::R2lTensor;
-use r2l_core::utils::rollout_buffer::{Advantages, Returns};
-use r2l_core::{rng::RNG, utils::rollout_buffer::Logps};
 use rand::seq::SliceRandom;
+
+use crate::on_policy_algorithms::{Advantages, Logps, Returns};
 
 pub enum HookResult {
     Continue,

@@ -4,7 +4,10 @@ use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
 use r2l_agents::{
     HookResult,
-    on_policy_algorithms::ppo::{PPOBatchData, PPOHook, PPOParams},
+    on_policy_algorithms::{
+        Advantages, Returns,
+        ppo::{PPOBatchData, PPOHook, PPOParams},
+    },
 };
 use r2l_burn::learning_module::{BurnActorCriticLMKind, BurnPolicy, BurnPolicyValuesLosses};
 use r2l_candle::learning_module::{CandlePolicyValuesLosses, R2lCandleLearningModule};
@@ -117,8 +120,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnActorCriticLMKind<B, D>>
         _params: &mut PPOParams,
         module: &mut BurnActorCriticLMKind<B, D>,
         _buffers: &[T],
-        advantages: &mut r2l_core::utils::rollout_buffer::Advantages,
-        _returns: &mut r2l_core::utils::rollout_buffer::Returns,
+        advantages: &mut Advantages,
+        _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
         self.current_epoch = 0;
         if self.normalize_advantage {
@@ -216,8 +219,8 @@ impl PPOHook<R2lCandleLearningModule> for DefaultPPOHook<R2lCandleLearningModule
         _params: &mut PPOParams,
         module: &mut R2lCandleLearningModule,
         _buffers: &[B],
-        advantages: &mut r2l_core::utils::rollout_buffer::Advantages,
-        _returns: &mut r2l_core::utils::rollout_buffer::Returns,
+        advantages: &mut Advantages,
+        _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
         self.current_epoch = 0;
         if self.normalize_advantage {

@@ -5,10 +5,13 @@ use r2l_core::{
     on_policy_algorithm::Agent,
     policies::{OnPolicyLearningModule, Policy},
     tensor::R2lTensorMath,
-    utils::rollout_buffer::{Advantages, Returns},
 };
 
-use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, sample};
+use crate::{
+    BatchIndexIterator, HookResult, buffers_advantages_and_returns,
+    on_policy_algorithms::{Advantages, Returns},
+    sample,
+};
 
 pub struct A2CParams {
     pub gamma: f32,

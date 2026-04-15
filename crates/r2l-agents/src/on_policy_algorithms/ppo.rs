@@ -5,10 +5,13 @@ use r2l_core::{
     on_policy_algorithm::Agent,
     policies::{LearningModule, OnPolicyLearningModule, Policy},
     tensor::{R2lTensor, R2lTensorMath},
-    utils::rollout_buffer::{Advantages, Logps, Returns},
 };
 
-use crate::{BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps, sample};
+use crate::{
+    BatchIndexIterator, HookResult, buffers_advantages_and_returns, logps,
+    on_policy_algorithms::{Advantages, Logps, Returns},
+    sample,
+};
 
 pub struct PPOParams {
     pub clip_range: f32,

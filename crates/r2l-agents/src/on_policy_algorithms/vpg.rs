@@ -7,7 +7,11 @@ use r2l_core::{
     tensor::R2lTensorMath,
 };
 
-use crate::{BatchIndexIterator, buffers_advantages_and_returns, sample};
+use crate::{
+    BatchIndexIterator, buffers_advantages_and_returns,
+    on_policy_algorithms::{Advantages, Returns},
+    sample,
+};
 
 pub struct VPGParams {
     pub gamma: f32,
@@ -34,8 +38,8 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
     fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
         &mut self,
         buffers: &[B],
-        advantages: &r2l_core::utils::rollout_buffer::Advantages,
-        returns: &r2l_core::utils::rollout_buffer::Returns,
+        advantages: &Advantages,
+        returns: &Returns,
     ) -> anyhow::Result<()> {
         let mut index_iterator = BatchIndexIterator::new(buffers, self.params.sample_size);
         let lm = &mut self.lm;
