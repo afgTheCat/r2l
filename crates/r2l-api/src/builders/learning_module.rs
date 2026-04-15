@@ -71,8 +71,7 @@ impl LearningModuleBuilder {
                 let value_layers = &[&value_layers[..], &[1]].concat();
                 let value_net =
                     build_sequential(observation_size, value_layers, &critic_vb, "value")?;
-                let policy_optimizer =
-                    AdamW::new(policy_varmap.all_vars(), self.params.clone())?;
+                let policy_optimizer = AdamW::new(policy_varmap.all_vars(), self.params.clone())?;
                 let value_optimizer = AdamW::new(critic_varmap.all_vars(), self.params.clone())?;
                 let policy_optimizer_with_grad = OptimizerWithMaxGrad::new(
                     policy_optimizer,

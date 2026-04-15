@@ -5,9 +5,7 @@ use r2l_core::{
 use r2l_sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
-    builders::{
-        agent::AgentBuilder, policy_builder::ActionSpaceType, sampler::SamplerBuilder,
-    },
+    builders::{agent::AgentBuilder, policy_builder::ActionSpaceType, sampler::SamplerBuilder},
     hooks::on_policy::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule},
 };
 
