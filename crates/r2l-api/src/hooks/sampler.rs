@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use candle_core::{DType, Device, Result, Tensor};
 use r2l_core::{
     buffers::EditableTrajectoryContainer,
-    distributions::Actor,
     env::{Env, EnvBuilderTrait, EnvironmentDescription},
+    policies::Actor,
 };
 use r2l_sampler::PreprocessorY;
 

@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::buffers::TrajectoryContainer;
-use crate::distributions::Actor;
+use crate::policies::Actor;
 use crate::tensor::R2lTensor;
 use crate::utils::actor_wrapper::ActorWrapper;
 use crate::utils::buffer_wrapper::BufferWrapper;
@@ -31,9 +31,9 @@ pub trait Sampler {
     type Tensor: R2lTensor;
     type TrajectoryContainer: TrajectoryContainer<Tensor = Self::Tensor>;
 
-    fn collect_rollouts<P: Actor<Tensor = Self::Tensor> + Clone>(
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
-        policy: P,
+        actor: A,
     ) -> impl AsRef<[Self::TrajectoryContainer]>;
 
     fn shutdown(&mut self) {}
@@ -48,7 +48,7 @@ pub trait OnPolicyAlgorithmHooks {
     fn post_rollout_hook(&mut self, rollouts: &[<Self::S as Sampler>::TrajectoryContainer])
     -> bool;
 
-    fn post_training_hook(&mut self, policy: <Self::A as Agent>::Actor) -> bool;
+    fn post_training_hook(&mut self, actor: <Self::A as Agent>::Actor) -> bool;
 
     fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()>;
 }
@@ -76,9 +76,9 @@ where
             return Ok(());
         }
         loop {
-            let policy = self.agent.actor();
-            let policy = ActorWrapper::new(policy);
-            let buffers = self.sampler.collect_rollouts(policy);
+            let actor = self.agent.actor();
+            let actor = ActorWrapper::new(actor);
+            let buffers = self.sampler.collect_rollouts(actor);
             break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
 
             let buffers = buffers
@@ -87,8 +87,8 @@ where
                 .map(|b| BufferWrapper::new(b))
                 .collect::<Vec<_>>();
             self.agent.learn(&buffers)?;
-            let policy = self.agent.actor();
-            break_on_hook_res!(self.hooks.post_training_hook(policy));
+            let actor = self.agent.actor();
+            break_on_hook_res!(self.hooks.post_training_hook(actor));
         }
 
         self.hooks.shutdown_hook(&mut self.agent, &mut self.sampler)

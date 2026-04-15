@@ -4,8 +4,8 @@ use bimodal_array::ElementHandle;
 use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{ExpandableTrajectoryContainer, Memory},
-    distributions::Actor,
     env::{Env, EnvironmentDescription, SnapShot},
+    policies::Actor,
     rng::RNG,
     tensor::R2lTensor,
 };

@@ -3,7 +3,7 @@ use std::f32;
 use anyhow::Result;
 use candle_core::Tensor as CandleTensor;
 use candle_nn::{Module, VarBuilder};
-use r2l_core::distributions::{Actor, Policy};
+use r2l_core::policies::{Actor, Policy};
 
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 

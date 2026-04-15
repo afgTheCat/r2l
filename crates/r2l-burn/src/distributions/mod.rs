@@ -1,5 +1,5 @@
 use burn::{Tensor as BurnTensor, module::Module, prelude::Backend};
-use r2l_core::distributions::{Actor, Policy};
+use r2l_core::policies::{Actor, Policy};
 
 use crate::distributions::{
     categorical_distribution::CategoricalDistribution,

@@ -9,7 +9,8 @@ use r2l_agents::{
 use r2l_burn::learning_module::{BurnActorCriticLMKind, BurnPolicy, BurnPolicyValuesLosses};
 use r2l_candle::learning_module::{CandlePolicyValuesLosses, R2lCandleLearningModule};
 use r2l_core::{
-    buffers::TrajectoryContainer, distributions::Policy, policies::OnPolicyLearningModule,
+    buffers::TrajectoryContainer,
+    policies::{OnPolicyLearningModule, Policy},
 };
 
 #[derive(Debug, Clone)]

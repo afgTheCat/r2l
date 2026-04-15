@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use candle_core::{Device, Result};
 use r2l_core::{
     buffers::variable_sized::VariableSizedStateBuffer,
-    distributions::Actor,
     env::{Env, SnapShot},
+    policies::Actor,
     rng::RNG,
 };
 use rand::RngExt;

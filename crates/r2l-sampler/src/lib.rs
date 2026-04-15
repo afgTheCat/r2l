@@ -9,12 +9,12 @@ use r2l_core::buffers::ExpandableTrajectoryContainer;
 use r2l_core::buffers::TrajectoryContainer;
 use r2l_core::buffers::fix_sized::FixedSizeStateBuffer;
 use r2l_core::buffers::variable_sized::VariableSizedStateBuffer;
-use r2l_core::distributions::Actor;
 use r2l_core::env::Env;
 use r2l_core::env::EnvBuilder;
 use r2l_core::env::EnvBuilderTrait;
 use r2l_core::env::EnvironmentDescription;
 use r2l_core::on_policy_algorithm::Sampler;
+use r2l_core::policies::Actor;
 use r2l_core::tensor::R2lTensor;
 
 use crate::worker::ThreadWorker;

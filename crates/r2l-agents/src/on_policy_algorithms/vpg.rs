@@ -1,7 +1,10 @@
 use anyhow::Result;
 use r2l_core::{
-    buffers::TrajectoryContainer, distributions::Policy, losses::PolicyValuesLosses,
-    on_policy_algorithm::Agent, policies::OnPolicyLearningModule, tensor::R2lTensorMath,
+    buffers::TrajectoryContainer,
+    losses::PolicyValuesLosses,
+    on_policy_algorithm::Agent,
+    policies::{OnPolicyLearningModule, Policy},
+    tensor::R2lTensorMath,
 };
 
 use crate::{BatchIndexIterator, buffers_advantages_and_returns, sample};
