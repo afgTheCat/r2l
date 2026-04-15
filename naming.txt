@@ -8,10 +8,6 @@ PPO naming concerns
 - Concern: this is a type-level marker, not a PPO.
 - Suggested names: `BurnKind`, `BurnMode`, `BurnBackendOnly`
 
-12. `distribution_builder`
-- Concern: maybe fine, but if this always builds policy-side structure then `policy_builder` may be clearer.
-- Suggested names: `policy_builder`
-
 Suggested overall naming direction
 
 - Use `Builder` for concrete builders.
@@ -36,18 +32,6 @@ Main concern to fix first
 
 
 r2l-api file naming concerns
-
-1. `crates/r2l-api/src/distribution.rs`
-- Concern: too vague. The file mainly contains `DistributionBuilder` and action-space-driven backend construction logic, not the general concept of "distribution".
-- Suggested names: `distribution_builder.rs`, `policy_distribution.rs`
-
-2. `crates/r2l-api/src/learning_module.rs`
-- Concern: the file is primarily builder/assembly code, not just learning module definitions.
-- Suggested names: `learning_module_builder.rs`
-
-3. `crates/r2l-api/src/sampler.rs`
-- Concern: this file mostly contains `SamplerBuilder`.
-- Suggested names: `sampler_builder.rs`
 
 4. `crates/r2l-api/src/algorithm/mod.rs`
 - Concern: singular `algorithm` is a bit awkward for a module containing builder infrastructure and PPO-specific entrypoints.
