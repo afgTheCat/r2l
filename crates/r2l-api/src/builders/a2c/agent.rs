@@ -36,7 +36,7 @@ pub type A2CCandleLearningModuleBuilder = A2CAgentBuilder<A2CCandleBackend>;
 impl Default for A2CAgentBuilder<A2CBurnBackend> {
     fn default() -> Self {
         Self {
-            hook_builder: DefaultA2CHookBuilder::new(),
+            hook_builder: DefaultA2CHookBuilder::default(),
             a2c_params: A2CParams::default(),
             policy_builder: PolicyBuilder {
                 hidden_layers: vec![64, 64],
@@ -63,7 +63,7 @@ impl Default for A2CAgentBuilder<A2CBurnBackend> {
 impl Default for A2CAgentBuilder<A2CCandleBackend> {
     fn default() -> Self {
         Self {
-            hook_builder: DefaultA2CHookBuilder::new(),
+            hook_builder: DefaultA2CHookBuilder::default(),
             a2c_params: A2CParams::default(),
             policy_builder: PolicyBuilder {
                 hidden_layers: vec![64, 64],

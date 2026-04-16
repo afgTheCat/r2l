@@ -1,3 +1,5 @@
+use std::sync::mpsc::Sender;
+
 use r2l_core::{env::EnvBuilderTrait, on_policy::algorithm::Agent};
 use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
@@ -13,7 +15,7 @@ use crate::{
         on_policy::OnPolicyAlgorightmBuilder,
         sampler::SamplerBuilder,
     },
-    hooks::on_policy::LearningSchedule,
+    hooks::{a2c::A2CStats, on_policy::LearningSchedule},
 };
 
 impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, A2CAgentBuilder<M>, EB, BD>
@@ -49,6 +51,11 @@ where
             .agent_builder
             .hook_builder
             .with_gradient_clipping(gradient_clipping);
+        self
+    }
+
+    pub fn with_reporter(mut self, tx: Option<Sender<A2CStats>>) -> Self {
+        self.agent_builder.hook_builder = self.agent_builder.hook_builder.with_tx(tx);
         self
     }
 
@@ -125,9 +132,11 @@ pub type A2CBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderT
 
 impl<EB: EnvBuilderTrait> A2CBurnAlgorithmBuilder<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+        let mut agent_builder = A2CBurnLearningModuleBuilder::default();
+        agent_builder.hook_builder = crate::builders::a2c::hook::DefaultA2CHookBuilder::new(n_envs);
         OnPolicyAlgorightmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
-            agent_builder: A2CBurnLearningModuleBuilder::default(),
+            agent_builder,
             learning_schedule: LearningSchedule::RolloutBound {
                 total_rollouts: 300,
                 current_rollout: 0,
@@ -141,9 +150,11 @@ pub type A2CCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilde
 
 impl<EB: EnvBuilderTrait> A2CCandleAlgorithmBuilder<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+        let mut agent_builder = A2CCandleLearningModuleBuilder::default();
+        agent_builder.hook_builder = crate::builders::a2c::hook::DefaultA2CHookBuilder::new(n_envs);
         OnPolicyAlgorightmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
-            agent_builder: A2CCandleLearningModuleBuilder::default(),
+            agent_builder,
             learning_schedule: LearningSchedule::RolloutBound {
                 total_rollouts: 300,
                 current_rollout: 0,
@@ -151,3 +162,6 @@ impl<EB: EnvBuilderTrait> A2CCandleAlgorithmBuilder<EB> {
         }
     }
 }
+
+pub type A2CAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+    A2CCandleAlgorithmBuilder<EB, BD>;

@@ -52,6 +52,15 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
+
+    fn after_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
+        &mut self,
+        _params: &mut A2CParams,
+        _module: &mut M,
+        _buffers: &[B],
+    ) -> anyhow::Result<HookResult> {
+        Ok(HookResult::Continue)
+    }
 }
 
 pub struct A2CBatchData<T: R2lTensor> {
@@ -133,6 +142,11 @@ impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
             &mut returns
         ));
         self.batch_loop(buffers, &advantages, &returns)?;
+        crate::process_hook_result!(self.hooks.after_learning_hook(
+            &mut self.params,
+            &mut self.lm,
+            buffers
+        ));
         Ok(())
     }
 }

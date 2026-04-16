@@ -1,6 +1,6 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::mpsc::Sender};
 
-use crate::hooks::a2c::DefaultA2CHook;
+use crate::hooks::a2c::{A2CStats, DefaultA2CHook, DefaultA2CHookReporter};
 
 #[derive(Debug, Clone)]
 pub struct DefaultA2CHookBuilder {
@@ -8,6 +8,8 @@ pub struct DefaultA2CHookBuilder {
     entropy_coeff: f32,
     vf_coeff: Option<f32>,
     gradient_clipping: Option<f32>,
+    n_envs: usize,
+    tx: Option<Sender<A2CStats>>,
 }
 
 impl Default for DefaultA2CHookBuilder {
@@ -17,13 +19,18 @@ impl Default for DefaultA2CHookBuilder {
             entropy_coeff: 0.,
             vf_coeff: None,
             gradient_clipping: None,
+            n_envs: 1,
+            tx: None,
         }
     }
 }
 
 impl DefaultA2CHookBuilder {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(n_envs: usize) -> Self {
+        Self {
+            n_envs,
+            ..Self::default()
+        }
     }
 
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
@@ -46,12 +53,20 @@ impl DefaultA2CHookBuilder {
         self
     }
 
+    pub fn with_tx(mut self, tx: Option<Sender<A2CStats>>) -> Self {
+        self.tx = tx;
+        self
+    }
+
     pub fn build<T>(self) -> DefaultA2CHook<T> {
         DefaultA2CHook {
             normalize_advantage: self.normalize_advantage,
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
             gradient_clipping: self.gradient_clipping,
+            reporter: self
+                .tx
+                .map(|tx| DefaultA2CHookReporter::new(tx, self.n_envs)),
             _lm: PhantomData,
         }
     }
