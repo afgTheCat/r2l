@@ -3,15 +3,15 @@ use candle_core::{DType, Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_burn::{
     learning_module::{
-        BurnActorCriticLMKind, BurnDecoupledActorCriticLM, BurnParalellActorCriticLM, BurnPolicy,
-        ParalellActorModel,
+        BurnPolicy, JointPolicyValueModule, ParalellActorModel, PolicyValueModule,
+        SplitPolicyValueModule,
     },
     sequential::Sequential,
 };
 use r2l_candle::{
     learning_module::{
-        CandleActorCriticKind, DecoupledActorCriticLM, ParalellActorCriticLM,
-        SequentialValueFunction,
+        JointPolicyValueOptimizer, PolicyValueOptimizer, SequentialValueFunction,
+        SplitPolicyValueOptimizer,
     },
     optimizer::OptimizerWithMaxGrad,
     thread_safe_sequential::build_sequential,
@@ -42,7 +42,7 @@ impl LearningModuleBuilder {
         policy_var_builder: VarBuilder,
         observation_size: usize,
         device: &Device,
-    ) -> Result<(SequentialValueFunction, CandleActorCriticKind)> {
+    ) -> Result<(SequentialValueFunction, PolicyValueOptimizer)> {
         match &self.learning_module_type {
             LearningModuleType::Paralell {
                 value_layers,
@@ -56,7 +56,7 @@ impl LearningModuleBuilder {
                     OptimizerWithMaxGrad::new(optimizer, *max_grad_norm, policy_varmap);
                 Ok((
                     SequentialValueFunction { value_net },
-                    CandleActorCriticKind::Paralell(ParalellActorCriticLM {
+                    PolicyValueOptimizer::Joint(JointPolicyValueOptimizer {
                         optimizer_with_grad,
                     }),
                 ))
@@ -82,7 +82,7 @@ impl LearningModuleBuilder {
                     OptimizerWithMaxGrad::new(value_optimizer, *value_max_grad_norm, critic_varmap);
                 Ok((
                     SequentialValueFunction { value_net },
-                    CandleActorCriticKind::Decoupled(DecoupledActorCriticLM {
+                    PolicyValueOptimizer::Split(SplitPolicyValueOptimizer {
                         policy_optimizer_with_grad,
                         value_optimizer_with_grad,
                     }),
@@ -95,7 +95,7 @@ impl LearningModuleBuilder {
         &self,
         observation_size: usize,
         policy: D,
-    ) -> BurnActorCriticLMKind<B, D> {
+    ) -> PolicyValueModule<B, D> {
         match &self.learning_module_type {
             LearningModuleType::Paralell {
                 value_layers,
@@ -105,7 +105,7 @@ impl LearningModuleBuilder {
                 let value_layers = &[&[observation_size][..], &value_layers[..], &[1]].concat();
                 let value_net: Sequential<B> = Sequential::build(value_layers);
                 let model = ParalellActorModel::new(policy, value_net);
-                BurnActorCriticLMKind::Paralell(BurnParalellActorCriticLM::new(
+                PolicyValueModule::Paralell(JointPolicyValueModule::new(
                     model,
                     AdamWConfig::new()
                         .with_beta_1(self.params.beta1 as f32)
@@ -124,7 +124,7 @@ impl LearningModuleBuilder {
             } => {
                 let value_layers = &[&[observation_size][..], &value_layers[..], &[1]].concat();
                 let value_net: Sequential<B> = Sequential::build(value_layers);
-                BurnActorCriticLMKind::Decoupled(BurnDecoupledActorCriticLM::new(
+                PolicyValueModule::Decoupled(SplitPolicyValueModule::new(
                     policy,
                     value_net,
                     AdamWConfig::new()

@@ -10,8 +10,12 @@ use r2l_agents::{
         a2c::{A2CBatchData, A2CHook, A2CParams},
     },
 };
-use r2l_burn::learning_module::{BurnActorCriticLMKind, BurnPolicy, BurnPolicyValuesLosses};
-use r2l_candle::learning_module::{CandlePolicyValuesLosses, R2lCandleLearningModule};
+use r2l_burn::learning_module::{
+    BurnPolicy, BurnPolicyValuesLosses, PolicyValueModule as BurnPolicyValueModule,
+};
+use r2l_candle::learning_module::{
+    CandlePolicyValuesLosses, PolicyValueModule as CandlePolicyValueModule,
+};
 use r2l_core::{
     buffers::TrajectoryContainer, models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
@@ -95,17 +99,17 @@ pub struct DefaultA2CHook<T = ()> {
     pub(crate) _lm: PhantomData<T>,
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnActorCriticLMKind<B, D>>
-    for DefaultA2CHook<BurnActorCriticLMKind<B, D>>
+impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
+    for DefaultA2CHook<BurnPolicyValueModule<B, D>>
 {
     fn before_learning_hook<
         C: TrajectoryContainer<
-            Tensor = <BurnActorCriticLMKind<B, D> as OnPolicyLearningModule>::InferenceTensor,
+            Tensor = <BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor,
         >,
     >(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnActorCriticLMKind<B, D>,
+        module: &mut BurnPolicyValueModule<B, D>,
         _buffers: &[C],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -122,7 +126,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnActorCriticLMKind<B, D>>
     fn batch_hook(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnActorCriticLMKind<B, D>,
+        module: &mut BurnPolicyValueModule<B, D>,
         losses: &mut BurnPolicyValuesLosses<B>,
         data: &A2CBatchData<burn::Tensor<B, 1>>,
     ) -> Result<HookResult> {
@@ -144,12 +148,12 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnActorCriticLMKind<B, D>>
 
     fn after_learning_hook<
         C: TrajectoryContainer<
-            Tensor = <BurnActorCriticLMKind<B, D> as OnPolicyLearningModule>::InferenceTensor,
+            Tensor = <BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor,
         >,
     >(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnActorCriticLMKind<B, D>,
+        module: &mut BurnPolicyValueModule<B, D>,
         buffers: &[C],
     ) -> Result<HookResult> {
         if let Some(reporter) = &mut self.reporter {
@@ -162,15 +166,15 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnActorCriticLMKind<B, D>>
     }
 }
 
-impl A2CHook<R2lCandleLearningModule> for DefaultA2CHook<R2lCandleLearningModule> {
+impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule> {
     fn before_learning_hook<
         B: TrajectoryContainer<
-            Tensor = <R2lCandleLearningModule as OnPolicyLearningModule>::InferenceTensor,
+            Tensor = <CandlePolicyValueModule as OnPolicyLearningModule>::InferenceTensor,
         >,
     >(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut R2lCandleLearningModule,
+        module: &mut CandlePolicyValueModule,
         _buffers: &[B],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -185,7 +189,7 @@ impl A2CHook<R2lCandleLearningModule> for DefaultA2CHook<R2lCandleLearningModule
     fn batch_hook(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut R2lCandleLearningModule,
+        module: &mut CandlePolicyValueModule,
         losses: &mut CandlePolicyValuesLosses,
         data: &A2CBatchData<candle_core::Tensor>,
     ) -> Result<HookResult> {
@@ -209,7 +213,7 @@ impl A2CHook<R2lCandleLearningModule> for DefaultA2CHook<R2lCandleLearningModule
     fn after_learning_hook<B: TrajectoryContainer<Tensor = candle_core::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut R2lCandleLearningModule,
+        module: &mut CandlePolicyValueModule,
         buffers: &[B],
     ) -> Result<HookResult> {
         if let Some(reporter) = &mut self.reporter {

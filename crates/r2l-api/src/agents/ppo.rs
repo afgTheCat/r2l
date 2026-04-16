@@ -1,15 +1,17 @@
 use burn::{module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::ppo::PPO;
-use r2l_burn::{distributions::BurnPolicyKind, learning_module::BurnActorCriticLMKind};
-use r2l_candle::{distributions::CandlePolicyKind, learning_module::R2lCandleLearningModule};
+use r2l_burn::{distributions::BurnPolicyKind, learning_module::PolicyValueModule};
+use r2l_candle::{
+    distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
+};
 use r2l_core::{buffers::TrajectoryContainer, on_policy::algorithm::Agent};
 
 use crate::hooks::ppo::DefaultPPOHook;
 
 pub struct BurnPPO<B: AutodiffBackend>(
     pub  PPO<
-        BurnActorCriticLMKind<B, BurnPolicyKind<B>>,
-        DefaultPPOHook<BurnActorCriticLMKind<B, BurnPolicyKind<B>>>,
+        PolicyValueModule<B, BurnPolicyKind<B>>,
+        DefaultPPOHook<PolicyValueModule<B, BurnPolicyKind<B>>>,
     >,
 );
 
@@ -33,7 +35,7 @@ impl<B: AutodiffBackend> Agent for BurnPPO<B> {
     }
 }
 
-pub struct CandlePPO(pub PPO<R2lCandleLearningModule, DefaultPPOHook<R2lCandleLearningModule>>);
+pub struct CandlePPO(pub PPO<CandlePolicyValueModule, DefaultPPOHook<CandlePolicyValueModule>>);
 
 impl Agent for CandlePPO {
     type Tensor = candle_core::Tensor;

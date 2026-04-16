@@ -1,7 +1,7 @@
 use candle_core::{DType, Device};
 use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
 use r2l_agents::on_policy_algorithms::a2c::{A2C, A2CParams};
-use r2l_candle::learning_module::R2lCandleLearningModule;
+use r2l_candle::learning_module::PolicyValueModule as CandlePolicyValueModule;
 
 use crate::{
     BurnBackend,
@@ -96,7 +96,7 @@ impl<M> A2CAgentBuilder<M> {
         action_size: usize,
         action_space: ActionSpaceType,
         device: &Device,
-    ) -> anyhow::Result<R2lCandleLearningModule> {
+    ) -> anyhow::Result<CandlePolicyValueModule> {
         let policy_varmap = VarMap::new();
         let policy_var_builder = VarBuilder::from_varmap(&policy_varmap, DType::F32, device);
         let policy = self.policy_builder.build_candle(
@@ -112,9 +112,9 @@ impl<M> A2CAgentBuilder<M> {
             observation_size,
             device,
         )?;
-        Ok(R2lCandleLearningModule {
+        Ok(CandlePolicyValueModule {
             policy,
-            actor_critic: learning_module,
+            optimizer: learning_module,
             value_function,
             device: device.clone(),
         })

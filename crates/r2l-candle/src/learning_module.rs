@@ -46,12 +46,12 @@ impl CandlePolicyValuesLosses {
     }
 }
 
-pub struct DecoupledActorCriticLM {
+pub struct SplitPolicyValueOptimizer {
     pub policy_optimizer_with_grad: OptimizerWithMaxGrad,
     pub value_optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
-impl DecoupledActorCriticLM {
+impl SplitPolicyValueOptimizer {
     pub fn policy_learning_rate(&self) -> f64 {
         self.policy_optimizer_with_grad.optimizer.learning_rate()
     }
@@ -68,7 +68,7 @@ impl DecoupledActorCriticLM {
 }
 
 /// The policy and the value function has different optimizers
-impl LearningModule for DecoupledActorCriticLM {
+impl LearningModule for SplitPolicyValueOptimizer {
     type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
@@ -89,11 +89,11 @@ impl LearningModule for DecoupledActorCriticLM {
 
 /// The policy and the value fuction has the same optimizer
 /// TODO: value_net does not need to be here
-pub struct ParalellActorCriticLM {
+pub struct JointPolicyValueOptimizer {
     pub optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
-impl ParalellActorCriticLM {
+impl JointPolicyValueOptimizer {
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer_with_grad.optimizer.learning_rate()
     }
@@ -103,39 +103,7 @@ impl ParalellActorCriticLM {
     }
 }
 
-pub enum ActorCriticKind {
-    Decoupled(DecoupledActorCriticLM),
-    Paralell(ParalellActorCriticLM),
-}
-
-impl ActorCriticKind {
-    pub fn policy_learning_rate(&self) -> f64 {
-        match self {
-            Self::Decoupled(decoupled) => decoupled.policy_learning_rate(),
-            Self::Paralell(paralell) => paralell.policy_learning_rate(),
-        }
-    }
-
-    pub fn set_grad_clipping(&mut self, max_grad_norm: Option<f32>) {
-        match self {
-            Self::Decoupled(decoupled) => decoupled.set_policy_grad_clip(max_grad_norm),
-            Self::Paralell(paralell) => paralell.set_grad_clip(max_grad_norm),
-        }
-    }
-}
-
-impl LearningModule for ActorCriticKind {
-    type Losses = CandlePolicyValuesLosses;
-
-    fn update(&mut self, losses: Self::Losses) -> Result<()> {
-        match self {
-            Self::Decoupled(lm) => lm.update(losses),
-            Self::Paralell(lm) => lm.update(losses),
-        }
-    }
-}
-
-impl LearningModule for ParalellActorCriticLM {
+impl LearningModule for JointPolicyValueOptimizer {
     type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
@@ -167,56 +135,56 @@ impl ValueFunction for SequentialValueFunction {
     }
 }
 
-pub enum CandleActorCriticKind {
-    Decoupled(DecoupledActorCriticLM),
-    Paralell(ParalellActorCriticLM),
+pub enum PolicyValueOptimizer {
+    Joint(JointPolicyValueOptimizer),
+    Split(SplitPolicyValueOptimizer),
 }
 
-impl CandleActorCriticKind {
+impl PolicyValueOptimizer {
     pub fn policy_learning_rate(&self) -> f64 {
         match self {
-            Self::Decoupled(decoupled) => decoupled.policy_learning_rate(),
-            Self::Paralell(paralell) => paralell.policy_learning_rate(),
+            Self::Joint(joint) => joint.policy_learning_rate(),
+            Self::Split(split) => split.policy_learning_rate(),
         }
     }
 
     pub fn set_grad_clipping(&mut self, max_grad_norm: Option<f32>) {
         match self {
-            Self::Decoupled(decoupled) => decoupled.set_policy_grad_clip(max_grad_norm),
-            Self::Paralell(paralell) => paralell.set_grad_clip(max_grad_norm),
+            Self::Joint(joint) => joint.set_grad_clip(max_grad_norm),
+            Self::Split(split) => split.set_policy_grad_clip(max_grad_norm),
         }
     }
 }
 
-impl LearningModule for CandleActorCriticKind {
+impl LearningModule for PolicyValueOptimizer {
     type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         match self {
-            Self::Decoupled(lm) => lm.update(losses),
-            Self::Paralell(lm) => lm.update(losses),
+            Self::Joint(lm) => lm.update(losses),
+            Self::Split(lm) => lm.update(losses),
         }
     }
 }
 
-pub struct R2lCandleLearningModule {
+pub struct PolicyValueModule {
     pub policy: CandlePolicyKind,
-    pub actor_critic: CandleActorCriticKind,
+    pub optimizer: PolicyValueOptimizer,
     pub value_function: SequentialValueFunction,
     pub device: Device,
 }
 
-impl R2lCandleLearningModule {
+impl PolicyValueModule {
     pub fn set_grad_clipping(&mut self, gradient_clipping: Option<f32>) {
-        self.actor_critic.set_grad_clipping(gradient_clipping);
+        self.optimizer.set_grad_clipping(gradient_clipping);
     }
 
     pub fn policy_learning_rate(&self) -> f64 {
-        self.actor_critic.policy_learning_rate()
+        self.optimizer.policy_learning_rate()
     }
 }
 
-impl ValueFunction for R2lCandleLearningModule {
+impl ValueFunction for PolicyValueModule {
     type Tensor = CandleTensor;
 
     fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -224,15 +192,15 @@ impl ValueFunction for R2lCandleLearningModule {
     }
 }
 
-impl LearningModule for R2lCandleLearningModule {
+impl LearningModule for PolicyValueModule {
     type Losses = CandlePolicyValuesLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
-        self.actor_critic.update(losses)
+        self.optimizer.update(losses)
     }
 }
 
-impl OnPolicyLearningModule for R2lCandleLearningModule {
+impl OnPolicyLearningModule for PolicyValueModule {
     type LearningTensor = CandleTensor;
     type InferenceTensor = CandleTensor;
     type Policy = CandlePolicyKind;
