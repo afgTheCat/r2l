@@ -23,7 +23,7 @@ struct App {
     recent_table: UpdateTable,
     best_table: UpdateTable,
     rx: Receiver<EventBox>,
-    rollout_rewards_avg: Vec<f32>,
+    average_rollout_rewards: Vec<f32>,
 }
 
 impl App {
@@ -43,7 +43,7 @@ impl App {
                 clip_range,
                 progress: Default::default(),
             },
-            rollout_rewards_avg: vec![],
+            average_rollout_rewards: vec![],
         }
     }
 }
@@ -59,24 +59,24 @@ impl eframe::App for App {
             let Ok(progress) = event.downcast::<PPOStats>() else {
                 break;
             };
-            let avg_rewards = progress.avarage_reward;
-            self.rollout_rewards_avg.push(avg_rewards);
+            let average_reward = progress.avarage_reward;
+            self.average_rollout_rewards.push(average_reward);
             self.recent_table.set_progress(*progress.clone());
             if self
-                .rollout_rewards_avg
+                .average_rollout_rewards
                 .iter()
-                .all(|rew| *rew <= avg_rewards)
+                .all(|reward| *reward <= average_reward)
             {
                 self.best_table.set_progress(*progress);
             }
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let availible_rect = Rect::from_min_max(
+            let available_rect = Rect::from_min_max(
                 Pos2::new(0., 0.),
                 Pos2::new(ui.available_width(), ui.available_height()),
             );
-            let (tables, other_widgets) = availible_rect.split_top_bottom_at_fraction(0.5);
+            let (tables, other_widgets) = available_rect.split_top_bottom_at_fraction(0.5);
             let (mut recent_table_rect, mut best_table_rect) =
                 tables.split_left_right_at_fraction(0.5);
 
@@ -91,16 +91,16 @@ impl eframe::App for App {
                 self.best_table.ui(ui)
             });
 
-            let (progress_bar, plot) = other_widgets.split_top_bottom_at_fraction(0.1);
+            let (_progress_bar, plot) = other_widgets.split_top_bottom_at_fraction(0.1);
             ui.scope_builder(UiBuilder::new().max_rect(plot), |ui| {
                 Plot::new("Plot")
                     .legend(Legend::default())
                     .show(ui, |plot_ui| {
                         let plot_points = self
-                            .rollout_rewards_avg
+                            .average_rollout_rewards
                             .iter()
                             .enumerate()
-                            .map(|(idx, avg_rew)| PlotPoint::from([idx as f64, *avg_rew as f64]))
+                            .map(|(idx, reward)| PlotPoint::from([idx as f64, *reward as f64]))
                             .collect();
                         plot_ui
                             .line(Line::new("curve", PlotPoints::Owned(plot_points)).name("curve"));
@@ -158,7 +158,7 @@ fn main() -> eframe::Result {
     std::thread::spawn(
         move || match train_ppo(update_tx, total_rollouts, clip_range) {
             Ok(()) => {
-                println!("ppo trainted normally")
+                println!("ppo trained normally")
             }
             Err(err) => {
                 eprintln!("ppo was not trained normally, err: {err}")
@@ -166,7 +166,7 @@ fn main() -> eframe::Result {
         },
     );
     eframe::run_native(
-        "R2L tui example",
+        "R2L GUI example",
         options,
         Box::new(|cc| Ok(Box::new(App::new(cc, event_rx, clip_range)))),
     )

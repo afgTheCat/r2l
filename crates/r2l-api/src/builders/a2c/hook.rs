@@ -12,24 +12,15 @@ pub struct DefaultA2CHookBuilder {
     tx: Option<Sender<A2CStats>>,
 }
 
-impl Default for DefaultA2CHookBuilder {
-    fn default() -> Self {
-        Self {
-            normalize_advantage: false,
-            entropy_coeff: 0.,
-            vf_coeff: None,
-            gradient_clipping: None,
-            n_envs: 1,
-            tx: None,
-        }
-    }
-}
-
 impl DefaultA2CHookBuilder {
     pub fn new(n_envs: usize) -> Self {
         Self {
             n_envs,
-            ..Self::default()
+            normalize_advantage: false,
+            entropy_coeff: 0.,
+            vf_coeff: None,
+            gradient_clipping: None,
+            tx: None,
         }
     }
 

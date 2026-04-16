@@ -23,7 +23,7 @@ impl<B: Backend> Layer<B> {
         Self::Activation(ReluAct)
     }
 
-    fn layer(input: usize, output: usize) -> Self {
+    fn linear(input: usize, output: usize) -> Self {
         let device = Default::default();
         let liner_config = LinearConfig::new(input, output).with_bias(true);
         let linear: Linear<B> = liner_config.init::<B>(&device);
@@ -50,9 +50,9 @@ impl<B: Backend> Sequential<B> {
         let num_layers = layer_sizes.len();
         for (layer_idx, layer_size) in layer_sizes.iter().enumerate().skip(1) {
             if layer_idx == num_layers - 1 {
-                layers.push(Layer::layer(last_dim, *layer_size));
+                layers.push(Layer::linear(last_dim, *layer_size));
             } else {
-                layers.push(Layer::layer(last_dim, *layer_size));
+                layers.push(Layer::linear(last_dim, *layer_size));
                 layers.push(Layer::relu_act());
             }
             last_dim = *layer_size;

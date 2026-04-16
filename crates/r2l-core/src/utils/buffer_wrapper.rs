@@ -132,7 +132,7 @@ impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S
 pub enum BufferWrapper<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S>>
 {
     Borrowed(BorrowedWrapper<'a, S, T, B>),
-    Cloned(FixedSizeStateBuffer<T>),
+    Cloned(Box<FixedSizeStateBuffer<T>>),
 }
 
 impl<'a, S: R2lTensor, T: R2lTensor + From<S>, B: TrajectoryContainer<Tensor = S>>
@@ -156,7 +156,7 @@ impl<'a, S: R2lTensor, T: R2lTensor + From<S>, B: TrajectoryContainer<Tensor = S
                     trancuated: memory.trancuated,
                 });
             }
-            BufferWrapper::Cloned(out)
+            BufferWrapper::Cloned(Box::new(out))
         }
     }
 }

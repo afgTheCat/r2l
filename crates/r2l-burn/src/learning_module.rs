@@ -10,7 +10,7 @@ use r2l_core::{
     on_policy::{learning_module::OnPolicyLearningModule, losses::PolicyValuesLosses},
 };
 
-use crate::sequential::Sequential;
+use crate::{distributions::BurnPolicyKind, sequential::Sequential};
 
 // A series constraints that we need for the policy to work nicely with AdamW
 pub trait BurnPolicy<B: AutodiffBackend>:
@@ -323,3 +323,5 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValu
         Tensor::from_data(t.to_data(), &Default::default())
     }
 }
+
+pub type PolicyValueModuleKind<B> = PolicyValueModule<B, BurnPolicyKind<B>>;

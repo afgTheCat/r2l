@@ -33,7 +33,7 @@ struct App {
     latest_update: Option<PPOStats>,
     rx: Receiver<EventBox>,
     best_update: Option<PPOStats>,
-    rollout_rewards_avg: Vec<f32>,
+    average_rollout_rewards: Vec<f32>,
     clip_range: f32,
     total_rollouts: usize,
     current_rollout: usize,
@@ -65,7 +65,7 @@ impl App {
             rx,
             best_update: None,
             latest_update: None,
-            rollout_rewards_avg: vec![],
+            average_rollout_rewards: vec![],
             current_rollout: 0,
             exit: false,
         }
@@ -92,11 +92,12 @@ impl App {
     }
 
     fn handle_progress(&mut self, progress: PPOStats) {
-        self.rollout_rewards_avg.push(progress.avarage_reward);
+        let average_reward = progress.avarage_reward;
+        self.average_rollout_rewards.push(average_reward);
         match &self.best_update {
             None => self.best_update = Some(progress.clone()),
-            Some(current_best) if current_best.avarage_reward < progress.avarage_reward => {
-                self.best_update = Some(progress.clone())
+            Some(current_best) if current_best.avarage_reward < average_reward => {
+                self.best_update = Some(progress.clone());
             }
             _ => {}
         }
@@ -159,7 +160,7 @@ impl App {
         let rows = vec![
             // Row::new(vec!["approx_kl".into(), ppo_progress.approx_kl.to_string()]),
             Row::new(vec![
-                "Avarage reward".into(),
+                "Average reward".into(),
                 ppo_progress.avarage_reward.to_string(),
             ]),
             Row::new(vec!["Clip fraction".into(), clip_fraction.to_string()]),
@@ -197,7 +198,7 @@ impl App {
 
     fn draw_chart(&self, chart_area: Rect, buf: &mut Buffer) {
         let rewards: Vec<_> = self
-            .rollout_rewards_avg
+            .average_rollout_rewards
             .iter()
             .enumerate()
             .map(|(i, d)| (i as f64, *d as f64))
@@ -229,7 +230,7 @@ impl App {
             let chart = Chart::new(dataset)
                 .block(
                     Block::default()
-                        .title("Avarage rewards per rollout")
+                        .title("Average rewards per rollout")
                         .borders(Borders::ALL),
                 )
                 .x_axis(

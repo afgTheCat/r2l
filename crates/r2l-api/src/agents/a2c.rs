@@ -1,6 +1,9 @@
 use burn::{module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::a2c::A2C;
-use r2l_burn::{distributions::BurnPolicyKind, learning_module::PolicyValueModule};
+use r2l_burn::{
+    distributions::BurnPolicyKind,
+    learning_module::PolicyValueModuleKind as BurnPolicyValueModuleKind,
+};
 use r2l_candle::{
     distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
 };
@@ -9,10 +12,7 @@ use r2l_core::{buffers::TrajectoryContainer, on_policy::algorithm::Agent};
 use crate::hooks::a2c::DefaultA2CHook;
 
 pub struct BurnA2C<B: AutodiffBackend>(
-    pub  A2C<
-        PolicyValueModule<B, BurnPolicyKind<B>>,
-        DefaultA2CHook<PolicyValueModule<B, BurnPolicyKind<B>>>,
-    >,
+    pub A2C<BurnPolicyValueModuleKind<B>, DefaultA2CHook<BurnPolicyValueModuleKind<B>>>,
 );
 
 impl<B: AutodiffBackend> Agent for BurnA2C<B> {

@@ -26,6 +26,10 @@ pub trait TrajectoryContainer: Sync {
 
     fn len(&self) -> usize;
 
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     fn states(&self) -> impl Iterator<Item = &Self::Tensor>;
 
     fn next_states(&self) -> impl Iterator<Item = &Self::Tensor>;

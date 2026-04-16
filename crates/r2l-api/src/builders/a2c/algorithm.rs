@@ -130,28 +130,12 @@ where
 pub type A2CBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
     OnPolicyAlgorightmBuilder<BurnA2C<BurnBackend>, A2CBurnLearningModuleBuilder, EB, BD>;
 
-impl<EB: EnvBuilderTrait> A2CBurnAlgorithmBuilder<EB> {
-    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
-        let mut agent_builder = A2CBurnLearningModuleBuilder::default();
-        agent_builder.hook_builder = crate::builders::a2c::hook::DefaultA2CHookBuilder::new(n_envs);
-        OnPolicyAlgorightmBuilder {
-            sampler_builder: SamplerBuilder::new(builder, n_envs),
-            agent_builder,
-            learning_schedule: LearningSchedule::RolloutBound {
-                total_rollouts: 300,
-                current_rollout: 0,
-            },
-        }
-    }
-}
-
 pub type A2CCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
     OnPolicyAlgorightmBuilder<CandleA2C, A2CCandleLearningModuleBuilder, EB, BD>;
 
 impl<EB: EnvBuilderTrait> A2CCandleAlgorithmBuilder<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
-        let mut agent_builder = A2CCandleLearningModuleBuilder::default();
-        agent_builder.hook_builder = crate::builders::a2c::hook::DefaultA2CHookBuilder::new(n_envs);
+        let agent_builder = A2CCandleLearningModuleBuilder::new(n_envs);
         OnPolicyAlgorightmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
             agent_builder,
