@@ -3,7 +3,7 @@ use r2l_core::{
     buffers::TrajectoryContainer,
     models::{LearningModule, Policy},
     on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::PolicyValuesLosses,
+        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
     },
     tensor::{R2lTensor, R2lTensorMath},
 };
@@ -96,7 +96,7 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
             let values_pred = lm.calculate_values(&observations)?;
             let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
-            let mut losses = Module::Losses::losses(policy_loss, value_loss);
+            let mut losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
             let a2c_data = A2CBatchData {
                 observations,
                 actions,

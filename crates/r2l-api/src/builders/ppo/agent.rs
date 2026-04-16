@@ -144,7 +144,7 @@ impl CandlePPOAgentBuilder {
                 distribution_type: DistributionType::Dynamic,
             },
             actor_critic_type: LearningModuleBuilder {
-                learning_module_type: LearningModuleType::Paralell {
+                learning_module_type: LearningModuleType::Joint {
                     value_layers: vec![64, 64],
                     max_grad_norm: None,
                 },

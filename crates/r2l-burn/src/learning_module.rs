@@ -7,7 +7,7 @@ use burn::{
 };
 use r2l_core::{
     models::{LearningModule, Policy, ValueFunction},
-    on_policy::{learning_module::OnPolicyLearningModule, losses::PolicyValuesLosses},
+    on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
 
 use crate::sequential::Sequential;
@@ -27,14 +27,14 @@ impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
 {
 }
 
-pub struct BurnPolicyValuesLosses<B: AutodiffBackend> {
+pub struct PolicyValueLosses<B: AutodiffBackend> {
     pub policy_loss: Tensor<B, 1>,
     pub value_loss: Tensor<B, 1>,
     pub vf_coeff: Option<f32>,
 }
 
-impl<B: AutodiffBackend> PolicyValuesLosses<Tensor<B, 1>> for BurnPolicyValuesLosses<B> {
-    fn losses(policy_loss: Tensor<B, 1>, value_loss: Tensor<B, 1>) -> Self {
+impl<B: AutodiffBackend> FromPolicyValueLosses<Tensor<B, 1>> for PolicyValueLosses<B> {
+    fn from_policy_value_losses(policy_loss: Tensor<B, 1>, value_loss: Tensor<B, 1>) -> Self {
         Self {
             policy_loss,
             value_loss,
@@ -43,7 +43,7 @@ impl<B: AutodiffBackend> PolicyValuesLosses<Tensor<B, 1>> for BurnPolicyValuesLo
     }
 }
 
-impl<B: AutodiffBackend> BurnPolicyValuesLosses<B> {
+impl<B: AutodiffBackend> PolicyValueLosses<B> {
     pub fn new(policy_loss: Tensor<B, 1>, value_loss: Tensor<B, 1>) -> Self {
         Self {
             policy_loss,
@@ -52,8 +52,8 @@ impl<B: AutodiffBackend> BurnPolicyValuesLosses<B> {
         }
     }
 
-    pub fn apply_entropy(&mut self, entropy: Tensor<B, 1>) {
-        self.policy_loss = self.policy_loss.clone() + entropy;
+    pub fn add_entropy_loss(&mut self, entropy_loss: Tensor<B, 1>) {
+        self.policy_loss = self.policy_loss.clone() + entropy_loss;
     }
 
     pub fn set_vf_coeff(&mut self, vf_coeff: Option<f32>) {
@@ -63,12 +63,12 @@ impl<B: AutodiffBackend> BurnPolicyValuesLosses<B> {
 
 // a model with a value function
 #[derive(Debug, Module)]
-pub struct ParalellActorModel<B: Backend, M: Module<B>> {
+pub struct JointActorModel<B: Backend, M: Module<B>> {
     pub policy: M,
     pub value_net: Sequential<B>,
 }
 
-impl<B: Backend, M: Module<B>> ParalellActorModel<B, M> {
+impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
     pub fn new(policy: M, value_net: Sequential<B>) -> Self {
         Self { policy, value_net }
     }
@@ -76,15 +76,15 @@ impl<B: Backend, M: Module<B>> ParalellActorModel<B, M> {
 
 pub struct JointPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
     pub lr: f64,
-    pub model: ParalellActorModel<B, M>,
+    pub model: JointActorModel<B, M>,
     // NOTE: the optimizer needs to be optimizing both the policy and the value net at the same time
-    pub optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
+    pub optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueModule<B, M> {
     pub fn new(
-        model: ParalellActorModel<B, M>,
-        optimizer: OptimizerAdaptor<AdamW, ParalellActorModel<B, M>, B>,
+        model: JointActorModel<B, M>,
+        optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
         lr: f64,
     ) -> Self {
         Self {
@@ -104,7 +104,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueModule<B, M> {
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for JointPolicyValueModule<B, M> {
-    type Losses = BurnPolicyValuesLosses<B>;
+    type Losses = PolicyValueLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         let loss = if let Some(vf_coeff) = losses.vf_coeff {
@@ -194,7 +194,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for SplitPolicyValueModule<B, M> {
-    type Losses = BurnPolicyValuesLosses<B>;
+    type Losses = PolicyValueLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         let policy_grads = losses.policy_loss.backward();
@@ -250,33 +250,33 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolic
 }
 
 pub enum PolicyValueModule<B: AutodiffBackend, D: BurnPolicy<B>> {
-    Paralell(JointPolicyValueModule<B, D>),
-    Decoupled(SplitPolicyValueModule<B, D>),
+    Joint(JointPolicyValueModule<B, D>),
+    Split(SplitPolicyValueModule<B, D>),
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
     pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
         match self {
-            Self::Paralell(lm) => lm.set_grad_clipping(grad_clipping),
-            Self::Decoupled(lm) => lm.set_grad_clipping(grad_clipping),
+            Self::Joint(lm) => lm.set_grad_clipping(grad_clipping),
+            Self::Split(lm) => lm.set_grad_clipping(grad_clipping),
         }
     }
 
     pub fn policy_learning_rate(&self) -> f64 {
         match self {
-            Self::Paralell(lm) => lm.policy_learning_rate(),
-            Self::Decoupled(lm) => lm.policy_learning_rate(),
+            Self::Joint(lm) => lm.policy_learning_rate(),
+            Self::Split(lm) => lm.policy_learning_rate(),
         }
     }
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for PolicyValueModule<B, M> {
-    type Losses = BurnPolicyValuesLosses<B>;
+    type Losses = PolicyValueLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         match self {
-            Self::Paralell(lm) => lm.update(losses),
-            Self::Decoupled(lm) => lm.update(losses),
+            Self::Joint(lm) => lm.update(losses),
+            Self::Split(lm) => lm.update(losses),
         }
     }
 }
@@ -286,8 +286,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueModule<B
 
     fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
         match self {
-            Self::Paralell(lm) => lm.calculate_values(observations),
-            Self::Decoupled(lm) => lm.calculate_values(observations),
+            Self::Joint(lm) => lm.calculate_values(observations),
+            Self::Split(lm) => lm.calculate_values(observations),
         }
     }
 }
@@ -300,22 +300,22 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValu
 
     fn get_inference_policy(&self) -> Self::InferencePolicy {
         match self {
-            Self::Paralell(lm) => lm.get_inference_policy(),
-            Self::Decoupled(lm) => lm.get_inference_policy(),
+            Self::Joint(lm) => lm.get_inference_policy(),
+            Self::Split(lm) => lm.get_inference_policy(),
         }
     }
 
     fn get_policy(&self) -> &Self::Policy {
         match self {
-            Self::Paralell(lm) => lm.get_policy(),
-            Self::Decoupled(lm) => lm.get_policy(),
+            Self::Joint(lm) => lm.get_policy(),
+            Self::Split(lm) => lm.get_policy(),
         }
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
         match self {
-            Self::Paralell(lm) => lm.tensor_from_slice(slice),
-            Self::Decoupled(lm) => lm.tensor_from_slice(slice),
+            Self::Joint(lm) => lm.tensor_from_slice(slice),
+            Self::Split(lm) => lm.tensor_from_slice(slice),
         }
     }
 

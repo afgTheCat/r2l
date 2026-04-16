@@ -99,21 +99,21 @@ where
         self
     }
 
-    pub fn with_parallel(mut self, value_layers: Vec<usize>, max_grad_norm: Option<f32>) -> Self {
-        self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Paralell {
+    pub fn with_joint(mut self, value_layers: Vec<usize>, max_grad_norm: Option<f32>) -> Self {
+        self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Joint {
             value_layers,
             max_grad_norm,
         };
         self
     }
 
-    pub fn with_decoupled(
+    pub fn with_split(
         mut self,
         value_layers: Vec<usize>,
         policy_max_grad_norm: Option<f32>,
         value_max_grad_norm: Option<f32>,
     ) -> Self {
-        self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Decoupled {
+        self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Split {
             value_layers,
             policy_max_grad_norm,
             value_max_grad_norm,

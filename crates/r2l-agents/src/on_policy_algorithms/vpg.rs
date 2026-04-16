@@ -3,7 +3,7 @@ use r2l_core::{
     buffers::TrajectoryContainer,
     models::Policy,
     on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::PolicyValuesLosses,
+        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
     },
     tensor::R2lTensorMath,
 };
@@ -53,7 +53,7 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
             let values_pred = lm.calculate_values(&observations)?;
             let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
-            let losses = Module::Losses::losses(policy_loss, value_loss);
+            let losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
             lm.update(losses)?;
         }
     }

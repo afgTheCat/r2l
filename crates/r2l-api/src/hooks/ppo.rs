@@ -10,10 +10,11 @@ use r2l_agents::{
     },
 };
 use r2l_burn::learning_module::{
-    BurnPolicy, BurnPolicyValuesLosses, PolicyValueModule as BurnPolicyValueModule,
+    BurnPolicy, PolicyValueLosses as BurnPolicyValueLosses,
+    PolicyValueModule as BurnPolicyValueModule,
 };
 use r2l_candle::learning_module::{
-    CandlePolicyValuesLosses, PolicyValueModule as CandlePolicyValueModule,
+    PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
     buffers::TrajectoryContainer, models::Policy,
@@ -169,7 +170,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
         &mut self,
         params: &mut PPOParams,
         module: &mut BurnPolicyValueModule<B, D>,
-        losses: &mut BurnPolicyValuesLosses<B>,
+        losses: &mut BurnPolicyValueLosses<B>,
         data: &PPOBatchData<burn::Tensor<B, 1>>,
     ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
@@ -202,7 +203,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
             });
         }
         if self.entropy_coeff != 0. {
-            losses.apply_entropy(entropy_loss);
+            losses.add_entropy_loss(entropy_loss);
         }
         if let Some(target_kl) = &mut self.target_kl {
             if approx_kl > 1.5 * target_kl.target {
@@ -264,7 +265,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
         &mut self,
         params: &mut PPOParams,
         module: &mut CandlePolicyValueModule,
-        losses: &mut CandlePolicyValuesLosses,
+        losses: &mut CandlePolicyValueLosses,
         data: &PPOBatchData<candle_core::Tensor>,
     ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
@@ -294,7 +295,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
             });
         }
         if self.entropy_coeff != 0. {
-            losses.apply_entropy(entropy_loss)?;
+            losses.add_entropy_loss(entropy_loss)?;
         }
         if let Some(target_kl) = &mut self.target_kl {
             if approx_kl > 1.5 * target_kl.target {

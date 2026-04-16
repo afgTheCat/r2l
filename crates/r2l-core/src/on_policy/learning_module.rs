@@ -1,11 +1,11 @@
 use crate::{
     models::{LearningModule, Policy, ValueFunction},
-    on_policy::losses::PolicyValuesLosses,
+    on_policy::losses::FromPolicyValueLosses,
     tensor::{R2lTensor, R2lTensorMath},
 };
 
 pub trait OnPolicyLearningModule:
-    LearningModule<Losses: PolicyValuesLosses<Self::LearningTensor>>
+    LearningModule<Losses: FromPolicyValueLosses<Self::LearningTensor>>
     + ValueFunction<Tensor = Self::LearningTensor>
 {
     type InferenceTensor: R2lTensor;

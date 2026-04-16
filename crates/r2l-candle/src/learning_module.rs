@@ -3,7 +3,7 @@ use candle_core::{Device, Tensor as CandleTensor};
 use candle_nn::{Module, Optimizer};
 use r2l_core::{
     models::{LearningModule, ValueFunction},
-    on_policy::{learning_module::OnPolicyLearningModule, losses::PolicyValuesLosses},
+    on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
 
 use crate::{
@@ -11,14 +11,17 @@ use crate::{
     thread_safe_sequential::ThreadSafeSequential,
 };
 
-pub struct CandlePolicyValuesLosses {
+pub struct PolicyValueLosses {
     pub policy_loss: CandleTensor,
     pub value_loss: CandleTensor,
     pub vf_coeff: Option<f32>,
 }
 
-impl PolicyValuesLosses<candle_core::Tensor> for CandlePolicyValuesLosses {
-    fn losses(policy_loss: candle_core::Tensor, value_loss: candle_core::Tensor) -> Self {
+impl FromPolicyValueLosses<candle_core::Tensor> for PolicyValueLosses {
+    fn from_policy_value_losses(
+        policy_loss: candle_core::Tensor,
+        value_loss: candle_core::Tensor,
+    ) -> Self {
         Self {
             policy_loss,
             value_loss,
@@ -27,7 +30,7 @@ impl PolicyValuesLosses<candle_core::Tensor> for CandlePolicyValuesLosses {
     }
 }
 
-impl CandlePolicyValuesLosses {
+impl PolicyValueLosses {
     pub fn new(policy_loss: CandleTensor, value_loss: CandleTensor) -> Self {
         Self {
             policy_loss,
@@ -36,8 +39,8 @@ impl CandlePolicyValuesLosses {
         }
     }
 
-    pub fn apply_entropy(&mut self, entropy: CandleTensor) -> Result<()> {
-        self.policy_loss = self.policy_loss.add(&entropy)?;
+    pub fn add_entropy_loss(&mut self, entropy_loss: CandleTensor) -> Result<()> {
+        self.policy_loss = self.policy_loss.add(&entropy_loss)?;
         Ok(())
     }
 
@@ -69,7 +72,7 @@ impl SplitPolicyValueOptimizer {
 
 /// The policy and the value function has different optimizers
 impl LearningModule for SplitPolicyValueOptimizer {
-    type Losses = CandlePolicyValuesLosses;
+    type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         self.policy_optimizer_with_grad
@@ -104,7 +107,7 @@ impl JointPolicyValueOptimizer {
 }
 
 impl LearningModule for JointPolicyValueOptimizer {
-    type Losses = CandlePolicyValuesLosses;
+    type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         let loss = if let Some(vf_coeff) = losses.vf_coeff {
@@ -157,7 +160,7 @@ impl PolicyValueOptimizer {
 }
 
 impl LearningModule for PolicyValueOptimizer {
-    type Losses = CandlePolicyValuesLosses;
+    type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         match self {
@@ -193,7 +196,7 @@ impl ValueFunction for PolicyValueModule {
 }
 
 impl LearningModule for PolicyValueModule {
-    type Losses = CandlePolicyValuesLosses;
+    type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
         self.optimizer.update(losses)

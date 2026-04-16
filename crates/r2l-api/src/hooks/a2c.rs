@@ -11,10 +11,11 @@ use r2l_agents::{
     },
 };
 use r2l_burn::learning_module::{
-    BurnPolicy, BurnPolicyValuesLosses, PolicyValueModule as BurnPolicyValueModule,
+    BurnPolicy, PolicyValueLosses as BurnPolicyValueLosses,
+    PolicyValueModule as BurnPolicyValueModule,
 };
 use r2l_candle::learning_module::{
-    CandlePolicyValuesLosses, PolicyValueModule as CandlePolicyValueModule,
+    PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
     buffers::TrajectoryContainer, models::Policy,
@@ -127,7 +128,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
         &mut self,
         _params: &mut A2CParams,
         module: &mut BurnPolicyValueModule<B, D>,
-        losses: &mut BurnPolicyValuesLosses<B>,
+        losses: &mut BurnPolicyValueLosses<B>,
         data: &A2CBatchData<burn::Tensor<B, 1>>,
     ) -> Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
@@ -141,7 +142,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
             });
         }
         if self.entropy_coeff != 0. {
-            losses.apply_entropy(entropy_loss);
+            losses.add_entropy_loss(entropy_loss);
         }
         Ok(HookResult::Continue)
     }
@@ -190,7 +191,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
         &mut self,
         _params: &mut A2CParams,
         module: &mut CandlePolicyValueModule,
-        losses: &mut CandlePolicyValuesLosses,
+        losses: &mut CandlePolicyValueLosses,
         data: &A2CBatchData<candle_core::Tensor>,
     ) -> Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
@@ -205,7 +206,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
             });
         }
         if self.entropy_coeff != 0. {
-            losses.apply_entropy(entropy_loss)?;
+            losses.add_entropy_loss(entropy_loss)?;
         }
         Ok(HookResult::Continue)
     }

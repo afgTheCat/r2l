@@ -3,7 +3,7 @@ use r2l_core::{
     buffers::TrajectoryContainer,
     models::{LearningModule, Policy},
     on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::PolicyValuesLosses,
+        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
     },
     tensor::{R2lTensor, R2lTensorMath},
 };
@@ -109,7 +109,7 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
             let clipped_adv = clip_ratio.mul(&advantages)?;
             let ratio_adv = ratio.mul(&advantages)?;
             let policy_loss = ratio_adv.minimum(&clipped_adv)?.neg()?.mean()?;
-            let mut losses = Module::Losses::losses(policy_loss, value_loss);
+            let mut losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
             let ppo_data = PPOBatchData {
                 observations,
                 actions,
