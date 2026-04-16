@@ -10,7 +10,7 @@ use crate::{
         agent::AgentBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
         policy_builder::{ActionSpaceType, DistributionType, PolicyBuilder},
-        ppo::hook::StandardPPOHookBuilder,
+        ppo::hook::DefaultPPOHookBuilder,
     },
 };
 
@@ -25,7 +25,7 @@ pub struct PPOCandleBackend {
 pub struct PPOAgentBuilder<M = PPOCandleBackend> {
     pub ppo_params: PPOParams,
     pub policy_builder: PolicyBuilder,
-    pub hook_builder: StandardPPOHookBuilder,
+    pub hook_builder: DefaultPPOHookBuilder,
     pub actor_critic_type: LearningModuleBuilder,
     pub backend: M,
 }
@@ -137,7 +137,7 @@ impl PPOAgentBuilder<PPOBurnBackend> {
 impl CandlePPOAgentBuilder {
     pub fn new(n_envs: usize) -> Self {
         Self {
-            hook_builder: StandardPPOHookBuilder::new(n_envs),
+            hook_builder: DefaultPPOHookBuilder::new(n_envs),
             ppo_params: PPOParams::default(),
             policy_builder: PolicyBuilder {
                 hidden_layers: vec![64, 64],

@@ -3,7 +3,7 @@ use std::{marker::PhantomData, sync::mpsc::Sender};
 use crate::hooks::ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPOStats, TargetKl};
 
 #[derive(Debug, Clone)]
-pub struct StandardPPOHookBuilder {
+pub struct DefaultPPOHookBuilder {
     normalize_advantage: bool,
     total_epochs: usize,
     entropy_coeff: f32,
@@ -14,7 +14,7 @@ pub struct StandardPPOHookBuilder {
     tx: Option<Sender<PPOStats>>,
 }
 
-impl StandardPPOHookBuilder {
+impl DefaultPPOHookBuilder {
     pub fn new(n_envs: usize) -> Self {
         Self {
             normalize_advantage: true,

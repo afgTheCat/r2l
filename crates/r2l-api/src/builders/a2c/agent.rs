@@ -33,37 +33,10 @@ pub struct A2CAgentBuilder<M> {
 pub type A2CBurnLearningModuleBuilder = A2CAgentBuilder<A2CBurnBackend>;
 pub type A2CCandleLearningModuleBuilder = A2CAgentBuilder<A2CCandleBackend>;
 
-impl Default for A2CAgentBuilder<A2CBurnBackend> {
-    fn default() -> Self {
+impl A2CCandleLearningModuleBuilder {
+    pub fn new(n_envs: usize) -> Self {
         Self {
-            hook_builder: DefaultA2CHookBuilder::default(),
-            a2c_params: A2CParams::default(),
-            policy_builder: PolicyBuilder {
-                hidden_layers: vec![64, 64],
-                distribution_type: DistributionType::Dynamic,
-            },
-            actor_critic_type: LearningModuleBuilder {
-                learning_module_type: LearningModuleType::Joint {
-                    value_layers: vec![64, 64],
-                    max_grad_norm: None,
-                },
-                params: ParamsAdamW {
-                    lr: 3e-4,
-                    beta1: 0.9,
-                    beta2: 0.999,
-                    eps: 1e-5,
-                    weight_decay: 1e-4,
-                },
-            },
-            backend: A2CBurnBackend,
-        }
-    }
-}
-
-impl Default for A2CAgentBuilder<A2CCandleBackend> {
-    fn default() -> Self {
-        Self {
-            hook_builder: DefaultA2CHookBuilder::default(),
+            hook_builder: DefaultA2CHookBuilder::new(n_envs),
             a2c_params: A2CParams::default(),
             policy_builder: PolicyBuilder {
                 hidden_layers: vec![64, 64],

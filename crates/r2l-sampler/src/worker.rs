@@ -13,6 +13,12 @@ use rand::RngExt;
 
 use crate::RolloutMode;
 
+type CommandSender<T> = Sender<WorkerCommand<T>>;
+type CommandReceiver<T> = Receiver<WorkerCommand<T>>;
+
+type ResultSender<T> = Sender<WorkerResult<T>>;
+type ResultReceiver<T> = Receiver<WorkerResult<T>>;
+
 pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
     pub env: E,
     pub buffer: ElementHandle<D>,
@@ -116,15 +122,15 @@ pub enum WorkerResult<T: R2lTensor> {
 
 pub struct ThreadWorker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
     worker: Worker<E, D>,
-    rx: Receiver<WorkerCommand<E::Tensor>>,
-    tx: Sender<WorkerResult<E::Tensor>>,
+    rx: CommandReceiver<E::Tensor>,
+    tx: ResultSender<E::Tensor>,
 }
 
 impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<E, D> {
     pub fn new(
         worker: Worker<E, D>,
-        rx: Receiver<WorkerCommand<E::Tensor>>,
-        tx: Sender<WorkerResult<E::Tensor>>,
+        rx: CommandReceiver<E::Tensor>,
+        tx: ResultSender<E::Tensor>,
     ) -> Self {
         Self { worker, rx, tx }
     }
@@ -158,9 +164,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
     }
 }
 
-pub struct ThreadWorkers<T: R2lTensor>(
-    pub HashMap<usize, (Sender<WorkerCommand<T>>, Receiver<WorkerResult<T>>)>,
-);
+pub struct ThreadWorkers<T: R2lTensor>(pub HashMap<usize, (CommandSender<T>, ResultReceiver<T>)>);
 
 impl<T: R2lTensor> ThreadWorkers<T> {
     pub fn get_environment_description(&self) -> EnvironmentDescription<T> {

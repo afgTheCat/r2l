@@ -38,7 +38,7 @@ impl UpdateTable {
             .progress
             .batch_stats
             .iter()
-            .map(|s| s.entropy_loss)
+            .map(|s| s.policy_loss)
             .collect::<Vec<_>>();
 
         let value_losses = self
@@ -72,7 +72,7 @@ impl UpdateTable {
                     .unwrap_or_else(|| "n/a".to_string())
             ),
             9 => select_row_or_col!(
-                "avarage_reward".to_owned(),
+                "average_reward".to_owned(),
                 format!("{:?}", self.progress.avarage_reward)
             ),
             10 => select_row_or_col!(

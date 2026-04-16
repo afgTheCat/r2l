@@ -9,6 +9,12 @@ use crate::{
     hooks::on_policy::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule},
 };
 
+type DefaultOnPolicyAlgorithm<A, EB, BD> = OnPolicyAlgorithm<
+    A,
+    FinalSampler<<EB as EnvBuilderTrait>::Env, BD>,
+    DefaultOnPolicyAlgorightmsHooks<A, FinalSampler<<EB as EnvBuilderTrait>::Env, BD>>,
+>;
+
 pub struct OnPolicyAlgorightmBuilder<
     A: Agent,
     AB: AgentBuilder<Agent = A>,
@@ -58,15 +64,7 @@ impl<
         self
     }
 
-    pub fn build(
-        self,
-    ) -> anyhow::Result<
-        OnPolicyAlgorithm<
-            A,
-            FinalSampler<EB::Env, BD>,
-            DefaultOnPolicyAlgorightmsHooks<A, FinalSampler<EB::Env, BD>>,
-        >,
-    > {
+    pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm<A, EB, BD>> {
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
         let observation_size = env_description.observation_size();
