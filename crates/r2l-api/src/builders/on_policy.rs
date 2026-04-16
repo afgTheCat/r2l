@@ -1,6 +1,6 @@
 use r2l_core::{
     env::{EnvBuilderTrait, Space},
-    on_policy::{Agent, OnPolicyAlgorithm},
+    on_policy::algorithm::{Agent, OnPolicyAlgorithm},
 };
 use r2l_sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound};
 

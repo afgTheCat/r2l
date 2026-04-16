@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryContainer,
-    on_policy::{Agent, OnPolicyAlgorithmHooks, Sampler},
+    on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, Sampler},
 };
 
 #[derive(Debug, Clone, Copy)]

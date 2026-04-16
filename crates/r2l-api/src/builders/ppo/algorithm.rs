@@ -1,7 +1,7 @@
 use std::sync::mpsc::Sender;
 
 use r2l_core::env::EnvBuilderTrait;
-use r2l_core::on_policy::Agent;
+use r2l_core::on_policy::algorithm::Agent;
 use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
 use crate::agents::ppo::{BurnPPO, CandlePPO};

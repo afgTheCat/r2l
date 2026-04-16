@@ -7,7 +7,7 @@ use burn::{
 };
 use r2l_core::{
     models::{LearningModule, Policy, ValueFunction},
-    on_policy::{OnPolicyLearningModule, PolicyValuesLosses},
+    on_policy::{learning_module::OnPolicyLearningModule, losses::PolicyValuesLosses},
 };
 
 use crate::sequential::Sequential;

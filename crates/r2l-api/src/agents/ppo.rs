@@ -2,7 +2,7 @@ use burn::{module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::ppo::PPO;
 use r2l_burn::{distributions::BurnPolicyKind, learning_module::BurnActorCriticLMKind};
 use r2l_candle::{distributions::CandlePolicyKind, learning_module::R2lCandleLearningModule};
-use r2l_core::{buffers::TrajectoryContainer, on_policy::Agent};
+use r2l_core::{buffers::TrajectoryContainer, on_policy::algorithm::Agent};
 
 use crate::hooks::ppo::DefaultPPOHook;
 

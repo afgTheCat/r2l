@@ -1,6 +1,6 @@
 use crate::{
     models::{LearningModule, Policy, ValueFunction},
-    on_policy::PolicyValuesLosses,
+    on_policy::losses::PolicyValuesLosses,
     tensor::{R2lTensor, R2lTensorMath},
 };
 

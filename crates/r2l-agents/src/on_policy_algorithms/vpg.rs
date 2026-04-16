@@ -2,7 +2,9 @@ use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryContainer,
     models::Policy,
-    on_policy::{Agent, OnPolicyLearningModule, PolicyValuesLosses},
+    on_policy::{
+        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::PolicyValuesLosses,
+    },
     tensor::R2lTensorMath,
 };
 

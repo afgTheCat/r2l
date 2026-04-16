@@ -96,7 +96,7 @@ For a more advanced and interactive example, see the [`r2l-tui`](./r2l-tui) crat
 
 ## Roadmap
 
-**Current version: `v0.0.1`**  
+**Current version: `v0.0.1`**
 The project is in an early experimental phase. Expect missing features, frequent breaking changes, bugs, and everything in between.
 
 ### `v0.1.0` – Core Algorithm Coverage (SB3 parity)
