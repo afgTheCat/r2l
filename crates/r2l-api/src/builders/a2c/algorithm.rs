@@ -23,6 +23,35 @@ where
     BD: TrajectoryBound<Tensor = EB::Tensor>,
     A2CAgentBuilder<M>: AgentBuilder<Agent = A>,
 {
+    pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
+        self.agent_builder.hook_builder = self
+            .agent_builder
+            .hook_builder
+            .with_normalize_advantage(normalize_advantage);
+        self
+    }
+
+    pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
+        self.agent_builder.hook_builder = self
+            .agent_builder
+            .hook_builder
+            .with_entropy_coeff(entropy_coeff);
+        self
+    }
+
+    pub fn with_vf_coeff(mut self, vf_coeff: Option<f32>) -> Self {
+        self.agent_builder.hook_builder = self.agent_builder.hook_builder.with_vf_coeff(vf_coeff);
+        self
+    }
+
+    pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
+        self.agent_builder.hook_builder = self
+            .agent_builder
+            .hook_builder
+            .with_gradient_clipping(gradient_clipping);
+        self
+    }
+
     pub fn with_gamma(mut self, gamma: f32) -> Self {
         self.agent_builder.a2c_params.gamma = gamma;
         self

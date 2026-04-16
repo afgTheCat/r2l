@@ -1,11 +1,11 @@
 use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryContainer,
-    models::Policy,
+    models::{LearningModule, Policy},
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearningModule, losses::PolicyValuesLosses,
     },
-    tensor::R2lTensorMath,
+    tensor::{R2lTensor, R2lTensorMath},
 };
 
 use crate::{
@@ -42,6 +42,23 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
+
+    fn batch_hook(
+        &mut self,
+        _params: &mut A2CParams,
+        _module: &mut M,
+        _losses: &mut <M as LearningModule>::Losses,
+        _data: &A2CBatchData<M::LearningTensor>,
+    ) -> anyhow::Result<HookResult> {
+        Ok(HookResult::Continue)
+    }
+}
+
+pub struct A2CBatchData<T: R2lTensor> {
+    pub observations: Vec<T>,
+    pub actions: Vec<T>,
+    pub logp: T,
+    pub values_pred: T,
 }
 
 pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
@@ -70,7 +87,20 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
             let values_pred = lm.calculate_values(&observations)?;
             let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
-            let losses = Module::Losses::losses(policy_loss, value_loss);
+            let mut losses = Module::Losses::losses(policy_loss, value_loss);
+            let a2c_data = A2CBatchData {
+                observations,
+                actions,
+                logp,
+                values_pred,
+            };
+            match self
+                .hooks
+                .batch_hook(&mut self.params, lm, &mut losses, &a2c_data)?
+            {
+                HookResult::Break => return Ok(()),
+                HookResult::Continue => {}
+            }
             lm.update(losses)?;
         }
     }
