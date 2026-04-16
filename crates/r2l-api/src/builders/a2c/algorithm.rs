@@ -1,5 +1,6 @@
 use std::sync::mpsc::Sender;
 
+use candle_core::Device;
 use r2l_core::{env::EnvBuilderTrait, on_policy::algorithm::Agent};
 use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
@@ -149,3 +150,59 @@ impl<EB: EnvBuilderTrait> A2CCandleAlgorithmBuilder<EB> {
 
 pub type A2CAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
     A2CCandleAlgorithmBuilder<EB, BD>;
+
+impl<EB: EnvBuilderTrait> A2CAlgorithmBuilder<EB> {
+    pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB> {
+        let OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder,
+        } = self;
+        OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder: agent_builder.with_candle(device),
+        }
+    }
+
+    pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB> {
+        let OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder,
+        } = self;
+        OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder: agent_builder.with_burn(),
+        }
+    }
+}
+
+impl<EB: EnvBuilderTrait> A2CBurnAlgorithmBuilder<EB> {
+    pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB> {
+        let OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder,
+        } = self;
+        OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder: agent_builder.with_candle(device),
+        }
+    }
+
+    pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB> {
+        let OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder,
+        } = self;
+        OnPolicyAlgorightmBuilder {
+            sampler_builder,
+            learning_schedule,
+            agent_builder: agent_builder.with_burn(),
+        }
+    }
+}

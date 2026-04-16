@@ -1,5 +1,6 @@
 use std::sync::mpsc::Sender;
 
+use candle_core::Device;
 use r2l_core::env::EnvBuilderTrait;
 use r2l_core::on_policy::algorithm::Agent;
 use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
@@ -195,7 +196,7 @@ pub type PPOAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait
     PPOCandleAlgorithmBuiler<EB, BD>;
 
 impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuiler<EB> {
-    pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuiler<EB> {
+    pub fn with_candle(self, device: Device) -> PPOCandleAlgorithmBuiler<EB> {
         let OnPolicyAlgorightmBuilder {
             sampler_builder,
             learning_schedule,

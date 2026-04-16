@@ -125,8 +125,48 @@ impl<M> A2CAgentBuilder<M> {
 }
 
 impl A2CAgentBuilder<A2CCandleBackend> {
-    pub fn with_candle_device(mut self, device: Device) -> Self {
+    pub fn with_candle(mut self, device: Device) -> Self {
         self.backend = A2CCandleBackend { device };
+        self
+    }
+
+    pub fn with_burn(self) -> A2CAgentBuilder<A2CBurnBackend> {
+        let A2CAgentBuilder {
+            a2c_params,
+            policy_builder,
+            hook_builder,
+            actor_critic_type,
+            ..
+        } = self;
+        A2CAgentBuilder {
+            a2c_params,
+            policy_builder,
+            hook_builder,
+            actor_critic_type,
+            backend: A2CBurnBackend,
+        }
+    }
+}
+
+impl A2CAgentBuilder<A2CBurnBackend> {
+    pub fn with_candle(self, device: Device) -> A2CAgentBuilder<A2CCandleBackend> {
+        let A2CAgentBuilder {
+            a2c_params,
+            policy_builder,
+            hook_builder,
+            actor_critic_type,
+            ..
+        } = self;
+        A2CAgentBuilder {
+            a2c_params,
+            policy_builder,
+            hook_builder,
+            actor_critic_type,
+            backend: A2CCandleBackend { device },
+        }
+    }
+
+    pub fn with_burn(self) -> Self {
         self
     }
 }
