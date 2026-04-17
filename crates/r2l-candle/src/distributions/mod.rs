@@ -27,7 +27,7 @@ impl CandlePolicyKind {
         action_size: usize,
         observation_size: usize,
     ) -> Result<Self> {
-        let layers = &[&hidden_layers[..], &[action_size]].concat();
+        let layers = &[hidden_layers, &[action_size]].concat();
         let distr = CategoricalDistribution::build(
             observation_size,
             action_size,
@@ -45,7 +45,7 @@ impl CandlePolicyKind {
         action_size: usize,
         observation_size: usize,
     ) -> Result<Self> {
-        let layers = &[&hidden_layers[..], &[action_size]].concat();
+        let layers = &[hidden_layers, &[action_size]].concat();
         let log_std = policy_varbuilder.get(action_size, "log_std")?;
         let distr = DiagGaussianDistribution::build(
             observation_size,

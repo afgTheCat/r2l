@@ -244,7 +244,7 @@ impl PolicyValueModule {
             action_size,
             observation_size,
         )?;
-        let value_layers = &[&value_layers[..], &[1]].concat();
+        let value_layers = &[value_layers, &[1]].concat();
         let value_function =
             SequentialValueFunction::new(observation_size, value_layers, &policy_vb, "value")?;
         let optimizer = PolicyValueOptimizer::joint(policy_varmap, params, max_grad_norm)?;
@@ -278,7 +278,7 @@ impl PolicyValueModule {
         )?;
         let critic_varmap = VarMap::new();
         let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, device);
-        let value_layers = &[&value_layers[..], &[1]].concat();
+        let value_layers = &[value_layers, &[1]].concat();
         let value_function =
             SequentialValueFunction::new(observation_size, value_layers, &critic_vb, "value")?;
         let optimizer = PolicyValueOptimizer::split(
