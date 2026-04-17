@@ -45,7 +45,7 @@ impl CategoricalDistribution {
 impl Actor for CategoricalDistribution {
     type Tensor = CandleTensor;
 
-    fn get_action(&self, observation: CandleTensor) -> Result<CandleTensor> {
+    fn action(&self, observation: CandleTensor) -> Result<CandleTensor> {
         assert!(
             observation.rank() == 1,
             "Observation should be a flattened tensor"

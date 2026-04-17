@@ -33,7 +33,7 @@ impl<B: Backend> CategoricalDistribution<B> {
 impl<B: Backend> Actor for CategoricalDistribution<B> {
     type Tensor = BurnTensor<B, 1>;
 
-    fn get_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
         let device: <B as Backend>::Device = Default::default();
         let observation: BurnTensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation);

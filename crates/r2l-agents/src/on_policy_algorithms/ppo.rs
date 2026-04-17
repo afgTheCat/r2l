@@ -99,8 +99,8 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
             let advantages = lm.tensor_from_slice(&advantages.sample(&indicies));
             let logp_old = lm.tensor_from_slice(&logps.sample(&indicies));
             let returns = lm.tensor_from_slice(&returns.sample(&indicies));
-            let logp = lm.get_policy().log_probs(&observations, &actions)?;
-            let values_pred = lm.calculate_values(&observations)?;
+            let logp = lm.policy().log_probs(&observations, &actions)?;
+            let values_pred = lm.values(&observations)?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
             let logp_diff = logp.sub(&logp_old)?;
             let ratio = logp_diff.exp()?;
@@ -151,7 +151,7 @@ impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
     type Actor = M::InferencePolicy;
 
     fn actor(&self) -> Self::Actor {
-        self.lm.get_inference_policy()
+        self.lm.inference_policy()
     }
 
     fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(

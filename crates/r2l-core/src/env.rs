@@ -7,7 +7,7 @@ use crate::tensor::R2lTensor;
 #[derive(Debug, Clone)]
 pub enum Space<T> {
     Discrete(usize),
-    Continous {
+    Continuous {
         min: Option<T>,
         max: Option<T>,
         size: usize,
@@ -15,8 +15,8 @@ pub enum Space<T> {
 }
 
 impl<T> Space<T> {
-    pub fn continous_from_dims(dims: Vec<usize>) -> Self {
-        Self::Continous {
+    pub fn continuous_from_dims(dims: Vec<usize>) -> Self {
+        Self::Continuous {
             min: None,
             max: None,
             size: dims.iter().product(),
@@ -26,18 +26,18 @@ impl<T> Space<T> {
     pub fn size(&self) -> usize {
         match &self {
             Self::Discrete(size) => *size,
-            Self::Continous { size, .. } => *size,
+            Self::Continuous { size, .. } => *size,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct EnvironmentDescription<T> {
+pub struct EnvDescription<T> {
     pub observation_space: Space<T>,
     pub action_space: Space<T>,
 }
 
-impl<T> EnvironmentDescription<T> {
+impl<T> EnvDescription<T> {
     pub fn new(observation_space: Space<T>, action_space: Space<T>) -> Self {
         Self {
             observation_space,
@@ -55,11 +55,11 @@ impl<T> EnvironmentDescription<T> {
 }
 
 // TODO: This is a useful thing buffer needs to be go
-pub struct SnapShot<T> {
+pub struct Snapshot<T> {
     pub state: T,
     pub reward: f32,
     pub terminated: bool,
-    pub trancuated: bool,
+    pub truncated: bool,
 }
 
 pub trait Env {
@@ -67,8 +67,8 @@ pub trait Env {
     type Tensor: R2lTensor;
 
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
-    fn step(&mut self, action: Self::Tensor) -> Result<SnapShot<Self::Tensor>>;
-    fn env_description(&self) -> EnvironmentDescription<Self::Tensor>;
+    fn step(&mut self, action: Self::Tensor) -> Result<Snapshot<Self::Tensor>>;
+    fn env_description(&self) -> EnvDescription<Self::Tensor>;
 }
 
 pub type EnvTensor<E> = <E as Env>::Tensor;
@@ -79,7 +79,7 @@ pub trait EnvBuilderTrait: Sync + Send + 'static {
 
     fn build_env(&self) -> Result<Self::Env>;
 
-    fn env_description(&self) -> Result<EnvironmentDescription<Self::Tensor>> {
+    fn env_description(&self) -> Result<EnvDescription<Self::Tensor>> {
         let env = self.build_env()?;
         Ok(env.env_description())
     }
@@ -132,7 +132,7 @@ impl<EB: EnvBuilderTrait> EnvBuilder<EB> {
         }
     }
 
-    pub fn env_description(&self) -> Result<EnvironmentDescription<EB::Tensor>> {
+    pub fn env_description(&self) -> Result<EnvDescription<EB::Tensor>> {
         match &self {
             Self::Homogenous { builder, n_envs: _ } => builder.env_description(),
             Self::Heterogenous { builders } => builders[0].env_description(),

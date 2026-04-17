@@ -48,6 +48,6 @@ impl R2lBuffer {
 
 impl R2lTensor for R2lBuffer {
     fn to_vec(&self) -> Vec<f32> {
-        todo!()
+        self.data.clone()
     }
 }

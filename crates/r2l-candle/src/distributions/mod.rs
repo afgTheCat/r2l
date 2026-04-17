@@ -19,10 +19,10 @@ pub enum CandlePolicyKind {
 impl Actor for CandlePolicyKind {
     type Tensor = CandleTensor;
 
-    fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
+    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         match self {
-            Self::Categorical(cat) => cat.get_action(observation),
-            Self::DiagGaussian(diag) => diag.get_action(observation),
+            Self::Categorical(cat) => cat.action(observation),
+            Self::DiagGaussian(diag) => diag.action(observation),
         }
     }
 }

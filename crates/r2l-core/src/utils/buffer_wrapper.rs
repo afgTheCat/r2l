@@ -124,8 +124,8 @@ impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S
         BoolIter::new(self.data.terminated())
     }
 
-    fn trancuated(&self) -> BoolIter<'_> {
-        BoolIter::new(self.data.trancuated())
+    fn truncated(&self) -> BoolIter<'_> {
+        BoolIter::new(self.data.truncated())
     }
 }
 
@@ -153,7 +153,7 @@ impl<'a, S: R2lTensor, T: R2lTensor + From<S>, B: TrajectoryContainer<Tensor = S
                     action: T::from(memory.action),
                     reward: memory.reward,
                     terminated: memory.terminated,
-                    trancuated: memory.trancuated,
+                    truncated: memory.truncated,
                 });
             }
             BufferWrapper::Cloned(Box::new(out))
@@ -208,10 +208,10 @@ impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S
         }
     }
 
-    fn trancuated(&self) -> impl Iterator<Item = bool> {
+    fn truncated(&self) -> impl Iterator<Item = bool> {
         match self {
-            Self::Borrowed(b) => b.trancuated(),
-            Self::Cloned(b) => BoolIter::new(b.trancuated()),
+            Self::Borrowed(b) => b.truncated(),
+            Self::Cloned(b) => BoolIter::new(b.truncated()),
         }
     }
 }

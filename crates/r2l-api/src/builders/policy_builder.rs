@@ -16,7 +16,7 @@ use r2l_candle::distributions::{
 #[derive(Debug, Clone, Copy)]
 pub enum ActionSpaceType {
     Discrete,
-    Continous,
+    Continuous,
 }
 
 pub enum DistributionType {
@@ -50,7 +50,7 @@ impl PolicyBuilder {
                 ActionSpaceType::Discrete => Ok(BurnPolicyKind::Categorical(
                     BurnCategoricalDistribution::build(policy_layers),
                 )),
-                ActionSpaceType::Continous => Ok(BurnPolicyKind::Diag(
+                ActionSpaceType::Continuous => Ok(BurnPolicyKind::Diag(
                     BurnDiagGaussianDistribution::build(policy_layers),
                 )),
             },
@@ -100,7 +100,7 @@ impl PolicyBuilder {
                         "policy",
                     )?,
                 )),
-                ActionSpaceType::Continous => {
+                ActionSpaceType::Continuous => {
                     let log_std = policy_varbuilder.get(action_size, "log_std")?;
                     Ok(CandlePolicyKind::DiagGaussian(
                         CandleDiagGaussianDistribution::build(

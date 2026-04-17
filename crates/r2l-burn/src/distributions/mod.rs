@@ -17,10 +17,10 @@ pub enum BurnPolicyKind<B: Backend> {
 impl<B: Backend> Actor for BurnPolicyKind<B> {
     type Tensor = BurnTensor<B, 1>;
 
-    fn get_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
         match self {
-            Self::Categorical(cat) => cat.get_action(observation),
-            Self::Diag(diag) => diag.get_action(observation),
+            Self::Categorical(cat) => cat.action(observation),
+            Self::Diag(diag) => diag.action(observation),
         }
     }
 }

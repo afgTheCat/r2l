@@ -131,7 +131,7 @@ pub struct SequentialValueFunction {
 impl ValueFunction for SequentialValueFunction {
     type Tensor = CandleTensor;
 
-    fn calculate_values(&self, observations: &[CandleTensor]) -> Result<CandleTensor> {
+    fn values(&self, observations: &[CandleTensor]) -> Result<CandleTensor> {
         let observations = CandleTensor::stack(observations, 0)?;
         let value = self.value_net.forward(&observations)?.squeeze(1)?;
         Ok(value)
@@ -190,8 +190,8 @@ impl PolicyValueModule {
 impl ValueFunction for PolicyValueModule {
     type Tensor = CandleTensor;
 
-    fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
-        self.value_function.calculate_values(observations)
+    fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+        self.value_function.values(observations)
     }
 }
 
@@ -209,11 +209,11 @@ impl OnPolicyLearningModule for PolicyValueModule {
     type Policy = CandlePolicyKind;
     type InferencePolicy = CandlePolicyKind;
 
-    fn get_inference_policy(&self) -> Self::InferencePolicy {
+    fn inference_policy(&self) -> Self::InferencePolicy {
         self.policy.clone()
     }
 
-    fn get_policy(&self) -> &Self::Policy {
+    fn policy(&self) -> &Self::Policy {
         &self.policy
     }
 

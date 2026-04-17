@@ -156,7 +156,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
         if should_stop {
             if let Some(reporter) = &mut self.reporter {
                 reporter.update_average_reward(buffers);
-                reporter.report.std = module.get_policy().std().ok();
+                reporter.report.std = module.policy().std().ok();
                 reporter.report.learning_rate = module.policy_learning_rate();
                 reporter.send_report();
             }
@@ -174,7 +174,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
         data: &PPOBatchData<burn::Tensor<B, 1>>,
     ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy = module.get_policy().entropy(&data.observations).unwrap();
+        let entropy = module.policy().entropy(&data.observations).unwrap();
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         let approx_kl = {
             let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
@@ -251,7 +251,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
         if should_stop {
             if let Some(reporter) = &mut self.reporter {
                 reporter.update_average_reward(buffers);
-                reporter.report.std = module.get_policy().std().ok();
+                reporter.report.std = module.policy().std().ok();
                 reporter.report.learning_rate = module.policy_learning_rate();
                 reporter.send_report();
             }
@@ -269,7 +269,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
         data: &PPOBatchData<candle_core::Tensor>,
     ) -> anyhow::Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy = module.get_policy().entropy(&data.observations).unwrap();
+        let entropy = module.policy().entropy(&data.observations).unwrap();
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
         let ratio = data.ratio.detach();

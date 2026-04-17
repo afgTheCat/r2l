@@ -35,7 +35,7 @@ impl<B: Backend> DiagGaussianDistribution<B> {
 impl<B: Backend> Actor for DiagGaussianDistribution<B> {
     type Tensor = BurnTensor<B, 1>;
 
-    fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
+    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device: <B as Backend>::Device = Default::default();
         let observation: BurnTensor<B, 2> = observation.unsqueeze();
         let mu = self.mu_net.forward(observation);

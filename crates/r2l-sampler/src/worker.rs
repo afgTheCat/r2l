@@ -4,7 +4,7 @@ use bimodal_array::ElementHandle;
 use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{ExpandableTrajectoryContainer, Memory},
-    env::{Env, EnvironmentDescription, SnapShot},
+    env::{Env, EnvDescription, Snapshot},
     models::Actor,
     rng::RNG,
     tensor::R2lTensor,
@@ -39,14 +39,14 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
         env.reset(seed).unwrap()
     };
 
-    let action = policy.get_action(state.clone()).unwrap();
-    let SnapShot {
+    let action = policy.action(state.clone()).unwrap();
+    let Snapshot {
         state: mut next_state,
         reward,
         terminated,
-        trancuated,
+        truncated,
     } = env.step(action.clone()).unwrap();
-    let done = terminated || trancuated;
+    let done = terminated || truncated;
     if done {
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         next_state = env.reset(seed).unwrap();
@@ -57,7 +57,7 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
         action,
         reward,
         terminated,
-        trancuated,
+        truncated,
     }
 }
 
@@ -91,7 +91,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
                     // TODO: this is a bit awkward.
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, policy, last_state);
-                    let terminates = memory.terminates();
+                    let terminates = memory.is_done();
                     self.last_state = Some(memory.next_state.clone());
                     buffer.push(memory);
                     if terminates {
@@ -109,14 +109,14 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
 pub enum WorkerCommand<T: R2lTensor> {
     SetPolicy(Box<dyn Actor<Tensor = T>>),
     Collect(RolloutMode),
-    GetEnvironmentDescription,
+    GetEnvDescription,
     Shutdown,
 }
 
 pub enum WorkerResult<T: R2lTensor> {
     PolicySet,
     Collected,
-    EnvironmentDescription(EnvironmentDescription<T>),
+    EnvDescription(EnvDescription<T>),
     Shutdown,
 }
 
@@ -147,12 +147,10 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
                     self.worker.collect_rollout(bound);
                     self.tx.send(WorkerResult::Collected).unwrap();
                 }
-                WorkerCommand::GetEnvironmentDescription => {
+                WorkerCommand::GetEnvDescription => {
                     let environment_descriotion = self.worker.env.env_description();
                     self.tx
-                        .send(WorkerResult::EnvironmentDescription(
-                            environment_descriotion,
-                        ))
+                        .send(WorkerResult::EnvDescription(environment_descriotion))
                         .unwrap();
                 }
                 WorkerCommand::Shutdown => {
@@ -167,14 +165,11 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
 pub struct ThreadWorkers<T: R2lTensor>(pub HashMap<usize, (CommandSender<T>, ResultReceiver<T>)>);
 
 impl<T: R2lTensor> ThreadWorkers<T> {
-    pub fn get_environment_description(&self) -> EnvironmentDescription<T> {
+    pub fn env_description(&self) -> EnvDescription<T> {
         let channels = &self.0;
         let (command_tx, worker_rx) = channels.get(&0).unwrap();
-        command_tx
-            .send(WorkerCommand::GetEnvironmentDescription)
-            .unwrap();
-        let WorkerResult::EnvironmentDescription(env_description) = worker_rx.recv().unwrap()
-        else {
+        command_tx.send(WorkerCommand::GetEnvDescription).unwrap();
+        let WorkerResult::EnvDescription(env_description) = worker_rx.recv().unwrap() else {
             todo!()
         };
         env_description
@@ -227,10 +222,10 @@ pub enum WorkerPool<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>
 }
 
 impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> WorkerPool<E, B> {
-    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
+    pub fn env_description(&self) -> EnvDescription<E::Tensor> {
         match self {
             Self::Vec(workers) => workers[0].env.env_description(),
-            Self::Thread(tw) => tw.get_environment_description(),
+            Self::Thread(tw) => tw.env_description(),
         }
     }
 

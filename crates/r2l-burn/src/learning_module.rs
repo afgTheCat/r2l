@@ -123,7 +123,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for JointPolicyValueMo
 impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueModule<B, M> {
     type Tensor = Tensor<B, 1>;
 
-    fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+    fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
         let observation: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
         let value = self.model.value_net.forward(observation);
         Ok(value.squeeze())
@@ -136,11 +136,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for JointPolic
     type Policy = D;
     type InferencePolicy = D::InnerModule;
 
-    fn get_inference_policy(&self) -> Self::InferencePolicy {
+    fn inference_policy(&self) -> Self::InferencePolicy {
         self.model.policy.valid()
     }
 
-    fn get_policy(&self) -> &Self::Policy {
+    fn policy(&self) -> &Self::Policy {
         &self.model.policy
     }
 
@@ -219,7 +219,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for SplitPolicyValueMo
 impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueModule<B, M> {
     type Tensor = Tensor<B, 1>;
 
-    fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+    fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
         let observation: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
         let value = self.value_net.forward(observation);
         Ok(value.squeeze())
@@ -232,11 +232,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolic
     type Policy = D;
     type InferencePolicy = D::InnerModule;
 
-    fn get_inference_policy(&self) -> Self::InferencePolicy {
+    fn inference_policy(&self) -> Self::InferencePolicy {
         self.policy.valid()
     }
 
-    fn get_policy(&self) -> &Self::Policy {
+    fn policy(&self) -> &Self::Policy {
         &self.policy
     }
 
@@ -284,10 +284,10 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for PolicyValueModule<
 impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueModule<B, M> {
     type Tensor = Tensor<B, 1>;
 
-    fn calculate_values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+    fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
         match self {
-            Self::Joint(lm) => lm.calculate_values(observations),
-            Self::Split(lm) => lm.calculate_values(observations),
+            Self::Joint(lm) => lm.values(observations),
+            Self::Split(lm) => lm.values(observations),
         }
     }
 }
@@ -298,17 +298,17 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValu
     type Policy = D;
     type InferencePolicy = D::InnerModule;
 
-    fn get_inference_policy(&self) -> Self::InferencePolicy {
+    fn inference_policy(&self) -> Self::InferencePolicy {
         match self {
-            Self::Joint(lm) => lm.get_inference_policy(),
-            Self::Split(lm) => lm.get_inference_policy(),
+            Self::Joint(lm) => lm.inference_policy(),
+            Self::Split(lm) => lm.inference_policy(),
         }
     }
 
-    fn get_policy(&self) -> &Self::Policy {
+    fn policy(&self) -> &Self::Policy {
         match self {
-            Self::Joint(lm) => lm.get_policy(),
-            Self::Split(lm) => lm.get_policy(),
+            Self::Joint(lm) => lm.policy(),
+            Self::Split(lm) => lm.policy(),
         }
     }
 

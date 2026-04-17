@@ -49,8 +49,8 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
             let (observations, actions) = sample(buffers, &indices, Module::lifter);
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices));
             let returns = lm.tensor_from_slice(&returns.sample(&indices));
-            let logp = lm.get_policy().log_probs(&observations, &actions)?;
-            let values_pred = lm.calculate_values(&observations)?;
+            let logp = lm.policy().log_probs(&observations, &actions)?;
+            let values_pred = lm.values(&observations)?;
             let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
             let losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
@@ -64,7 +64,7 @@ impl<M: OnPolicyLearningModule> Agent for VPG<M> {
     type Actor = M::InferencePolicy;
 
     fn actor(&self) -> Self::Actor {
-        self.lm.get_inference_policy()
+        self.lm.inference_policy()
     }
 
     fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(

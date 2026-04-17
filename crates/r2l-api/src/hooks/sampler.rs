@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use candle_core::{DType, Device, Result, Tensor};
 use r2l_core::{
     buffers::EditableTrajectoryContainer,
-    env::{Env, EnvBuilderTrait, EnvironmentDescription},
+    env::{Env, EnvBuilderTrait, EnvDescription},
     models::Actor,
 };
 use r2l_sampler::PreprocessorY;
@@ -183,7 +183,7 @@ impl NormalizerOptions {
 
     pub fn build<T>(
         &self,
-        env_description: EnvironmentDescription<T>,
+        env_description: EnvDescription<T>,
         n_envs: usize,
         device: &Device,
     ) -> EnvNormalizer {

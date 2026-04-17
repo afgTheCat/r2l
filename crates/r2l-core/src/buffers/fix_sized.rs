@@ -13,7 +13,7 @@ pub struct FixedSizeStateBuffer<T: R2lTensor> {
     pub rewards: AllocRingBuffer<f32>,
     pub action: AllocRingBuffer<T>,
     pub terminated: AllocRingBuffer<bool>,
-    pub trancuated: AllocRingBuffer<bool>,
+    pub truncated: AllocRingBuffer<bool>,
 }
 
 impl<T: R2lTensor> FixedSizeStateBuffer<T> {
@@ -25,7 +25,7 @@ impl<T: R2lTensor> FixedSizeStateBuffer<T> {
             rewards: AllocRingBuffer::new(len),
             action: AllocRingBuffer::new(len),
             terminated: AllocRingBuffer::new(len),
-            trancuated: AllocRingBuffer::new(len),
+            truncated: AllocRingBuffer::new(len),
         }
     }
 }
@@ -57,8 +57,8 @@ impl<T: R2lTensor> TrajectoryContainer for FixedSizeStateBuffer<T> {
         self.terminated.iter().copied()
     }
 
-    fn trancuated(&self) -> impl Iterator<Item = bool> {
-        self.trancuated.iter().copied()
+    fn truncated(&self) -> impl Iterator<Item = bool> {
+        self.truncated.iter().copied()
     }
 }
 
@@ -70,13 +70,13 @@ impl<T: R2lTensor> ExpandableTrajectoryContainer for FixedSizeStateBuffer<T> {
             action,
             reward,
             terminated,
-            trancuated,
+            truncated,
         } = memory;
         self.states.enqueue(state);
         self.next_states.enqueue(next_state);
         self.action.enqueue(action);
         self.rewards.enqueue(reward);
         self.terminated.enqueue(terminated);
-        self.trancuated.enqueue(trancuated);
+        self.truncated.enqueue(truncated);
     }
 }

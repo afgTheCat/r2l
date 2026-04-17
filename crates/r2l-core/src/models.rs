@@ -5,7 +5,7 @@ use crate::tensor::R2lTensor;
 pub trait Actor: Send + 'static {
     type Tensor: R2lTensor;
 
-    fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
+    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
 }
 
 pub trait Policy: Actor {
@@ -33,5 +33,5 @@ pub trait LearningModule {
 pub trait ValueFunction {
     type Tensor: Clone;
 
-    fn calculate_values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor>;
+    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor>;
 }

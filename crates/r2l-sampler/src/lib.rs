@@ -12,7 +12,7 @@ use r2l_core::buffers::variable_sized::VariableSizedStateBuffer;
 use r2l_core::env::Env;
 use r2l_core::env::EnvBuilder;
 use r2l_core::env::EnvBuilderTrait;
-use r2l_core::env::EnvironmentDescription;
+use r2l_core::env::EnvDescription;
 use r2l_core::models::Actor;
 use r2l_core::on_policy::algorithm::Sampler;
 use r2l_core::tensor::R2lTensor;
@@ -163,7 +163,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
         }
     }
 
-    pub fn env_description(&self) -> EnvironmentDescription<E::Tensor> {
+    pub fn env_description(&self) -> EnvDescription<E::Tensor> {
         self.worker_pool.env_description()
     }
 }

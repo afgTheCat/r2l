@@ -12,12 +12,12 @@ pub struct Memory<T> {
     pub action: T,
     pub reward: f32,
     pub terminated: bool,
-    pub trancuated: bool,
+    pub truncated: bool,
 }
 
 impl<T> Memory<T> {
-    pub fn terminates(&self) -> bool {
-        self.terminated || self.trancuated
+    pub fn is_done(&self) -> bool {
+        self.terminated || self.truncated
     }
 }
 
@@ -40,12 +40,12 @@ pub trait TrajectoryContainer: Sync {
 
     fn terminated(&self) -> impl Iterator<Item = bool>;
 
-    fn trancuated(&self) -> impl Iterator<Item = bool>;
+    fn truncated(&self) -> impl Iterator<Item = bool>;
 
     fn dones(&self) -> impl Iterator<Item = bool> {
         self.terminated()
-            .zip(self.trancuated())
-            .map(|(terminated, trancuated)| terminated || trancuated)
+            .zip(self.truncated())
+            .map(|(terminated, truncated)| terminated || truncated)
     }
 
     // TODO: warning, this clones the states, probably not good for perf
@@ -57,19 +57,23 @@ pub trait TrajectoryContainer: Sync {
             self.actions(),
             self.rewards(),
             self.terminated(),
-            self.trancuated()
+            self.truncated()
         )
         .map(
-            |(state, next_state, action, reward, terminated, trancuated)| Memory {
+            |(state, next_state, action, reward, terminated, truncated)| Memory {
                 state: state.clone(),
                 next_state: next_state.clone(),
                 action: action.clone(),
                 reward,
                 terminated,
-                trancuated,
+                truncated,
             },
         )
     }
+}
+
+pub trait ExpandableTrajectoryContainer: TrajectoryContainer + Send + 'static {
+    fn push(&mut self, memory: Memory<Self::Tensor>);
 }
 
 // TODO: I think maybe we need a pop_last. Or maybe a mut ref to the last
@@ -81,8 +85,4 @@ pub trait EditableTrajectoryContainer: TrajectoryContainer {
     fn set_last_state(&mut self, t: Self::Tensor);
 
     fn set_last_reward(&mut self, r: f32);
-}
-
-pub trait ExpandableTrajectoryContainer: TrajectoryContainer + Send + 'static {
-    fn push(&mut self, memory: Memory<Self::Tensor>);
 }

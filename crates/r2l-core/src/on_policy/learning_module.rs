@@ -18,7 +18,7 @@ pub trait OnPolicyLearningModule:
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor;
 
-    fn get_inference_policy(&self) -> Self::InferencePolicy;
+    fn inference_policy(&self) -> Self::InferencePolicy;
 
-    fn get_policy(&self) -> &Self::Policy;
+    fn policy(&self) -> &Self::Policy;
 }

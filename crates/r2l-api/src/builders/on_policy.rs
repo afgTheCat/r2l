@@ -71,7 +71,7 @@ impl<
         let action_size = env_description.action_size();
         let action_space = match env_description.action_space {
             Space::Discrete(_) => ActionSpaceType::Discrete,
-            Space::Continous { .. } => ActionSpaceType::Continous,
+            Space::Continuous { .. } => ActionSpaceType::Continuous,
         };
         let agent = self
             .agent_builder

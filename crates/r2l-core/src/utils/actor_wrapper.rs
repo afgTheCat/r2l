@@ -26,8 +26,8 @@ where
 {
     type Tensor = T;
 
-    fn get_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let action = self.policy.get_action(observation.into())?;
+    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
+        let action = self.policy.action(observation.into())?;
         Ok(action.into())
     }
 }

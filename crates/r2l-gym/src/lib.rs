@@ -4,7 +4,7 @@ use pyo3::{
     types::{PyAnyMethods, PyDict},
 };
 use r2l_core::{
-    env::{Env, EnvBuilderTrait, EnvironmentDescription, SnapShot, Space},
+    env::{Env, EnvBuilderTrait, EnvDescription, Snapshot, Space},
     tensor::R2lBuffer,
 };
 
@@ -35,7 +35,7 @@ impl GymEnv {
                 let low = R2lBuffer::new(low, vec![action_size]);
                 let high: Vec<f32> = action_space.getattr("high")?.extract()?;
                 let high = R2lBuffer::new(high, vec![action_size]);
-                Space::Continous {
+                Space::Continuous {
                     min: Some(low),
                     max: Some(high),
                     size: action_size,
@@ -45,7 +45,7 @@ impl GymEnv {
             };
             let observation_space = env.getattr("observation_space")?;
             let observation_space: Vec<usize> = observation_space.getattr("shape")?.extract()?;
-            let observation_space = Space::continous_from_dims(observation_space);
+            let observation_space = Space::continuous_from_dims(observation_space);
             PyResult::Ok(GymEnv {
                 env: env.into(),
                 action_space,
@@ -91,10 +91,10 @@ impl Env for GymEnv {
         Ok(state)
     }
 
-    fn step(&mut self, action: R2lBuffer) -> Result<SnapShot<R2lBuffer>> {
+    fn step(&mut self, action: R2lBuffer) -> Result<Snapshot<R2lBuffer>> {
         let snapshot = Python::with_gil(|py| {
             let step = match &self.action_space {
-                Space::Continous {
+                Space::Continuous {
                     min: Some(min),
                     max: Some(max),
                     ..
@@ -115,19 +115,19 @@ impl Env for GymEnv {
             let next_state = R2lBuffer::from_vec(next_state);
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
-            let trancuated: bool = step.get_item(3)?.extract()?;
-            PyResult::Ok(SnapShot {
+            let truncated: bool = step.get_item(3)?.extract()?;
+            PyResult::Ok(Snapshot {
                 state: next_state,
                 reward,
                 terminated,
-                trancuated,
+                truncated,
             })
         })?;
         Ok(snapshot)
     }
 
-    fn env_description(&self) -> EnvironmentDescription<R2lBuffer> {
-        EnvironmentDescription {
+    fn env_description(&self) -> EnvDescription<R2lBuffer> {
+        EnvDescription {
             observation_space: self.observation_space.clone(),
             action_space: self.action_space.clone(),
         }

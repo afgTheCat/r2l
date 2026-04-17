@@ -132,7 +132,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
         data: &A2CBatchData<burn::Tensor<B, 1>>,
     ) -> Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy = module.get_policy().entropy(&data.observations)?;
+        let entropy = module.policy().entropy(&data.observations)?;
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         if let Some(DefaultA2CHookReporter { report, .. }) = &mut self.reporter {
             report.collect_batch_data(A2CBatchStats {
@@ -159,7 +159,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
     ) -> Result<HookResult> {
         if let Some(reporter) = &mut self.reporter {
             reporter.update_average_reward(buffers);
-            reporter.report.std = module.get_policy().std().ok();
+            reporter.report.std = module.policy().std().ok();
             reporter.report.learning_rate = module.policy_learning_rate();
             reporter.send_report();
         }
@@ -195,7 +195,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
         data: &A2CBatchData<candle_core::Tensor>,
     ) -> Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy = module.get_policy().entropy(&data.observations)?;
+        let entropy = module.policy().entropy(&data.observations)?;
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
         if let Some(DefaultA2CHookReporter { report, .. }) = &mut self.reporter {
@@ -219,7 +219,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
     ) -> Result<HookResult> {
         if let Some(reporter) = &mut self.reporter {
             reporter.update_average_reward(buffers);
-            reporter.report.std = module.get_policy().std().ok();
+            reporter.report.std = module.policy().std().ok();
             reporter.report.learning_rate = module.policy_learning_rate();
             reporter.send_report();
         }

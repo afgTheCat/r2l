@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use candle_core::{Device, Result};
 use r2l_core::{
     buffers::variable_sized::VariableSizedStateBuffer,
-    env::{Env, SnapShot},
+    env::{Env, Snapshot},
     models::Actor,
     rng::RNG,
 };
@@ -22,14 +22,14 @@ pub struct Evaluator<E: Env> {
 fn run_episode<E: Env>(
     env: &mut E,
     dist: &dyn Actor<Tensor = E::Tensor>,
-) -> Vec<SnapShot<E::Tensor>> {
+) -> Vec<Snapshot<E::Tensor>> {
     let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
     let mut state = env.reset(seed).unwrap();
     let mut snapshots = vec![];
     loop {
-        let action = dist.get_action(state.clone()).unwrap();
+        let action = dist.action(state.clone()).unwrap();
         let snapshot = env.step(action).unwrap();
-        let should_stop = snapshot.terminated || snapshot.trancuated;
+        let should_stop = snapshot.terminated || snapshot.truncated;
         state = snapshot.state.clone();
         snapshots.push(snapshot);
         if should_stop {
@@ -74,7 +74,7 @@ impl<E: Env> Evaluator<E> {
             let rewards = snapshots.iter().map(|s| s.reward).collect::<Vec<_>>();
             let dones = snapshots
                 .iter()
-                .map(|s| s.terminated || s.trancuated)
+                .map(|s| s.terminated || s.truncated)
                 .collect::<Vec<_>>();
             let sum_rewads = rewards.iter().sum::<f32>();
             let avg_rewards = sum_rewads / self.eval_episodes as f32;

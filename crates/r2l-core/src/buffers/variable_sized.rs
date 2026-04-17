@@ -10,7 +10,7 @@ pub struct VariableSizedStateBuffer<T: R2lTensor> {
     pub rewards: Vec<f32>,
     pub action: Vec<T>,
     pub terminated: Vec<bool>,
-    pub trancuated: Vec<bool>,
+    pub truncated: Vec<bool>,
 }
 
 impl<T: R2lTensor> Default for VariableSizedStateBuffer<T> {
@@ -27,7 +27,7 @@ impl<T: R2lTensor> VariableSizedStateBuffer<T> {
             rewards: vec![],
             action: vec![],
             terminated: vec![],
-            trancuated: vec![],
+            truncated: vec![],
         }
     }
 }
@@ -59,8 +59,8 @@ impl<T: R2lTensor> TrajectoryContainer for VariableSizedStateBuffer<T> {
         self.terminated.iter().copied()
     }
 
-    fn trancuated(&self) -> impl Iterator<Item = bool> {
-        self.trancuated.iter().copied()
+    fn truncated(&self) -> impl Iterator<Item = bool> {
+        self.truncated.iter().copied()
     }
 }
 
@@ -72,13 +72,13 @@ impl<T: R2lTensor> ExpandableTrajectoryContainer for VariableSizedStateBuffer<T>
             action,
             reward,
             terminated,
-            trancuated,
+            truncated,
         } = memory;
         self.states.push(state);
         self.next_states.push(next_state);
         self.action.push(action);
         self.rewards.push(reward);
         self.terminated.push(terminated);
-        self.trancuated.push(trancuated);
+        self.truncated.push(truncated);
     }
 }

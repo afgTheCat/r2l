@@ -134,7 +134,7 @@ pub fn buffer_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) ->
 ) -> anyhow::Result<(Vec<f32>, Vec<f32>)> {
     let mut states = buffer.states().map(&lifter).collect::<Vec<_>>();
     states.push(buffer.next_states().last().map(&lifter).unwrap());
-    let values_stacked = value_func.calculate_values(&states).unwrap();
+    let values_stacked = value_func.values(&states).unwrap();
     let values: Vec<f32> = values_stacked.to_vec();
     let total_steps = buffer.rewards().count();
     let mut advantages: Vec<f32> = vec![0.; total_steps];
@@ -144,8 +144,8 @@ pub fn buffer_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) ->
     for i in (0..total_steps).rev() {
         let mut dones = buffer
             .terminated()
-            .zip(buffer.trancuated())
-            .map(|(terminated, trancuated)| terminated || trancuated);
+            .zip(buffer.truncated())
+            .map(|(terminated, truncated)| terminated || truncated);
         let next_non_terminal = if dones.nth(i).unwrap() {
             last_gae_lam = 0.;
             0f32
