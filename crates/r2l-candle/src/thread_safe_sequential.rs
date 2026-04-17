@@ -4,12 +4,12 @@ use candle_nn::{Activation, Init, Linear, Module, VarBuilder};
 use either::Either;
 
 #[derive(Debug, Clone)]
-pub struct LinearLayer {
+struct LinearLayer {
     layer: Linear,
 }
 
 impl LinearLayer {
-    pub fn new(in_dim: usize, out_dim: usize, vb: &VarBuilder, prefix: &str) -> Result<Self> {
+    fn new(in_dim: usize, out_dim: usize, vb: &VarBuilder, prefix: &str) -> Result<Self> {
         let layer_vb = vb.pp(prefix);
         let weight = layer_vb.get_with_hints(
             (out_dim, in_dim),
@@ -41,7 +41,7 @@ impl Module for LinearLayer {
 }
 
 #[derive(Debug, Clone)]
-pub struct ActivationLayer(pub Activation);
+struct ActivationLayer(Activation);
 
 impl Module for ActivationLayer {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
@@ -50,14 +50,14 @@ impl Module for ActivationLayer {
 }
 
 #[derive(Debug, Clone)]
-pub struct ThreadSafeLayer(pub Either<LinearLayer, ActivationLayer>);
+struct ThreadSafeLayer(Either<LinearLayer, ActivationLayer>);
 
 impl ThreadSafeLayer {
-    pub fn linear(linear: LinearLayer) -> Self {
+    fn linear(linear: LinearLayer) -> Self {
         Self(Either::Left(linear))
     }
 
-    pub fn activation(activation: ActivationLayer) -> Self {
+    fn activation(activation: ActivationLayer) -> Self {
         Self(Either::Right(activation))
     }
 }
@@ -72,7 +72,7 @@ impl Module for ThreadSafeLayer {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct ThreadSafeSequential {
+pub(crate) struct ThreadSafeSequential {
     layers: Vec<ThreadSafeLayer>,
 }
 
@@ -86,7 +86,7 @@ impl Module for ThreadSafeSequential {
     }
 }
 
-pub fn build_sequential(
+pub(crate) fn build_sequential(
     input_dim: usize,
     layers: &[usize],
     vb: &VarBuilder,
@@ -112,7 +112,7 @@ pub fn build_sequential(
 }
 
 impl ThreadSafeSequential {
-    pub fn add_layer(mut self, layer: ThreadSafeLayer) -> Self {
+    fn add_layer(mut self, layer: ThreadSafeLayer) -> Self {
         self.layers.push(layer);
         self
     }

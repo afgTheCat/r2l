@@ -4,6 +4,13 @@ use anyhow::Result;
 
 use crate::tensor::R2lTensor;
 
+/// The type of action space.
+#[derive(Debug, Clone, Copy)]
+pub enum ActionSpaceType {
+    Discrete,
+    Continuous,
+}
+
 /// Description of an observation or action space.
 #[derive(Debug, Clone)]
 pub enum Space<T> {

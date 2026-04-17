@@ -30,7 +30,7 @@ fn clip_grad(t: &Tensor, varmap: &VarMap, max_norm: f32) -> Result<GradStore> {
     Ok(grad_store)
 }
 
-pub struct OptimizerWithMaxGrad {
+pub(crate) struct OptimizerWithMaxGrad {
     pub optimizer: AdamW,
     pub max_grad_norm: Option<f32>,
     pub varmap: VarMap,

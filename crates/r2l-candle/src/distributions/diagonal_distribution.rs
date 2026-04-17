@@ -16,14 +16,6 @@ pub struct DiagGaussianDistribution {
 }
 
 impl DiagGaussianDistribution {
-    pub fn new(noise: CandleTensor, mu_net: ThreadSafeSequential, log_std: CandleTensor) -> Self {
-        Self {
-            noise,
-            mu_net,
-            log_std,
-        }
-    }
-
     pub fn build(
         input_dim: usize,
         layers: &[usize],

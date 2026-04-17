@@ -1,23 +1,13 @@
 use anyhow::Result;
 use burn::tensor::backend::AutodiffBackend;
-use candle_core::Device;
 use candle_nn::VarBuilder;
 use r2l_burn::distributions::{
     BurnPolicyKind,
     categorical_distribution::CategoricalDistribution as BurnCategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution as BurnDiagGaussianDistribution,
 };
-use r2l_candle::distributions::{
-    CandlePolicyKind,
-    categorical_distribution::CategoricalDistribution as CandleCategoricalDistribution,
-    diagonal_distribution::DiagGaussianDistribution as CandleDiagGaussianDistribution,
-};
-
-#[derive(Debug, Clone, Copy)]
-pub enum ActionSpaceType {
-    Discrete,
-    Continuous,
-}
+use r2l_candle::distributions::CandlePolicyKind;
+use r2l_core::env::ActionSpaceType;
 
 pub enum DistributionType {
     Dynamic,
@@ -60,59 +50,30 @@ impl PolicyBuilder {
     pub fn build_candle(
         &self,
         policy_varbuilder: &VarBuilder,
-        device: &Device,
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> Result<CandlePolicyKind> {
-        let layers = &[&self.hidden_layers[..], &[action_size]].concat();
         match self.distribution_type {
-            DistributionType::DiagGaussianDistribution => {
-                let log_std = policy_varbuilder.get(action_size, "log_std")?;
-                Ok(CandlePolicyKind::DiagGaussian(
-                    CandleDiagGaussianDistribution::build(
-                        observation_size,
-                        layers,
-                        policy_varbuilder,
-                        log_std,
-                        "policy",
-                    )?,
-                ))
-            }
-            DistributionType::CategoricalDistribution => Ok(CandlePolicyKind::Categorical(
-                CandleCategoricalDistribution::build(
-                    observation_size,
-                    action_size,
-                    layers,
-                    policy_varbuilder,
-                    device.clone(),
-                    "policy",
-                )?,
-            )),
-            DistributionType::Dynamic => match action_space {
-                ActionSpaceType::Discrete => Ok(CandlePolicyKind::Categorical(
-                    CandleCategoricalDistribution::build(
-                        observation_size,
-                        action_size,
-                        layers,
-                        policy_varbuilder,
-                        device.clone(),
-                        "policy",
-                    )?,
-                )),
-                ActionSpaceType::Continuous => {
-                    let log_std = policy_varbuilder.get(action_size, "log_std")?;
-                    Ok(CandlePolicyKind::DiagGaussian(
-                        CandleDiagGaussianDistribution::build(
-                            observation_size,
-                            layers,
-                            policy_varbuilder,
-                            log_std,
-                            "policy",
-                        )?,
-                    ))
-                }
-            },
+            DistributionType::CategoricalDistribution => CandlePolicyKind::categorical(
+                policy_varbuilder,
+                &self.hidden_layers,
+                action_size,
+                observation_size,
+            ),
+            DistributionType::DiagGaussianDistribution => CandlePolicyKind::diag_gaussian(
+                policy_varbuilder,
+                &self.hidden_layers,
+                action_size,
+                observation_size,
+            ),
+            DistributionType::Dynamic => CandlePolicyKind::build(
+                action_space,
+                policy_varbuilder,
+                &self.hidden_layers,
+                action_size,
+                observation_size,
+            ),
         }
     }
 }

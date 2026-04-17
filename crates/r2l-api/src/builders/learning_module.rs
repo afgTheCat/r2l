@@ -1,20 +1,11 @@
 use burn::{optim::AdamWConfig, tensor::backend::AutodiffBackend};
-use candle_core::{DType, Device, Result};
-use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
+use candle_nn::ParamsAdamW;
 use r2l_burn::{
     learning_module::{
         BurnPolicy, JointActorModel, JointPolicyValueModule, PolicyValueModule,
         SplitPolicyValueModule,
     },
     sequential::Sequential,
-};
-use r2l_candle::{
-    learning_module::{
-        JointPolicyValueOptimizer, PolicyValueOptimizer, SequentialValueFunction,
-        SplitPolicyValueOptimizer,
-    },
-    optimizer::OptimizerWithMaxGrad,
-    thread_safe_sequential::build_sequential,
 };
 
 pub enum LearningModuleType {
@@ -36,61 +27,6 @@ pub struct LearningModuleBuilder {
 }
 
 impl LearningModuleBuilder {
-    pub fn build_candle(
-        &self,
-        policy_varmap: VarMap,
-        policy_var_builder: VarBuilder,
-        observation_size: usize,
-        device: &Device,
-    ) -> Result<(SequentialValueFunction, PolicyValueOptimizer)> {
-        match &self.learning_module_type {
-            LearningModuleType::Joint {
-                value_layers,
-                max_grad_norm,
-            } => {
-                let value_layers = &[&value_layers[..], &[1]].concat();
-                let value_net =
-                    build_sequential(observation_size, value_layers, &policy_var_builder, "value")?;
-                let optimizer = AdamW::new(policy_varmap.all_vars(), self.params.clone())?;
-                let optimizer_with_grad =
-                    OptimizerWithMaxGrad::new(optimizer, *max_grad_norm, policy_varmap);
-                Ok((
-                    SequentialValueFunction { value_net },
-                    PolicyValueOptimizer::Joint(JointPolicyValueOptimizer {
-                        optimizer_with_grad,
-                    }),
-                ))
-            }
-            LearningModuleType::Split {
-                value_layers,
-                policy_max_grad_norm,
-                value_max_grad_norm,
-            } => {
-                let critic_varmap = VarMap::new();
-                let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, device);
-                let value_layers = &[&value_layers[..], &[1]].concat();
-                let value_net =
-                    build_sequential(observation_size, value_layers, &critic_vb, "value")?;
-                let policy_optimizer = AdamW::new(policy_varmap.all_vars(), self.params.clone())?;
-                let value_optimizer = AdamW::new(critic_varmap.all_vars(), self.params.clone())?;
-                let policy_optimizer_with_grad = OptimizerWithMaxGrad::new(
-                    policy_optimizer,
-                    *policy_max_grad_norm,
-                    policy_varmap,
-                );
-                let value_optimizer_with_grad =
-                    OptimizerWithMaxGrad::new(value_optimizer, *value_max_grad_norm, critic_varmap);
-                Ok((
-                    SequentialValueFunction { value_net },
-                    PolicyValueOptimizer::Split(SplitPolicyValueOptimizer {
-                        policy_optimizer_with_grad,
-                        value_optimizer_with_grad,
-                    }),
-                ))
-            }
-        }
-    }
-
     pub fn build_burn<B: AutodiffBackend, D: BurnPolicy<B>>(
         &self,
         observation_size: usize,

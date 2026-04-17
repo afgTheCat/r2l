@@ -1,7 +1,8 @@
-use candle_core::{DType, Device};
-use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
+use candle_core::Device;
+use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
 use r2l_candle::learning_module::PolicyValueModule as CandlePolicyValueModule;
+use r2l_core::env::ActionSpaceType;
 
 use crate::{
     BurnBackend,
@@ -9,7 +10,7 @@ use crate::{
     builders::{
         agent::AgentBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
-        policy_builder::{ActionSpaceType, DistributionType, PolicyBuilder},
+        policy_builder::{DistributionType, PolicyBuilder},
         ppo::hook::DefaultPPOHookBuilder,
     },
 };
@@ -41,27 +42,36 @@ impl<M> PPOAgentBuilder<M> {
         action_space: ActionSpaceType,
         device: &Device,
     ) -> anyhow::Result<CandlePolicyValueModule> {
-        let policy_varmap = VarMap::new();
-        let policy_var_builder = VarBuilder::from_varmap(&policy_varmap, DType::F32, device);
-        let policy = self.policy_builder.build_candle(
-            &policy_var_builder,
-            device,
-            observation_size,
-            action_size,
-            action_space,
-        )?;
-        let (value_function, learning_module) = self.actor_critic_type.build_candle(
-            policy_varmap,
-            policy_var_builder,
-            observation_size,
-            device,
-        )?;
-        Ok(CandlePolicyValueModule {
-            policy,
-            optimizer: learning_module,
-            value_function,
-            device: device.clone(),
-        })
+        match &self.actor_critic_type.learning_module_type {
+            LearningModuleType::Joint {
+                value_layers,
+                max_grad_norm,
+            } => CandlePolicyValueModule::build_joint(
+                device,
+                action_size,
+                observation_size,
+                &self.policy_builder.hidden_layers,
+                action_space,
+                &value_layers,
+                *max_grad_norm,
+                self.actor_critic_type.params.clone(),
+            ),
+            LearningModuleType::Split {
+                value_layers,
+                policy_max_grad_norm,
+                value_max_grad_norm,
+            } => CandlePolicyValueModule::build_split(
+                device,
+                action_size,
+                observation_size,
+                &self.policy_builder.hidden_layers,
+                action_space,
+                &value_layers,
+                *policy_max_grad_norm,
+                *value_max_grad_norm,
+                self.actor_critic_type.params.clone(),
+            ),
+        }
     }
 
     fn build_candle(

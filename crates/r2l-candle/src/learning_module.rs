@@ -1,14 +1,16 @@
 use anyhow::{Ok, Result};
-use candle_core::{Device, Tensor as CandleTensor};
-use candle_nn::{Module, Optimizer};
+use candle_core::{DType, Device, Tensor as CandleTensor};
+use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
+    env::ActionSpaceType,
     models::{LearningModule, ValueFunction},
     on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
 
 use crate::{
-    distributions::CandlePolicyKind, optimizer::OptimizerWithMaxGrad,
-    thread_safe_sequential::ThreadSafeSequential,
+    distributions::CandlePolicyKind,
+    optimizer::OptimizerWithMaxGrad,
+    thread_safe_sequential::{ThreadSafeSequential, build_sequential},
 };
 
 pub struct PolicyValueLosses {
@@ -50,8 +52,8 @@ impl PolicyValueLosses {
 }
 
 pub struct SplitPolicyValueOptimizer {
-    pub policy_optimizer_with_grad: OptimizerWithMaxGrad,
-    pub value_optimizer_with_grad: OptimizerWithMaxGrad,
+    policy_optimizer_with_grad: OptimizerWithMaxGrad,
+    value_optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
 impl SplitPolicyValueOptimizer {
@@ -93,7 +95,7 @@ impl LearningModule for SplitPolicyValueOptimizer {
 /// The policy and the value fuction has the same optimizer
 /// TODO: value_net does not need to be here
 pub struct JointPolicyValueOptimizer {
-    pub optimizer_with_grad: OptimizerWithMaxGrad,
+    optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
 impl JointPolicyValueOptimizer {
@@ -123,8 +125,20 @@ impl LearningModule for JointPolicyValueOptimizer {
     }
 }
 
-pub struct SequentialValueFunction {
-    pub value_net: ThreadSafeSequential,
+pub(crate) struct SequentialValueFunction {
+    value_net: ThreadSafeSequential,
+}
+
+impl SequentialValueFunction {
+    pub fn new(
+        input_dim: usize,
+        layers: &[usize],
+        vb: &VarBuilder,
+        prefix: &str,
+    ) -> candle_core::Result<Self> {
+        let value_net = build_sequential(input_dim, layers, vb, prefix)?;
+        candle_core::Result::Ok(Self { value_net })
+    }
 }
 
 // TODO: maybe value function could be a subtrait on LearningModule?
@@ -141,6 +155,39 @@ impl ValueFunction for SequentialValueFunction {
 pub enum PolicyValueOptimizer {
     Joint(JointPolicyValueOptimizer),
     Split(SplitPolicyValueOptimizer),
+}
+
+impl PolicyValueOptimizer {
+    pub fn joint(
+        vm: VarMap,
+        params: ParamsAdamW,
+        max_grad_norm: Option<f32>,
+    ) -> candle_core::Result<Self> {
+        let optimizer = AdamW::new(vm.all_vars(), params)?;
+        let optimizer_with_grad = OptimizerWithMaxGrad::new(optimizer, max_grad_norm, vm);
+        candle_core::Result::Ok(Self::Joint(JointPolicyValueOptimizer {
+            optimizer_with_grad,
+        }))
+    }
+
+    pub fn split(
+        policy_vm: VarMap,
+        critic_vm: VarMap,
+        params: ParamsAdamW,
+        policy_max_grad_norm: Option<f32>,
+        value_max_grad_norm: Option<f32>,
+    ) -> candle_core::Result<Self> {
+        let policy_optimizer = AdamW::new(policy_vm.all_vars(), params.clone())?;
+        let value_optimizer = AdamW::new(critic_vm.all_vars(), params.clone())?;
+        let policy_optimizer_with_grad =
+            OptimizerWithMaxGrad::new(policy_optimizer, policy_max_grad_norm, policy_vm);
+        let value_optimizer_with_grad =
+            OptimizerWithMaxGrad::new(value_optimizer, value_max_grad_norm, critic_vm);
+        candle_core::Result::Ok(Self::Split(SplitPolicyValueOptimizer {
+            policy_optimizer_with_grad,
+            value_optimizer_with_grad,
+        }))
+    }
 }
 
 impl PolicyValueOptimizer {
@@ -171,13 +218,84 @@ impl LearningModule for PolicyValueOptimizer {
 }
 
 pub struct PolicyValueModule {
-    pub policy: CandlePolicyKind,
-    pub optimizer: PolicyValueOptimizer,
-    pub value_function: SequentialValueFunction,
-    pub device: Device,
+    policy: CandlePolicyKind,
+    optimizer: PolicyValueOptimizer,
+    value_function: SequentialValueFunction,
+    device: Device,
 }
 
 impl PolicyValueModule {
+    pub fn build_joint(
+        device: &Device,
+        action_size: usize,
+        observation_size: usize,
+        hidden_layers: &[usize],
+        action_space_type: ActionSpaceType,
+        value_layers: &[usize],
+        max_grad_norm: Option<f32>,
+        params: ParamsAdamW,
+    ) -> Result<Self> {
+        let policy_varmap = VarMap::new();
+        let policy_vb = VarBuilder::from_varmap(&policy_varmap, DType::F32, device);
+        let policy = CandlePolicyKind::build(
+            action_space_type,
+            &policy_vb,
+            hidden_layers,
+            action_size,
+            observation_size,
+        )?;
+        let value_layers = &[&value_layers[..], &[1]].concat();
+        let value_function =
+            SequentialValueFunction::new(observation_size, value_layers, &policy_vb, "value")?;
+        let optimizer = PolicyValueOptimizer::joint(policy_varmap, params, max_grad_norm)?;
+        Ok(Self {
+            policy,
+            optimizer,
+            value_function,
+            device: device.clone(),
+        })
+    }
+
+    pub fn build_split(
+        device: &Device,
+        action_size: usize,
+        observation_size: usize,
+        hidden_layers: &[usize],
+        action_space_type: ActionSpaceType,
+        value_layers: &[usize],
+        policy_max_grad_norm: Option<f32>,
+        value_max_grad_norm: Option<f32>,
+        params: ParamsAdamW,
+    ) -> Result<Self> {
+        let policy_varmap = VarMap::new();
+        let policy_vb = VarBuilder::from_varmap(&policy_varmap, DType::F32, device);
+        let policy = CandlePolicyKind::build(
+            action_space_type,
+            &policy_vb,
+            hidden_layers,
+            action_size,
+            observation_size,
+        )?;
+        let critic_varmap = VarMap::new();
+        let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, device);
+        let value_layers = &[&value_layers[..], &[1]].concat();
+        let value_function =
+            SequentialValueFunction::new(observation_size, value_layers, &critic_vb, "value")?;
+        let optimizer = PolicyValueOptimizer::split(
+            policy_varmap,
+            critic_varmap,
+            params,
+            policy_max_grad_norm,
+            value_max_grad_norm,
+        )?;
+        Ok(Self {
+            policy,
+            optimizer,
+            value_function,
+            device: device.clone(),
+        })
+    }
+
     pub fn set_grad_clipping(&mut self, gradient_clipping: Option<f32>) {
         self.optimizer.set_grad_clipping(gradient_clipping);
     }

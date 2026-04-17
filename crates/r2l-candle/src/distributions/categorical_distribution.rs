@@ -17,14 +17,6 @@ pub struct CategoricalDistribution {
 }
 
 impl CategoricalDistribution {
-    pub fn new(action_size: usize, logits: ThreadSafeSequential, device: Device) -> Self {
-        Self {
-            action_size,
-            logits,
-            device,
-        }
-    }
-
     pub fn build(
         input_dim: usize,
         action_size: usize,

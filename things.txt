@@ -1,0 +1,21 @@
+  - optimizer::OptimizerWithMaxGrad
+      - This is an implementation helper around Candle AdamW plus gradient clipping.
+      - I would make optimizer private and keep this pub(crate) unless users are expected to plug it in manually.
+  - learning_module::JointPolicyValueOptimizer
+  - learning_module::SplitPolicyValueOptimizer
+  - learning_module::PolicyValueOptimizer
+      - These are internal strategy details for PolicyValueModule.
+      - They currently leak because r2l-api builds them directly. Long term, I’d hide them behind constructors/builders on PolicyValueModule.
+  - learning_module::SequentialValueFunction
+      - This should probably be private or pub(crate).
+      - External code should interact with PolicyValueModule through ValueFunction, not own the separate value-function wrapper.
+  - thread_safe_sequential::LinearLayer
+  - thread_safe_sequential::ActivationLayer
+  - thread_safe_sequential::ThreadSafeLayer
+      - Definitely implementation details.
+  - thread_safe_sequential::ThreadSafeSequential
+      - Probably not public unless you want users to manually assemble Candle MLPs.
+      - If needed externally, expose it deliberately as a neural-net utility. Otherwise keep private.
+  - thread_safe_sequential::build_sequential
+      - Not a struct/enum, but same story: it is a builder helper. I’d keep it private or pub(crate) and expose higher-level policy/value
+        builders instead.
