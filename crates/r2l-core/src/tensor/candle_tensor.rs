@@ -1,15 +1,15 @@
 use candle_core::{Device, Tensor as CandleTensor};
 
-use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorMath};
+use crate::tensor::{R2lTensor, R2lTensorMath, TensorData};
 
-impl From<R2lBuffer> for CandleTensor {
-    fn from(val: R2lBuffer) -> Self {
-        let R2lBuffer { data, shape } = val;
+impl From<TensorData> for CandleTensor {
+    fn from(val: TensorData) -> Self {
+        let TensorData { data, shape } = val;
         CandleTensor::from_vec(data, shape, &Device::Cpu).unwrap()
     }
 }
 
-impl From<CandleTensor> for R2lBuffer {
+impl From<CandleTensor> for TensorData {
     fn from(value: CandleTensor) -> Self {
         let shape = value.shape().clone().into_dims();
         let data: Vec<f32> = value.to_vec1().unwrap();
@@ -61,7 +61,7 @@ impl R2lTensorMath for CandleTensor {
     }
 }
 
-impl R2lBuffer {
+impl TensorData {
     // TODO: implement this without relying on candle
     pub fn clamp(&self, min: &Self, max: &Self) -> Self {
         let t: CandleTensor = self.clone().into();

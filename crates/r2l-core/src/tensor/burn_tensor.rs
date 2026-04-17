@@ -1,19 +1,19 @@
 use burn::{
     prelude::Backend,
-    tensor::{Tensor as BurnTensor, TensorData, backend::AutodiffBackend},
+    tensor::{Tensor as BurnTensor, TensorData as BurnTensorData, backend::AutodiffBackend},
 };
 
-use crate::tensor::{R2lBuffer, R2lTensor, R2lTensorMath};
+use crate::tensor::{R2lTensor, R2lTensorMath, TensorData};
 
-impl<B: Backend> From<R2lBuffer> for BurnTensor<B, 1> {
-    fn from(value: R2lBuffer) -> Self {
+impl<B: Backend> From<TensorData> for BurnTensor<B, 1> {
+    fn from(value: TensorData) -> Self {
         let device = Default::default();
-        let tensor_data = TensorData::new(value.data, value.shape.clone());
+        let tensor_data = BurnTensorData::new(value.data, value.shape.clone());
         BurnTensor::from_data(tensor_data, &device)
     }
 }
 
-impl<B: Backend> From<BurnTensor<B, 1>> for R2lBuffer {
+impl<B: Backend> From<BurnTensor<B, 1>> for TensorData {
     fn from(value: BurnTensor<B, 1>) -> Self {
         let data = value.to_data().to_vec().unwrap();
         let shape = vec![data.len()];

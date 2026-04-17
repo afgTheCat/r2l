@@ -22,31 +22,29 @@ pub trait R2lTensorMath: R2lTensor {
     fn sqr(&self) -> anyhow::Result<Self>;
 }
 
-// TODO: let's start using the DType at one point
-// Also this should be called something else
-// Name is also in progress for now
 #[derive(Debug, Clone)]
-pub struct R2lBuffer {
+pub struct TensorData {
     pub data: Vec<f32>,
     pub shape: Vec<usize>,
 }
 
-impl R2lBuffer {
+impl TensorData {
     pub fn from_vec(data: Vec<f32>) -> Self {
         let shape = vec![data.len()];
         Self { data, shape }
     }
 
     pub fn new(data: Vec<f32>, shape: Vec<usize>) -> Self {
+        debug_assert!(shape.iter().product::<usize>() == data.len());
         Self { data, shape }
     }
 
-    pub fn to_data(self) -> Vec<f32> {
+    pub fn into_vec(self) -> Vec<f32> {
         self.data
     }
 }
 
-impl R2lTensor for R2lBuffer {
+impl R2lTensor for TensorData {
     fn to_vec(&self) -> Vec<f32> {
         self.data.clone()
     }

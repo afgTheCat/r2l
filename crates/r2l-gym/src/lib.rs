@@ -5,13 +5,13 @@ use pyo3::{
 };
 use r2l_core::{
     env::{Env, EnvBuilderTrait, EnvDescription, Snapshot, Space},
-    tensor::R2lBuffer,
+    tensor::TensorData,
 };
 
 pub struct GymEnv {
     env: PyObject,
-    action_space: Space<R2lBuffer>,
-    observation_space: Space<R2lBuffer>,
+    action_space: Space<TensorData>,
+    observation_space: Space<TensorData>,
 }
 
 impl GymEnv {
@@ -32,9 +32,9 @@ impl GymEnv {
             } else if action_space.is_instance(&gym_spaces.getattr("Box")?)? {
                 let low: Vec<f32> = action_space.getattr("low")?.extract()?;
                 let action_size = low.len();
-                let low = R2lBuffer::new(low, vec![action_size]);
+                let low = TensorData::new(low, vec![action_size]);
                 let high: Vec<f32> = action_space.getattr("high")?.extract()?;
-                let high = R2lBuffer::new(high, vec![action_size]);
+                let high = TensorData::new(high, vec![action_size]);
                 Space::Continuous {
                     min: Some(low),
                     max: Some(high),
@@ -63,11 +63,11 @@ impl GymEnv {
         self.action_space.size()
     }
 
-    pub fn observation_space(&self) -> Space<R2lBuffer> {
+    pub fn observation_space(&self) -> Space<TensorData> {
         self.observation_space.clone()
     }
 
-    pub fn action_space(&self) -> Space<R2lBuffer> {
+    pub fn action_space(&self) -> Space<TensorData> {
         self.action_space.clone()
     }
 
@@ -77,21 +77,21 @@ impl GymEnv {
 }
 
 impl Env for GymEnv {
-    type Tensor = R2lBuffer;
+    type Tensor = TensorData;
 
-    fn reset(&mut self, seed: u64) -> Result<R2lBuffer> {
+    fn reset(&mut self, seed: u64) -> Result<TensorData> {
         let state = Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
             kwargs.set_item("seed", seed)?;
             let state = self.env.call_method(py, "reset", (), Some(&kwargs))?;
             let step = state.bind(py);
             let state = step.get_item(0)?.extract()?;
-            PyResult::Ok(R2lBuffer::from_vec(state))
+            PyResult::Ok(TensorData::from_vec(state))
         })?;
         Ok(state)
     }
 
-    fn step(&mut self, action: R2lBuffer) -> Result<Snapshot<R2lBuffer>> {
+    fn step(&mut self, action: TensorData) -> Result<Snapshot<TensorData>> {
         let snapshot = Python::with_gil(|py| {
             let step = match &self.action_space {
                 Space::Continuous {
@@ -100,11 +100,11 @@ impl Env for GymEnv {
                     ..
                 } => {
                     let clipped_action = action.clamp(min, max);
-                    let action_vec: Vec<f32> = clipped_action.to_data();
+                    let action_vec: Vec<f32> = clipped_action.into_vec();
                     self.env.call_method(py, "step", (action_vec,), None)?
                 }
                 _ => {
-                    let action: Vec<f32> = action.to_data();
+                    let action: Vec<f32> = action.into_vec();
                     // TODO: remove unwrap
                     let action = action.iter().position(|i| *i > 0.).unwrap();
                     self.env.call_method(py, "step", (action,), None)?
@@ -112,7 +112,7 @@ impl Env for GymEnv {
             };
             let step = step.bind(py);
             let next_state: Vec<f32> = step.get_item(0)?.extract()?;
-            let next_state = R2lBuffer::from_vec(next_state);
+            let next_state = TensorData::from_vec(next_state);
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
             let truncated: bool = step.get_item(3)?.extract()?;
@@ -126,7 +126,7 @@ impl Env for GymEnv {
         Ok(snapshot)
     }
 
-    fn env_description(&self) -> EnvDescription<R2lBuffer> {
+    fn env_description(&self) -> EnvDescription<TensorData> {
         EnvDescription {
             observation_space: self.observation_space.clone(),
             action_space: self.action_space.clone(),
@@ -155,7 +155,7 @@ impl From<&str> for GymEnvBuilder {
 }
 
 impl EnvBuilderTrait for GymEnvBuilder {
-    type Tensor = R2lBuffer;
+    type Tensor = TensorData;
     type Env = GymEnv;
 
     fn build_env(&self) -> Result<Self::Env> {
