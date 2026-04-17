@@ -3,13 +3,20 @@ use crate::{
     tensor::R2lTensor,
 };
 
+/// Growable trajectory storage backed by vectors.
 #[derive(Clone)]
 pub struct VariableSizedStateBuffer<T: R2lTensor> {
+    /// Observations before each action.
     pub states: Vec<T>,
+    /// Observations after each action.
     pub next_states: Vec<T>,
+    /// Rewards for each transition.
     pub rewards: Vec<f32>,
+    /// Actions for each transition.
     pub action: Vec<T>,
+    /// Terminal-state flags.
     pub terminated: Vec<bool>,
+    /// Time-limit or external-cutoff flags.
     pub truncated: Vec<bool>,
 }
 
@@ -20,6 +27,7 @@ impl<T: R2lTensor> Default for VariableSizedStateBuffer<T> {
 }
 
 impl<T: R2lTensor> VariableSizedStateBuffer<T> {
+    /// Creates an empty growable trajectory buffer.
     pub fn new() -> Self {
         Self {
             states: vec![],

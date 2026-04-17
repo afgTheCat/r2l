@@ -6,17 +6,29 @@ use crate::{
     tensor::R2lTensor,
 };
 
+/// Ring-buffer trajectory storage with a fixed capacity.
+///
+/// When more than `len` transitions are pushed, older transitions are evicted
+/// by the underlying ring buffers.
 pub struct FixedSizeStateBuffer<T: R2lTensor> {
+    /// Maximum number of transitions retained.
     pub len: usize,
+    /// Observations before each action.
     pub states: AllocRingBuffer<T>,
+    /// Observations after each action.
     pub next_states: AllocRingBuffer<T>,
+    /// Rewards for each transition.
     pub rewards: AllocRingBuffer<f32>,
+    /// Actions for each transition.
     pub action: AllocRingBuffer<T>,
+    /// Terminal-state flags.
     pub terminated: AllocRingBuffer<bool>,
+    /// Time-limit or external-cutoff flags.
     pub truncated: AllocRingBuffer<bool>,
 }
 
 impl<T: R2lTensor> FixedSizeStateBuffer<T> {
+    /// Creates an empty fixed-capacity trajectory buffer.
     pub fn new(len: usize) -> Self {
         Self {
             len,

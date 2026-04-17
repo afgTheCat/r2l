@@ -7,6 +7,8 @@ pub mod rng;
 pub mod tensor;
 mod utils;
 
+/// Common imports for implementing environments, policies, agents, samplers,
+/// and learning modules.
 pub mod prelude {
     pub use crate::buffers::{
         EditableTrajectoryContainer, ExpandableTrajectoryContainer, Memory, TrajectoryContainer,
