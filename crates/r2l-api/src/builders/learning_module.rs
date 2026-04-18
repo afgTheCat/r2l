@@ -2,7 +2,7 @@ use burn::{optim::AdamWConfig, tensor::backend::AutodiffBackend};
 use candle_nn::ParamsAdamW;
 use r2l_burn::{
     learning_module::{
-        BurnPolicy, JointActorModel, JointPolicyValueModule, PolicyValueModule2,
+        BurnPolicy, JointActorModel, JointPolicyValueModule, PolicyValueModule,
         SplitPolicyValueModule,
     },
     sequential::Sequential,
@@ -31,7 +31,7 @@ impl LearningModuleBuilder {
         &self,
         observation_size: usize,
         policy: D,
-    ) -> PolicyValueModule2<B, D> {
+    ) -> PolicyValueModule<B, D> {
         match &self.learning_module_type {
             LearningModuleType::Joint {
                 value_layers,
@@ -41,7 +41,7 @@ impl LearningModuleBuilder {
                 let value_layers = &[&[observation_size][..], &value_layers[..], &[1]].concat();
                 let value_net: Sequential<B> = Sequential::build(value_layers);
                 let model = JointActorModel::new(policy, value_net);
-                PolicyValueModule2::Joint(JointPolicyValueModule::new(
+                PolicyValueModule::Joint(JointPolicyValueModule::new(
                     model,
                     AdamWConfig::new()
                         .with_beta_1(self.params.beta1 as f32)
@@ -60,7 +60,7 @@ impl LearningModuleBuilder {
             } => {
                 let value_layers = &[&[observation_size][..], &value_layers[..], &[1]].concat();
                 let value_net: Sequential<B> = Sequential::build(value_layers);
-                PolicyValueModule2::Split(SplitPolicyValueModule::new(
+                PolicyValueModule::Split(SplitPolicyValueModule::new(
                     policy,
                     value_net,
                     AdamWConfig::new()

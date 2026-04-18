@@ -9,12 +9,12 @@ pub mod categorical_distribution;
 pub mod diagonal_distribution;
 
 #[derive(Debug, Module)]
-pub enum PolicyValueModule<B: Backend> {
+pub enum PolicyKind<B: Backend> {
     Categorical(CategoricalDistribution<B>),
     Diag(DiagGaussianDistribution<B>),
 }
 
-impl<B: Backend> Actor for PolicyValueModule<B> {
+impl<B: Backend> Actor for PolicyKind<B> {
     type Tensor = BurnTensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
@@ -25,7 +25,7 @@ impl<B: Backend> Actor for PolicyValueModule<B> {
     }
 }
 
-impl<B: Backend> Policy for PolicyValueModule<B> {
+impl<B: Backend> Policy for PolicyKind<B> {
     fn log_probs(
         &self,
         observations: &[Self::Tensor],

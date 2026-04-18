@@ -1,5 +1,7 @@
+use burn::{prelude::Backend, tensor::backend::AutodiffBackend};
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
+use r2l_burn::learning_module::PolicyValueModuleKind as BurnPolicyValueModule;
 use r2l_candle::learning_module::PolicyValueModule as CandlePolicyValueModule;
 use r2l_core::env::ActionSpaceType;
 
@@ -58,5 +60,7 @@ impl LearningModuleBuilder {
         }
     }
 
-    fn build_burn(&self) {}
+    fn build_burn<B: AutodiffBackend>(&self) -> anyhow::Result<BurnPolicyValueModule<B>> {
+        todo!()
+    }
 }

@@ -12,7 +12,7 @@ use r2l_agents::{
 };
 use r2l_burn::learning_module::{
     BurnPolicy, PolicyValueLosses as BurnPolicyValueLosses,
-    PolicyValueModule2 as BurnPolicyValueModule,
+    PolicyValueModule as BurnPolicyValueModule,
 };
 use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,

@@ -2,8 +2,7 @@ use anyhow::Result;
 use burn::tensor::backend::AutodiffBackend;
 use candle_nn::VarBuilder;
 use r2l_burn::distributions::{
-    PolicyValueModule,
-    categorical_distribution::CategoricalDistribution as BurnCategoricalDistribution,
+    PolicyKind, categorical_distribution::CategoricalDistribution as BurnCategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution as BurnDiagGaussianDistribution,
 };
 use r2l_candle::distributions::CandlePolicyKind;
@@ -26,21 +25,21 @@ impl PolicyBuilder {
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
-    ) -> Result<PolicyValueModule<B>> {
+    ) -> Result<PolicyKind<B>> {
         let layers = &[&self.hidden_layers[..], &[action_size]].concat();
         let policy_layers = &[&[observation_size][..], &layers[..]].concat();
         match self.distribution_type {
-            DistributionType::DiagGaussianDistribution => Ok(PolicyValueModule::Diag(
+            DistributionType::DiagGaussianDistribution => Ok(PolicyKind::Diag(
                 BurnDiagGaussianDistribution::build(policy_layers),
             )),
-            DistributionType::CategoricalDistribution => Ok(PolicyValueModule::Categorical(
+            DistributionType::CategoricalDistribution => Ok(PolicyKind::Categorical(
                 BurnCategoricalDistribution::build(policy_layers),
             )),
             DistributionType::Dynamic => match action_space {
-                ActionSpaceType::Discrete => Ok(PolicyValueModule::Categorical(
+                ActionSpaceType::Discrete => Ok(PolicyKind::Categorical(
                     BurnCategoricalDistribution::build(policy_layers),
                 )),
-                ActionSpaceType::Continuous => Ok(PolicyValueModule::Diag(
+                ActionSpaceType::Continuous => Ok(PolicyKind::Diag(
                     BurnDiagGaussianDistribution::build(policy_layers),
                 )),
             },
