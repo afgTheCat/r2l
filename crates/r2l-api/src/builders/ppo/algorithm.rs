@@ -11,14 +11,14 @@ use crate::{
     builders::{
         agent::AgentBuilder,
         learning_module::LearningModuleType,
-        on_policy::OnPolicyAlgorightmBuilder,
+        on_policy::OnPolicyAlgorithmBuilder,
         ppo::agent::{BurnPPOAgentBuilder, CandlePPOAgentBuilder, PPOAgentBuilder},
         sampler::SamplerBuilder,
     },
     hooks::{on_policy::LearningSchedule, ppo::PPOStats},
 };
 
-impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, PPOAgentBuilder<M>, EB, BD>
+impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, PPOAgentBuilder<M>, EB, BD>
 where
     A: Agent,
     EB: EnvBuilderTrait,
@@ -163,12 +163,12 @@ where
     }
 }
 
-pub type PPOCandleAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    OnPolicyAlgorightmBuilder<CandlePPO, CandlePPOAgentBuilder, EB, BD>;
+pub type PPOCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+    OnPolicyAlgorithmBuilder<CandlePPO, CandlePPOAgentBuilder, EB, BD>;
 
-impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuiler<EB> {
+impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuilder<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
             agent_builder: CandlePPOAgentBuilder::new(n_envs),
             learning_schedule: LearningSchedule::RolloutBound {
@@ -179,30 +179,30 @@ impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuiler<EB> {
     }
 }
 
-pub type PPOBurnAlgorithmBuiler<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    OnPolicyAlgorightmBuilder<BurnPPO<BurnBackend>, BurnPPOAgentBuilder, EB, BD>;
+pub type PPOBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+    OnPolicyAlgorithmBuilder<BurnPPO<BurnBackend>, BurnPPOAgentBuilder, EB, BD>;
 
-impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuiler<EB> {
-    pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuiler<EB> {
-        let OnPolicyAlgorightmBuilder {
+impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuilder<EB> {
+    pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuilder<EB> {
+        let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder,
         } = self;
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder: agent_builder.with_candle(device),
         }
     }
 
-    pub fn with_burn(self) -> PPOBurnAlgorithmBuiler<EB> {
-        let OnPolicyAlgorightmBuilder {
+    pub fn with_burn(self) -> PPOBurnAlgorithmBuilder<EB> {
+        let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder,
         } = self;
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder: agent_builder.with_burn(),
@@ -211,29 +211,29 @@ impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuiler<EB> {
 }
 
 pub type PPOAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    PPOCandleAlgorithmBuiler<EB, BD>;
+    PPOCandleAlgorithmBuilder<EB, BD>;
 
-impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuiler<EB> {
-    pub fn with_candle(self, device: Device) -> PPOCandleAlgorithmBuiler<EB> {
-        let OnPolicyAlgorightmBuilder {
+impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuilder<EB> {
+    pub fn with_candle(self, device: Device) -> PPOCandleAlgorithmBuilder<EB> {
+        let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder,
         } = self;
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder: agent_builder.with_candle(device),
         }
     }
 
-    pub fn with_burn(self) -> PPOBurnAlgorithmBuiler<EB> {
-        let OnPolicyAlgorightmBuilder {
+    pub fn with_burn(self) -> PPOBurnAlgorithmBuilder<EB> {
+        let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder,
         } = self;
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder: agent_builder.with_burn(),

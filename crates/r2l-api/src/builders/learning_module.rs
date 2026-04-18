@@ -79,7 +79,7 @@ impl LearningModuleBuilder {
             &[action_size],
         ]
         .concat();
-        let policy = PolicyKind::build(action_space, &policy_layers);
+        let policy = PolicyKind::build(action_space, policy_layers);
         let learning_module = match self.learning_module_type {
             LearningModuleType::Joint { max_grad_norm } => {
                 let value_layers =

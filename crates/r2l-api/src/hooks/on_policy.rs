@@ -34,13 +34,13 @@ impl LearningSchedule {
     }
 }
 
-pub struct DefaultOnPolicyAlgorightmsHooks<A: Agent, S: Sampler> {
+pub struct DefaultOnPolicyAlgorithmsHooks<A: Agent, S: Sampler> {
     rollout_idx: usize,
     learning_schedule: LearningSchedule,
     _phantom: PhantomData<(A, S)>,
 }
 
-impl<A: Agent, S: Sampler> DefaultOnPolicyAlgorightmsHooks<A, S> {
+impl<A: Agent, S: Sampler> DefaultOnPolicyAlgorithmsHooks<A, S> {
     pub fn new(learning_schedule: LearningSchedule) -> Self {
         Self {
             rollout_idx: 0,
@@ -50,7 +50,7 @@ impl<A: Agent, S: Sampler> DefaultOnPolicyAlgorightmsHooks<A, S> {
     }
 }
 
-impl<A: Agent, S: Sampler> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorightmsHooks<A, S> {
+impl<A: Agent, S: Sampler> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmsHooks<A, S> {
     type A = A;
     type S = S;
 

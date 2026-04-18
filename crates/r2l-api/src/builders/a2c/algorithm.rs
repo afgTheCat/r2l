@@ -11,13 +11,13 @@ use crate::{
         a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder},
         agent::AgentBuilder,
         learning_module::LearningModuleType,
-        on_policy::OnPolicyAlgorightmBuilder,
+        on_policy::OnPolicyAlgorithmBuilder,
         sampler::SamplerBuilder,
     },
     hooks::{a2c::A2CStats, on_policy::LearningSchedule},
 };
 
-impl<A, M, EB, BD> OnPolicyAlgorightmBuilder<A, A2CAgentBuilder<M>, EB, BD>
+impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, A2CAgentBuilder<M>, EB, BD>
 where
     A: Agent,
     EB: EnvBuilderTrait,
@@ -145,15 +145,15 @@ where
 }
 
 pub type A2CBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    OnPolicyAlgorightmBuilder<BurnA2C<BurnBackend>, A2CBurnAgentBuilder, EB, BD>;
+    OnPolicyAlgorithmBuilder<BurnA2C<BurnBackend>, A2CBurnAgentBuilder, EB, BD>;
 
 pub type A2CCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    OnPolicyAlgorightmBuilder<CandleA2C, A2CCandleAgentBuilder, EB, BD>;
+    OnPolicyAlgorithmBuilder<CandleA2C, A2CCandleAgentBuilder, EB, BD>;
 
 impl<EB: EnvBuilderTrait> A2CCandleAlgorithmBuilder<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
         let agent_builder = A2CCandleAgentBuilder::new(n_envs);
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
             agent_builder,
             learning_schedule: LearningSchedule::RolloutBound {
@@ -169,12 +169,12 @@ pub type A2CAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait
 
 impl<EB: EnvBuilderTrait> A2CAlgorithmBuilder<EB> {
     pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB> {
-        let OnPolicyAlgorightmBuilder {
+        let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder,
         } = self;
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder: agent_builder.with_candle(device),
@@ -182,12 +182,12 @@ impl<EB: EnvBuilderTrait> A2CAlgorithmBuilder<EB> {
     }
 
     pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB> {
-        let OnPolicyAlgorightmBuilder {
+        let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder,
         } = self;
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder: agent_builder.with_burn(),
@@ -197,12 +197,12 @@ impl<EB: EnvBuilderTrait> A2CAlgorithmBuilder<EB> {
 
 impl<EB: EnvBuilderTrait> A2CBurnAlgorithmBuilder<EB> {
     pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB> {
-        let OnPolicyAlgorightmBuilder {
+        let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder,
         } = self;
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder: agent_builder.with_candle(device),
@@ -210,12 +210,12 @@ impl<EB: EnvBuilderTrait> A2CBurnAlgorithmBuilder<EB> {
     }
 
     pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB> {
-        let OnPolicyAlgorightmBuilder {
+        let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder,
         } = self;
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             agent_builder: agent_builder.with_burn(),

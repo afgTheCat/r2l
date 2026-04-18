@@ -58,7 +58,7 @@ fn configure_candle_ppo_test(config: A2CTestConfig) {
 
     let t = thread::spawn(move || {
         while let Ok(stats) = update_rx.recv() {
-            println!("avg reward: {}", stats.avarage_reward);
+            println!("avg reward: {}", stats.average_reward);
         }
     });
 

@@ -33,7 +33,7 @@ pub struct A2CBatchStats {
 pub struct A2CStats {
     pub batch_stats: Vec<A2CBatchStats>,
     pub std: Option<f32>,
-    pub avarage_reward: f32,
+    pub average_reward: f32,
     pub learning_rate: f64,
 }
 
@@ -82,12 +82,12 @@ impl DefaultA2CHookReporter {
             self.latest_average_reward = completed_episode_rewards.iter().sum::<f32>()
                 / completed_episode_rewards.len() as f32;
         }
-        self.report.avarage_reward = self.latest_average_reward;
+        self.report.average_reward = self.latest_average_reward;
     }
 
     fn send_report(&mut self) {
         self.tx.send(std::mem::take(&mut self.report)).unwrap();
-        self.report.avarage_reward = self.latest_average_reward;
+        self.report.average_reward = self.latest_average_reward;
     }
 }
 

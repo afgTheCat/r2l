@@ -6,16 +6,16 @@ use r2l_sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
     builders::{agent::AgentBuilder, sampler::SamplerBuilder},
-    hooks::on_policy::{DefaultOnPolicyAlgorightmsHooks, LearningSchedule},
+    hooks::on_policy::{DefaultOnPolicyAlgorithmsHooks, LearningSchedule},
 };
 
 type DefaultOnPolicyAlgorithm<A, EB, BD> = OnPolicyAlgorithm<
     A,
     FinalSampler<<EB as EnvBuilderTrait>::Env, BD>,
-    DefaultOnPolicyAlgorightmsHooks<A, FinalSampler<<EB as EnvBuilderTrait>::Env, BD>>,
+    DefaultOnPolicyAlgorithmsHooks<A, FinalSampler<<EB as EnvBuilderTrait>::Env, BD>>,
 >;
 
-pub struct OnPolicyAlgorightmBuilder<
+pub struct OnPolicyAlgorithmBuilder<
     A: Agent,
     AB: AgentBuilder<Agent = A>,
     EB: EnvBuilderTrait,
@@ -27,19 +27,19 @@ pub struct OnPolicyAlgorightmBuilder<
 }
 
 impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilderTrait>
-    OnPolicyAlgorightmBuilder<A, AB, EB>
+    OnPolicyAlgorithmBuilder<A, AB, EB>
 {
     pub fn with_bound<BD2: TrajectoryBound<Tensor = EB::Tensor>>(
         self,
         trajectory_bound: BD2,
-    ) -> OnPolicyAlgorightmBuilder<A, AB, EB, BD2> {
-        let OnPolicyAlgorightmBuilder {
+    ) -> OnPolicyAlgorithmBuilder<A, AB, EB, BD2> {
+        let OnPolicyAlgorithmBuilder {
             sampler_builder,
             agent_builder,
             learning_schedule,
             ..
         } = self;
-        OnPolicyAlgorightmBuilder {
+        OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_bound(trajectory_bound),
             agent_builder,
             learning_schedule,
@@ -52,7 +52,7 @@ impl<
     AB: AgentBuilder<Agent = A>,
     EB: EnvBuilderTrait,
     BD: TrajectoryBound<Tensor = EB::Tensor>,
-> OnPolicyAlgorightmBuilder<A, AB, EB, BD>
+> OnPolicyAlgorithmBuilder<A, AB, EB, BD>
 {
     pub fn with_location(mut self, location: Location) -> Self {
         self.sampler_builder = self.sampler_builder.with_location(location);
@@ -76,7 +76,7 @@ impl<
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
-        let hooks = DefaultOnPolicyAlgorightmsHooks::new(self.learning_schedule);
+        let hooks = DefaultOnPolicyAlgorithmsHooks::new(self.learning_schedule);
         Ok(OnPolicyAlgorithm {
             sampler,
             agent,
