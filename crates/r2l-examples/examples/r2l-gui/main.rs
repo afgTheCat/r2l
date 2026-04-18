@@ -59,7 +59,7 @@ impl eframe::App for App {
             let Ok(progress) = event.downcast::<PPOStats>() else {
                 break;
             };
-            let average_reward = progress.avarage_reward;
+            let average_reward = progress.average_reward;
             self.average_rollout_rewards.push(average_reward);
             self.recent_table.set_progress(*progress.clone());
             if self
