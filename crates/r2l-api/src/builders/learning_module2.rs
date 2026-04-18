@@ -28,7 +28,7 @@ pub enum LearningModuleType {
     },
 }
 
-struct LearningModuleBuilder {
+struct LearningModuleBuilder2 {
     observation_size: usize,
     action_size: usize,
     action_space: ActionSpaceType,
@@ -37,7 +37,7 @@ struct LearningModuleBuilder {
     params: ParamsAdamW,
 }
 
-impl LearningModuleBuilder {
+impl LearningModuleBuilder2 {
     fn build_candle(self, device: &Device) -> anyhow::Result<CandlePolicyValueModule> {
         match self.learning_module_type {
             LearningModuleType::Joint {
