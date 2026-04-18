@@ -158,7 +158,7 @@ pub struct SplitPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
     pub value_net: Sequential<B>,
     pub policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
     pub policy_lr: f64,
-    pub value_net_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
+    pub value_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
     pub value_lr: f64,
 }
 
@@ -168,7 +168,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
         value_net: Sequential<B>,
         policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
         policy_lr: f64,
-        value_net_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
+        value_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
         value_lr: f64,
     ) -> Self {
         Self {
@@ -176,7 +176,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
             value_net,
             policy_optimizer,
             policy_lr,
-            value_net_optimizer,
+            value_optimizer,
             value_lr,
         }
     }
@@ -210,7 +210,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for SplitPolicyValueMo
         let value_grads = value_loss.backward();
         let value_grads = GradientsParams::from_grads(value_grads, &self.value_net);
         self.value_net =
-            self.value_net_optimizer
+            self.value_optimizer
                 .step(self.value_lr, self.value_net.clone(), value_grads);
         Ok(())
     }

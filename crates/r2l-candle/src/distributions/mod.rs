@@ -5,7 +5,7 @@ pub mod diagonal_distribution;
 use std::{f32, fmt::Debug};
 
 use anyhow::Result;
-use candle_core::Tensor as CandleTensor;
+use candle_core::{Device, Tensor as CandleTensor};
 use candle_nn::VarBuilder;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
@@ -21,6 +21,20 @@ pub enum CandlePolicyKind {
 }
 
 impl CandlePolicyKind {
+    pub fn device(&self) -> Device {
+        match self {
+            Self::Categorical(c) => c.device(),
+            Self::DiagGaussian(d) => d.device(),
+        }
+    }
+
+    pub fn observation_size(&self) -> usize {
+        match self {
+            Self::Categorical(c) => c.observation_size(),
+            Self::DiagGaussian(d) => d.observation_size(),
+        }
+    }
+
     pub fn categorical(
         policy_varbuilder: &VarBuilder,
         hidden_layers: &[usize],

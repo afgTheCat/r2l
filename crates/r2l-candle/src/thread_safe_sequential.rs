@@ -32,6 +32,12 @@ impl LinearLayer {
         let layer = Linear::new(weight, Some(bias));
         Ok(Self { layer })
     }
+
+    fn input_size(&self) -> usize {
+        let shape = self.layer.weight().shape();
+        debug_assert!(shape.rank() == 2);
+        shape.dims()[1]
+    }
 }
 
 impl Module for LinearLayer {
@@ -50,7 +56,7 @@ impl Module for ActivationLayer {
 }
 
 #[derive(Debug, Clone)]
-struct ThreadSafeLayer(Either<LinearLayer, ActivationLayer>);
+pub(crate) struct ThreadSafeLayer(Either<LinearLayer, ActivationLayer>);
 
 impl ThreadSafeLayer {
     fn linear(linear: LinearLayer) -> Self {
@@ -59,6 +65,13 @@ impl ThreadSafeLayer {
 
     fn activation(activation: ActivationLayer) -> Self {
         Self(Either::Right(activation))
+    }
+
+    pub(crate) fn input_size(&self) -> Option<usize> {
+        match &self.0 {
+            Either::Left(linear) => Some(linear.input_size()),
+            Either::Right(act) => None,
+        }
     }
 }
 
@@ -74,6 +87,12 @@ impl Module for ThreadSafeLayer {
 #[derive(Default, Debug, Clone)]
 pub(crate) struct ThreadSafeSequential {
     layers: Vec<ThreadSafeLayer>,
+}
+
+impl ThreadSafeSequential {
+    pub(crate) fn layer(&self, idx: usize) -> Option<&ThreadSafeLayer> {
+        self.layers.get(idx)
+    }
 }
 
 impl Module for ThreadSafeSequential {

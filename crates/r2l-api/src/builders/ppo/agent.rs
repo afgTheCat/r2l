@@ -1,7 +1,9 @@
-use candle_core::Device;
-use candle_nn::ParamsAdamW;
+use candle_core::{DType, Device};
+use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
-use r2l_candle::learning_module::PolicyValueModule as CandlePolicyValueModule;
+use r2l_candle::{
+    distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
+};
 use r2l_core::env::ActionSpaceType;
 
 use crate::{

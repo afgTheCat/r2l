@@ -256,6 +256,28 @@ impl PolicyValueModule {
         })
     }
 
+    pub fn build_joint2(
+        policy: CandlePolicyKind,
+        value_hidden_layers: &[usize],
+        policy_varmap: VarMap,
+        max_grad_norm: Option<f32>,
+        params: ParamsAdamW,
+    ) -> Result<Self> {
+        let device = policy.device();
+        let policy_vb = VarBuilder::from_varmap(&policy_varmap, DType::F32, &device);
+        let observation_size = policy.observation_size();
+        let value_layers = &[value_hidden_layers, &[1]].concat();
+        let value_function =
+            SequentialValueFunction::new(observation_size, value_layers, &policy_vb, "value")?;
+        let optimizer = PolicyValueOptimizer::joint(policy_varmap, params, max_grad_norm)?;
+        Ok(Self {
+            policy,
+            optimizer,
+            value_function,
+            device,
+        })
+    }
+
     pub fn build_split(
         device: &Device,
         action_size: usize,
@@ -279,6 +301,36 @@ impl PolicyValueModule {
         let critic_varmap = VarMap::new();
         let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, device);
         let value_layers = &[value_layers, &[1]].concat();
+        let value_function =
+            SequentialValueFunction::new(observation_size, value_layers, &critic_vb, "value")?;
+        let optimizer = PolicyValueOptimizer::split(
+            policy_varmap,
+            critic_varmap,
+            params,
+            policy_max_grad_norm,
+            value_max_grad_norm,
+        )?;
+        Ok(Self {
+            policy,
+            optimizer,
+            value_function,
+            device: device.clone(),
+        })
+    }
+
+    pub fn build_split2(
+        value_hidden_layers: &[usize],
+        policy: CandlePolicyKind,
+        policy_varmap: VarMap,
+        policy_max_grad_norm: Option<f32>,
+        value_max_grad_norm: Option<f32>,
+        params: ParamsAdamW,
+    ) -> Result<Self> {
+        let device = policy.device();
+        let observation_size = policy.observation_size();
+        let critic_varmap = VarMap::new();
+        let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, &device);
+        let value_layers = &[value_hidden_layers, &[1]].concat();
         let value_function =
             SequentialValueFunction::new(observation_size, value_layers, &critic_vb, "value")?;
         let optimizer = PolicyValueOptimizer::split(

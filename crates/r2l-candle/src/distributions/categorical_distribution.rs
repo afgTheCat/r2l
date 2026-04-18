@@ -18,19 +18,31 @@ pub struct CategoricalDistribution {
 
 impl CategoricalDistribution {
     pub fn build(
-        input_dim: usize,
+        observation_size: usize,
         action_size: usize,
         layers: &[usize],
         vb: &VarBuilder,
         device: Device,
         prefix: &str,
     ) -> Result<Self> {
-        let logits = build_sequential(input_dim, layers, vb, prefix)?;
+        let logits = build_sequential(observation_size, layers, vb, prefix)?;
         Ok(Self {
             action_size,
             logits,
             device,
         })
+    }
+
+    pub fn device(&self) -> Device {
+        self.device.clone()
+    }
+
+    pub fn observation_size(&self) -> usize {
+        let observation_size = self.logits.layer(0).and_then(|s| s.input_size());
+        match observation_size {
+            Some(observation_size) => observation_size,
+            None => panic!("Invalid observation_size"),
+        }
     }
 }
 

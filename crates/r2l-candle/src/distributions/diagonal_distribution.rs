@@ -1,7 +1,7 @@
 use std::f32;
 
 use anyhow::Result;
-use candle_core::Tensor as CandleTensor;
+use candle_core::{Device, Tensor as CandleTensor};
 use candle_nn::{Module, VarBuilder};
 use r2l_core::models::{Actor, Policy};
 
@@ -13,23 +13,38 @@ pub struct DiagGaussianDistribution {
     noise: CandleTensor,
     mu_net: ThreadSafeSequential,
     log_std: CandleTensor,
+    device: Device,
 }
 
 impl DiagGaussianDistribution {
     pub fn build(
-        input_dim: usize,
+        obseravtion_size: usize,
         layers: &[usize],
         vb: &VarBuilder,
         log_std: CandleTensor,
         prefix: &str,
     ) -> Result<Self> {
-        let mu_net = build_sequential(input_dim, layers, vb, prefix)?;
+        let mu_net = build_sequential(obseravtion_size, layers, vb, prefix)?;
         let noise = CandleTensor::randn(0f32, 1., log_std.shape(), log_std.device()).unwrap();
+        let device = vb.device().clone();
         Ok(Self {
             log_std,
             mu_net,
             noise,
+            device,
         })
+    }
+
+    pub fn device(&self) -> Device {
+        self.device.clone()
+    }
+
+    pub fn observation_size(&self) -> usize {
+        let observation_size = self.mu_net.layer(0).and_then(|s| s.input_size());
+        match observation_size {
+            Some(observation_size) => observation_size,
+            None => panic!("Invalid observation_size"),
+        }
     }
 }
 
