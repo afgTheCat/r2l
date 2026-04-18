@@ -82,7 +82,7 @@ pub struct JointPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueModule<B, M> {
-    pub fn new(
+    fn new(
         model: JointActorModel<B, M>,
         optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
         lr: f64,
@@ -163,7 +163,7 @@ pub struct SplitPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
-    pub fn new(
+    fn new(
         policy: M,
         value_net: Sequential<B>,
         policy_optimizer: OptimizerAdaptor<AdamW, M, B>,

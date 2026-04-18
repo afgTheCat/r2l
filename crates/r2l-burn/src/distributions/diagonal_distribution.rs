@@ -11,15 +11,11 @@ use crate::sequential::Sequential;
 
 #[derive(Debug, Module)]
 pub struct DiagGaussianDistribution<B: Backend> {
-    pub mu_net: Sequential<B>,
-    pub log_std: Param<BurnTensor<B, 2>>,
+    mu_net: Sequential<B>,
+    log_std: Param<BurnTensor<B, 2>>,
 }
 
 impl<B: Backend> DiagGaussianDistribution<B> {
-    pub fn new(mu_net: Sequential<B>, log_std: Param<BurnTensor<B, 2>>) -> Self {
-        Self { mu_net, log_std }
-    }
-
     pub fn build(mu_layers: &[usize]) -> Self {
         let device = Default::default();
         let action_size = *mu_layers.last().unwrap();
