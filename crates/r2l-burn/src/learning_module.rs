@@ -10,7 +10,7 @@ use r2l_core::{
     on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
 
-use crate::{distributions::BurnPolicyKind, sequential::Sequential};
+use crate::{distributions::PolicyValueModule, sequential::Sequential};
 
 // A series constraints that we need for the policy to work nicely with AdamW
 pub trait BurnPolicy<B: AutodiffBackend>:
@@ -249,12 +249,12 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolic
     }
 }
 
-pub enum PolicyValueModule<B: AutodiffBackend, D: BurnPolicy<B>> {
+pub enum PolicyValueModule2<B: AutodiffBackend, D: BurnPolicy<B>> {
     Joint(JointPolicyValueModule<B, D>),
     Split(SplitPolicyValueModule<B, D>),
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule2<B, D> {
     pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
         match self {
             Self::Joint(lm) => lm.set_grad_clipping(grad_clipping),
@@ -270,7 +270,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for PolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for PolicyValueModule2<B, M> {
     type Losses = PolicyValueLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -281,7 +281,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for PolicyValueModule<
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueModule2<B, M> {
     type Tensor = Tensor<B, 1>;
 
     fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -292,7 +292,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueModule<B
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValueModule<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValueModule2<B, D> {
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
     type Policy = D;
@@ -324,4 +324,4 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValu
     }
 }
 
-pub type PolicyValueModuleKind<B> = PolicyValueModule<B, BurnPolicyKind<B>>;
+pub type PolicyValueModuleKind<B> = PolicyValueModule2<B, PolicyValueModule<B>>;
