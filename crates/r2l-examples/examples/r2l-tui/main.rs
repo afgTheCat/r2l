@@ -92,11 +92,11 @@ impl App {
     }
 
     fn handle_progress(&mut self, progress: PPOStats) {
-        let average_reward = progress.avarage_reward;
+        let average_reward = progress.average_reward;
         self.average_rollout_rewards.push(average_reward);
         match &self.best_update {
             None => self.best_update = Some(progress.clone()),
-            Some(current_best) if current_best.avarage_reward < average_reward => {
+            Some(current_best) if current_best.average_reward < average_reward => {
                 self.best_update = Some(progress.clone());
             }
             _ => {}
@@ -161,7 +161,7 @@ impl App {
             // Row::new(vec!["approx_kl".into(), ppo_progress.approx_kl.to_string()]),
             Row::new(vec![
                 "Average reward".into(),
-                ppo_progress.avarage_reward.to_string(),
+                ppo_progress.average_reward.to_string(),
             ]),
             Row::new(vec!["Clip fraction".into(), clip_fraction.to_string()]),
             Row::new(vec!["Clip range".into(), self.clip_range.to_string()]),

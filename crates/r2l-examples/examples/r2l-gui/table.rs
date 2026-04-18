@@ -73,7 +73,7 @@ impl UpdateTable {
             ),
             9 => select_row_or_col!(
                 "average_reward".to_owned(),
-                format!("{:?}", self.progress.avarage_reward)
+                format!("{:?}", self.progress.average_reward)
             ),
             10 => select_row_or_col!(
                 "learning_rate".to_owned(),
