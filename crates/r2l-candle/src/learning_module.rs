@@ -1,5 +1,5 @@
 use anyhow::{Ok, Result};
-use candle_core::{DType, Device, Tensor as CandleTensor};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
     models::{LearningModule, ValueFunction},
@@ -13,16 +13,13 @@ use crate::{
 };
 
 pub struct PolicyValueLosses {
-    pub policy_loss: CandleTensor,
-    pub value_loss: CandleTensor,
+    pub policy_loss: Tensor,
+    pub value_loss: Tensor,
     pub vf_coeff: Option<f32>,
 }
 
-impl FromPolicyValueLosses<candle_core::Tensor> for PolicyValueLosses {
-    fn from_policy_value_losses(
-        policy_loss: candle_core::Tensor,
-        value_loss: candle_core::Tensor,
-    ) -> Self {
+impl FromPolicyValueLosses<Tensor> for PolicyValueLosses {
+    fn from_policy_value_losses(policy_loss: Tensor, value_loss: Tensor) -> Self {
         Self {
             policy_loss,
             value_loss,
@@ -32,7 +29,7 @@ impl FromPolicyValueLosses<candle_core::Tensor> for PolicyValueLosses {
 }
 
 impl PolicyValueLosses {
-    pub fn new(policy_loss: CandleTensor, value_loss: CandleTensor) -> Self {
+    pub fn new(policy_loss: Tensor, value_loss: Tensor) -> Self {
         Self {
             policy_loss,
             value_loss,
@@ -40,7 +37,7 @@ impl PolicyValueLosses {
         }
     }
 
-    pub fn add_entropy_loss(&mut self, entropy_loss: CandleTensor) -> Result<()> {
+    pub fn add_entropy_loss(&mut self, entropy_loss: Tensor) -> Result<()> {
         self.policy_loss = self.policy_loss.add(&entropy_loss)?;
         Ok(())
     }
@@ -81,7 +78,7 @@ impl LearningModule for SplitPolicyValueOptimizer {
         if let Some(vf_coeff) = losses.vf_coeff {
             let device = losses.value_loss.device();
             let shape = losses.value_loss.shape();
-            let value_loss = (&losses.value_loss * CandleTensor::full(vf_coeff, shape, device)?)?;
+            let value_loss = (&losses.value_loss * Tensor::full(vf_coeff, shape, device)?)?;
             self.value_optimizer_with_grad.backward_step(&value_loss)?;
         } else {
             self.value_optimizer_with_grad
@@ -114,7 +111,7 @@ impl LearningModule for JointPolicyValueOptimizer {
         let loss = if let Some(vf_coeff) = losses.vf_coeff {
             let device = losses.value_loss.device();
             let shape = losses.value_loss.shape();
-            let value_loss = (&losses.value_loss * CandleTensor::full(vf_coeff, shape, device)?)?;
+            let value_loss = (&losses.value_loss * Tensor::full(vf_coeff, shape, device)?)?;
             losses.policy_loss.add(&value_loss)?
         } else {
             losses.policy_loss.add(&losses.value_loss)?
@@ -142,10 +139,10 @@ impl SequentialValueFunction {
 
 // TODO: maybe value function could be a subtrait on LearningModule?
 impl ValueFunction for SequentialValueFunction {
-    type Tensor = CandleTensor;
+    type Tensor = Tensor;
 
-    fn values(&self, observations: &[CandleTensor]) -> Result<CandleTensor> {
-        let observations = CandleTensor::stack(observations, 0)?;
+    fn values(&self, observations: &[Tensor]) -> Result<Tensor> {
+        let observations = Tensor::stack(observations, 0)?;
         let value = self.value_net.forward(&observations)?.squeeze(1)?;
         Ok(value)
     }
@@ -286,7 +283,7 @@ impl PolicyValueModule {
 }
 
 impl ValueFunction for PolicyValueModule {
-    type Tensor = CandleTensor;
+    type Tensor = Tensor;
 
     fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
         self.value_function.values(observations)
@@ -302,8 +299,8 @@ impl LearningModule for PolicyValueModule {
 }
 
 impl OnPolicyLearningModule for PolicyValueModule {
-    type LearningTensor = CandleTensor;
-    type InferenceTensor = CandleTensor;
+    type LearningTensor = Tensor;
+    type InferenceTensor = Tensor;
     type Policy = CandlePolicyKind;
     type InferencePolicy = CandlePolicyKind;
 
@@ -316,7 +313,7 @@ impl OnPolicyLearningModule for PolicyValueModule {
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
-        CandleTensor::from_slice(slice, slice.len(), &self.device).unwrap()
+        Tensor::from_slice(slice, slice.len(), &self.device).unwrap()
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {

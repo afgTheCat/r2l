@@ -1,7 +1,7 @@
 use std::f32;
 
 use anyhow::Result;
-use candle_core::{Device, Tensor as CandleTensor};
+use candle_core::{Device, Tensor};
 use candle_nn::{Module, VarBuilder};
 use r2l_core::models::{Actor, Policy};
 
@@ -10,9 +10,9 @@ use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 // TODO: we may want to resample the noise better than it is now
 #[derive(Debug, Clone)]
 pub struct DiagGaussianDistribution {
-    noise: CandleTensor,
+    noise: Tensor,
     mu_net: ThreadSafeSequential,
-    log_std: CandleTensor,
+    log_std: Tensor,
     device: Device,
 }
 
@@ -21,11 +21,11 @@ impl DiagGaussianDistribution {
         obseravtion_size: usize,
         layers: &[usize],
         vb: &VarBuilder,
-        log_std: CandleTensor,
+        log_std: Tensor,
         prefix: &str,
     ) -> Result<Self> {
         let mu_net = build_sequential(obseravtion_size, layers, vb, prefix)?;
-        let noise = CandleTensor::randn(0f32, 1., log_std.shape(), log_std.device()).unwrap();
+        let noise = Tensor::randn(0f32, 1., log_std.shape(), log_std.device()).unwrap();
         let device = vb.device().clone();
         Ok(Self {
             log_std,
@@ -49,9 +49,9 @@ impl DiagGaussianDistribution {
 }
 
 impl Actor for DiagGaussianDistribution {
-    type Tensor = CandleTensor;
+    type Tensor = Tensor;
 
-    fn action(&self, observation: CandleTensor) -> Result<CandleTensor> {
+    fn action(&self, observation: Tensor) -> Result<Tensor> {
         assert!(
             observation.rank() == 1,
             "Observation should be a flattened tensor"
@@ -62,21 +62,21 @@ impl Actor for DiagGaussianDistribution {
             .forward(&observation.unsqueeze(0)?)?
             .squeeze(0)?;
         let std = self.log_std.exp()?.unsqueeze(0)?;
-        let noise = CandleTensor::randn(0f32, 1., self.log_std.shape(), self.log_std.device())?;
+        let noise = Tensor::randn(0f32, 1., self.log_std.shape(), self.log_std.device())?;
         let action = (mu + std.mul(&noise.unsqueeze(0)?)?)?.squeeze(0)?.detach();
         Ok(action)
     }
 }
 
 impl Policy for DiagGaussianDistribution {
-    fn log_probs(&self, states: &[CandleTensor], actions: &[CandleTensor]) -> Result<CandleTensor> {
-        let states = CandleTensor::stack(states, 0)?;
-        let actions = CandleTensor::stack(actions, 0)?;
+    fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
+        let states = Tensor::stack(states, 0)?;
+        let actions = Tensor::stack(actions, 0)?;
         let mu = self.mu_net.forward(&states)?;
         let std = self.log_std.exp()?.broadcast_as(mu.shape())?;
         let var = std.sqr()?;
         let log_sqrt_2pi = f32::ln(f32::sqrt(2f32 * f32::consts::PI));
-        let log_sqrt_2pi = CandleTensor::full(log_sqrt_2pi, mu.shape(), mu.device())?;
+        let log_sqrt_2pi = Tensor::full(log_sqrt_2pi, mu.shape(), mu.device())?;
         let log_probs = ((((actions - &mu)?.sqr()? / (2. * var)?)?.neg()?
             - &self.log_std.broadcast_as(mu.shape())?)?
             - log_sqrt_2pi)?;
@@ -84,8 +84,8 @@ impl Policy for DiagGaussianDistribution {
         Ok(log_probs)
     }
 
-    fn entropy(&self, _states: &[CandleTensor]) -> Result<CandleTensor> {
-        let log_2pi_plus_1_div_2 = CandleTensor::full(
+    fn entropy(&self, _states: &[Tensor]) -> Result<Tensor> {
+        let log_2pi_plus_1_div_2 = Tensor::full(
             0.5 * ((2. * f32::consts::PI).ln() + 1.),
             self.log_std.shape(),
             self.log_std.device(),
@@ -100,7 +100,7 @@ impl Policy for DiagGaussianDistribution {
     }
 
     fn resample_noise(&mut self) -> Result<()> {
-        self.noise = CandleTensor::randn(0f32, 1., self.noise.shape(), self.noise.device())?;
+        self.noise = Tensor::randn(0f32, 1., self.noise.shape(), self.noise.device())?;
         Ok(())
     }
 }

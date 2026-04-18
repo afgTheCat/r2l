@@ -4,7 +4,7 @@ use anyhow::Result;
 use burn::module::{Module, Param};
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
-use burn::{prelude::Backend, tensor::Tensor as BurnTensor};
+use burn::{prelude::Backend, tensor::Tensor};
 use r2l_core::models::{Actor, Policy};
 
 use crate::sequential::Sequential;
@@ -12,7 +12,7 @@ use crate::sequential::Sequential;
 #[derive(Debug, Module)]
 pub struct DiagGaussianDistribution<B: Backend> {
     mu_net: Sequential<B>,
-    log_std: Param<BurnTensor<B, 2>>,
+    log_std: Param<Tensor<B, 2>>,
 }
 
 impl<B: Backend> DiagGaussianDistribution<B> {
@@ -29,14 +29,14 @@ impl<B: Backend> DiagGaussianDistribution<B> {
 }
 
 impl<B: Backend> Actor for DiagGaussianDistribution<B> {
-    type Tensor = BurnTensor<B, 1>;
+    type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device: <B as Backend>::Device = Default::default();
-        let observation: BurnTensor<B, 2> = observation.unsqueeze();
+        let observation: Tensor<B, 2> = observation.unsqueeze();
         let mu = self.mu_net.forward(observation);
         let std = self.log_std.val().exp();
-        let noise = BurnTensor::random(mu.shape(), BurnDistribution::Normal(0., 1.), &device);
+        let noise = Tensor::random(mu.shape(), BurnDistribution::Normal(0., 1.), &device);
         let action = mu + noise * std;
         Ok(action.squeeze_dims(&[1]))
     }
@@ -47,14 +47,14 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
     // different trait, as log_probs are not really used during inference.
     fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
         let device: <B as Backend>::Device = Default::default();
-        let states: BurnTensor<B, 2> = BurnTensor::stack(states.to_vec(), 0);
-        let actions: BurnTensor<B, 2> = BurnTensor::stack(actions.to_vec(), 0);
+        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
+        let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
         let mu = self.mu_net.forward(states);
         let log_std = self.log_std.val();
         let std = log_std.clone().exp();
         let var = std.clone() * std;
         let log_sqrt_2pi = f32::ln(f32::sqrt(2f32 * f32::consts::PI));
-        let log_sqrt_2pi: BurnTensor<B, 2> = BurnTensor::from_data(
+        let log_sqrt_2pi: Tensor<B, 2> = Tensor::from_data(
             TensorData::new(
                 vec![log_sqrt_2pi; mu.shape().num_elements()],
                 mu.shape().dims,
@@ -62,7 +62,7 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
             &device,
         );
         let actions_minus_mu = actions - mu;
-        let log_probs: BurnTensor<B, 2> = (actions_minus_mu.clone() * actions_minus_mu) / (2 * var);
+        let log_probs: Tensor<B, 2> = (actions_minus_mu.clone() * actions_minus_mu) / (2 * var);
         let log_probs = log_probs.neg() - log_std - log_sqrt_2pi;
         Ok(log_probs.sum_dim(1).squeeze())
     }
@@ -71,7 +71,7 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         let device: <B as Backend>::Device = Default::default();
         let log_std = self.log_std.val();
         let entropy_per_dim = log_std.clone()
-            + BurnTensor::from_data(
+            + Tensor::from_data(
                 TensorData::new(
                     vec![0.5 * ((2. * f32::consts::PI).ln() + 1.); log_std.shape().num_elements()],
                     log_std.shape().dims,

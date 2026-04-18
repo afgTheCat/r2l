@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use candle_core::{Device, Error, Tensor as CandleTensor};
+use candle_core::{Device, Error, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
@@ -47,9 +47,9 @@ impl CategoricalDistribution {
 }
 
 impl Actor for CategoricalDistribution {
-    type Tensor = CandleTensor;
+    type Tensor = Tensor;
 
-    fn action(&self, observation: CandleTensor) -> Result<CandleTensor> {
+    fn action(&self, observation: Tensor) -> Result<Tensor> {
         assert!(
             observation.rank() == 1,
             "Observation should be a flattened tensor"
@@ -62,23 +62,23 @@ impl Actor for CategoricalDistribution {
         // TODO: there is a one_hot function in candle. Should we use it?
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
-        let action = CandleTensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
+        let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
         Ok(action)
     }
 }
 
 impl Policy for CategoricalDistribution {
-    fn log_probs(&self, states: &[CandleTensor], actions: &[CandleTensor]) -> Result<CandleTensor> {
-        let states = CandleTensor::stack(states, 0)?;
-        let actions = CandleTensor::stack(actions, 0)?;
+    fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
+        let states = Tensor::stack(states, 0)?;
+        let actions = Tensor::stack(actions, 0)?;
         let logits = self.logits.forward(&states)?;
         let log_probs = log_softmax(&logits, 1)?;
         let log_probs = actions.mul(&log_probs)?.sum(1)?;
         Ok(log_probs)
     }
 
-    fn entropy(&self, states: &[CandleTensor]) -> Result<CandleTensor> {
-        let states = CandleTensor::stack(states, 0)?;
+    fn entropy(&self, states: &[Tensor]) -> Result<Tensor> {
+        let states = Tensor::stack(states, 0)?;
         let logits = self.logits.forward(&states)?;
         let probs = softmax(&logits, 1)?;
         let log_probs = log_softmax(&logits, 1)?;

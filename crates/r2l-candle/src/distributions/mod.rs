@@ -4,7 +4,7 @@ pub mod diagonal_distribution;
 use std::{f32, fmt::Debug};
 
 use anyhow::Result;
-use candle_core::{Device, Tensor as CandleTensor};
+use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
@@ -95,7 +95,7 @@ impl CandlePolicyKind {
 }
 
 impl Actor for CandlePolicyKind {
-    type Tensor = CandleTensor;
+    type Tensor = Tensor;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         match self {

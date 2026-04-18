@@ -1,4 +1,4 @@
-use burn::{Tensor as BurnTensor, module::Module, prelude::Backend};
+use burn::{Tensor, module::Module, prelude::Backend};
 use r2l_core::{
     env::ActionSpaceType,
     models::{Actor, Policy},
@@ -35,7 +35,7 @@ impl<B: Backend> PolicyKind<B> {
 }
 
 impl<B: Backend> Actor for PolicyKind<B> {
-    type Tensor = BurnTensor<B, 1>;
+    type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
         match self {

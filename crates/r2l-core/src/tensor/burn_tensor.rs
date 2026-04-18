@@ -1,33 +1,33 @@
 use burn::{
     prelude::Backend,
-    tensor::{Tensor as BurnTensor, TensorData as BurnTensorData, backend::AutodiffBackend},
+    tensor::{Tensor, TensorData as BurnTensorData, backend::AutodiffBackend},
 };
 
 use crate::tensor::{R2lTensor, R2lTensorMath, TensorData};
 
-impl<B: Backend> From<TensorData> for BurnTensor<B, 1> {
+impl<B: Backend> From<TensorData> for Tensor<B, 1> {
     fn from(value: TensorData) -> Self {
         let device = Default::default();
         let tensor_data = BurnTensorData::new(value.data, value.shape.clone());
-        BurnTensor::from_data(tensor_data, &device)
+        Tensor::from_data(tensor_data, &device)
     }
 }
 
-impl<B: Backend> From<BurnTensor<B, 1>> for TensorData {
-    fn from(value: BurnTensor<B, 1>) -> Self {
+impl<B: Backend> From<Tensor<B, 1>> for TensorData {
+    fn from(value: Tensor<B, 1>) -> Self {
         let data = value.to_data().to_vec().unwrap();
         let shape = vec![data.len()];
         Self { data, shape }
     }
 }
 
-impl<B: Backend, const D: usize> R2lTensor for BurnTensor<B, D> {
+impl<B: Backend, const D: usize> R2lTensor for Tensor<B, D> {
     fn to_vec(&self) -> Vec<f32> {
         self.to_data().to_vec().unwrap()
     }
 }
 
-impl<B: AutodiffBackend> R2lTensorMath for burn::Tensor<B, 1> {
+impl<B: AutodiffBackend> R2lTensorMath for Tensor<B, 1> {
     fn add(&self, other: &Self) -> anyhow::Result<Self> {
         Ok(self.clone() + other.clone())
     }
