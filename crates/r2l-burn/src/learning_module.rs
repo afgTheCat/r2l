@@ -1,7 +1,7 @@
 use burn::{
     grad_clipping::GradientClipping,
     module::{AutodiffModule, Module, ModuleDisplay},
-    optim::{AdamW, GradientsParams, Optimizer, adaptor::OptimizerAdaptor},
+    optim::{AdamW, AdamWConfig, GradientsParams, Optimizer, adaptor::OptimizerAdaptor},
     prelude::Backend,
     tensor::{Tensor, backend::AutodiffBackend},
 };
@@ -64,8 +64,8 @@ impl<B: AutodiffBackend> PolicyValueLosses<B> {
 // a model with a value function
 #[derive(Debug, Module)]
 pub struct JointActorModel<B: Backend, M: Module<B>> {
-    pub policy: M,
-    pub value_net: Sequential<B>,
+    policy: M,
+    value_net: Sequential<B>,
 }
 
 impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
@@ -75,10 +75,10 @@ impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
 }
 
 pub struct JointPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
-    pub lr: f64,
-    pub model: JointActorModel<B, M>,
+    lr: f64,
+    model: JointActorModel<B, M>,
     // NOTE: the optimizer needs to be optimizing both the policy and the value net at the same time
-    pub optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
+    optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueModule<B, M> {
@@ -154,12 +154,12 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for JointPolic
 }
 
 pub struct SplitPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
-    pub policy: M,
-    pub value_net: Sequential<B>,
-    pub policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
-    pub policy_lr: f64,
-    pub value_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
-    pub value_lr: f64,
+    policy: M,
+    value_net: Sequential<B>,
+    policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
+    policy_lr: f64,
+    value_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
+    value_lr: f64,
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
@@ -252,6 +252,40 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolic
 pub enum PolicyValueModule<B: AutodiffBackend, D: BurnPolicy<B>> {
     Joint(JointPolicyValueModule<B, D>),
     Split(SplitPolicyValueModule<B, D>),
+}
+
+impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
+    pub fn joint(
+        policy: D,
+        value_layers: &[usize],
+        optimizer_config: AdamWConfig,
+        lr: f64,
+    ) -> Self {
+        let value_net: Sequential<B> = Sequential::build(value_layers);
+        let model = JointActorModel::new(policy, value_net);
+        let model = JointPolicyValueModule::new(model, optimizer_config.init(), lr);
+        Self::Joint(model)
+    }
+
+    pub fn split(
+        policy: D,
+        value_layers: &[usize],
+        policy_optimizer_config: AdamWConfig,
+        policy_lr: f64,
+        value_optimizer_config: AdamWConfig,
+        value_lr: f64,
+    ) -> Self {
+        let value_net: Sequential<B> = Sequential::build(value_layers);
+        let model = SplitPolicyValueModule::new(
+            policy,
+            value_net,
+            policy_optimizer_config.init(),
+            policy_lr,
+            value_optimizer_config.init(),
+            value_lr,
+        );
+        Self::Split(model)
+    }
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {

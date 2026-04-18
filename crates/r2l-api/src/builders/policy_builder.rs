@@ -20,7 +20,6 @@ pub struct PolicyBuilder {
 }
 
 impl PolicyBuilder {
-    // ONE
     pub fn build_burn<B: AutodiffBackend>(
         &self,
         observation_size: usize,

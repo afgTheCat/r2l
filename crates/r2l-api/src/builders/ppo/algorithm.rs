@@ -127,33 +127,31 @@ where
         self
     }
 
-    pub fn with_joint(
-        mut self,
-        value_hidden_layers: Vec<usize>,
-        max_grad_norm: Option<f32>,
-    ) -> Self {
+    pub fn with_joint(mut self, max_grad_norm: Option<f32>) -> Self {
         self.agent_builder
             .learning_module_builder
-            .learning_module_type = LearningModuleType::Joint {
-            value_hidden_layers,
-            max_grad_norm,
-        };
+            .learning_module_type = LearningModuleType::Joint { max_grad_norm };
         self
     }
 
     pub fn with_split(
         mut self,
-        value_hidden_layers: Vec<usize>,
         policy_max_grad_norm: Option<f32>,
         value_max_grad_norm: Option<f32>,
     ) -> Self {
         self.agent_builder
             .learning_module_builder
             .learning_module_type = LearningModuleType::Split {
-            value_hidden_layers,
             policy_max_grad_norm,
             value_max_grad_norm,
         };
+        self
+    }
+
+    pub fn with_value_hidden_layers(mut self, value_hidden_layers: Vec<usize>) -> Self {
+        self.agent_builder
+            .learning_module_builder
+            .value_hidden_layers = value_hidden_layers;
         self
     }
 

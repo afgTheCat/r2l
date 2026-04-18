@@ -1,4 +1,3 @@
-// TODO: do we even need a folder for this?
 pub mod categorical_distribution;
 pub mod diagonal_distribution;
 

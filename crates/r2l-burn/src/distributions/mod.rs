@@ -1,5 +1,8 @@
 use burn::{Tensor as BurnTensor, module::Module, prelude::Backend};
-use r2l_core::models::{Actor, Policy};
+use r2l_core::{
+    env::ActionSpaceType,
+    models::{Actor, Policy},
+};
 
 use crate::distributions::{
     categorical_distribution::CategoricalDistribution,
@@ -12,6 +15,23 @@ pub mod diagonal_distribution;
 pub enum PolicyKind<B: Backend> {
     Categorical(CategoricalDistribution<B>),
     Diag(DiagGaussianDistribution<B>),
+}
+
+impl<B: Backend> PolicyKind<B> {
+    fn categorical(policy_layers: &[usize]) -> Self {
+        PolicyKind::Categorical(CategoricalDistribution::<B>::build(policy_layers))
+    }
+
+    fn continuous(policy_layers: &[usize]) -> Self {
+        PolicyKind::Diag(DiagGaussianDistribution::build(policy_layers))
+    }
+
+    pub fn build(action_space_type: ActionSpaceType, policy_layers: &[usize]) -> Self {
+        match action_space_type {
+            ActionSpaceType::Discrete => Self::categorical(policy_layers),
+            ActionSpaceType::Continuous => Self::continuous(policy_layers),
+        }
+    }
 }
 
 impl<B: Backend> Actor for PolicyKind<B> {

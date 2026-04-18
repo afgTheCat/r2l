@@ -38,8 +38,8 @@ impl A2CCandleAgentBuilder {
             a2c_params: A2CParams::default(),
             learning_module_builder: LearningModuleBuilder {
                 policy_hidden_layers: vec![64, 64],
+                value_hidden_layers: vec![64, 64],
                 learning_module_type: LearningModuleType::Joint {
-                    value_hidden_layers: vec![64, 64],
                     max_grad_norm: None,
                 },
                 params: ParamsAdamW {
