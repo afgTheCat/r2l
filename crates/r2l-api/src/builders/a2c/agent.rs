@@ -1,7 +1,6 @@
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::a2c::{A2C, A2CParams};
-use r2l_candle::learning_module::PolicyValueModule as CandlePolicyValueModule;
 use r2l_core::env::ActionSpaceType;
 
 use crate::{
@@ -11,7 +10,6 @@ use crate::{
         a2c::hook::DefaultA2CHookBuilder,
         agent::AgentBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
-        policy_builder::{DistributionType, PolicyBuilder},
     },
 };
 
@@ -25,27 +23,23 @@ pub struct A2CCandleBackend {
 
 pub struct A2CAgentBuilder<M> {
     pub a2c_params: A2CParams,
-    pub policy_builder: PolicyBuilder,
     pub hook_builder: DefaultA2CHookBuilder,
-    pub actor_critic_type: LearningModuleBuilder,
+    pub learning_module_builder: LearningModuleBuilder,
     pub backend: M,
 }
 
-pub type A2CBurnLearningModuleBuilder = A2CAgentBuilder<A2CBurnBackend>;
-pub type A2CCandleLearningModuleBuilder = A2CAgentBuilder<A2CCandleBackend>;
+pub type A2CBurnAgentBuilder = A2CAgentBuilder<A2CBurnBackend>;
+pub type A2CCandleAgentBuilder = A2CAgentBuilder<A2CCandleBackend>;
 
-impl A2CCandleLearningModuleBuilder {
+impl A2CCandleAgentBuilder {
     pub fn new(n_envs: usize) -> Self {
         Self {
             hook_builder: DefaultA2CHookBuilder::new(n_envs),
             a2c_params: A2CParams::default(),
-            policy_builder: PolicyBuilder {
-                hidden_layers: vec![64, 64],
-                distribution_type: DistributionType::Dynamic,
-            },
-            actor_critic_type: LearningModuleBuilder {
+            learning_module_builder: LearningModuleBuilder {
+                policy_hidden_layers: vec![64, 64],
                 learning_module_type: LearningModuleType::Joint {
-                    value_layers: vec![64, 64],
+                    value_hidden_layers: vec![64, 64],
                     max_grad_norm: None,
                 },
                 params: ParamsAdamW {
@@ -64,45 +58,6 @@ impl A2CCandleLearningModuleBuilder {
 }
 
 impl<M> A2CAgentBuilder<M> {
-    fn build_candle_module(
-        &self,
-        observation_size: usize,
-        action_size: usize,
-        action_space: ActionSpaceType,
-        device: &Device,
-    ) -> anyhow::Result<CandlePolicyValueModule> {
-        match &self.actor_critic_type.learning_module_type {
-            LearningModuleType::Joint {
-                value_layers,
-                max_grad_norm,
-            } => CandlePolicyValueModule::build_joint(
-                device,
-                action_size,
-                observation_size,
-                &self.policy_builder.hidden_layers,
-                action_space,
-                value_layers,
-                *max_grad_norm,
-                self.actor_critic_type.params.clone(),
-            ),
-            LearningModuleType::Split {
-                value_layers,
-                policy_max_grad_norm,
-                value_max_grad_norm,
-            } => CandlePolicyValueModule::build_split(
-                device,
-                action_size,
-                observation_size,
-                &self.policy_builder.hidden_layers,
-                action_space,
-                value_layers,
-                *policy_max_grad_norm,
-                *value_max_grad_norm,
-                self.actor_critic_type.params.clone(),
-            ),
-        }
-    }
-
     fn build_candle(
         self,
         observation_size: usize,
@@ -110,7 +65,12 @@ impl<M> A2CAgentBuilder<M> {
         action_space: ActionSpaceType,
         device: Device,
     ) -> anyhow::Result<CandleA2C> {
-        let lm = self.build_candle_module(observation_size, action_size, action_space, &device)?;
+        let lm = self.learning_module_builder.build_candle(
+            observation_size,
+            action_size,
+            action_space,
+            &device,
+        )?;
         let hooks = self.hook_builder.build();
         let params = self.a2c_params;
         Ok(CandleA2C(A2C { lm, hooks, params }))
@@ -122,12 +82,11 @@ impl<M> A2CAgentBuilder<M> {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<BurnA2C<BurnBackend>> {
-        let policy = self.policy_builder.build_burn::<BurnBackend>(
+        let lm = self.learning_module_builder.build_burn::<BurnBackend>(
             observation_size,
             action_size,
             action_space,
         )?;
-        let lm = self.actor_critic_type.build_burn(observation_size, policy);
         let hooks = self.hook_builder.build();
         let params = self.a2c_params;
         Ok(BurnA2C(A2C { lm, hooks, params }))
@@ -143,16 +102,14 @@ impl A2CAgentBuilder<A2CCandleBackend> {
     pub fn with_burn(self) -> A2CAgentBuilder<A2CBurnBackend> {
         let A2CAgentBuilder {
             a2c_params,
-            policy_builder,
             hook_builder,
-            actor_critic_type,
+            learning_module_builder,
             ..
         } = self;
         A2CAgentBuilder {
             a2c_params,
-            policy_builder,
             hook_builder,
-            actor_critic_type,
+            learning_module_builder,
             backend: A2CBurnBackend,
         }
     }
@@ -162,16 +119,14 @@ impl A2CAgentBuilder<A2CBurnBackend> {
     pub fn with_candle(self, device: Device) -> A2CAgentBuilder<A2CCandleBackend> {
         let A2CAgentBuilder {
             a2c_params,
-            policy_builder,
             hook_builder,
-            actor_critic_type,
+            learning_module_builder,
             ..
         } = self;
         A2CAgentBuilder {
             a2c_params,
-            policy_builder,
             hook_builder,
-            actor_critic_type,
+            learning_module_builder,
             backend: A2CCandleBackend { device },
         }
     }

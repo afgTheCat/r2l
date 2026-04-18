@@ -8,9 +8,7 @@ use crate::{
     BurnBackend,
     agents::a2c::{BurnA2C, CandleA2C},
     builders::{
-        a2c::agent::{
-            A2CAgentBuilder, A2CBurnLearningModuleBuilder, A2CCandleLearningModuleBuilder,
-        },
+        a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder},
         agent::AgentBuilder,
         learning_module::LearningModuleType,
         on_policy::OnPolicyAlgorightmBuilder,
@@ -75,34 +73,50 @@ where
         self
     }
 
+    pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
+        self.agent_builder
+            .learning_module_builder
+            .policy_hidden_layers = policy_hidden_layers;
+        self
+    }
+
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
-        self.agent_builder.actor_critic_type.params.lr = learning_rate;
+        self.agent_builder.learning_module_builder.params.lr = learning_rate;
         self
     }
 
     pub fn with_beta1(mut self, beta1: f64) -> Self {
-        self.agent_builder.actor_critic_type.params.beta1 = beta1;
+        self.agent_builder.learning_module_builder.params.beta1 = beta1;
         self
     }
 
     pub fn with_beta2(mut self, beta2: f64) -> Self {
-        self.agent_builder.actor_critic_type.params.beta2 = beta2;
+        self.agent_builder.learning_module_builder.params.beta2 = beta2;
         self
     }
 
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
-        self.agent_builder.actor_critic_type.params.eps = epsilon;
+        self.agent_builder.learning_module_builder.params.eps = epsilon;
         self
     }
 
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
-        self.agent_builder.actor_critic_type.params.weight_decay = weight_decay;
+        self.agent_builder
+            .learning_module_builder
+            .params
+            .weight_decay = weight_decay;
         self
     }
 
-    pub fn with_joint(mut self, value_layers: Vec<usize>, max_grad_norm: Option<f32>) -> Self {
-        self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Joint {
-            value_layers,
+    pub fn with_joint(
+        mut self,
+        value_hidden_layers: Vec<usize>,
+        max_grad_norm: Option<f32>,
+    ) -> Self {
+        self.agent_builder
+            .learning_module_builder
+            .learning_module_type = LearningModuleType::Joint {
+            value_hidden_layers,
             max_grad_norm,
         };
         self
@@ -110,12 +124,14 @@ where
 
     pub fn with_split(
         mut self,
-        value_layers: Vec<usize>,
+        value_hidden_layers: Vec<usize>,
         policy_max_grad_norm: Option<f32>,
         value_max_grad_norm: Option<f32>,
     ) -> Self {
-        self.agent_builder.actor_critic_type.learning_module_type = LearningModuleType::Split {
-            value_layers,
+        self.agent_builder
+            .learning_module_builder
+            .learning_module_type = LearningModuleType::Split {
+            value_hidden_layers,
             policy_max_grad_norm,
             value_max_grad_norm,
         };
@@ -123,20 +139,22 @@ where
     }
 
     pub fn with_learning_module_type(mut self, learning_module_type: LearningModuleType) -> Self {
-        self.agent_builder.actor_critic_type.learning_module_type = learning_module_type;
+        self.agent_builder
+            .learning_module_builder
+            .learning_module_type = learning_module_type;
         self
     }
 }
 
 pub type A2CBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    OnPolicyAlgorightmBuilder<BurnA2C<BurnBackend>, A2CBurnLearningModuleBuilder, EB, BD>;
+    OnPolicyAlgorightmBuilder<BurnA2C<BurnBackend>, A2CBurnAgentBuilder, EB, BD>;
 
 pub type A2CCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    OnPolicyAlgorightmBuilder<CandleA2C, A2CCandleLearningModuleBuilder, EB, BD>;
+    OnPolicyAlgorightmBuilder<CandleA2C, A2CCandleAgentBuilder, EB, BD>;
 
 impl<EB: EnvBuilderTrait> A2CCandleAlgorithmBuilder<EB> {
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
-        let agent_builder = A2CCandleLearningModuleBuilder::new(n_envs);
+        let agent_builder = A2CCandleAgentBuilder::new(n_envs);
         OnPolicyAlgorightmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
             agent_builder,

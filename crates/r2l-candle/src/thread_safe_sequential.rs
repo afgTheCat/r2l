@@ -70,7 +70,7 @@ impl ThreadSafeLayer {
     pub(crate) fn input_size(&self) -> Option<usize> {
         match &self.0 {
             Either::Left(linear) => Some(linear.input_size()),
-            Either::Right(act) => None,
+            Either::Right(_) => None,
         }
     }
 }

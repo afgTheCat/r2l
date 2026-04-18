@@ -12,6 +12,7 @@ use r2l_api::{
 use r2l_gym::GymEnvBuilder;
 use r2l_sampler::StepTrajectoryBound;
 
+#[allow(dead_code)]
 struct PPOTestConfig {
     env_name: &'static str,
     n_envs: usize,

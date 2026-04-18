@@ -11,6 +11,7 @@ use r2l_api::{
 use r2l_gym::GymEnvBuilder;
 use r2l_sampler::StepTrajectoryBound;
 
+#[allow(dead_code)]
 struct A2CTestConfig {
     env_name: &'static str,
     n_envs: usize,
@@ -28,6 +29,7 @@ struct A2CTestConfig {
     sde_sample_freq: Option<usize>,
 }
 
+#[allow(dead_code)]
 fn configure_candle_ppo_test(config: A2CTestConfig) {
     let (update_tx, update_rx): (Sender<A2CStats>, Receiver<A2CStats>) = mpsc::channel();
 

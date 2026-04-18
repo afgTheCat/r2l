@@ -1,9 +1,6 @@
-use candle_core::{DType, Device};
-use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
+use candle_core::Device;
+use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
-use r2l_candle::{
-    distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
-};
 use r2l_core::env::ActionSpaceType;
 
 use crate::{
@@ -12,7 +9,6 @@ use crate::{
     builders::{
         agent::AgentBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
-        policy_builder::{DistributionType, PolicyBuilder},
         ppo::hook::DefaultPPOHookBuilder,
     },
 };
@@ -27,9 +23,8 @@ pub struct PPOCandleBackend {
 
 pub struct PPOAgentBuilder<M = PPOCandleBackend> {
     pub ppo_params: PPOParams,
-    pub policy_builder: PolicyBuilder,
     pub hook_builder: DefaultPPOHookBuilder,
-    pub actor_critic_type: LearningModuleBuilder,
+    pub learning_module_builder: LearningModuleBuilder,
     pub backend: M,
 }
 
@@ -37,45 +32,6 @@ pub type BurnPPOAgentBuilder = PPOAgentBuilder<PPOBurnBackend>;
 pub type CandlePPOAgentBuilder = PPOAgentBuilder<PPOCandleBackend>;
 
 impl<M> PPOAgentBuilder<M> {
-    fn build_candle_module(
-        &self,
-        observation_size: usize,
-        action_size: usize,
-        action_space: ActionSpaceType,
-        device: &Device,
-    ) -> anyhow::Result<CandlePolicyValueModule> {
-        match &self.actor_critic_type.learning_module_type {
-            LearningModuleType::Joint {
-                value_layers,
-                max_grad_norm,
-            } => CandlePolicyValueModule::build_joint(
-                device,
-                action_size,
-                observation_size,
-                &self.policy_builder.hidden_layers,
-                action_space,
-                value_layers,
-                *max_grad_norm,
-                self.actor_critic_type.params.clone(),
-            ),
-            LearningModuleType::Split {
-                value_layers,
-                policy_max_grad_norm,
-                value_max_grad_norm,
-            } => CandlePolicyValueModule::build_split(
-                device,
-                action_size,
-                observation_size,
-                &self.policy_builder.hidden_layers,
-                action_space,
-                value_layers,
-                *policy_max_grad_norm,
-                *value_max_grad_norm,
-                self.actor_critic_type.params.clone(),
-            ),
-        }
-    }
-
     fn build_candle(
         self,
         observation_size: usize,
@@ -83,7 +39,12 @@ impl<M> PPOAgentBuilder<M> {
         action_space: ActionSpaceType,
         device: Device,
     ) -> anyhow::Result<CandlePPO> {
-        let lm = self.build_candle_module(observation_size, action_size, action_space, &device)?;
+        let lm = self.learning_module_builder.build_candle(
+            observation_size,
+            action_size,
+            action_space,
+            &device,
+        )?;
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
         Ok(CandlePPO(PPO { lm, hooks, params }))
@@ -95,12 +56,11 @@ impl<M> PPOAgentBuilder<M> {
         action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<BurnPPO<BurnBackend>> {
-        let policy = self.policy_builder.build_burn::<BurnBackend>(
+        let lm = self.learning_module_builder.build_burn::<BurnBackend>(
             observation_size,
             action_size,
             action_space,
         )?;
-        let lm = self.actor_critic_type.build_burn(observation_size, policy);
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
         Ok(BurnPPO(PPO { lm, hooks, params }))
@@ -111,9 +71,8 @@ impl PPOAgentBuilder<PPOCandleBackend> {
     pub fn with_burn(self) -> PPOAgentBuilder<PPOBurnBackend> {
         PPOAgentBuilder {
             ppo_params: self.ppo_params,
-            policy_builder: self.policy_builder,
             hook_builder: self.hook_builder,
-            actor_critic_type: self.actor_critic_type,
+            learning_module_builder: self.learning_module_builder,
             backend: PPOBurnBackend,
         }
     }
@@ -128,9 +87,8 @@ impl PPOAgentBuilder<PPOBurnBackend> {
     pub fn with_candle(self, device: Device) -> PPOAgentBuilder<PPOCandleBackend> {
         PPOAgentBuilder {
             ppo_params: self.ppo_params,
-            policy_builder: self.policy_builder,
             hook_builder: self.hook_builder,
-            actor_critic_type: self.actor_critic_type,
+            learning_module_builder: self.learning_module_builder,
             backend: PPOCandleBackend { device },
         }
     }
@@ -138,9 +96,8 @@ impl PPOAgentBuilder<PPOBurnBackend> {
     pub fn with_burn(self) -> PPOAgentBuilder<PPOBurnBackend> {
         PPOAgentBuilder {
             ppo_params: self.ppo_params,
-            policy_builder: self.policy_builder,
             hook_builder: self.hook_builder,
-            actor_critic_type: self.actor_critic_type,
+            learning_module_builder: self.learning_module_builder,
             backend: PPOBurnBackend,
         }
     }
@@ -151,13 +108,10 @@ impl CandlePPOAgentBuilder {
         Self {
             hook_builder: DefaultPPOHookBuilder::new(n_envs),
             ppo_params: PPOParams::default(),
-            policy_builder: PolicyBuilder {
-                hidden_layers: vec![64, 64],
-                distribution_type: DistributionType::Dynamic,
-            },
-            actor_critic_type: LearningModuleBuilder {
+            learning_module_builder: LearningModuleBuilder {
+                policy_hidden_layers: vec![64, 64],
                 learning_module_type: LearningModuleType::Joint {
-                    value_layers: vec![64, 64],
+                    value_hidden_layers: vec![64, 64],
                     max_grad_norm: None,
                 },
                 params: ParamsAdamW {

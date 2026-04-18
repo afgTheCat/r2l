@@ -2,7 +2,6 @@ use anyhow::{Ok, Result};
 use candle_core::{DType, Device, Tensor as CandleTensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
-    env::ActionSpaceType,
     models::{LearningModule, ValueFunction},
     on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
@@ -226,37 +225,6 @@ pub struct PolicyValueModule {
 
 impl PolicyValueModule {
     pub fn build_joint(
-        device: &Device,
-        action_size: usize,
-        observation_size: usize,
-        hidden_layers: &[usize],
-        action_space_type: ActionSpaceType,
-        value_layers: &[usize],
-        max_grad_norm: Option<f32>,
-        params: ParamsAdamW,
-    ) -> Result<Self> {
-        let policy_varmap = VarMap::new();
-        let policy_vb = VarBuilder::from_varmap(&policy_varmap, DType::F32, device);
-        let policy = CandlePolicyKind::build(
-            action_space_type,
-            &policy_vb,
-            hidden_layers,
-            action_size,
-            observation_size,
-        )?;
-        let value_layers = &[value_layers, &[1]].concat();
-        let value_function =
-            SequentialValueFunction::new(observation_size, value_layers, &policy_vb, "value")?;
-        let optimizer = PolicyValueOptimizer::joint(policy_varmap, params, max_grad_norm)?;
-        Ok(Self {
-            policy,
-            optimizer,
-            value_function,
-            device: device.clone(),
-        })
-    }
-
-    pub fn build_joint2(
         policy: CandlePolicyKind,
         value_hidden_layers: &[usize],
         policy_varmap: VarMap,
@@ -279,46 +247,6 @@ impl PolicyValueModule {
     }
 
     pub fn build_split(
-        device: &Device,
-        action_size: usize,
-        observation_size: usize,
-        hidden_layers: &[usize],
-        action_space_type: ActionSpaceType,
-        value_layers: &[usize],
-        policy_max_grad_norm: Option<f32>,
-        value_max_grad_norm: Option<f32>,
-        params: ParamsAdamW,
-    ) -> Result<Self> {
-        let policy_varmap = VarMap::new();
-        let policy_vb = VarBuilder::from_varmap(&policy_varmap, DType::F32, device);
-        let policy = CandlePolicyKind::build(
-            action_space_type,
-            &policy_vb,
-            hidden_layers,
-            action_size,
-            observation_size,
-        )?;
-        let critic_varmap = VarMap::new();
-        let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, device);
-        let value_layers = &[value_layers, &[1]].concat();
-        let value_function =
-            SequentialValueFunction::new(observation_size, value_layers, &critic_vb, "value")?;
-        let optimizer = PolicyValueOptimizer::split(
-            policy_varmap,
-            critic_varmap,
-            params,
-            policy_max_grad_norm,
-            value_max_grad_norm,
-        )?;
-        Ok(Self {
-            policy,
-            optimizer,
-            value_function,
-            device: device.clone(),
-        })
-    }
-
-    pub fn build_split2(
         value_hidden_layers: &[usize],
         policy: CandlePolicyKind,
         policy_varmap: VarMap,
