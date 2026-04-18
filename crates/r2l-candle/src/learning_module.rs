@@ -169,12 +169,13 @@ impl PolicyValueOptimizer {
     pub fn split(
         policy_vm: VarMap,
         critic_vm: VarMap,
-        params: ParamsAdamW,
+        policy_params: ParamsAdamW,
+        value_params: ParamsAdamW,
         policy_max_grad_norm: Option<f32>,
         value_max_grad_norm: Option<f32>,
     ) -> candle_core::Result<Self> {
-        let policy_optimizer = AdamW::new(policy_vm.all_vars(), params.clone())?;
-        let value_optimizer = AdamW::new(critic_vm.all_vars(), params.clone())?;
+        let policy_optimizer = AdamW::new(policy_vm.all_vars(), policy_params.clone())?;
+        let value_optimizer = AdamW::new(critic_vm.all_vars(), policy_params.clone())?;
         let policy_optimizer_with_grad =
             OptimizerWithMaxGrad::new(policy_optimizer, policy_max_grad_norm, policy_vm);
         let value_optimizer_with_grad =
@@ -244,12 +245,13 @@ impl PolicyValueModule {
     }
 
     pub fn build_split(
-        value_hidden_layers: &[usize],
         policy: CandlePolicyKind,
+        value_hidden_layers: &[usize],
         policy_varmap: VarMap,
         policy_max_grad_norm: Option<f32>,
         value_max_grad_norm: Option<f32>,
-        params: ParamsAdamW,
+        policy_params: ParamsAdamW,
+        value_params: ParamsAdamW,
     ) -> Result<Self> {
         let device = policy.device();
         let observation_size = policy.observation_size();
@@ -261,7 +263,8 @@ impl PolicyValueModule {
         let optimizer = PolicyValueOptimizer::split(
             policy_varmap,
             critic_varmap,
-            params,
+            policy_params,
+            value_params,
             policy_max_grad_norm,
             value_max_grad_norm,
         )?;

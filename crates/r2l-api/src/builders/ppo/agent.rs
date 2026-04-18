@@ -112,14 +112,14 @@ impl CandlePPOAgentBuilder {
                 policy_hidden_layers: vec![64, 64],
                 value_hidden_layers: vec![64, 64],
                 learning_module_type: LearningModuleType::Joint {
+                    params: ParamsAdamW {
+                        lr: 3e-4,
+                        beta1: 0.9,
+                        beta2: 0.999,
+                        eps: 1e-5,
+                        weight_decay: 1e-4,
+                    },
                     max_grad_norm: None,
-                },
-                params: ParamsAdamW {
-                    lr: 3e-4,
-                    beta1: 0.9,
-                    beta2: 0.999,
-                    eps: 1e-5,
-                    weight_decay: 1e-4,
                 },
             },
             backend: PPOCandleBackend {

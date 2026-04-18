@@ -41,13 +41,13 @@ impl A2CCandleAgentBuilder {
                 value_hidden_layers: vec![64, 64],
                 learning_module_type: LearningModuleType::Joint {
                     max_grad_norm: None,
-                },
-                params: ParamsAdamW {
-                    lr: 3e-4,
-                    beta1: 0.9,
-                    beta2: 0.999,
-                    eps: 1e-5,
-                    weight_decay: 1e-4,
+                    params: ParamsAdamW {
+                        lr: 3e-4,
+                        beta1: 0.9,
+                        beta2: 0.999,
+                        eps: 1e-5,
+                        weight_decay: 1e-4,
+                    },
                 },
             },
             backend: A2CCandleBackend {
