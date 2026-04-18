@@ -1,7 +1,18 @@
-use burn::{prelude::Backend, tensor::backend::AutodiffBackend};
+use burn::{optim::AdamWConfig, prelude::Backend, tensor::backend::AutodiffBackend};
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
-use r2l_burn::learning_module::PolicyValueModuleKind as BurnPolicyValueModule;
+use r2l_burn::{
+    distributions::{
+        PolicyKind,
+        categorical_distribution::CategoricalDistribution as BurnCategoricalDistribution,
+        diagonal_distribution::DiagGaussianDistribution as BurnDiagGaussianDistribution,
+    },
+    learning_module::{
+        JointActorModel, JointPolicyValueModule, PolicyValueModule,
+        PolicyValueModuleKind as BurnPolicyValueModule, SplitPolicyValueModule,
+    },
+    sequential::Sequential,
+};
 use r2l_candle::learning_module::PolicyValueModule as CandlePolicyValueModule;
 use r2l_core::env::ActionSpaceType;
 
@@ -61,6 +72,64 @@ impl LearningModuleBuilder {
     }
 
     fn build_burn<B: AutodiffBackend>(&self) -> anyhow::Result<BurnPolicyValueModule<B>> {
-        todo!()
+        let layers = &[&self.policy_hidden_layers[..], &[self.action_size]].concat();
+        let policy_layers = &[&[self.observation_size][..], &layers[..]].concat();
+        let policy = match self.action_space {
+            ActionSpaceType::Discrete => {
+                PolicyKind::Categorical(BurnCategoricalDistribution::<B>::build(policy_layers))
+            }
+            ActionSpaceType::Continuous => {
+                PolicyKind::Diag(BurnDiagGaussianDistribution::build(policy_layers))
+            }
+        };
+        let learning_module = match self.learning_module_type {
+            LearningModuleType::Joint {
+                value_layers,
+                max_grad_norm,
+            } => {
+                let value_layers =
+                    &[&[self.observation_size][..], &value_layers[..], &[1]].concat();
+                let value_net: Sequential<B> = Sequential::build(value_layers);
+                let model = JointActorModel::new(policy, value_net);
+                PolicyValueModule::Joint(JointPolicyValueModule::new(
+                    model,
+                    AdamWConfig::new()
+                        .with_beta_1(self.params.beta1 as f32)
+                        .with_beta_2(self.params.beta2 as f32)
+                        .with_epsilon(self.params.eps as f32)
+                        .with_weight_decay(self.params.weight_decay as f32)
+                        .init(),
+                    self.params.lr,
+                ))
+            }
+            LearningModuleType::Split {
+                value_layers,
+                policy_max_grad_norm,
+                value_max_grad_norm,
+            } => {
+                let value_layers =
+                    &[&[self.observation_size][..], &value_layers[..], &[1]].concat();
+                let value_net: Sequential<B> = Sequential::build(value_layers);
+                PolicyValueModule::Split(SplitPolicyValueModule::new(
+                    policy,
+                    value_net,
+                    AdamWConfig::new()
+                        .with_beta_1(self.params.beta1 as f32)
+                        .with_beta_2(self.params.beta2 as f32)
+                        .with_epsilon(self.params.eps as f32)
+                        .with_weight_decay(self.params.weight_decay as f32)
+                        .init(),
+                    self.params.lr,
+                    AdamWConfig::new()
+                        .with_beta_1(self.params.beta1 as f32)
+                        .with_beta_2(self.params.beta2 as f32)
+                        .with_epsilon(self.params.eps as f32)
+                        .with_weight_decay(self.params.weight_decay as f32)
+                        .init(),
+                    self.params.lr,
+                ))
+            }
+        };
+        Ok(learning_module)
     }
 }
