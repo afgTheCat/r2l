@@ -95,6 +95,7 @@ where
     A::Tensor: From<B::Tensor>,
     S::Tensor: From<A::Tensor>,
 {
+    // ANCHOR: train_loop
     /// Runs rollout collection and learning until a hook requests shutdown.
     pub fn train(&mut self) -> Result<()> {
         if self.hooks.init_hook() {
@@ -118,4 +119,5 @@ where
 
         self.hooks.shutdown_hook(&mut self.agent, &mut self.sampler)
     }
+    // ANCHOR_END: train_loop
 }
