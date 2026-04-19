@@ -14,6 +14,7 @@ macro_rules! break_on_hook_res {
     };
 }
 
+// ANCHOR: agent
 /// Trainable component that updates from collected trajectories.
 pub trait Agent {
     /// Tensor type shared with the sampler and rollout buffers.
@@ -32,7 +33,9 @@ pub trait Agent {
     /// Releases agent resources before the training loop exits.
     fn shutdown(&mut self) {}
 }
+// ANCHOR_END: agent
 
+// ANCHOR: sampler
 /// Rollout collector used by [`OnPolicyAlgorithm`].
 pub trait Sampler {
     /// Tensor type produced by environments and consumed by actors.
@@ -49,6 +52,7 @@ pub trait Sampler {
     /// Releases sampler resources before the training loop exits.
     fn shutdown(&mut self) {}
 }
+// ANCHOR_END: sampler
 
 /// Lifecycle hooks for [`OnPolicyAlgorithm`].
 ///
@@ -73,6 +77,7 @@ pub trait OnPolicyAlgorithmHooks {
     fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()>;
 }
 
+// ANCHOR: on_policy_algorithm
 /// Default on-policy training loop over an [`Agent`], [`Sampler`], and hooks.
 pub struct OnPolicyAlgorithm<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> {
     /// Rollout collector.
@@ -82,6 +87,7 @@ pub struct OnPolicyAlgorithm<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A =
     /// Lifecycle hooks.
     pub hooks: H,
 }
+// ANCHOR_END: on_policy_algorithm
 
 impl<
     B: TrajectoryContainer,
