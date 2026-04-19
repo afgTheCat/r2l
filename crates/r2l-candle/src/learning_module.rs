@@ -175,7 +175,7 @@ impl PolicyValueOptimizer {
         value_max_grad_norm: Option<f32>,
     ) -> candle_core::Result<Self> {
         let policy_optimizer = AdamW::new(policy_vm.all_vars(), policy_params.clone())?;
-        let value_optimizer = AdamW::new(critic_vm.all_vars(), policy_params.clone())?;
+        let value_optimizer = AdamW::new(critic_vm.all_vars(), value_params.clone())?;
         let policy_optimizer_with_grad =
             OptimizerWithMaxGrad::new(policy_optimizer, policy_max_grad_norm, policy_vm);
         let value_optimizer_with_grad =

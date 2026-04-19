@@ -25,13 +25,16 @@ pub enum LearningModuleType {
 }
 
 impl LearningModuleType {
-    pub fn with_lr(self, lr: f64) -> Self {
+    fn map_params<F>(self, mut f: F) -> Self
+    where
+        F: FnMut(&mut ParamsAdamW),
+    {
         match self {
             Self::Joint {
                 max_grad_norm,
                 mut params,
             } => {
-                params.lr = lr;
+                f(&mut params);
                 Self::Joint {
                     params,
                     max_grad_norm,
@@ -43,8 +46,8 @@ impl LearningModuleType {
                 value_max_grad_norm,
                 mut value_params,
             } => {
-                policy_params.lr = lr;
-                value_params.lr = lr;
+                f(&mut policy_params);
+                f(&mut value_params);
                 Self::Split {
                     policy_max_grad_norm,
                     policy_params,
@@ -53,6 +56,26 @@ impl LearningModuleType {
                 }
             }
         }
+    }
+
+    pub fn with_lr(self, lr: f64) -> Self {
+        self.map_params(|params| params.lr = lr)
+    }
+
+    pub fn with_beta1(self, beta1: f64) -> Self {
+        self.map_params(|params| params.beta1 = beta1)
+    }
+
+    pub fn with_beta2(self, beta2: f64) -> Self {
+        self.map_params(|params| params.beta2 = beta2)
+    }
+
+    pub fn with_epsilon(self, epsilon: f64) -> Self {
+        self.map_params(|params| params.eps = epsilon)
+    }
+
+    pub fn with_weight_decay(self, weight_decay: f64) -> Self {
+        self.map_params(|params| params.weight_decay = weight_decay)
     }
 }
 

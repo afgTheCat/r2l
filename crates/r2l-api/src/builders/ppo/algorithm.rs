@@ -111,28 +111,49 @@ where
         self
     }
 
-    // pub fn with_beta1(mut self, beta1: f64) -> Self {
-    //     self.agent_builder.learning_module_builder.params.beta1 = beta1;
-    //     self
-    // }
-    //
-    // pub fn with_beta2(mut self, beta2: f64) -> Self {
-    //     self.agent_builder.learning_module_builder.params.beta2 = beta2;
-    //     self
-    // }
-    //
-    // pub fn with_epsilon(mut self, epsilon: f64) -> Self {
-    //     self.agent_builder.learning_module_builder.params.eps = epsilon;
-    //     self
-    // }
-    //
-    // pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
-    //     self.agent_builder
-    //         .learning_module_builder
-    //         .params
-    //         .weight_decay = weight_decay;
-    //     self
-    // }
+    pub fn with_beta1(mut self, beta1: f64) -> Self {
+        self.agent_builder
+            .learning_module_builder
+            .learning_module_type = self
+            .agent_builder
+            .learning_module_builder
+            .learning_module_type
+            .with_beta1(beta1);
+        self
+    }
+
+    pub fn with_beta2(mut self, beta2: f64) -> Self {
+        self.agent_builder
+            .learning_module_builder
+            .learning_module_type = self
+            .agent_builder
+            .learning_module_builder
+            .learning_module_type
+            .with_beta2(beta2);
+        self
+    }
+
+    pub fn with_epsilon(mut self, epsilon: f64) -> Self {
+        self.agent_builder
+            .learning_module_builder
+            .learning_module_type = self
+            .agent_builder
+            .learning_module_builder
+            .learning_module_type
+            .with_epsilon(epsilon);
+        self
+    }
+
+    pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
+        self.agent_builder
+            .learning_module_builder
+            .learning_module_type = self
+            .agent_builder
+            .learning_module_builder
+            .learning_module_type
+            .with_weight_decay(weight_decay);
+        self
+    }
 
     pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: ParamsAdamW) -> Self {
         self.agent_builder
