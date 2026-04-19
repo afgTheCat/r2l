@@ -1,0 +1,18 @@
+- AI generated docs code chunks
+- Hand written architecture:
+  - On policy algorithm docs
+  - Sampler docs
+  - PPO/A2C docs
+- Hand written user guide:
+  - How to use PPO/A2C default hooks
+  - Hook trait implementations
+- Document capabilities
+  - What we have/don't have
+  - What environments have been tested
+- Update the roadmap for v0.0.3
+  - Sampler hooks -> env normalization + reward normalization
+  - Results
+- Document AI usage
+  - Code is 80% hand written
+  - Code docs are AI generated
+  - Book + Readme is human written
