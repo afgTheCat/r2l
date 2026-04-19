@@ -1,0 +1,14 @@
+[package]
+name = "r2l-sampler"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+bimodal-array = { version = "0.1.1" }
+r2l-core = { workspace = true }
+crossbeam = { workspace = true }
+rand = { workspace = true }

@@ -187,9 +187,10 @@ impl ToTokens for TrainingHook {
 
 #[cfg(test)]
 mod test {
-    use super::TrainingHook;
     use quote::ToTokens;
     use syn::parse_quote;
+
+    use super::TrainingHook;
 
     #[test]
     fn training_hook_test() {

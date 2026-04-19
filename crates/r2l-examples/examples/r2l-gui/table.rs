@@ -1,14 +1,15 @@
 use egui::{Id, Margin};
 use egui_table::{Column, HeaderCellInfo};
-use r2l_examples::PPOProgress;
+use r2l_api::hooks::ppo::PPOStats;
 
 #[derive(Default)]
 pub struct UpdateTable {
-    progress: PPOProgress,
+    pub progress: PPOStats,
+    pub clip_range: f32,
 }
 
 impl UpdateTable {
-    pub fn set_progress(&mut self, progress: PPOProgress) {
+    pub fn set_progress(&mut self, progress: PPOStats) {
         self.progress = progress
     }
 
@@ -19,43 +20,60 @@ impl UpdateTable {
             };
         }
 
+        let clip_fractions = self
+            .progress
+            .batch_stats
+            .iter()
+            .map(|s| s.clip_fraction)
+            .collect::<Vec<_>>();
+
+        let entropy_losses = self
+            .progress
+            .batch_stats
+            .iter()
+            .map(|s| s.entropy_loss)
+            .collect::<Vec<_>>();
+
+        let policy_losses = self
+            .progress
+            .batch_stats
+            .iter()
+            .map(|s| s.policy_loss)
+            .collect::<Vec<_>>();
+
+        let value_losses = self
+            .progress
+            .batch_stats
+            .iter()
+            .map(|s| s.value_loss)
+            .collect::<Vec<_>>();
+
+        let approx_kl = self
+            .progress
+            .batch_stats
+            .iter()
+            .map(|s| s.approx_kl)
+            .collect::<Vec<_>>();
+
         match row_idx {
-            0 => select_row_or_col!(
-                "clip_fractions".to_owned(),
-                format!("{:?}", self.progress.clip_fractions)
+            0 => select_row_or_col!("clip_fractions".to_owned(), format!("{:?}", clip_fractions)),
+            1 => select_row_or_col!("entropy_losses".to_owned(), format!("{:?}", entropy_losses)),
+            2 => select_row_or_col!("policy_losses".to_owned(), format!("{:?}", policy_losses)),
+            3 => select_row_or_col!("value_losses".to_owned(), format!("{:?}", value_losses)),
+            4 => select_row_or_col!("clip_range".to_owned(), format!("{:?}", self.clip_range)),
+            5 => select_row_or_col!("approx_kl".to_owned(), format!("{:?}", approx_kl)),
+            6 => select_row_or_col!("explained_variance".to_owned(), format!("To be added")),
+            7 => select_row_or_col!("progress".to_owned(), format!("To be added")),
+            8 => select_row_or_col!(
+                "std".to_owned(),
+                self.progress
+                    .std
+                    .map(|std| std.to_string())
+                    .unwrap_or_else(|| "n/a".to_string())
             ),
-            1 => select_row_or_col!(
-                "entropy_losses".to_owned(),
-                format!("{:?}", self.progress.entropy_losses)
-            ),
-            2 => select_row_or_col!(
-                "policy_losses".to_owned(),
-                format!("{:?}", self.progress.policy_losses)
-            ),
-            3 => select_row_or_col!(
-                "value_losses".to_owned(),
-                format!("{:?}", self.progress.value_losses)
-            ),
-            4 => select_row_or_col!(
-                "clip_range".to_owned(),
-                format!("{:?}", self.progress.clip_range)
-            ),
-            5 => select_row_or_col!(
-                "approx_kl".to_owned(),
-                format!("{:?}", self.progress.approx_kl)
-            ),
-            6 => select_row_or_col!(
-                "explained_variance".to_owned(),
-                format!("{:?}", self.progress.explained_variance)
-            ),
-            7 => select_row_or_col!(
-                "progress".to_owned(),
-                format!("{:?}", self.progress.progress)
-            ),
-            8 => select_row_or_col!("std".to_owned(), format!("{:?}", self.progress.std)),
             9 => select_row_or_col!(
-                "avarage_reward".to_owned(),
-                format!("{:?}", self.progress.avarage_reward)
+                "average_reward".to_owned(),
+                format!("{:?}", self.progress.average_reward)
             ),
             10 => select_row_or_col!(
                 "learning_rate".to_owned(),

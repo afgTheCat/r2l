@@ -32,7 +32,7 @@ impl RunningMeanStd {
 
     pub fn update(&mut self, arr: &Tensor) -> Result<()> {
         let batch_mean = arr.mean(0)?;
-        let batch_var = biased_var(&arr, 0)?;
+        let batch_var = biased_var(arr, 0)?;
         let batch_count = arr.shape().dim(0)? as f32;
         self.update_from_moments(batch_mean, batch_var, batch_count)?;
         Ok(())
@@ -47,9 +47,11 @@ impl RunningMeanStd {
     ) -> Result<()> {
         let delta = batch_mean.sub(&self.mean)?;
         let tot_count = self.count + batch_count;
-        self.mean = self.mean.add(
-            &(&delta.broadcast_mul(&Tensor::full(batch_count / tot_count, (), &self.device)?)?),
-        )?;
+        self.mean = self.mean.add(&delta.broadcast_mul(&Tensor::full(
+            batch_count / tot_count,
+            (),
+            &self.device,
+        )?)?)?;
         let m_a = self
             .var
             .broadcast_mul(&Tensor::full(self.count, (), self.var.device())?)?;
@@ -66,7 +68,7 @@ impl RunningMeanStd {
             (),
             &self.device,
         )?)?;
-        self.count = batch_count + self.count;
+        self.count += batch_count;
         Ok(())
     }
 }
@@ -74,7 +76,7 @@ impl RunningMeanStd {
 #[cfg(test)]
 mod test {
     use candle_core::{Device, Result, Tensor};
-    use rand::{Rng, thread_rng};
+    use rand::{RngExt, rng};
 
     use crate::utils::running_mean::{RunningMeanStd, biased_var};
 
@@ -82,12 +84,12 @@ mod test {
     fn test_biased_var() -> Result<()> {
         let test_t = Tensor::from_slice(
             &[
-                0.48883059f32,
+                0.488_830_6_f32,
                 0.48259816,
-                0.79328812,
-                0.19103859,
+                0.793_288_1,
+                0.191_038_6,
                 0.11694599,
-                0.53854045,
+                0.538_540_4,
             ],
             (2, 3),
             &Device::Cpu,
@@ -103,13 +105,13 @@ mod test {
     #[test]
     fn test_running_mean_std_running() -> Result<()> {
         let device = Device::Cpu;
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let shape = (10, 3);
         let mut rms = RunningMeanStd::new(shape.1, device.clone()); // replace `shape` with e.g. 3 or 10
         let mut all_data = vec![];
 
         for _ in 0..100 {
-            let data: Vec<f32> = (0..30).map(|_| rng.gen_range(-1.0..1.0)).collect();
+            let data: Vec<f32> = (0..30).map(|_| rng.random_range(-1.0..1.0)).collect();
             let tensor = Tensor::from_slice(&data, shape, &device)?; // shape (10, 3)
             rms.update(&tensor)?;
             all_data.extend(data);

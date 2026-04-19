@@ -8,21 +8,25 @@ license.workspace = true
 readme = "README.md"
 
 [dependencies]
-r2l-macros = { workspace = true }
 rand = { workspace = true }
-interprocess = "2.2.3" 
 rayon = "1.10.0"
 derive_more = { version = "2.0.1", features = ["full"] }
-enum_dispatch = "0.3.13"
-bincode = { workspace = true }
 either = {workspace = true}
 safetensors = "0.4.1"
-smol = "2.0.2"
 crossbeam = { workspace = true }
 ringbuffer = "0.16.0"
 anyhow = { workspace = true }
+candle-core = { workspace = true, optional = true }
+burn = { workspace = true, optional = true }
+bimodal-array = { version = "0.1.1" }
+itertools = "0.14.0"
 
 [dev-dependencies]
 r2l-api = { workspace = true }
-r2l-buffer = { workspace = true }
 candle-core = { workspace = true }
+
+[features]
+candle = ["dep:candle-core"]
+burn = ["dep:burn"]
+cuda = ["candle", "candle-core/cuda"]
+default = ["candle", "burn"]

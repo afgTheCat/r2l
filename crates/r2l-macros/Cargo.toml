@@ -10,6 +10,9 @@ readme = "README.md"
 [lib]
 proc-macro = true
 
+[features]
+cuda = []
+
 [dependencies]
 itertools = "0.14.0"
 proc-macro2 = { version = "1.0.95" }

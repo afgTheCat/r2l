@@ -1,0 +1,80 @@
+use burn::{Tensor, module::Module, prelude::Backend};
+use r2l_core::{
+    env::ActionSpaceType,
+    models::{Actor, Policy},
+};
+
+use crate::distributions::{
+    categorical_distribution::CategoricalDistribution,
+    diagonal_distribution::DiagGaussianDistribution,
+};
+pub mod categorical_distribution;
+pub mod diagonal_distribution;
+
+#[derive(Debug, Module)]
+pub enum PolicyKind<B: Backend> {
+    Categorical(CategoricalDistribution<B>),
+    Diag(DiagGaussianDistribution<B>),
+}
+
+impl<B: Backend> PolicyKind<B> {
+    fn categorical(policy_layers: &[usize]) -> Self {
+        PolicyKind::Categorical(CategoricalDistribution::<B>::build(policy_layers))
+    }
+
+    fn continuous(policy_layers: &[usize]) -> Self {
+        PolicyKind::Diag(DiagGaussianDistribution::build(policy_layers))
+    }
+
+    pub fn build(action_space_type: ActionSpaceType, policy_layers: &[usize]) -> Self {
+        match action_space_type {
+            ActionSpaceType::Discrete => Self::categorical(policy_layers),
+            ActionSpaceType::Continuous => Self::continuous(policy_layers),
+        }
+    }
+}
+
+impl<B: Backend> Actor for PolicyKind<B> {
+    type Tensor = Tensor<B, 1>;
+
+    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+        match self {
+            Self::Categorical(cat) => cat.action(observation),
+            Self::Diag(diag) => diag.action(observation),
+        }
+    }
+}
+
+impl<B: Backend> Policy for PolicyKind<B> {
+    fn log_probs(
+        &self,
+        observations: &[Self::Tensor],
+        actions: &[Self::Tensor],
+    ) -> anyhow::Result<Self::Tensor> {
+        match self {
+            Self::Categorical(cat) => cat.log_probs(observations, actions),
+            Self::Diag(diag) => diag.log_probs(observations, actions),
+        }
+    }
+
+    fn std(&self) -> anyhow::Result<f32> {
+        match self {
+            Self::Categorical(cat) => cat.std(),
+            Self::Diag(diag) => diag.std(),
+        }
+    }
+
+    fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+        match self {
+            Self::Categorical(cat) => cat.entropy(states),
+            Self::Diag(diag) => diag.entropy(states),
+        }
+    }
+
+    fn resample_noise(&mut self) -> anyhow::Result<()> {
+        match self {
+            Self::Categorical(cat) => cat.resample_noise(),
+            Self::Diag(diag) => diag.resample_noise(),
+        }
+    }
+}

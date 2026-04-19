@@ -1,130 +1,257 @@
-use anyhow::Result;
-use candle_core::Device;
-use r2l_api::builders::on_policy_algo2::OnPolicyAlgorithmBuilder;
-use r2l_api::builders::sampler::EnvPoolType;
-use r2l_api::builders::sampler_hooks2::{EvaluatorNormalizerOptions, EvaluatorOptions};
-use r2l_api::test_utils::run_gym_episodes;
-use r2l_core::agents::Agent;
-use r2l_core::{Algorithm, on_policy_algorithm::LearningSchedule};
+// Testing the capabilities according to model garden
+
+use std::{
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
+};
+
+use r2l_api::{
+    builders::ppo::algorithm::PPOAlgorithmBuilder,
+    hooks::{on_policy::LearningSchedule, ppo::PPOStats},
+};
 use r2l_gym::GymEnvBuilder;
+use r2l_sampler::StepTrajectoryBound;
 
-const NUM_ENVIRONMENTS: usize = 10;
+#[allow(dead_code)]
+struct PPOTestConfig {
+    env_name: &'static str,
+    n_envs: usize,
+    clip_range: Option<f32>,
+    entropy_coeff: f32,
+    gae_lambda: f32,
+    gamma: f32,
+    learning_rate: Option<f64>,
+    sample_size: Option<usize>,
+    total_epochs: usize,
+    n_steps: usize,
+    n_timesteps: usize,
+    vf_coeff: Option<f32>,
+    gradient_clipping: Option<f32>,
+    // TODO: implement these features
+    norm_obs: Option<bool>,
+    norm_reward: Option<bool>,
+    use_sde: Option<bool>,
+    sde_sample_freq: Option<usize>,
+}
 
-#[test]
-fn ppo_acrobat() -> Result<()> {
-    // TODO: separate OnPolicyAlgorithmBuilder into ppo and a2c
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("Acrobot-v1"), NUM_ENVIRONMENTS)?;
-    ppo.train()?;
-    Ok(())
+fn configure_candle_ppo_test(config: PPOTestConfig) {
+    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
+
+    let mut ppo_builder = PPOAlgorithmBuilder::<GymEnvBuilder>::new(config.env_name, config.n_envs)
+        .with_candle(candle_core::Device::Cpu)
+        .with_entropy_coeff(config.entropy_coeff)
+        .with_lambda(config.gae_lambda)
+        .with_gamma(config.gamma)
+        .with_total_epochs(config.total_epochs)
+        .with_bound(StepTrajectoryBound::new(config.n_steps))
+        .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps))
+        .with_reporter(Some(update_tx));
+
+    if let Some(clip_range) = config.clip_range {
+        ppo_builder = ppo_builder.with_clip_range(clip_range);
+    }
+
+    if let Some(learning_rate) = config.learning_rate {
+        ppo_builder = ppo_builder.with_learning_rate(learning_rate);
+    }
+
+    if let Some(sample_size) = config.sample_size {
+        ppo_builder = ppo_builder.with_sample_size(sample_size);
+    }
+
+    if let Some(vf_coeff) = config.vf_coeff {
+        ppo_builder = ppo_builder.with_vf_coeff(Some(vf_coeff));
+    }
+
+    if let Some(gradient_clipping) = config.gradient_clipping {
+        ppo_builder = ppo_builder.with_gradient_clipping(Some(gradient_clipping));
+    }
+
+    let mut ppo = ppo_builder.build().unwrap();
+    let t = thread::spawn(move || {
+        while let Ok(stats) = update_rx.recv() {
+            println!("avg reward: {}", stats.average_reward);
+        }
+    });
+    ppo.train().unwrap();
+    drop(ppo);
+    t.join().unwrap();
 }
 
 #[test]
-fn ppo_pendulum1() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("Pendulum-v1"), NUM_ENVIRONMENTS)?;
-    ppo.train()?;
-    Ok(())
+fn cartpole_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-CartPole-v1
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "CartPole-v1",
+        n_envs: 8,
+        clip_range: Some(0.2),
+        entropy_coeff: 0.0,
+        gae_lambda: 0.8,
+        gamma: 0.98,
+        learning_rate: Some(0.001),
+        sample_size: Some(256),
+        total_epochs: 20,
+        n_steps: 32,
+        n_timesteps: 100000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(false),
+        norm_reward: None,
+        use_sde: None,
+        sde_sample_freq: None,
+    });
 }
 
 #[test]
-fn ppo_pendulum2() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("Pendulum-v1"), NUM_ENVIRONMENTS)?;
-    ppo.train()?;
-    Ok(())
+fn pendulum_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-Pendulum-v1
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "Pendulum-v1",
+        n_envs: 4,
+        clip_range: Some(0.2),
+        entropy_coeff: 0.0,
+        gae_lambda: 0.95,
+        gamma: 0.9,
+        learning_rate: Some(0.001),
+        sample_size: None,
+        total_epochs: 10,
+        n_steps: 1024,
+        n_timesteps: 100000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(false),
+        norm_reward: None,
+        use_sde: Some(true),
+        sde_sample_freq: Some(4),
+    });
 }
 
 #[test]
-fn ppo_cart_pole1() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("CartPole-v1"), NUM_ENVIRONMENTS)?;
-    ppo.train()?;
-    run_gym_episodes("CartPole-v1", 10, &ppo.agent.policy())?;
-    Ok(())
+fn acrobot_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-Acrobot-v1
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "Acrobot-v1",
+        n_envs: 16,
+        clip_range: None,
+        entropy_coeff: 0.0,
+        gae_lambda: 0.94,
+        gamma: 0.99,
+        learning_rate: None,
+        sample_size: None,
+        total_epochs: 4,
+        n_steps: 256,
+        n_timesteps: 1_000_000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(true),
+        norm_reward: Some(false),
+        use_sde: None,
+        sde_sample_freq: None,
+    });
 }
 
 #[test]
-fn ppo_cart_pole2() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("CartPole-v1"), NUM_ENVIRONMENTS)?;
-    ppo.train()?;
-    run_gym_episodes("CartPole-v1", 10, &ppo.agent.policy())?;
-    Ok(())
+fn mountain_car_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-MountainCar-v0
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "MountainCar-v0",
+        n_envs: 16,
+        clip_range: None,
+        entropy_coeff: 0.0,
+        gae_lambda: 0.98,
+        gamma: 0.99,
+        learning_rate: None,
+        sample_size: None,
+        total_epochs: 4,
+        n_steps: 16,
+        n_timesteps: 1_000_000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(true),
+        norm_reward: Some(false),
+        use_sde: None,
+        sde_sample_freq: None,
+    });
 }
 
+// TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
-fn ppo_cart_pole3() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
-    ppo_builder.set_env_pool_type(EnvPoolType::ThreadStep);
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("CartPole-v1"), NUM_ENVIRONMENTS)?;
-    ppo.train()?;
-    run_gym_episodes("CartPole-v1", 10, &ppo.agent.policy())?;
-    Ok(())
+fn mountain_car_continuous_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-MountainCarContinuous-v0
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "MountainCarContinuous-v0",
+        n_envs: 1,
+        clip_range: Some(0.1),
+        entropy_coeff: 0.00429,
+        gae_lambda: 0.9,
+        gamma: 0.9999,
+        learning_rate: Some(7.77e-05),
+        sample_size: Some(256),
+        total_epochs: 10,
+        n_steps: 8,
+        n_timesteps: 20000,
+        vf_coeff: Some(0.19),
+        gradient_clipping: Some(5.0),
+        norm_obs: Some(true),
+        norm_reward: Some(true),
+        use_sde: Some(true),
+        sde_sample_freq: None,
+    });
 }
 
+// TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
-fn ppo_pendulum3() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(5000000));
-    ppo_builder.set_env_pool_type(EnvPoolType::ThreadStep);
-    ppo_builder.set_n_step(2048);
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("Pendulum-v1"), 1)?;
-    ppo.train()?;
-    Ok(())
+fn lunar_lander_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-LunarLander-v2
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "LunarLander-v2",
+        n_envs: 16,
+        clip_range: None,
+        entropy_coeff: 0.01,
+        gae_lambda: 0.98,
+        gamma: 0.999,
+        learning_rate: None,
+        sample_size: Some(64),
+        total_epochs: 4,
+        n_steps: 1024,
+        n_timesteps: 1_000_000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(false),
+        norm_reward: None,
+        use_sde: None,
+        sde_sample_freq: None,
+    });
 }
 
+// TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
-fn ppo2_cart_pole() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
-    let evaluator_opts = EvaluatorOptions {
-        eval_freq: 1000,
-        ..EvaluatorOptions::default()
-    };
-    let eval_res = evaluator_opts.results.clone();
-    ppo_builder.set_hook_options(EvaluatorNormalizerOptions::evaluator(
-        evaluator_opts,
-        Device::Cpu,
-    ));
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("CartPole-v1"), NUM_ENVIRONMENTS)?;
-    ppo.train()?;
-    println!("eval res: {:?}", eval_res.lock().unwrap());
-    run_gym_episodes("CartPole-v1", 10, &ppo.agent.policy())?;
-    Ok(())
-}
-
-// Evaluator and normalizer at the same time
-#[test]
-fn ppo2_cart_pole_normalize() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
-    let evaluator_options = EvaluatorOptions {
-        eval_freq: 1000,
-        ..EvaluatorOptions::default()
-    };
-    let eval_res = evaluator_options.results.clone();
-    let eval_normalizer = EvaluatorNormalizerOptions::evaluator(evaluator_options, Device::Cpu);
-    ppo_builder.set_hook_options(eval_normalizer);
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("CartPole-v1"), NUM_ENVIRONMENTS)?;
-    ppo.train()?;
-    println!("eval res: {:?}", eval_res.lock().unwrap());
-    run_gym_episodes("CartPole-v1", 10, &ppo.agent.policy())?;
-    Ok(())
-}
-
-#[test]
-fn ppo2_cart_pole_seq_only() -> Result<()> {
-    let mut ppo_builder = OnPolicyAlgorithmBuilder::ppo();
-    ppo_builder.set_learning_schedule(LearningSchedule::total_step_bound(500000));
-    let mut ppo = ppo_builder.build(GymEnvBuilder::new("CartPole-v1"), NUM_ENVIRONMENTS)?;
-    ppo.train()?;
-    run_gym_episodes("CartPole-v1", 10, &ppo.agent.policy())?;
-    Ok(())
+fn lunar_lander_continuous_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-LunarLanderContinuous-v2
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "LunarLanderContinuous-v2",
+        n_envs: 16,
+        clip_range: None,
+        entropy_coeff: 0.01,
+        gae_lambda: 0.98,
+        gamma: 0.999,
+        learning_rate: None,
+        sample_size: Some(64),
+        total_epochs: 4,
+        n_steps: 1024,
+        n_timesteps: 1_000_000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(false),
+        norm_reward: None,
+        use_sde: None,
+        sde_sample_freq: None,
+    });
 }

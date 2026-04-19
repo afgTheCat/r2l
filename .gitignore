@@ -1,1 +1,4 @@
 target
+.venv
+sb3/__pycache__
+sb3/runs

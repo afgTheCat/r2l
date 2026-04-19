@@ -1,0 +1,17 @@
+[package]
+name = "r2l-burn"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[features]
+cuda = ["r2l-core/cuda"]
+
+[dependencies]
+burn = { workspace = true }
+r2l-core = { workspace = true }
+anyhow = { workspace = true }
+rand = { workspace = true }
+derive_more = { version = "2.0.1", features = ["full"] }
