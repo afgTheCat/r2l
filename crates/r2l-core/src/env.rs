@@ -87,6 +87,7 @@ pub struct Snapshot<T> {
     pub truncated: bool,
 }
 
+// ANCHOR: env
 /// Environment interface used by samplers.
 pub trait Env {
     /// Tensor type used for observations and actions.
@@ -99,6 +100,7 @@ pub trait Env {
     /// Returns static observation/action space metadata.
     fn env_description(&self) -> EnvDescription<Self::Tensor>;
 }
+// ANCHOR_END: env
 
 /// Tensor type used by an [`Env`] implementation.
 pub type EnvTensor<E> = <E as Env>::Tensor;
