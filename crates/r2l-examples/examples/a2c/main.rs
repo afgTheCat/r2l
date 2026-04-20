@@ -1,3 +1,4 @@
+// ANCHOR: a2c
 use std::{
     sync::mpsc::{self, Receiver, Sender},
     thread,
@@ -12,7 +13,6 @@ use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{Location, StepTrajectoryBound};
 
 fn main() {
-    // ANCHOR: a2c
     let (update_tx, update_rx): (Sender<A2CStats>, Receiver<A2CStats>) = mpsc::channel();
     let ppo_builder = A2CAlgorithmBuilder::<GymEnvBuilder>::new("Pendulum-v1", 10)
         .with_candle(Device::Cpu)
@@ -32,5 +32,5 @@ fn main() {
     ppo.train().unwrap();
     drop(ppo);
     t.join().unwrap();
-    // ANCHOR_END: a2c
 }
+// ANCHOR_END: a2c
