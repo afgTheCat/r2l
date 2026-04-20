@@ -9,7 +9,6 @@ use r2l_api::{
     builders::ppo::algorithm::PPOAlgorithmBuilder,
     hooks::{on_policy::LearningSchedule, ppo::PPOStats},
 };
-use r2l_gym::GymEnvBuilder;
 use r2l_sampler::StepTrajectoryBound;
 
 #[allow(dead_code)]
@@ -37,7 +36,7 @@ struct PPOTestConfig {
 fn configure_candle_ppo_test(config: PPOTestConfig) {
     let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
 
-    let mut ppo_builder = PPOAlgorithmBuilder::<GymEnvBuilder>::new(config.env_name, config.n_envs)
+    let mut ppo_builder = PPOAlgorithmBuilder::gym(config.env_name, config.n_envs)
         .with_candle(candle_core::Device::Cpu)
         .with_entropy_coeff(config.entropy_coeff)
         .with_lambda(config.gae_lambda)

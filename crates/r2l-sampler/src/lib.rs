@@ -11,7 +11,7 @@ use r2l_core::buffers::fix_sized::FixedSizeStateBuffer;
 use r2l_core::buffers::variable_sized::VariableSizedStateBuffer;
 use r2l_core::env::Env;
 use r2l_core::env::EnvBuilder;
-use r2l_core::env::EnvBuilderTrait;
+use r2l_core::env::EnvBuilderType;
 use r2l_core::env::EnvDescription;
 use r2l_core::models::Actor;
 use r2l_core::on_policy::algorithm::Sampler;
@@ -106,15 +106,15 @@ pub trait PreprocessorY<T: R2lTensor, B: TrajectoryContainer<Tensor = T>> {
 }
 
 // BD: collection method should probably be an enum!
-pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
+pub struct R2lSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,
     rollout_mode: RolloutMode,
 }
 
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
-    pub fn build<EB: EnvBuilderTrait<Env = E>>(
-        env_builder: EnvBuilder<EB>,
+impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
+    pub fn build<EB: EnvBuilder<Env = E>>(
+        env_builder: EnvBuilderType<EB>,
         collection_method: BD,
         location: Location,
     ) -> Self {
@@ -168,7 +168,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
     }
 }
 
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E, BD> {
+impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for R2lSampler<E, BD> {
     type Tensor = E::Tensor;
     type TrajectoryContainer = BD::Container;
 

@@ -13,7 +13,7 @@ pub enum ActionSpaceType {
 
 /// Description of an observation or action space.
 #[derive(Debug, Clone)]
-pub enum Space<T> {
+pub enum Space<T: R2lTensor> {
     /// Discrete space with `usize` possible values.
     Discrete(usize),
     /// Continuous vector space with optional elementwise bounds.
@@ -27,7 +27,21 @@ pub enum Space<T> {
     },
 }
 
-impl<T> Space<T> {
+impl<T: R2lTensor> Space<T> {
+    pub fn discrete(size: usize) -> Self {
+        Self::Discrete(size)
+    }
+
+    pub fn continuous(size: usize, min: Option<T>, max: Option<T>) -> Self {
+        if let Some(min) = min.as_ref() {
+            debug_assert_eq!(min.len(), size);
+        }
+        if let Some(max) = max.as_ref() {
+            debug_assert_eq!(max.len(), size);
+        }
+        Self::Continuous { min, max, size }
+    }
+
     /// Creates an unbounded continuous space from tensor dimensions.
     pub fn continuous_from_dims(dims: Vec<usize>) -> Self {
         Self::Continuous {
@@ -48,14 +62,14 @@ impl<T> Space<T> {
 
 /// Observation and action space metadata for an environment.
 #[derive(Debug, Clone)]
-pub struct EnvDescription<T> {
+pub struct EnvDescription<T: R2lTensor> {
     /// Space returned by [`Env::reset`] and [`Env::step`].
     pub observation_space: Space<T>,
     /// Space accepted by [`Env::step`].
     pub action_space: Space<T>,
 }
 
-impl<T> EnvDescription<T> {
+impl<T: R2lTensor> EnvDescription<T> {
     /// Creates a description from observation and action spaces.
     pub fn new(observation_space: Space<T>, action_space: Space<T>) -> Self {
         Self {
@@ -76,7 +90,7 @@ impl<T> EnvDescription<T> {
 }
 
 /// Result of one environment step.
-pub struct Snapshot<T> {
+pub struct Snapshot<T: R2lTensor> {
     /// Observation after the action was applied.
     pub state: T,
     /// Reward produced by the transition.
@@ -87,6 +101,21 @@ pub struct Snapshot<T> {
     pub truncated: bool,
 }
 
+impl<T: R2lTensor> Snapshot<T> {
+    pub fn new(state: T, reward: f32, terminated: bool, truncated: bool) -> Self {
+        Self {
+            state,
+            reward,
+            terminated,
+            truncated,
+        }
+    }
+}
+
+/// Tensor type used by an [`Env`] implementation.
+pub type EnvTensor<E> = <E as Env>::Tensor;
+
+// ANCHOR: env
 /// Environment interface used by samplers.
 pub trait Env {
     /// Tensor type used for observations and actions.
@@ -99,32 +128,31 @@ pub trait Env {
     /// Returns static observation/action space metadata.
     fn env_description(&self) -> EnvDescription<Self::Tensor>;
 }
+// ANCHOR_END: env
 
-/// Tensor type used by an [`Env`] implementation.
-pub type EnvTensor<E> = <E as Env>::Tensor;
-
+// ANCHOR: env_builder
 /// Factory for constructing environments of one compatible type.
-pub trait EnvBuilderTrait: Sync + Send + 'static {
-    /// Tensor type used by environments produced by this builder.
-    type Tensor: R2lTensor;
+pub trait EnvBuilder: Sync + Send + 'static {
     /// Environment type produced by this builder.
-    type Env: Env<Tensor = Self::Tensor>;
+    type Env: Env;
 
     /// Builds a fresh environment instance.
     fn build_env(&self) -> Result<Self::Env>;
 
     /// Returns the environment description for produced environments.
-    fn env_description(&self) -> Result<EnvDescription<Self::Tensor>> {
+    fn env_description(&self) -> Result<EnvDescription<<Self::Env as Env>::Tensor>> {
         let env = self.build_env()?;
         Ok(env.env_description())
     }
 }
+// ANCHOR_END: env_builder
 
-impl<E: Env, F: Sync + Send + 'static> EnvBuilderTrait for F
+pub type TensorOfEnvBuilder<EB> = <<EB as EnvBuilder>::Env as Env>::Tensor;
+
+impl<E: Env, F: Sync + Send + 'static> EnvBuilder for F
 where
     F: Fn() -> Result<E>,
 {
-    type Tensor = E::Tensor;
     type Env = E;
 
     fn build_env(&self) -> Result<Self::Env> {
@@ -133,14 +161,14 @@ where
 }
 
 /// Collection of environment builders used to create rollout workers.
-pub enum EnvBuilder<EB: EnvBuilderTrait> {
+pub enum EnvBuilderType<EB: EnvBuilder> {
     /// Reuses one builder for `n_envs` homogeneous workers.
     Homogenous { builder: Arc<EB>, n_envs: usize },
     /// Uses one builder per worker.
     Heterogenous { builders: Vec<Arc<EB>> },
 }
 
-impl<EB: EnvBuilderTrait> EnvBuilder<EB> {
+impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// Creates a homogeneous builder collection.
     pub fn homogenous(builder: EB, n_envs: usize) -> Self {
         Self::Homogenous {
@@ -174,7 +202,7 @@ impl<EB: EnvBuilderTrait> EnvBuilder<EB> {
     }
 
     /// Returns a representative environment description.
-    pub fn env_description(&self) -> Result<EnvDescription<EB::Tensor>> {
+    pub fn env_description(&self) -> Result<EnvDescription<<EB::Env as Env>::Tensor>> {
         match &self {
             Self::Homogenous { builder, n_envs: _ } => builder.env_description(),
             Self::Heterogenous { builders } => builders[0].env_description(),

@@ -3,8 +3,9 @@ use std::sync::{Arc, Mutex};
 use candle_core::{DType, Device, Result, Tensor};
 use r2l_core::{
     buffers::EditableTrajectoryContainer,
-    env::{Env, EnvBuilderTrait, EnvDescription},
+    env::{Env, EnvBuilder, EnvDescription},
     models::Actor,
+    tensor::R2lTensor,
 };
 use r2l_sampler::PreprocessorY;
 
@@ -47,7 +48,7 @@ impl EvaluatorOptions {
         )
     }
 
-    pub fn build<EB: EnvBuilderTrait>(
+    pub fn build<EB: EnvBuilder>(
         &self,
         env_builder: &EB,
         n_envs: usize,
@@ -181,7 +182,7 @@ impl NormalizerOptions {
         }
     }
 
-    pub fn build<T>(
+    pub fn build<T: R2lTensor>(
         &self,
         env_description: EnvDescription<T>,
         n_envs: usize,

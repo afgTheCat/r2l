@@ -54,7 +54,7 @@ pub mod prelude {
         EditableTrajectoryContainer, ExpandableTrajectoryContainer, Memory, TrajectoryContainer,
         fix_sized::FixedSizeStateBuffer, variable_sized::VariableSizedStateBuffer,
     };
-    pub use crate::env::{Env, EnvBuilder, EnvBuilderTrait, EnvDescription, Space};
+    pub use crate::env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Space};
     pub use crate::models::{Actor, LearningModule, Policy, ValueFunction};
     pub use crate::on_policy::algorithm::{
         Agent, OnPolicyAlgorithm, OnPolicyAlgorithmHooks, Sampler,

@@ -33,7 +33,7 @@ struct A2CTestConfig {
 fn configure_candle_ppo_test(config: A2CTestConfig) {
     let (update_tx, update_rx): (Sender<A2CStats>, Receiver<A2CStats>) = mpsc::channel();
 
-    let mut a2c_builder = A2CAlgorithmBuilder::<GymEnvBuilder>::new(config.env_name, config.n_envs)
+    let mut a2c_builder = A2CAlgorithmBuilder::gym(config.env_name, config.n_envs)
         .with_candle(Device::Cpu)
         .with_entropy_coeff(config.entropy_coeff)
         .with_lambda(config.gae_lambda)
