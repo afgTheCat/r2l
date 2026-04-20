@@ -1,5 +1,5 @@
 use r2l_core::{
-    env::{ActionSpaceType, EnvBuilderTrait, Space},
+    env::{ActionSpaceType, EnvBuilder, Space, TensorOfEnvBuilder},
     on_policy::algorithm::{Agent, OnPolicyAlgorithm},
 };
 use r2l_sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound};
@@ -11,25 +11,25 @@ use crate::{
 
 type DefaultOnPolicyAlgorithm<A, EB, BD> = OnPolicyAlgorithm<
     A,
-    FinalSampler<<EB as EnvBuilderTrait>::Env, BD>,
-    DefaultOnPolicyAlgorithmsHooks<A, FinalSampler<<EB as EnvBuilderTrait>::Env, BD>>,
+    FinalSampler<<EB as EnvBuilder>::Env, BD>,
+    DefaultOnPolicyAlgorithmsHooks<A, FinalSampler<<EB as EnvBuilder>::Env, BD>>,
 >;
 
 pub struct OnPolicyAlgorithmBuilder<
     A: Agent,
     AB: AgentBuilder<Agent = A>,
-    EB: EnvBuilderTrait,
-    BD: TrajectoryBound<Tensor = EB::Tensor> = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>,
+    EB: EnvBuilder,
+    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>> = StepTrajectoryBound<
+        TensorOfEnvBuilder<EB>,
+    >,
 > {
     pub sampler_builder: SamplerBuilder<EB, BD>,
     pub learning_schedule: LearningSchedule,
     pub agent_builder: AB,
 }
 
-impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilderTrait>
-    OnPolicyAlgorithmBuilder<A, AB, EB>
-{
-    pub fn with_bound<BD2: TrajectoryBound<Tensor = EB::Tensor>>(
+impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder> OnPolicyAlgorithmBuilder<A, AB, EB> {
+    pub fn with_bound<BD2: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>>(
         self,
         trajectory_bound: BD2,
     ) -> OnPolicyAlgorithmBuilder<A, AB, EB, BD2> {
@@ -50,8 +50,8 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilderTrait>
 impl<
     A: Agent,
     AB: AgentBuilder<Agent = A>,
-    EB: EnvBuilderTrait,
-    BD: TrajectoryBound<Tensor = EB::Tensor>,
+    EB: EnvBuilder,
+    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
 > OnPolicyAlgorithmBuilder<A, AB, EB, BD>
 {
     pub fn with_location(mut self, location: Location) -> Self {

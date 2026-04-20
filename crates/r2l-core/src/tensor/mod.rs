@@ -15,6 +15,16 @@ use std::fmt::Debug;
 pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns the tensor values as a flat vector.
     fn to_vec(&self) -> Vec<f32>;
+
+    /// Returns the length of the tensor
+    fn len(&self) -> usize {
+        self.to_vec().len()
+    }
+
+    /// Returns true if the tensor is empty
+    fn is_empty(&self) -> bool {
+        self.to_vec().is_empty()
+    }
 }
 
 /// Elementwise and reduction operations required by the built-in on-policy

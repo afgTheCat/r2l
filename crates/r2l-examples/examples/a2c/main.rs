@@ -9,12 +9,11 @@ use r2l_api::{
     builders::a2c::algorithm::A2CAlgorithmBuilder,
     hooks::{a2c::A2CStats, on_policy::LearningSchedule},
 };
-use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{Location, StepTrajectoryBound};
 
 fn main() {
     let (update_tx, update_rx): (Sender<A2CStats>, Receiver<A2CStats>) = mpsc::channel();
-    let ppo_builder = A2CAlgorithmBuilder::<GymEnvBuilder>::new("Pendulum-v1", 10)
+    let ppo_builder = A2CAlgorithmBuilder::gym("Pendulum-v1", 10)
         .with_candle(Device::Cpu)
         .with_burn()
         .with_entropy_coeff(0.2)

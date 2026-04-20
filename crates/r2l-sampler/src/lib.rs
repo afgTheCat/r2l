@@ -11,7 +11,7 @@ use r2l_core::buffers::fix_sized::FixedSizeStateBuffer;
 use r2l_core::buffers::variable_sized::VariableSizedStateBuffer;
 use r2l_core::env::Env;
 use r2l_core::env::EnvBuilder;
-use r2l_core::env::EnvBuilderTrait;
+use r2l_core::env::EnvBuilderType;
 use r2l_core::env::EnvDescription;
 use r2l_core::models::Actor;
 use r2l_core::on_policy::algorithm::Sampler;
@@ -113,8 +113,8 @@ pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
 }
 
 impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
-    pub fn build<EB: EnvBuilderTrait<Env = E>>(
-        env_builder: EnvBuilder<EB>,
+    pub fn build<EB: EnvBuilder<Env = E>>(
+        env_builder: EnvBuilderType<EB>,
         collection_method: BD,
         location: Location,
     ) -> Self {

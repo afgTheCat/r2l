@@ -6104,6 +6104,7 @@ dependencies = [
  "anyhow",
  "burn",
  "candle-core",
+ "candle-nn",
  "crossterm 0.29.0",
  "eframe",
  "egui",

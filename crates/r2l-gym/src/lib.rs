@@ -4,7 +4,7 @@ use pyo3::{
     types::{PyAnyMethods, PyDict},
 };
 use r2l_core::{
-    env::{Env, EnvBuilderTrait, EnvDescription, Snapshot, Space},
+    env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     tensor::TensorData,
 };
 
@@ -116,12 +116,8 @@ impl Env for GymEnv {
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
             let truncated: bool = step.get_item(3)?.extract()?;
-            PyResult::Ok(Snapshot {
-                state: next_state,
-                reward,
-                terminated,
-                truncated,
-            })
+            let snapshot = Snapshot::new(next_state, reward, terminated, truncated);
+            PyResult::Ok(snapshot)
         })?;
         Ok(snapshot)
     }
@@ -154,8 +150,7 @@ impl From<&str> for GymEnvBuilder {
     }
 }
 
-impl EnvBuilderTrait for GymEnvBuilder {
-    type Tensor = TensorData;
+impl EnvBuilder for GymEnvBuilder {
     type Env = GymEnv;
 
     fn build_env(&self) -> Result<Self::Env> {
