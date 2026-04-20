@@ -12,9 +12,7 @@ use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
 use r2l_api::builders::ppo::algorithm::PPOAlgorithmBuilder;
 use r2l_api::hooks::on_policy::LearningSchedule;
 use r2l_api::hooks::ppo::PPOStats;
-// use r2l_core::sampler::{Location, buffer::StepTrajectoryBound};
 use r2l_examples::EventBox;
-use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{Location, StepTrajectoryBound};
 
 use crate::table::UpdateTable;
@@ -121,7 +119,7 @@ pub fn train_ppo(
     clip_range: f32,
 ) -> anyhow::Result<()> {
     // TODO: The generic here is ugly
-    let ppo_builder = PPOAlgorithmBuilder::<GymEnvBuilder>::new(ENV_NAME, 10)
+    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))

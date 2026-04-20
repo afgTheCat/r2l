@@ -2,7 +2,11 @@ use std::sync::mpsc::Sender;
 
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
-use r2l_core::{env::EnvBuilderTrait, on_policy::algorithm::Agent};
+use r2l_core::{
+    env::{EnvBuilder, TensorOfEnvBuilder},
+    on_policy::algorithm::Agent,
+};
+use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
@@ -21,8 +25,8 @@ use crate::{
 impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, A2CAgentBuilder<M>, EB, BD>
 where
     A: Agent,
-    EB: EnvBuilderTrait,
-    BD: TrajectoryBound<Tensor = EB::Tensor>,
+    EB: EnvBuilder,
+    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
     A2CAgentBuilder<M>: AgentBuilder<Agent = A>,
 {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
@@ -179,14 +183,14 @@ where
     }
 }
 
-pub type A2CBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+pub type A2CBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
     OnPolicyAlgorithmBuilder<BurnA2C<BurnBackend>, A2CBurnAgentBuilder, EB, BD>;
 
-pub type A2CCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+pub type A2CCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
     OnPolicyAlgorithmBuilder<CandleA2C, A2CCandleAgentBuilder, EB, BD>;
 
-impl<EB: EnvBuilderTrait> A2CCandleAlgorithmBuilder<EB> {
-    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+impl A2CCandleAlgorithmBuilder<GymEnvBuilder> {
+    pub fn gym<EB: Into<GymEnvBuilder>>(builder: EB, n_envs: usize) -> Self {
         let agent_builder = A2CCandleAgentBuilder::new(n_envs);
         OnPolicyAlgorithmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
@@ -199,10 +203,7 @@ impl<EB: EnvBuilderTrait> A2CCandleAlgorithmBuilder<EB> {
     }
 }
 
-pub type A2CAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
-    A2CCandleAlgorithmBuilder<EB, BD>;
-
-impl<EB: EnvBuilderTrait> A2CAlgorithmBuilder<EB> {
+impl<EB: EnvBuilder> A2CBurnAlgorithmBuilder<EB> {
     pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
@@ -230,7 +231,21 @@ impl<EB: EnvBuilderTrait> A2CAlgorithmBuilder<EB> {
     }
 }
 
-impl<EB: EnvBuilderTrait> A2CBurnAlgorithmBuilder<EB> {
+pub type A2CAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
+    A2CCandleAlgorithmBuilder<EB, BD>;
+
+impl<EB: EnvBuilder> A2CAlgorithmBuilder<EB> {
+    pub fn new(builder: EB, n_envs: usize) -> Self {
+        OnPolicyAlgorithmBuilder {
+            sampler_builder: SamplerBuilder::new(builder, n_envs),
+            agent_builder: A2CCandleAgentBuilder::new(n_envs),
+            learning_schedule: LearningSchedule::RolloutBound {
+                total_rollouts: 300,
+                current_rollout: 0,
+            },
+        }
+    }
+
     pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,

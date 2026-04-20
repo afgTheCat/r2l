@@ -2,8 +2,9 @@ use std::sync::mpsc::Sender;
 
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
-use r2l_core::env::EnvBuilderTrait;
+use r2l_core::env::{EnvBuilder, TensorOfEnvBuilder};
 use r2l_core::on_policy::algorithm::Agent;
+use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
 use crate::agents::ppo::{BurnPPO, CandlePPO};
@@ -22,8 +23,8 @@ use crate::{
 impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, PPOAgentBuilder<M>, EB, BD>
 where
     A: Agent,
-    EB: EnvBuilderTrait,
-    BD: TrajectoryBound<Tensor = EB::Tensor>,
+    EB: EnvBuilder,
+    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
     PPOAgentBuilder<M>: AgentBuilder<Agent = A>,
 {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
@@ -43,125 +44,84 @@ where
     }
 
     pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
-        self.agent_builder.hook_builder = self
-            .agent_builder
-            .hook_builder
-            .with_entropy_coeff(entropy_coeff);
+        self.agent_builder = self.agent_builder.with_entropy_coeff(entropy_coeff);
         self
     }
 
     pub fn with_vf_coeff(mut self, vf_coeff: Option<f32>) -> Self {
-        self.agent_builder.hook_builder = self.agent_builder.hook_builder.with_vf_coeff(vf_coeff);
+        self.agent_builder = self.agent_builder.with_vf_coeff(vf_coeff);
         self
     }
 
     pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
-        self.agent_builder.hook_builder = self.agent_builder.hook_builder.with_target_kl(target_kl);
+        self.agent_builder = self.agent_builder.with_target_kl(target_kl);
         self
     }
 
     pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
-        self.agent_builder.hook_builder = self
-            .agent_builder
-            .hook_builder
-            .with_gradient_clipping(gradient_clipping);
+        self.agent_builder = self.agent_builder.with_gradient_clipping(gradient_clipping);
         self
     }
 
     pub fn with_reporter(mut self, tx: Option<Sender<PPOStats>>) -> Self {
-        self.agent_builder.hook_builder = self.agent_builder.hook_builder.with_tx(tx);
+        self.agent_builder = self.agent_builder.with_reporter(tx);
         self
     }
 
     pub fn with_clip_range(mut self, clip_range: f32) -> Self {
-        self.agent_builder.ppo_params.clip_range = clip_range;
+        self.agent_builder = self.agent_builder.with_clip_range(clip_range);
         self
     }
 
     pub fn with_gamma(mut self, gamma: f32) -> Self {
-        self.agent_builder.ppo_params.gamma = gamma;
+        self.agent_builder = self.agent_builder.with_gamma(gamma);
         self
     }
 
     pub fn with_lambda(mut self, lambda: f32) -> Self {
-        self.agent_builder.ppo_params.lambda = lambda;
+        self.agent_builder = self.agent_builder.with_lambda(lambda);
         self
     }
 
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
-        self.agent_builder.ppo_params.sample_size = sample_size;
+        self.agent_builder = self.agent_builder.with_sample_size(sample_size);
         self
     }
 
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .policy_hidden_layers = policy_hidden_layers;
+        self.agent_builder = self
+            .agent_builder
+            .with_policy_hidden_layers(policy_hidden_layers);
         self
     }
 
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .learning_module_type = self
-            .agent_builder
-            .learning_module_builder
-            .learning_module_type
-            .with_lr(learning_rate);
+        self.agent_builder = self.agent_builder.with_learning_rate(learning_rate);
         self
     }
 
     pub fn with_beta1(mut self, beta1: f64) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .learning_module_type = self
-            .agent_builder
-            .learning_module_builder
-            .learning_module_type
-            .with_beta1(beta1);
+        self.agent_builder = self.agent_builder.with_beta1(beta1);
         self
     }
 
     pub fn with_beta2(mut self, beta2: f64) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .learning_module_type = self
-            .agent_builder
-            .learning_module_builder
-            .learning_module_type
-            .with_beta2(beta2);
+        self.agent_builder = self.agent_builder.with_beta2(beta2);
         self
     }
 
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .learning_module_type = self
-            .agent_builder
-            .learning_module_builder
-            .learning_module_type
-            .with_epsilon(epsilon);
+        self.agent_builder = self.agent_builder.with_epsilon(epsilon);
         self
     }
 
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .learning_module_type = self
-            .agent_builder
-            .learning_module_builder
-            .learning_module_type
-            .with_weight_decay(weight_decay);
+        self.agent_builder = self.agent_builder.with_weight_decay(weight_decay);
         self
     }
 
     pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: ParamsAdamW) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .learning_module_type = LearningModuleType::Joint {
-            max_grad_norm,
-            params,
-        };
+        self.agent_builder = self.agent_builder.with_joint(max_grad_norm, params);
         self
     }
 
@@ -172,37 +132,35 @@ where
         value_max_grad_norm: Option<f32>,
         value_params: ParamsAdamW,
     ) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .learning_module_type = LearningModuleType::Split {
+        self.agent_builder = self.agent_builder.with_split(
             policy_max_grad_norm,
             policy_params,
             value_max_grad_norm,
             value_params,
-        };
+        );
         self
     }
 
     pub fn with_value_hidden_layers(mut self, value_hidden_layers: Vec<usize>) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .value_hidden_layers = value_hidden_layers;
+        self.agent_builder = self
+            .agent_builder
+            .with_value_hidden_layers(value_hidden_layers);
         self
     }
 
     pub fn with_learning_module_type(mut self, learning_module_type: LearningModuleType) -> Self {
-        self.agent_builder
-            .learning_module_builder
-            .learning_module_type = learning_module_type;
+        self.agent_builder = self
+            .agent_builder
+            .with_learning_module_type(learning_module_type);
         self
     }
 }
 
-pub type PPOCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+pub type PPOCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
     OnPolicyAlgorithmBuilder<CandlePPO, CandlePPOAgentBuilder, EB, BD>;
 
-impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuilder<EB> {
-    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+impl PPOCandleAlgorithmBuilder<GymEnvBuilder> {
+    pub fn gym<EB: Into<GymEnvBuilder>>(builder: EB, n_envs: usize) -> Self {
         OnPolicyAlgorithmBuilder {
             sampler_builder: SamplerBuilder::new(builder, n_envs),
             agent_builder: CandlePPOAgentBuilder::new(n_envs),
@@ -214,10 +172,23 @@ impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuilder<EB> {
     }
 }
 
-pub type PPOBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+impl<EB: EnvBuilder> PPOCandleAlgorithmBuilder<EB> {
+    pub fn new(builder: EB, n_envs: usize) -> Self {
+        OnPolicyAlgorithmBuilder {
+            sampler_builder: SamplerBuilder::new(builder, n_envs),
+            agent_builder: CandlePPOAgentBuilder::new(n_envs),
+            learning_schedule: LearningSchedule::RolloutBound {
+                total_rollouts: 300,
+                current_rollout: 0,
+            },
+        }
+    }
+}
+
+pub type PPOBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
     OnPolicyAlgorithmBuilder<BurnPPO<BurnBackend>, BurnPPOAgentBuilder, EB, BD>;
 
-impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuilder<EB> {
+impl<EB: EnvBuilder> PPOBurnAlgorithmBuilder<EB> {
     pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuilder<EB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
@@ -245,10 +216,10 @@ impl<EB: EnvBuilderTrait> PPOBurnAlgorithmBuilder<EB> {
     }
 }
 
-pub type PPOAlgorithmBuilder<EB, BD = StepTrajectoryBound<<EB as EnvBuilderTrait>::Tensor>> =
+pub type PPOAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
     PPOCandleAlgorithmBuilder<EB, BD>;
 
-impl<EB: EnvBuilderTrait> PPOCandleAlgorithmBuilder<EB> {
+impl<EB: EnvBuilder> PPOCandleAlgorithmBuilder<EB> {
     pub fn with_candle(self, device: Device) -> PPOCandleAlgorithmBuilder<EB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,

@@ -5,7 +5,6 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l_api::hooks::ppo::PPOStats;
 use r2l_api::{builders::ppo::algorithm::PPOAlgorithmBuilder, hooks::on_policy::LearningSchedule};
 use r2l_examples::EventBox;
-use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{Location, StepTrajectoryBound};
 use ratatui::{
     DefaultTerminal, Frame,
@@ -278,7 +277,7 @@ pub fn train_ppo(
     clip_range: f32,
 ) -> anyhow::Result<()> {
     // TODO: The generic here is ugly
-    let ppo_builder = PPOAlgorithmBuilder::<GymEnvBuilder>::new(ENV_NAME, 10)
+    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_candle(candle_core::Device::Cpu)
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
