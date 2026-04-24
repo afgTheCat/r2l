@@ -106,13 +106,13 @@ pub trait PreprocessorY<T: R2lTensor, B: TrajectoryContainer<Tensor = T>> {
 }
 
 // BD: collection method should probably be an enum!
-pub struct FinalSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
+pub struct R2lSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,
     rollout_mode: RolloutMode,
 }
 
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
+impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         collection_method: BD,
@@ -168,7 +168,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> FinalSampler<E, BD> {
     }
 }
 
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for FinalSampler<E, BD> {
+impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for R2lSampler<E, BD> {
     type Tensor = E::Tensor;
     type TrajectoryContainer = BD::Container;
 

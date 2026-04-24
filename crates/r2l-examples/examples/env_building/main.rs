@@ -48,20 +48,26 @@ fn build_env() -> Result<MyEnv> {
 }
 
 fn main() {
+    // Anything that implement Into<GymEnvBuilder> can be used with the PPOAlgorithmBuilder::gym
+    // method. This includes &str, String and GymEnvBuilder itself (or your own implementation)
     let ppo_builder0 = PPOAlgorithmBuilder::gym("Pendulum-v1", 10);
     let _ppo0 = ppo_builder0.build().unwrap();
 
+    // Since GymEnvBuilder is an EnvBuilder, it can be used PPOAlgorithmBuilder::gym
     let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
     let ppo_builder1 = PPOAlgorithmBuilder::new(gym_env_builder, 10);
     let _ppo1 = ppo_builder1.build().unwrap();
 
+    // This closure that returns an environment can be used as an environment builder
     let env_builder = || Ok(MyEnv);
     let ppo_builder2 = PPOAlgorithmBuilder::new(env_builder, 10);
     let _ppo2 = ppo_builder2.build().unwrap();
 
+    // This function that returns an environment can also be used as an environment builder
     let ppo_builder3 = PPOAlgorithmBuilder::new(build_env, 10);
     let _ppo3 = ppo_builder3.build().unwrap();
 
+    // We can implement our own environment builder to be used with PPOAlgorithmBuilder::new.
     let ppo_builder4 = PPOAlgorithmBuilder::new(MyEnvBuilder, 10);
     let _ppo4 = ppo_builder4.build().unwrap();
 }

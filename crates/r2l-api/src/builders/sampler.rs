@@ -1,5 +1,5 @@
 use r2l_core::env::{EnvBuilder, EnvBuilderType, TensorOfEnvBuilder};
-use r2l_sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound};
+use r2l_sampler::{Location, R2lSampler, StepTrajectoryBound, TrajectoryBound};
 
 pub struct SamplerBuilder<
     EB: EnvBuilder,
@@ -50,7 +50,7 @@ impl<EB: EnvBuilder, BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>> Sampl
         self
     }
 
-    pub fn build(self) -> FinalSampler<EB::Env, BD> {
-        FinalSampler::build(self.env_builder, self.trajectory_bound, self.location)
+    pub fn build(self) -> R2lSampler<EB::Env, BD> {
+        R2lSampler::build(self.env_builder, self.trajectory_bound, self.location)
     }
 }

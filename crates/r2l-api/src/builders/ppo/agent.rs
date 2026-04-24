@@ -35,6 +35,13 @@ pub type BurnPPOAgentBuilder = PPOAgentBuilder<PPOBurnBackend>;
 pub type CandlePPOAgentBuilder = PPOAgentBuilder<PPOCandleBackend>;
 
 impl<M> PPOAgentBuilder<M> {
+    pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
+        self.hook_builder = self
+            .hook_builder
+            .with_normalize_advantage(normalize_advantage);
+        self
+    }
+
     fn build_candle(
         self,
         observation_size: usize,
@@ -192,25 +199,7 @@ impl<M> PPOAgentBuilder<M> {
         self.learning_module_builder.learning_module_type = learning_module_type;
         self
     }
-}
 
-impl PPOAgentBuilder<PPOCandleBackend> {
-    pub fn with_burn(self) -> PPOAgentBuilder<PPOBurnBackend> {
-        PPOAgentBuilder {
-            ppo_params: self.ppo_params,
-            hook_builder: self.hook_builder,
-            learning_module_builder: self.learning_module_builder,
-            backend: PPOBurnBackend,
-        }
-    }
-
-    pub fn with_candle(mut self, device: Device) -> PPOAgentBuilder<PPOCandleBackend> {
-        self.backend = PPOCandleBackend { device };
-        self
-    }
-}
-
-impl PPOAgentBuilder<PPOBurnBackend> {
     pub fn with_candle(self, device: Device) -> PPOAgentBuilder<PPOCandleBackend> {
         PPOAgentBuilder {
             ppo_params: self.ppo_params,

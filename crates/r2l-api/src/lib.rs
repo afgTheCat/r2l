@@ -7,3 +7,5 @@ pub mod hooks;
 pub mod utils;
 
 pub type BurnBackend = Autodiff<NdArray>;
+
+pub use r2l_sampler::{EpisodeTrajectoryBound, Location, StepTrajectoryBound};

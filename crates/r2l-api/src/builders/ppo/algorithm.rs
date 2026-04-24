@@ -17,7 +17,7 @@ use crate::{
         ppo::agent::{BurnPPOAgentBuilder, CandlePPOAgentBuilder, PPOAgentBuilder},
         sampler::SamplerBuilder,
     },
-    hooks::{on_policy::LearningSchedule, ppo::PPOStats},
+    hooks::ppo::PPOStats,
 };
 
 impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, PPOAgentBuilder<M>, EB, BD>
@@ -28,9 +28,8 @@ where
     PPOAgentBuilder<M>: AgentBuilder<Agent = A>,
 {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
-        self.agent_builder.hook_builder = self
+        self.agent_builder = self
             .agent_builder
-            .hook_builder
             .with_normalize_advantage(normalize_advantage);
         self
     }
@@ -161,27 +160,19 @@ pub type PPOCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuild
 
 impl PPOCandleAlgorithmBuilder<GymEnvBuilder> {
     pub fn gym<EB: Into<GymEnvBuilder>>(builder: EB, n_envs: usize) -> Self {
-        OnPolicyAlgorithmBuilder {
-            sampler_builder: SamplerBuilder::new(builder, n_envs),
-            agent_builder: CandlePPOAgentBuilder::new(n_envs),
-            learning_schedule: LearningSchedule::RolloutBound {
-                total_rollouts: 300,
-                current_rollout: 0,
-            },
-        }
+        Self::from_sampler_and_agent_builder(
+            SamplerBuilder::new(builder, n_envs),
+            CandlePPOAgentBuilder::new(n_envs),
+        )
     }
 }
 
 impl<EB: EnvBuilder> PPOCandleAlgorithmBuilder<EB> {
     pub fn new(builder: EB, n_envs: usize) -> Self {
-        OnPolicyAlgorithmBuilder {
-            sampler_builder: SamplerBuilder::new(builder, n_envs),
-            agent_builder: CandlePPOAgentBuilder::new(n_envs),
-            learning_schedule: LearningSchedule::RolloutBound {
-                total_rollouts: 300,
-                current_rollout: 0,
-            },
-        }
+        Self::from_sampler_and_agent_builder(
+            SamplerBuilder::new(builder, n_envs),
+            CandlePPOAgentBuilder::new(n_envs),
+        )
     }
 }
 

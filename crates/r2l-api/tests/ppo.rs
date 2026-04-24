@@ -9,7 +9,6 @@ use r2l_api::{
     builders::ppo::algorithm::PPOAlgorithmBuilder,
     hooks::{on_policy::LearningSchedule, ppo::PPOStats},
 };
-use r2l_gym::GymEnvBuilder;
 use r2l_sampler::StepTrajectoryBound;
 
 #[allow(dead_code)]
@@ -37,16 +36,15 @@ struct PPOTestConfig {
 fn configure_candle_ppo_test(config: PPOTestConfig) {
     let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
 
-    let mut ppo_builder =
-        PPOAlgorithmBuilder::<GymEnvBuilder>::gym(config.env_name.into(), config.n_envs)
-            .with_candle(candle_core::Device::Cpu)
-            .with_entropy_coeff(config.entropy_coeff)
-            .with_lambda(config.gae_lambda)
-            .with_gamma(config.gamma)
-            .with_total_epochs(config.total_epochs)
-            .with_bound(StepTrajectoryBound::new(config.n_steps))
-            .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps))
-            .with_reporter(Some(update_tx));
+    let mut ppo_builder = PPOAlgorithmBuilder::gym(config.env_name, config.n_envs)
+        .with_candle(candle_core::Device::Cpu)
+        .with_entropy_coeff(config.entropy_coeff)
+        .with_lambda(config.gae_lambda)
+        .with_gamma(config.gamma)
+        .with_total_epochs(config.total_epochs)
+        .with_bound(StepTrajectoryBound::new(config.n_steps))
+        .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps))
+        .with_reporter(Some(update_tx));
 
     if let Some(clip_range) = config.clip_range {
         ppo_builder = ppo_builder.with_clip_range(clip_range);

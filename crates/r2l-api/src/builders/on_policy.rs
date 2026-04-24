@@ -2,7 +2,7 @@ use r2l_core::{
     env::{ActionSpaceType, EnvBuilder, Space, TensorOfEnvBuilder},
     on_policy::algorithm::{Agent, OnPolicyAlgorithm},
 };
-use r2l_sampler::{FinalSampler, Location, StepTrajectoryBound, TrajectoryBound};
+use r2l_sampler::{Location, R2lSampler, StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
     builders::{agent::AgentBuilder, sampler::SamplerBuilder},
@@ -11,8 +11,8 @@ use crate::{
 
 type DefaultOnPolicyAlgorithm<A, EB, BD> = OnPolicyAlgorithm<
     A,
-    FinalSampler<<EB as EnvBuilder>::Env, BD>,
-    DefaultOnPolicyAlgorithmsHooks<A, FinalSampler<<EB as EnvBuilder>::Env, BD>>,
+    R2lSampler<<EB as EnvBuilder>::Env, BD>,
+    DefaultOnPolicyAlgorithmsHooks<A, R2lSampler<<EB as EnvBuilder>::Env, BD>>,
 >;
 
 pub struct OnPolicyAlgorithmBuilder<
@@ -28,7 +28,24 @@ pub struct OnPolicyAlgorithmBuilder<
     pub agent_builder: AB,
 }
 
-impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder> OnPolicyAlgorithmBuilder<A, AB, EB> {
+impl<
+    A: Agent,
+    AB: AgentBuilder<Agent = A>,
+    EB: EnvBuilder,
+    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
+> OnPolicyAlgorithmBuilder<A, AB, EB, BD>
+{
+    pub fn from_sampler_and_agent_builder(
+        sampler_builder: SamplerBuilder<EB, BD>,
+        agent_builder: AB,
+    ) -> Self {
+        Self {
+            sampler_builder,
+            agent_builder,
+            learning_schedule: LearningSchedule::rollout_bound(300),
+        }
+    }
+
     pub fn with_bound<BD2: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>>(
         self,
         trajectory_bound: BD2,
@@ -45,22 +62,14 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder> OnPolicyAlgorithmBui
             learning_schedule,
         }
     }
-}
-
-impl<
-    A: Agent,
-    AB: AgentBuilder<Agent = A>,
-    EB: EnvBuilder,
-    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
-> OnPolicyAlgorithmBuilder<A, AB, EB, BD>
-{
-    pub fn with_location(mut self, location: Location) -> Self {
-        self.sampler_builder = self.sampler_builder.with_location(location);
-        self
-    }
 
     pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
         self.learning_schedule = learning_schedule;
+        self
+    }
+
+    pub fn with_location(mut self, location: Location) -> Self {
+        self.sampler_builder = self.sampler_builder.with_location(location);
         self
     }
 
