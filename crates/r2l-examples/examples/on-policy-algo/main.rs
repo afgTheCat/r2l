@@ -18,5 +18,7 @@ fn main() {
         OnPolicyAlgorithmBuilder::from_sampler_and_agent_builder(sampler_builder, agent_builder)
             .with_learning_schedule(LearningSchedule::rollout_bound(10))
             .with_learning_schedule(LearningSchedule::total_step_bound(1000));
+    let mut algo = algo_builder.build().unwrap();
+    algo.train().unwrap();
 }
 // ANCHOR_END: on_policy

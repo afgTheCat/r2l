@@ -122,7 +122,7 @@ chapter.
 
 A2C is a synchronous, deterministic variant of A3C. For more info, check the
 [paper](https://arxiv.org/abs/1602.01783). It is implemented as an `Agent`
-whitin `r2l`.
+within `r2l`.
 
 ```rust
 let a2c_algo = A2CAgentBuilder::new(10)
@@ -145,11 +145,9 @@ let a2c_algo = A2CAgentBuilder::new(10)
 
 ### PPO Agent
 
-The Proximal Policy Optimization algorithm combines ideas from A2C (having
-multiple workers) and TRPO (it uses a trust region to improve the actor).
-
-The main idea is that after an update, the new policy should be not too far from
-the old policy. For that, ppo uses clipping to avoid too large update.
+The Proximal Policy Optimization algorithm combines ideas from A2C and TRPO .
+For more, check the [paper](https://arxiv.org/abs/1707.06347). It is implemented
+as an `Agent` within `r2l`.
 
 ```rust
 let ppo_algo = PPOAgentBuilder::new(10)
