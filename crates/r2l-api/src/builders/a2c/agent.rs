@@ -10,11 +10,127 @@ use crate::{
     agents::a2c::{A2CBurnAgent, A2CCandleAgent},
     builders::{
         a2c::hook::DefaultA2CHookBuilder,
-        agent::AgentBuilder,
+        agent::{AgentBuilder, AgentBuilderStruct, CandleBackend},
         learning_module::{LearningModuleBuilder, LearningModuleType},
     },
     hooks::a2c::A2CStats,
 };
+
+// Public facing type
+pub type A2CAgentBuilder2 = AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, CandleBackend>;
+pub type A2CBurnAgentBuilder2 = AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, BurnBackend>;
+
+impl A2CAgentBuilder2 {
+    pub fn new(n_envs: usize) -> Self {
+        Self {
+            hook_builder: DefaultA2CHookBuilder::new(n_envs),
+            params: A2CParams::default(),
+            learning_module_builder: LearningModuleBuilder {
+                policy_hidden_layers: vec![64, 64],
+                value_hidden_layers: vec![64, 64],
+                learning_module_type: LearningModuleType::Joint {
+                    max_grad_norm: None,
+                    params: ParamsAdamW {
+                        lr: 3e-4,
+                        beta1: 0.9,
+                        beta2: 0.999,
+                        eps: 1e-5,
+                        weight_decay: 1e-4,
+                    },
+                },
+            },
+            backend: CandleBackend {
+                device: Device::Cpu,
+            },
+        }
+    }
+}
+
+impl<Backend> AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, Backend> {
+    pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
+        self.hook_builder = self
+            .hook_builder
+            .with_normalize_advantage(normalize_advantage);
+        self
+    }
+
+    pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
+        self.hook_builder = self.hook_builder.with_entropy_coeff(entropy_coeff);
+        self
+    }
+
+    pub fn with_vf_coeff(mut self, vf_coeff: Option<f32>) -> Self {
+        self.hook_builder = self.hook_builder.with_vf_coeff(vf_coeff);
+        self
+    }
+
+    pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
+        self.hook_builder = self.hook_builder.with_gradient_clipping(gradient_clipping);
+        self
+    }
+
+    pub fn with_reporter(mut self, tx: Option<Sender<A2CStats>>) -> Self {
+        self.hook_builder = self.hook_builder.with_tx(tx);
+        self
+    }
+
+    pub fn with_gamma(mut self, gamma: f32) -> Self {
+        self.params.gamma = gamma;
+        self
+    }
+
+    pub fn with_lambda(mut self, lambda: f32) -> Self {
+        self.params.lambda = lambda;
+        self
+    }
+
+    pub fn with_sample_size(mut self, sample_size: usize) -> Self {
+        self.params.sample_size = sample_size;
+        self
+    }
+}
+
+impl AgentBuilder for A2CAgentBuilder2 {
+    type Agent = A2CCandleAgent;
+
+    fn build(
+        self,
+        observation_size: usize,
+        action_size: usize,
+        action_space: ActionSpaceType,
+    ) -> anyhow::Result<Self::Agent> {
+        let device = self.backend.device.clone();
+        let lm = self.learning_module_builder.build_candle(
+            observation_size,
+            action_size,
+            action_space,
+            &device,
+        )?;
+        let hooks = self.hook_builder.build();
+        let params = self.params;
+        Ok(A2CCandleAgent(A2C { lm, hooks, params }))
+    }
+}
+
+impl AgentBuilder for A2CBurnAgentBuilder2 {
+    type Agent = A2CBurnAgent<BurnBackend>;
+
+    fn build(
+        self,
+        observation_size: usize,
+        action_size: usize,
+        action_space: ActionSpaceType,
+    ) -> anyhow::Result<Self::Agent> {
+        let lm = self.learning_module_builder.build_burn::<BurnBackend>(
+            observation_size,
+            action_size,
+            action_space,
+        )?;
+        let hooks = self.hook_builder.build();
+        let params = self.params;
+        Ok(A2CBurnAgent(A2C { lm, hooks, params }))
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct A2CBurnBackend;
@@ -32,6 +148,36 @@ pub struct A2CAgentBuilder<M = A2CCandleBackend> {
 }
 
 impl<M> A2CAgentBuilder<M> {
+    pub fn with_candle(self, device: Device) -> A2CAgentBuilder<A2CCandleBackend> {
+        let A2CAgentBuilder {
+            a2c_params,
+            hook_builder,
+            learning_module_builder,
+            ..
+        } = self;
+        A2CAgentBuilder {
+            a2c_params,
+            hook_builder,
+            learning_module_builder,
+            backend: A2CCandleBackend { device },
+        }
+    }
+
+    pub fn with_burn(self) -> A2CAgentBuilder<A2CBurnBackend> {
+        let A2CAgentBuilder {
+            a2c_params,
+            hook_builder,
+            learning_module_builder,
+            ..
+        } = self;
+        A2CAgentBuilder {
+            a2c_params,
+            hook_builder,
+            learning_module_builder,
+            backend: A2CBurnBackend,
+        }
+    }
+
     fn build_candle(
         self,
         observation_size: usize,
@@ -214,49 +360,6 @@ impl A2CCandleAgentBuilder {
                 device: Device::Cpu,
             },
         }
-    }
-}
-
-impl A2CAgentBuilder<A2CCandleBackend> {
-    pub fn with_candle(mut self, device: Device) -> Self {
-        self.backend = A2CCandleBackend { device };
-        self
-    }
-
-    pub fn with_burn(self) -> A2CAgentBuilder<A2CBurnBackend> {
-        let A2CAgentBuilder {
-            a2c_params,
-            hook_builder,
-            learning_module_builder,
-            ..
-        } = self;
-        A2CAgentBuilder {
-            a2c_params,
-            hook_builder,
-            learning_module_builder,
-            backend: A2CBurnBackend,
-        }
-    }
-}
-
-impl A2CAgentBuilder<A2CBurnBackend> {
-    pub fn with_candle(self, device: Device) -> A2CAgentBuilder<A2CCandleBackend> {
-        let A2CAgentBuilder {
-            a2c_params,
-            hook_builder,
-            learning_module_builder,
-            ..
-        } = self;
-        A2CAgentBuilder {
-            a2c_params,
-            hook_builder,
-            learning_module_builder,
-            backend: A2CCandleBackend { device },
-        }
-    }
-
-    pub fn with_burn(self) -> Self {
-        self
     }
 }
 
