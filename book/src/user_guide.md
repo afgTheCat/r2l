@@ -12,8 +12,8 @@ The chapter introduces
 - how to use the builder API to work with these environments.
 
 Currently, we only support on policy algorithms. This will change in the future
-and more algorithms will be covered here. While **r2l** composes of multiple
-crates, only the following are necessary to get started:
+and more algorithms will be covered. While **r2l** composes of multiple crates,
+only the following are necessary to get started:
 
 - `crates/r2l-api`: shared API-facing types and interfaces,
 - `crates/r2l-core`: core RL abstractions including `R2lTensor`, `Env` and
@@ -28,14 +28,17 @@ validate the hooks based architecture. That architecture is not discussed here,
 for details check out the [On policy algorithms](./on_policy_algorithms.md) and
 [Off policy algorithms](./off_policy_algorithms.md) chapter.
 
-<!-- This it the new structure -->
-
 ## Core concepts of on-policy training in **r2l**
 
-Within **r2l**, on policy algorithms have two distinct stages
+Within **r2l**, the on policy algorithm's learning loop consist of two stages
 
 - collecting samples using the `Sampler`
 - processing the samples is done by the `Agent`
+
+The `Algoritm` is responsible for running the loop until a fixed amount of
+timesteps/episodes have elapsed. The simplified overview is presented down.
+
+![A simplfied overview of On Policy algorithms](./images/simplified_onpolicy_learning_loop.png)
 
 The `r2l-api` exposes builder for `Sampler`s, `Agent`s and `Algorithm`. While it
 is possible to construct `Sampler`s and `Agents`, most users would probably
@@ -56,6 +59,8 @@ prefer constructing algorithms.
 ## Algorithm builders
 
 ## Examples
+
+<!-- This it the new structure -->
 
 ## Environments
 
