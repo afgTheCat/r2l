@@ -95,11 +95,12 @@ impl<T: R2lTensor> TrajectoryBound for EpisodeTrajectoryBound<T> {
     }
 }
 
-pub enum Location {
+pub enum SamplerExecutionMode {
     Vec,
     Thread,
 }
 
+// TODO: highly experimental sampler trait
 pub trait PreprocessorY<T: R2lTensor, B: TrajectoryContainer<Tensor = T>> {
     // The question is, can we make this dyn compatible? Otherwise we just use a ref
     fn preprocess_states(&mut self, policy: &dyn Actor<Tensor = T>, buffers: &mut [B]);
@@ -116,7 +117,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         collection_method: BD,
-        location: Location,
+        location: SamplerExecutionMode,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = (0..num_envs)
@@ -124,7 +125,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
             .collect();
         let (all_buffers, buffer_handlers) = bimodal_array(buffers);
         let worker_pool = match location {
-            Location::Vec => {
+            SamplerExecutionMode::Vec => {
                 let workers = buffer_handlers
                     .into_iter()
                     .enumerate()
@@ -135,7 +136,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
                     .collect();
                 WorkerPool::Vec(workers)
             }
-            Location::Thread => {
+            SamplerExecutionMode::Thread => {
                 let env_builder = Arc::new(env_builder);
                 let workers = buffer_handlers
                     .into_iter()

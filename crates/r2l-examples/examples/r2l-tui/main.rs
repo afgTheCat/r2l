@@ -4,7 +4,7 @@ use std::{f64, io, sync::mpsc};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
 use r2l_examples::EventBox;
-use r2l_sampler::{Location, StepTrajectoryBound};
+use r2l_sampler::{SamplerExecutionMode, StepTrajectoryBound};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -282,7 +282,7 @@ pub fn train_ppo(
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
         .with_bound(StepTrajectoryBound::new(2048))
-        .with_location(Location::Vec)
+        .with_execution_mode(SamplerExecutionMode::Vec)
         .with_clip_range(clip_range)
         .with_learning_schedule(LearningSchedule::RolloutBound {
             total_rollouts,

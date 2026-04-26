@@ -2,7 +2,7 @@ use r2l_core::{
     env::{ActionSpaceType, EnvBuilder, Space, TensorOfEnvBuilder},
     on_policy::algorithm::{Agent, OnPolicyAlgorithm},
 };
-use r2l_sampler::{Location, R2lSampler, StepTrajectoryBound, TrajectoryBound};
+use r2l_sampler::{R2lSampler, SamplerExecutionMode, StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
     builders::{agent::AgentBuilder, sampler::SamplerBuilder},
@@ -68,8 +68,8 @@ impl<
         self
     }
 
-    pub fn with_location(mut self, location: Location) -> Self {
-        self.sampler_builder = self.sampler_builder.with_location(location);
+    pub fn with_execution_mode(mut self, location: SamplerExecutionMode) -> Self {
+        self.sampler_builder = self.sampler_builder.with_execution_mode(location);
         self
     }
 

@@ -6,8 +6,7 @@ use std::{
 
 use candle_core::Device;
 use r2l_api::{
-    LearningSchedule, PPOAlgorithmBuilder, PPOStats,
-    Location, StepTrajectoryBound,
+    LearningSchedule, PPOAlgorithmBuilder, PPOStats, SamplerExecutionMode, StepTrajectoryBound,
 };
 
 fn main() {
@@ -20,7 +19,7 @@ fn main() {
         .with_gradient_clipping(Some(0.5))
         .with_target_kl(Some(0.01))
         .with_bound(StepTrajectoryBound::new(2048))
-        .with_location(Location::Vec)
+        .with_execution_mode(SamplerExecutionMode::Vec)
         .with_clip_range(0.2)
         .with_learning_schedule(LearningSchedule::rollout_bound(300))
         .with_reporter(Some(update_tx));

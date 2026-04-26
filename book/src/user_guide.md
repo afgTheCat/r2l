@@ -137,29 +137,11 @@ It is also possible to implement your own sampler, for more info check the
 relevant section of the [On policy algorithms](./on_policy_algorithms.md)
 chapter.
 
-## AgentBuilders
+## Agent builder
 
 While `A2CAgentBuilder` and `PPOAgentBuilder` differ in what `Agent` they are
-going to build, they do share a lot of the configuration options.
-
-| Method                      | Argument(s)                                                                  | Purpose                                                                    |
-| --------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `Self::new`                 | `n_envs: usize`                                                              | Creates the agent builder configured for the given number of environments. |
-| `with_candle`               | `device: Device`                                                             | Selects the Candle backend and the device to run on.                       |
-| `with_burn`                 | none                                                                         | Selects the Burn backend.                                                  |
-| `with_normalize_advantage`  | `normalize_advantage: bool`                                                  | Enables or disables advantage normalization before optimization.           |
-| `with_entropy_coeff`        | `entropy_coeff: f32`                                                         | Sets the entropy bonus coefficient used to encourage exploration.          |
-| `with_vf_coeff`             | `vf_coeff: Option<f32>`                                                      | Sets the value-function loss coefficient.                                  |
-| `with_gradient_clipping`    | `gradient_clipping: Option<f32>`                                             | Enables gradient norm clipping and sets the clipping threshold.            |
-| `with_gamma`                | `gamma: f32`                                                                 | Sets the discount factor for future rewards.                               |
-| `with_lambda`               | `lambda: f32`                                                                | Sets the lambda parameter used for return / advantage estimation.          |
-| `with_policy_hidden_layers` | `policy_hidden_layers: Vec<usize>`                                           | Configures the hidden-layer sizes of the policy network.                   |
-| `with_learning_rate`        | `learning_rate: f64`                                                         | Sets the optimizer learning rate.                                          |
-| `with_beta1`                | `beta1: f64`                                                                 | Sets the Adam/AdamW `beta1` parameter.                                     |
-| `with_beta2`                | `beta2: f64`                                                                 | Sets the Adam/AdamW `beta2` parameter.                                     |
-| `with_epsilon`              | `epsilon: f64`                                                               | Sets the Adam/AdamW epsilon value.                                         |
-| `with_weight_decay`         | `weight_decay: f64`                                                          | Sets the optimizer weight decay.                                           |
-| `build`                     | `observation_size: usize, action_size: usize, action_space: ActionSpaceType` | Builds the final agent from the configured builder.                        |
+going to build, they also share a lot of the parameters. That found
+[here](file:///home/g/git/r2l/target/doc/r2l_api/struct.OnPolicyAgentBuilder.html#impl-OnPolicyAgentBuilder%3CParams,+HookBuilder,+Backend%3E).
 
 ### A2C agent builder
 

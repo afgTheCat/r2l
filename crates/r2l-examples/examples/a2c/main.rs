@@ -6,9 +6,7 @@ use std::{
 
 use candle_core::Device;
 use r2l_api::{
-    A2CAlgorithmBuilder, A2CStats,
-    Location, StepTrajectoryBound,
-    LearningSchedule,
+    A2CAlgorithmBuilder, A2CStats, LearningSchedule, SamplerExecutionMode, StepTrajectoryBound,
 };
 
 fn main() {
@@ -20,7 +18,7 @@ fn main() {
         .with_entropy_coeff(0.2)
         .with_gradient_clipping(Some(0.5))
         .with_bound(StepTrajectoryBound::new(2048))
-        .with_location(Location::Vec)
+        .with_execution_mode(SamplerExecutionMode::Vec)
         .with_learning_schedule(LearningSchedule::rollout_bound(300))
         .with_reporter(Some(update_tx));
     let mut ppo = a2c_builder.build().unwrap();

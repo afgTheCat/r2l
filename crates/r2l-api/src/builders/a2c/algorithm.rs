@@ -33,6 +33,7 @@ where
     BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
     OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, M>: AgentBuilder<Agent = A>,
 {
+    /// Enables or disables advantage normalization in the underlying A2C hook.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.agent_builder = self
             .agent_builder
@@ -40,41 +41,49 @@ where
         self
     }
 
+    /// Sets the entropy coefficient.
     pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
         self.agent_builder = self.agent_builder.with_entropy_coeff(entropy_coeff);
         self
     }
 
+    /// Sets the optional value-function loss coefficient.
     pub fn with_vf_coeff(mut self, vf_coeff: Option<f32>) -> Self {
         self.agent_builder = self.agent_builder.with_vf_coeff(vf_coeff);
         self
     }
 
+    /// Sets optional gradient clipping in the underlying A2C hook.
     pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
         self.agent_builder = self.agent_builder.with_gradient_clipping(gradient_clipping);
         self
     }
 
+    /// Installs a reporter channel for [`A2CStats`](crate::A2CStats).
     pub fn with_reporter(mut self, tx: Option<Sender<A2CStats>>) -> Self {
         self.agent_builder = self.agent_builder.with_reporter(tx);
         self
     }
 
+    /// Sets the discount factor.
     pub fn with_gamma(mut self, gamma: f32) -> Self {
         self.agent_builder = self.agent_builder.with_gamma(gamma);
         self
     }
 
+    /// Sets the GAE lambda parameter.
     pub fn with_lambda(mut self, lambda: f32) -> Self {
         self.agent_builder = self.agent_builder.with_lambda(lambda);
         self
     }
 
+    /// Sets the rollout sample size used during training updates.
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
         self.agent_builder = self.agent_builder.with_sample_size(sample_size);
         self
     }
 
+    /// Sets the hidden layer sizes used by the policy network.
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
         self.agent_builder = self
             .agent_builder
@@ -82,36 +91,43 @@ where
         self
     }
 
+    /// Sets the optimizer learning rate for all configured optimizers.
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.agent_builder = self.agent_builder.with_learning_rate(learning_rate);
         self
     }
 
+    /// Sets the AdamW `beta1` parameter for all configured optimizers.
     pub fn with_beta1(mut self, beta1: f64) -> Self {
         self.agent_builder = self.agent_builder.with_beta1(beta1);
         self
     }
 
+    /// Sets the AdamW `beta2` parameter for all configured optimizers.
     pub fn with_beta2(mut self, beta2: f64) -> Self {
         self.agent_builder = self.agent_builder.with_beta2(beta2);
         self
     }
 
+    /// Sets the AdamW epsilon parameter for all configured optimizers.
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
         self.agent_builder = self.agent_builder.with_epsilon(epsilon);
         self
     }
 
+    /// Sets the AdamW weight decay parameter for all configured optimizers.
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
         self.agent_builder = self.agent_builder.with_weight_decay(weight_decay);
         self
     }
 
+    /// Uses a joint policy-value learning module configuration.
     pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: ParamsAdamW) -> Self {
         self.agent_builder = self.agent_builder.with_joint(max_grad_norm, params);
         self
     }
 
+    /// Uses separate optimizer settings for the policy and value modules.
     pub fn with_split(
         mut self,
         policy_max_grad_norm: Option<f32>,
@@ -128,6 +144,7 @@ where
         self
     }
 
+    /// Sets the hidden layer sizes used by the value network.
     pub fn with_value_hidden_layers(mut self, value_hidden_layers: Vec<usize>) -> Self {
         self.agent_builder = self
             .agent_builder
@@ -135,6 +152,7 @@ where
         self
     }
 
+    /// Replaces the full learning module configuration.
     pub fn with_learning_module_type(
         mut self,
         learning_module_type: OnPolicyLearningModuleType,
@@ -146,13 +164,19 @@ where
     }
 }
 
+/// High-level A2C algorithm builder specialized to the Burn backend.
 pub type A2CBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
     OnPolicyAlgorithmBuilder<A2CBurnAgent<BurnBackend>, A2CBurnAgentBuilder, EB, BD>;
 
+/// High-level A2C algorithm builder specialized to the Candle backend.
+///
+/// This builder combines environment setup, sampler construction, agent
+/// construction, and default on-policy training hooks.
 pub type A2CCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
     OnPolicyAlgorithmBuilder<A2CCandleAgent, A2CCandleAgentBuilder, EB, BD>;
 
 impl A2CCandleAlgorithmBuilder<GymEnvBuilder> {
+    /// Creates an A2C algorithm builder for a Gym environment.
     pub fn gym<EB: Into<GymEnvBuilder>>(builder: EB, n_envs: usize) -> Self {
         let agent_builder = A2CCandleAgentBuilder::new(n_envs);
         Self::from_sampler_and_agent_builder(SamplerBuilder::new(builder, n_envs), agent_builder)
@@ -160,6 +184,7 @@ impl A2CCandleAlgorithmBuilder<GymEnvBuilder> {
 }
 
 impl<EB: EnvBuilder> A2CBurnAlgorithmBuilder<EB> {
+    /// Switches the algorithm builder to the Candle backend.
     pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
@@ -173,6 +198,7 @@ impl<EB: EnvBuilder> A2CBurnAlgorithmBuilder<EB> {
         }
     }
 
+    /// Keeps the algorithm builder on the Burn backend.
     pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
@@ -187,10 +213,14 @@ impl<EB: EnvBuilder> A2CBurnAlgorithmBuilder<EB> {
     }
 }
 
+/// Default high-level A2C algorithm builder.
+///
+/// This alias uses the Candle backend by default.
 pub type A2CAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
     A2CCandleAlgorithmBuilder<EB, BD>;
 
 impl<EB: EnvBuilder> A2CAlgorithmBuilder<EB> {
+    /// Creates an A2C algorithm builder for a custom environment builder.
     pub fn new(builder: EB, n_envs: usize) -> Self {
         Self::from_sampler_and_agent_builder(
             SamplerBuilder::new(builder, n_envs),
@@ -198,6 +228,7 @@ impl<EB: EnvBuilder> A2CAlgorithmBuilder<EB> {
         )
     }
 
+    /// Switches the algorithm builder to the Candle backend.
     pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
@@ -211,6 +242,7 @@ impl<EB: EnvBuilder> A2CAlgorithmBuilder<EB> {
         }
     }
 
+    /// Switches the algorithm builder to the Burn backend.
     pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
