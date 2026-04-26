@@ -63,30 +63,6 @@ impl DefaultPPOHookBuilder {
         self
     }
 
-    pub fn normalize_advantage(&self) -> bool {
-        self.normalize_advantage
-    }
-
-    pub fn total_epochs(&self) -> usize {
-        self.total_epochs
-    }
-
-    pub fn entropy_coeff(&self) -> f32 {
-        self.entropy_coeff
-    }
-
-    pub fn vf_coeff(&self) -> Option<f32> {
-        self.vf_coeff
-    }
-
-    pub fn target_kl(&self) -> Option<f32> {
-        self.target_kl
-    }
-
-    pub fn gradient_clipping(&self) -> Option<f32> {
-        self.gradient_clipping
-    }
-
     pub fn build<T>(self) -> DefaultPPOHook<T> {
         DefaultPPOHook {
             normalize_advantage: self.normalize_advantage,

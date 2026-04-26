@@ -2,8 +2,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::{f64, io, sync::mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_api::hooks::ppo::PPOStats;
-use r2l_api::{builders::ppo::algorithm::PPOAlgorithmBuilder, hooks::on_policy::LearningSchedule};
+use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
 use r2l_examples::EventBox;
 use r2l_sampler::{Location, StepTrajectoryBound};
 use ratatui::{

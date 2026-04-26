@@ -6,9 +6,9 @@ use std::{
 
 use candle_core::Device;
 use r2l_api::{
+    A2CAlgorithmBuilder, A2CStats,
     Location, StepTrajectoryBound,
-    builders::a2c::algorithm::A2CAlgorithmBuilder,
-    hooks::{a2c::A2CStats, on_policy::LearningSchedule},
+    LearningSchedule,
 };
 
 fn main() {

@@ -79,10 +79,10 @@ impl LearningModuleType {
     }
 }
 
-pub struct LearningModuleBuilder {
-    pub policy_hidden_layers: Vec<usize>,
-    pub value_hidden_layers: Vec<usize>,
-    pub learning_module_type: LearningModuleType,
+pub(crate) struct LearningModuleBuilder {
+    pub(crate) policy_hidden_layers: Vec<usize>,
+    pub(crate) value_hidden_layers: Vec<usize>,
+    pub(crate) learning_module_type: LearningModuleType,
 }
 
 impl LearningModuleBuilder {

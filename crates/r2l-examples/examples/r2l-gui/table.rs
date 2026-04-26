@@ -1,6 +1,6 @@
 use egui::{Id, Margin};
 use egui_table::{Column, HeaderCellInfo};
-use r2l_api::hooks::ppo::PPOStats;
+use r2l_api::PPOStats;
 
 #[derive(Default)]
 pub struct UpdateTable {

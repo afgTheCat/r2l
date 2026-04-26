@@ -23,9 +23,9 @@ pub struct OnPolicyAlgorithmBuilder<
         TensorOfEnvBuilder<EB>,
     >,
 > {
-    pub sampler_builder: SamplerBuilder<EB, BD>,
-    pub learning_schedule: LearningSchedule,
-    pub agent_builder: AB,
+    pub(crate) sampler_builder: SamplerBuilder<EB, BD>,
+    pub(crate) learning_schedule: LearningSchedule,
+    pub(crate) agent_builder: AB,
 }
 
 impl<

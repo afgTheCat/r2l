@@ -17,10 +17,10 @@ pub trait AgentBuilder {
 }
 
 pub struct AgentBuilderStruct<Params, HookBuilder, Backend> {
-    pub params: Params,
-    pub hook_builder: HookBuilder,
-    pub learning_module_builder: LearningModuleBuilder,
-    pub backend: Backend,
+    pub(crate) params: Params,
+    pub(crate) hook_builder: HookBuilder,
+    pub(crate) learning_module_builder: LearningModuleBuilder,
+    pub(crate) backend: Backend,
 }
 
 #[derive(Debug, Clone, Copy, Default)]

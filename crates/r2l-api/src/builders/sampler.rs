@@ -7,9 +7,9 @@ pub struct SamplerBuilder<
         TensorOfEnvBuilder<EB>,
     >,
 > {
-    pub env_builder: EnvBuilderType<EB>,
-    pub trajectory_bound: BD,
-    pub location: Location,
+    pub(crate) env_builder: EnvBuilderType<EB>,
+    pub(crate) trajectory_bound: BD,
+    pub(crate) location: Location,
 }
 
 impl<EB: EnvBuilder> SamplerBuilder<EB> {

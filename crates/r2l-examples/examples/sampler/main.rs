@@ -1,6 +1,6 @@
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
-use r2l_api::builders::{ppo::agent::PPOAgentBuilder, sampler::SamplerBuilder};
+use r2l_api::{PPOAgentBuilder, SamplerBuilder};
 use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{EpisodeTrajectoryBound, Location, StepTrajectoryBound};
 

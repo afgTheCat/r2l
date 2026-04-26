@@ -6,9 +6,8 @@ use std::{
 
 use candle_core::Device;
 use r2l_api::{
+    LearningSchedule, PPOAlgorithmBuilder, PPOStats,
     Location, StepTrajectoryBound,
-    builders::ppo::algorithm::PPOAlgorithmBuilder,
-    hooks::{on_policy::LearningSchedule, ppo::PPOStats},
 };
 
 fn main() {
