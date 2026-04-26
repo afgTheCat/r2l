@@ -2,6 +2,7 @@ use std::sync::mpsc::Sender;
 
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
+use r2l_agents::on_policy_algorithms::a2c::A2CParams;
 use r2l_core::{
     env::{EnvBuilder, TensorOfEnvBuilder},
     on_policy::algorithm::Agent,
@@ -13,8 +14,11 @@ use crate::{
     BurnBackend,
     agents::a2c::{A2CBurnAgent, A2CCandleAgent},
     builders::{
-        a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder},
-        agent::AgentBuilder,
+        a2c::{
+            agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder},
+            hook::DefaultA2CHookBuilder,
+        },
+        agent::{AgentBuilder, AgentBuilderStruct},
         learning_module::LearningModuleType,
         on_policy::OnPolicyAlgorithmBuilder,
         sampler::SamplerBuilder,
@@ -22,12 +26,12 @@ use crate::{
     hooks::a2c::A2CStats,
 };
 
-impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, A2CAgentBuilder<M>, EB, BD>
+impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, M>, EB, BD>
 where
     A: Agent,
     EB: EnvBuilder,
     BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
-    A2CAgentBuilder<M>: AgentBuilder<Agent = A>,
+    AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, M>: AgentBuilder<Agent = A>,
 {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.agent_builder = self

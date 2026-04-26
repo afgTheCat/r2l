@@ -2,6 +2,7 @@ use std::sync::mpsc::Sender;
 
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
+use r2l_agents::on_policy_algorithms::ppo::PPOParams;
 use r2l_core::env::{EnvBuilder, TensorOfEnvBuilder};
 use r2l_core::on_policy::algorithm::Agent;
 use r2l_gym::GymEnvBuilder;
@@ -11,21 +12,24 @@ use crate::agents::ppo::{PPOBurnAgent, PPOCandleAgent};
 use crate::{
     BurnBackend,
     builders::{
-        agent::AgentBuilder,
+        agent::{AgentBuilder, AgentBuilderStruct},
         learning_module::LearningModuleType,
         on_policy::OnPolicyAlgorithmBuilder,
-        ppo::agent::{BurnPPOAgentBuilder, CandlePPOAgentBuilder, PPOAgentBuilder},
+        ppo::{
+            agent::{BurnPPOAgentBuilder, CandlePPOAgentBuilder},
+            hook::DefaultPPOHookBuilder,
+        },
         sampler::SamplerBuilder,
     },
     hooks::ppo::PPOStats,
 };
 
-impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, PPOAgentBuilder<M>, EB, BD>
+impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, AgentBuilderStruct<PPOParams, DefaultPPOHookBuilder, M>, EB, BD>
 where
     A: Agent,
     EB: EnvBuilder,
     BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
-    PPOAgentBuilder<M>: AgentBuilder<Agent = A>,
+    AgentBuilderStruct<PPOParams, DefaultPPOHookBuilder, M>: AgentBuilder<Agent = A>,
 {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.agent_builder = self

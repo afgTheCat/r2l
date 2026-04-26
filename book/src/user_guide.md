@@ -103,7 +103,7 @@ through a dedicated `gym` constructor.
 let ppo_builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 10);
 ```
 
-A sidenote on `gym` environments: while it is possible to use a
+A side-note on `gym` environments: while it is possible to use a
 `ThreadEnvironment`, thanks to the GIL, true parallelism is not going to happen.
 
 ## SamplerBuilder
