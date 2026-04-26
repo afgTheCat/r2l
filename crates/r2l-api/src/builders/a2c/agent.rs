@@ -7,7 +7,7 @@ use r2l_core::env::ActionSpaceType;
 
 use crate::{
     BurnBackend,
-    agents::a2c::{BurnA2C, CandleA2C},
+    agents::a2c::{A2CBurnAgent, A2CCandleAgent},
     builders::{
         a2c::hook::DefaultA2CHookBuilder,
         agent::AgentBuilder,
@@ -24,7 +24,7 @@ pub struct A2CCandleBackend {
     pub device: Device,
 }
 
-pub struct A2CAgentBuilder<M> {
+pub struct A2CAgentBuilder<M = A2CCandleBackend> {
     pub a2c_params: A2CParams,
     pub hook_builder: DefaultA2CHookBuilder,
     pub learning_module_builder: LearningModuleBuilder,
@@ -38,7 +38,7 @@ impl<M> A2CAgentBuilder<M> {
         action_size: usize,
         action_space: ActionSpaceType,
         device: Device,
-    ) -> anyhow::Result<CandleA2C> {
+    ) -> anyhow::Result<A2CCandleAgent> {
         let lm = self.learning_module_builder.build_candle(
             observation_size,
             action_size,
@@ -47,7 +47,7 @@ impl<M> A2CAgentBuilder<M> {
         )?;
         let hooks = self.hook_builder.build();
         let params = self.a2c_params;
-        Ok(CandleA2C(A2C { lm, hooks, params }))
+        Ok(A2CCandleAgent(A2C { lm, hooks, params }))
     }
 
     fn build_burn(
@@ -55,7 +55,7 @@ impl<M> A2CAgentBuilder<M> {
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
-    ) -> anyhow::Result<BurnA2C<BurnBackend>> {
+    ) -> anyhow::Result<A2CBurnAgent<BurnBackend>> {
         let lm = self.learning_module_builder.build_burn::<BurnBackend>(
             observation_size,
             action_size,
@@ -63,7 +63,7 @@ impl<M> A2CAgentBuilder<M> {
         )?;
         let hooks = self.hook_builder.build();
         let params = self.a2c_params;
-        Ok(BurnA2C(A2C { lm, hooks, params }))
+        Ok(A2CBurnAgent(A2C { lm, hooks, params }))
     }
 
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
@@ -261,7 +261,7 @@ impl A2CAgentBuilder<A2CBurnBackend> {
 }
 
 impl AgentBuilder for A2CAgentBuilder<A2CBurnBackend> {
-    type Agent = BurnA2C<BurnBackend>;
+    type Agent = A2CBurnAgent<BurnBackend>;
 
     fn build(
         self,
@@ -274,7 +274,7 @@ impl AgentBuilder for A2CAgentBuilder<A2CBurnBackend> {
 }
 
 impl AgentBuilder for A2CAgentBuilder<A2CCandleBackend> {
-    type Agent = CandleA2C;
+    type Agent = A2CCandleAgent;
 
     fn build(
         self,

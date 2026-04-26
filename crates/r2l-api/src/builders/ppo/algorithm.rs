@@ -7,7 +7,7 @@ use r2l_core::on_policy::algorithm::Agent;
 use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
-use crate::agents::ppo::{BurnPPO, CandlePPO};
+use crate::agents::ppo::{PPOBurnAgent, PPOCandleAgent};
 use crate::{
     BurnBackend,
     builders::{
@@ -156,7 +156,7 @@ where
 }
 
 pub type PPOCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
-    OnPolicyAlgorithmBuilder<CandlePPO, CandlePPOAgentBuilder, EB, BD>;
+    OnPolicyAlgorithmBuilder<PPOCandleAgent, CandlePPOAgentBuilder, EB, BD>;
 
 impl PPOCandleAlgorithmBuilder<GymEnvBuilder> {
     pub fn gym<EB: Into<GymEnvBuilder>>(builder: EB, n_envs: usize) -> Self {
@@ -177,7 +177,7 @@ impl<EB: EnvBuilder> PPOCandleAlgorithmBuilder<EB> {
 }
 
 pub type PPOBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
-    OnPolicyAlgorithmBuilder<BurnPPO<BurnBackend>, BurnPPOAgentBuilder, EB, BD>;
+    OnPolicyAlgorithmBuilder<PPOBurnAgent<BurnBackend>, BurnPPOAgentBuilder, EB, BD>;
 
 impl<EB: EnvBuilder> PPOBurnAlgorithmBuilder<EB> {
     pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuilder<EB> {

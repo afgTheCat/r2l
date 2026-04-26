@@ -11,7 +11,7 @@ use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
     BurnBackend,
-    agents::a2c::{BurnA2C, CandleA2C},
+    agents::a2c::{A2CBurnAgent, A2CCandleAgent},
     builders::{
         a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder},
         agent::AgentBuilder,
@@ -140,10 +140,10 @@ where
 }
 
 pub type A2CBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
-    OnPolicyAlgorithmBuilder<BurnA2C<BurnBackend>, A2CBurnAgentBuilder, EB, BD>;
+    OnPolicyAlgorithmBuilder<A2CBurnAgent<BurnBackend>, A2CBurnAgentBuilder, EB, BD>;
 
 pub type A2CCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
-    OnPolicyAlgorithmBuilder<CandleA2C, A2CCandleAgentBuilder, EB, BD>;
+    OnPolicyAlgorithmBuilder<A2CCandleAgent, A2CCandleAgentBuilder, EB, BD>;
 
 impl A2CCandleAlgorithmBuilder<GymEnvBuilder> {
     pub fn gym<EB: Into<GymEnvBuilder>>(builder: EB, n_envs: usize) -> Self {

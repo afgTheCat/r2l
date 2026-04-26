@@ -7,7 +7,7 @@ use r2l_core::env::ActionSpaceType;
 
 use crate::{
     BurnBackend,
-    agents::ppo::{BurnPPO, CandlePPO},
+    agents::ppo::{PPOBurnAgent, PPOCandleAgent},
     builders::{
         agent::AgentBuilder,
         learning_module::{LearningModuleBuilder, LearningModuleType},
@@ -48,7 +48,7 @@ impl<M> PPOAgentBuilder<M> {
         action_size: usize,
         action_space: ActionSpaceType,
         device: Device,
-    ) -> anyhow::Result<CandlePPO> {
+    ) -> anyhow::Result<PPOCandleAgent> {
         let lm = self.learning_module_builder.build_candle(
             observation_size,
             action_size,
@@ -57,7 +57,7 @@ impl<M> PPOAgentBuilder<M> {
         )?;
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
-        Ok(CandlePPO(PPO { lm, hooks, params }))
+        Ok(PPOCandleAgent(PPO { lm, hooks, params }))
     }
 
     fn build_burn(
@@ -65,7 +65,7 @@ impl<M> PPOAgentBuilder<M> {
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
-    ) -> anyhow::Result<BurnPPO<BurnBackend>> {
+    ) -> anyhow::Result<PPOBurnAgent<BurnBackend>> {
         let lm = self.learning_module_builder.build_burn::<BurnBackend>(
             observation_size,
             action_size,
@@ -73,7 +73,7 @@ impl<M> PPOAgentBuilder<M> {
         )?;
         let hooks = self.hook_builder.build();
         let params = self.ppo_params;
-        Ok(BurnPPO(PPO { lm, hooks, params }))
+        Ok(PPOBurnAgent(PPO { lm, hooks, params }))
     }
 
     pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
@@ -246,7 +246,7 @@ impl CandlePPOAgentBuilder {
 }
 
 impl AgentBuilder for PPOAgentBuilder<PPOBurnBackend> {
-    type Agent = BurnPPO<BurnBackend>;
+    type Agent = PPOBurnAgent<BurnBackend>;
 
     fn build(
         self,
@@ -259,7 +259,7 @@ impl AgentBuilder for PPOAgentBuilder<PPOBurnBackend> {
 }
 
 impl AgentBuilder for PPOAgentBuilder<PPOCandleBackend> {
-    type Agent = CandlePPO;
+    type Agent = PPOCandleAgent;
 
     fn build(
         self,
