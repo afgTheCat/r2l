@@ -28,6 +28,35 @@ validate the hooks based architecture. That architecture is not discussed here,
 for details check out the [On policy algorithms](./on_policy_algorithms.md) and
 [Off policy algorithms](./off_policy_algorithms.md) chapter.
 
+<!-- This it the new structure -->
+
+## Core concepts of on-policy training in **r2l**
+
+Within **r2l**, on policy algorithms have two distinct stages
+
+- collecting samples using the `Sampler`
+- processing the samples is done by the `Agent`
+
+The `r2l-api` exposes builder for `Sampler`s, `Agent`s and `Algorithm`. While it
+is possible to construct `Sampler`s and `Agents`, most users would probably
+prefer constructing algorithms.
+
+## Environments
+
+## SamplerBuilder
+
+## AgentBuilder
+
+### Common parameters
+
+### A2C-specific parameters
+
+### PPO-specific parameters
+
+## Algorithm builders
+
+## Examples
+
 ## Environments
 
 In order to use `r2l` (or any other rl library for that matter) an environments
@@ -81,7 +110,7 @@ A sidenote on `gym` environments: while it is possible to use a
 
 ## On Policy algorithms
 
-Whitin **r2l**, on policy algorithms have distinct stages
+Within **r2l**, on policy algorithms have two distinct stages
 
 - collecting samples using the `Sampler`
 - processing the samples is done by the `Agent`
@@ -142,6 +171,25 @@ let a2c_algo = A2CAgentBuilder::new(10)
     .with_weight_decay(1e-4)
     .build(10, 2, ActionSpaceType::Discrete);
 ```
+
+| Method                      | Argument(s)                                                                  | Purpose                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `A2CAgentBuilder::new`      | `n_envs: usize`                                                              | Creates an A2C agent builder configured for the given number of environments. |
+| `with_candle`               | `device: Device`                                                             | Selects the Candle backend and the device to run on.                          |
+| `with_burn`                 | none                                                                         | Selects the Burn backend.                                                     |
+| `with_normalize_advantage`  | `normalize_advantage: bool`                                                  | Enables or disables advantage normalization before optimization.              |
+| `with_entropy_coeff`        | `entropy_coeff: f32`                                                         | Sets the entropy bonus coefficient used to encourage exploration.             |
+| `with_vf_coeff`             | `vf_coeff: Option<f32>`                                                      | Sets the value-function loss coefficient.                                     |
+| `with_gradient_clipping`    | `gradient_clipping: Option<f32>`                                             | Enables gradient clipping and sets the clipping threshold.                    |
+| `with_gamma`                | `gamma: f32`                                                                 | Sets the discount factor for future rewards.                                  |
+| `with_lambda`               | `lambda: f32`                                                                | Sets the lambda parameter used for return / advantage estimation.             |
+| `with_policy_hidden_layers` | `policy_hidden_layers: Vec<usize>`                                           | Configures the hidden-layer sizes of the policy network.                      |
+| `with_learning_rate`        | `learning_rate: f64`                                                         | Sets the optimizer learning rate.                                             |
+| `with_beta1`                | `beta1: f64`                                                                 | Sets the Adam/AdamW `beta1` parameter.                                        |
+| `with_beta2`                | `beta2: f64`                                                                 | Sets the Adam/AdamW `beta2` parameter.                                        |
+| `with_epsilon`              | `epsilon: f64`                                                               | Sets the Adam/AdamW epsilon value.                                            |
+| `with_weight_decay`         | `weight_decay: f64`                                                          | Sets the optimizer weight decay.                                              |
+| `build`                     | `observation_size: usize, action_size: usize, action_space: ActionSpaceType` | Builds the final A2C agent from the configured builder.                       |
 
 ### PPO Agent
 
