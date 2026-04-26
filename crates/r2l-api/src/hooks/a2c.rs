@@ -43,7 +43,7 @@ impl A2CStats {
     }
 }
 
-pub struct DefaultA2CHookReporter {
+pub(crate) struct DefaultA2CHookReporter {
     report: A2CStats,
     tx: Sender<A2CStats>,
     unfinished_episode_rewards: Vec<f32>,
@@ -92,11 +92,11 @@ impl DefaultA2CHookReporter {
 }
 
 pub struct DefaultA2CHook<T = ()> {
-    pub normalize_advantage: bool,
-    pub entropy_coeff: f32,
-    pub vf_coeff: Option<f32>,
-    pub gradient_clipping: Option<f32>,
-    pub reporter: Option<DefaultA2CHookReporter>,
+    pub(crate) normalize_advantage: bool,
+    pub(crate) entropy_coeff: f32,
+    pub(crate) vf_coeff: Option<f32>,
+    pub(crate) gradient_clipping: Option<f32>,
+    pub(crate) reporter: Option<DefaultA2CHookReporter>,
     pub(crate) _lm: PhantomData<T>,
 }
 

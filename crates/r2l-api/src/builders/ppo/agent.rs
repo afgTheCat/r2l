@@ -10,28 +10,28 @@ use crate::{
     agents::ppo::{PPOBurnAgent, PPOCandleAgent},
     builders::{
         agent::{
-            AgentBuilder, AgentBuilderStruct, BurnBackend as BuilderBurnBackend, CandleBackend,
+            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
         },
-        learning_module::{LearningModuleBuilder, LearningModuleType},
+        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
         ppo::hook::DefaultPPOHookBuilder,
     },
     hooks::ppo::PPOStats,
 };
 
-pub type PPOAgentBuilder = AgentBuilderStruct<PPOParams, DefaultPPOHookBuilder, CandleBackend>;
-pub type CandlePPOAgentBuilder = PPOAgentBuilder;
-pub type BurnPPOAgentBuilder =
-    AgentBuilderStruct<PPOParams, DefaultPPOHookBuilder, BuilderBurnBackend>;
+pub type PPOAgentBuilder = OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, CandleBackend>;
+pub type PPOCandleAgentBuilder = PPOAgentBuilder;
+pub type PPOBurnAgentBuilder =
+    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, BuilderBurnBackend>;
 
 impl PPOAgentBuilder {
     pub fn new(n_envs: usize) -> Self {
         Self {
             hook_builder: DefaultPPOHookBuilder::new(n_envs),
             params: PPOParams::default(),
-            learning_module_builder: LearningModuleBuilder {
+            learning_module_builder: OnPolicyLearningModuleBuilder {
                 policy_hidden_layers: vec![64, 64],
                 value_hidden_layers: vec![64, 64],
-                learning_module_type: LearningModuleType::Joint {
+                learning_module_type: OnPolicyLearningModuleType::Joint {
                     params: ParamsAdamW {
                         lr: 3e-4,
                         beta1: 0.9,
@@ -49,7 +49,7 @@ impl PPOAgentBuilder {
     }
 }
 
-impl<Backend> AgentBuilderStruct<PPOParams, DefaultPPOHookBuilder, Backend> {
+impl<Backend> OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, Backend> {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.hook_builder = self
             .hook_builder
@@ -125,7 +125,7 @@ impl AgentBuilder for PPOAgentBuilder {
     }
 }
 
-impl AgentBuilder for BurnPPOAgentBuilder {
+impl AgentBuilder for PPOBurnAgentBuilder {
     type Agent = PPOBurnAgent<BurnBackend>;
 
     fn build(

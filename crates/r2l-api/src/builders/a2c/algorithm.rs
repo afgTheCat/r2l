@@ -18,20 +18,20 @@ use crate::{
             agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder},
             hook::DefaultA2CHookBuilder,
         },
-        agent::{AgentBuilder, AgentBuilderStruct},
-        learning_module::LearningModuleType,
+        agent::{AgentBuilder, OnPolicyAgentBuilder},
+        learning_module::OnPolicyLearningModuleType,
         on_policy::OnPolicyAlgorithmBuilder,
         sampler::SamplerBuilder,
     },
     hooks::a2c::A2CStats,
 };
 
-impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, M>, EB, BD>
+impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, M>, EB, BD>
 where
     A: Agent,
     EB: EnvBuilder,
     BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
-    AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, M>: AgentBuilder<Agent = A>,
+    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, M>: AgentBuilder<Agent = A>,
 {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.agent_builder = self
@@ -135,7 +135,10 @@ where
         self
     }
 
-    pub fn with_learning_module_type(mut self, learning_module_type: LearningModuleType) -> Self {
+    pub fn with_learning_module_type(
+        mut self,
+        learning_module_type: OnPolicyLearningModuleType,
+    ) -> Self {
         self.agent_builder = self
             .agent_builder
             .with_learning_module_type(learning_module_type);

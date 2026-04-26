@@ -12,11 +12,11 @@ use crate::agents::ppo::{PPOBurnAgent, PPOCandleAgent};
 use crate::{
     BurnBackend,
     builders::{
-        agent::{AgentBuilder, AgentBuilderStruct},
-        learning_module::LearningModuleType,
+        agent::{AgentBuilder, OnPolicyAgentBuilder},
+        learning_module::OnPolicyLearningModuleType,
         on_policy::OnPolicyAlgorithmBuilder,
         ppo::{
-            agent::{BurnPPOAgentBuilder, CandlePPOAgentBuilder},
+            agent::{PPOBurnAgentBuilder, PPOCandleAgentBuilder},
             hook::DefaultPPOHookBuilder,
         },
         sampler::SamplerBuilder,
@@ -24,12 +24,12 @@ use crate::{
     hooks::ppo::PPOStats,
 };
 
-impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, AgentBuilderStruct<PPOParams, DefaultPPOHookBuilder, M>, EB, BD>
+impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, M>, EB, BD>
 where
     A: Agent,
     EB: EnvBuilder,
     BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
-    AgentBuilderStruct<PPOParams, DefaultPPOHookBuilder, M>: AgentBuilder<Agent = A>,
+    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, M>: AgentBuilder<Agent = A>,
 {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.agent_builder = self
@@ -151,7 +151,10 @@ where
         self
     }
 
-    pub fn with_learning_module_type(mut self, learning_module_type: LearningModuleType) -> Self {
+    pub fn with_learning_module_type(
+        mut self,
+        learning_module_type: OnPolicyLearningModuleType,
+    ) -> Self {
         self.agent_builder = self
             .agent_builder
             .with_learning_module_type(learning_module_type);
@@ -160,13 +163,13 @@ where
 }
 
 pub type PPOCandleAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
-    OnPolicyAlgorithmBuilder<PPOCandleAgent, CandlePPOAgentBuilder, EB, BD>;
+    OnPolicyAlgorithmBuilder<PPOCandleAgent, PPOCandleAgentBuilder, EB, BD>;
 
 impl PPOCandleAlgorithmBuilder<GymEnvBuilder> {
     pub fn gym<EB: Into<GymEnvBuilder>>(builder: EB, n_envs: usize) -> Self {
         Self::from_sampler_and_agent_builder(
             SamplerBuilder::new(builder, n_envs),
-            CandlePPOAgentBuilder::new(n_envs),
+            PPOCandleAgentBuilder::new(n_envs),
         )
     }
 }
@@ -175,13 +178,13 @@ impl<EB: EnvBuilder> PPOCandleAlgorithmBuilder<EB> {
     pub fn new(builder: EB, n_envs: usize) -> Self {
         Self::from_sampler_and_agent_builder(
             SamplerBuilder::new(builder, n_envs),
-            CandlePPOAgentBuilder::new(n_envs),
+            PPOCandleAgentBuilder::new(n_envs),
         )
     }
 }
 
 pub type PPOBurnAlgorithmBuilder<EB, BD = StepTrajectoryBound<TensorOfEnvBuilder<EB>>> =
-    OnPolicyAlgorithmBuilder<PPOBurnAgent<BurnBackend>, BurnPPOAgentBuilder, EB, BD>;
+    OnPolicyAlgorithmBuilder<PPOBurnAgent<BurnBackend>, PPOBurnAgentBuilder, EB, BD>;
 
 impl<EB: EnvBuilder> PPOBurnAlgorithmBuilder<EB> {
     pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuilder<EB> {

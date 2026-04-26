@@ -10,13 +10,13 @@ use r2l_core::{
 use rand::RngExt;
 
 pub struct Evaluator<E: Env> {
-    pub env: E,
-    pub trajectory_buffer: VariableSizedStateBuffer<E::Tensor>,
-    pub eval_episodes: usize,
-    pub eval_freq: usize,
-    pub eval_step: usize,
-    pub evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
-    pub device: Device,
+    pub(crate) env: E,
+    pub(crate) trajectory_buffer: VariableSizedStateBuffer<E::Tensor>,
+    pub(crate) eval_episodes: usize,
+    pub(crate) eval_freq: usize,
+    pub(crate) eval_step: usize,
+    pub(crate) evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
+    pub(crate) device: Device,
 }
 
 fn run_episode<E: Env>(

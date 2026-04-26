@@ -11,27 +11,27 @@ use crate::{
     builders::{
         a2c::hook::DefaultA2CHookBuilder,
         agent::{
-            AgentBuilder, AgentBuilderStruct, BurnBackend as BuilderBurnBackend, CandleBackend,
+            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
         },
-        learning_module::{LearningModuleBuilder, LearningModuleType},
+        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
     },
     hooks::a2c::A2CStats,
 };
 
-pub type A2CAgentBuilder = AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, CandleBackend>;
+pub type A2CAgentBuilder = OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, CandleBackend>;
 pub type A2CCandleAgentBuilder = A2CAgentBuilder;
 pub type A2CBurnAgentBuilder =
-    AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, BuilderBurnBackend>;
+    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, BuilderBurnBackend>;
 
 impl A2CAgentBuilder {
     pub fn new(n_envs: usize) -> Self {
         Self {
             hook_builder: DefaultA2CHookBuilder::new(n_envs),
             params: A2CParams::default(),
-            learning_module_builder: LearningModuleBuilder {
+            learning_module_builder: OnPolicyLearningModuleBuilder {
                 policy_hidden_layers: vec![64, 64],
                 value_hidden_layers: vec![64, 64],
-                learning_module_type: LearningModuleType::Joint {
+                learning_module_type: OnPolicyLearningModuleType::Joint {
                     max_grad_norm: None,
                     params: ParamsAdamW {
                         lr: 3e-4,
@@ -49,7 +49,7 @@ impl A2CAgentBuilder {
     }
 }
 
-impl<Backend> AgentBuilderStruct<A2CParams, DefaultA2CHookBuilder, Backend> {
+impl<Backend> OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, Backend> {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.hook_builder = self
             .hook_builder

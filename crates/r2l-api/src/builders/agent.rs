@@ -2,7 +2,9 @@ use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_core::{env::ActionSpaceType, on_policy::algorithm::Agent};
 
-use crate::builders::learning_module::{LearningModuleBuilder, LearningModuleType};
+use crate::builders::learning_module::{
+    OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType,
+};
 
 pub trait AgentBuilder {
     type Agent: Agent;
@@ -16,10 +18,10 @@ pub trait AgentBuilder {
     ) -> anyhow::Result<Self::Agent>;
 }
 
-pub struct AgentBuilderStruct<Params, HookBuilder, Backend> {
+pub struct OnPolicyAgentBuilder<Params, HookBuilder, Backend> {
     pub(crate) params: Params,
     pub(crate) hook_builder: HookBuilder,
-    pub(crate) learning_module_builder: LearningModuleBuilder,
+    pub(crate) learning_module_builder: OnPolicyLearningModuleBuilder,
     pub(crate) backend: Backend,
 }
 
@@ -28,21 +30,21 @@ pub struct BurnBackend;
 
 #[derive(Debug, Clone)]
 pub struct CandleBackend {
-    pub device: Device,
+    pub(crate) device: Device,
 }
 
-impl<Params, HookBuilder, Backend> AgentBuilderStruct<Params, HookBuilder, Backend> {
+impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Backend> {
     pub fn with_candle(
         self,
         device: Device,
-    ) -> AgentBuilderStruct<Params, HookBuilder, CandleBackend> {
-        let AgentBuilderStruct {
+    ) -> OnPolicyAgentBuilder<Params, HookBuilder, CandleBackend> {
+        let OnPolicyAgentBuilder {
             params,
             hook_builder,
             learning_module_builder,
             ..
         } = self;
-        AgentBuilderStruct {
+        OnPolicyAgentBuilder {
             params,
             hook_builder,
             learning_module_builder,
@@ -50,14 +52,14 @@ impl<Params, HookBuilder, Backend> AgentBuilderStruct<Params, HookBuilder, Backe
         }
     }
 
-    pub fn with_burn(self) -> AgentBuilderStruct<Params, HookBuilder, BurnBackend> {
-        let AgentBuilderStruct {
+    pub fn with_burn(self) -> OnPolicyAgentBuilder<Params, HookBuilder, BurnBackend> {
+        let OnPolicyAgentBuilder {
             params,
             hook_builder,
             learning_module_builder,
             ..
         } = self;
-        AgentBuilderStruct {
+        OnPolicyAgentBuilder {
             params,
             hook_builder,
             learning_module_builder,
@@ -111,7 +113,7 @@ impl<Params, HookBuilder, Backend> AgentBuilderStruct<Params, HookBuilder, Backe
     }
 
     pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: ParamsAdamW) -> Self {
-        self.learning_module_builder.learning_module_type = LearningModuleType::Joint {
+        self.learning_module_builder.learning_module_type = OnPolicyLearningModuleType::Joint {
             max_grad_norm,
             params,
         };
@@ -125,7 +127,7 @@ impl<Params, HookBuilder, Backend> AgentBuilderStruct<Params, HookBuilder, Backe
         value_max_grad_norm: Option<f32>,
         value_params: ParamsAdamW,
     ) -> Self {
-        self.learning_module_builder.learning_module_type = LearningModuleType::Split {
+        self.learning_module_builder.learning_module_type = OnPolicyLearningModuleType::Split {
             policy_max_grad_norm,
             policy_params,
             value_max_grad_norm,
@@ -139,7 +141,10 @@ impl<Params, HookBuilder, Backend> AgentBuilderStruct<Params, HookBuilder, Backe
         self
     }
 
-    pub fn with_learning_module_type(mut self, learning_module_type: LearningModuleType) -> Self {
+    pub fn with_learning_module_type(
+        mut self,
+        learning_module_type: OnPolicyLearningModuleType,
+    ) -> Self {
         self.learning_module_builder.learning_module_type = learning_module_type;
         self
     }

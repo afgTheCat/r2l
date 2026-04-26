@@ -22,7 +22,7 @@ use r2l_core::{
 };
 
 #[derive(Debug, Clone)]
-pub struct BatchStats {
+pub struct PPOBatchStats {
     pub clip_fraction: f32,
     pub entropy_loss: f32,
     pub policy_loss: f32,
@@ -32,19 +32,19 @@ pub struct BatchStats {
 
 #[derive(Default, Debug, Clone)]
 pub struct PPOStats {
-    pub batch_stats: Vec<BatchStats>,
+    pub batch_stats: Vec<PPOBatchStats>,
     pub std: Option<f32>,
     pub average_reward: f32,
     pub learning_rate: f64,
 }
 
 impl PPOStats {
-    pub fn collect_batch_data(&mut self, batch_stats: BatchStats) {
+    pub fn collect_batch_data(&mut self, batch_stats: PPOBatchStats) {
         self.batch_stats.push(batch_stats);
     }
 }
 
-pub struct TargetKl {
+pub(crate) struct TargetKl {
     pub target: f32,
     pub target_exceeded: bool,
 }
@@ -55,7 +55,7 @@ impl TargetKl {
     }
 }
 
-pub struct DefaultPPOHookReporter {
+pub(crate) struct DefaultPPOHookReporter {
     report: PPOStats,
     tx: Sender<PPOStats>,
     unfinished_episode_rewards: Vec<f32>,
@@ -104,14 +104,14 @@ impl DefaultPPOHookReporter {
 }
 
 pub struct DefaultPPOHook<T = ()> {
-    pub normalize_advantage: bool,
-    pub total_epochs: usize,
-    pub entropy_coeff: f32,
-    pub vf_coeff: Option<f32>,
-    pub target_kl: Option<TargetKl>,
-    pub gradient_clipping: Option<f32>,
-    pub current_epoch: usize,
-    pub reporter: Option<DefaultPPOHookReporter>,
+    pub(crate) normalize_advantage: bool,
+    pub(crate) total_epochs: usize,
+    pub(crate) entropy_coeff: f32,
+    pub(crate) vf_coeff: Option<f32>,
+    pub(crate) target_kl: Option<TargetKl>,
+    pub(crate) gradient_clipping: Option<f32>,
+    pub(crate) current_epoch: usize,
+    pub(crate) reporter: Option<DefaultPPOHookReporter>,
     pub(crate) _lm: PhantomData<T>,
 }
 
@@ -194,7 +194,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
                 .filter(|value| (**value - 1.).abs() > params.clip_range)
                 .count() as f32
                 / ratio.len() as f32;
-            report.collect_batch_data(BatchStats {
+            report.collect_batch_data(PPOBatchStats {
                 clip_fraction,
                 policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
                 entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
@@ -286,7 +286,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
                 .to_dtype(candle_core::DType::F32)?
                 .mean_all()?
                 .to_scalar::<f32>()?;
-            report.collect_batch_data(BatchStats {
+            report.collect_batch_data(PPOBatchStats {
                 clip_fraction,
                 policy_loss: losses.policy_loss.to_scalar()?,
                 entropy_loss: entropy_loss.to_scalar()?,

@@ -6,13 +6,13 @@ use r2l_sampler::{Location, R2lSampler, StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
     builders::{agent::AgentBuilder, sampler::SamplerBuilder},
-    hooks::on_policy::{DefaultOnPolicyAlgorithmsHooks, LearningSchedule},
+    hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule},
 };
 
 type DefaultOnPolicyAlgorithm<A, EB, BD> = OnPolicyAlgorithm<
     A,
     R2lSampler<<EB as EnvBuilder>::Env, BD>,
-    DefaultOnPolicyAlgorithmsHooks<A, R2lSampler<<EB as EnvBuilder>::Env, BD>>,
+    DefaultOnPolicyAlgorithmHooks<A, R2lSampler<<EB as EnvBuilder>::Env, BD>>,
 >;
 
 pub struct OnPolicyAlgorithmBuilder<
@@ -85,7 +85,7 @@ impl<
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
-        let hooks = DefaultOnPolicyAlgorithmsHooks::new(self.learning_schedule);
+        let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule);
         Ok(OnPolicyAlgorithm {
             sampler,
             agent,
