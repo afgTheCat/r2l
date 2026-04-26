@@ -5,10 +5,10 @@ use candle_core::Tensor;
 use candle_core::shape::Dim;
 
 pub struct RunningMeanStd {
-    pub mean: Tensor,
-    pub var: Tensor,
-    pub count: f32,
-    pub device: Device,
+    pub(crate) mean: Tensor,
+    pub(crate) var: Tensor,
+    pub(crate) count: f32,
+    pub(crate) device: Device,
 }
 
 fn biased_var<D: Dim>(t: &Tensor, dim: D) -> Result<Tensor> {

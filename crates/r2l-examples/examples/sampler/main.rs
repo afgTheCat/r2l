@@ -1,14 +1,14 @@
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
-use r2l_api::builders::{ppo::agent::PPOAgentBuilder, sampler::SamplerBuilder};
+use r2l_api::{PPOAgentBuilder, SamplerBuilder};
 use r2l_gym::GymEnvBuilder;
-use r2l_sampler::{EpisodeTrajectoryBound, Location, StepTrajectoryBound};
+use r2l_sampler::{EpisodeTrajectoryBound, SamplerExecutionMode, StepTrajectoryBound};
 
 fn main() {
     let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
     let sampler_builder = SamplerBuilder::<GymEnvBuilder>::new(gym_env_builder, 10)
-        .with_location(Location::Vec)
-        .with_location(Location::Thread)
+        .with_execution_mode(SamplerExecutionMode::Vec)
+        .with_execution_mode(SamplerExecutionMode::Thread)
         .with_bound(EpisodeTrajectoryBound::new(10))
         .with_bound(StepTrajectoryBound::new(1000));
     let sampler = sampler_builder.build();

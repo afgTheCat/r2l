@@ -12,8 +12,8 @@ The chapter introduces
 - how to use the builder API to work with these environments.
 
 Currently, we only support on policy algorithms. This will change in the future
-and more algorithms will be covered here. While **r2l** composes of multiple
-crates, only the following are necessary to get started:
+and more algorithms will be covered. While **r2l** composes of multiple crates,
+only the following are necessary to get started:
 
 - `crates/r2l-api`: shared API-facing types and interfaces,
 - `crates/r2l-core`: core RL abstractions including `R2lTensor`, `Env` and
@@ -27,6 +27,30 @@ reach the functionality of Stable Baselines3 (we are not there yet), and to
 validate the hooks based architecture. That architecture is not discussed here,
 for details check out the [On policy algorithms](./on_policy_algorithms.md) and
 [Off policy algorithms](./off_policy_algorithms.md) chapter.
+
+## Core concepts of on-policy training in **r2l**
+
+Within **r2l**, the on policy algorithm's learning loop consist of two stages
+
+- collecting samples using the `Sampler`
+- processing the samples is done by the `Agent`
+
+The `Algoritm` is responsible for running the loop until a fixed amount of
+steps/episodes have elapsed. The simplified overview is presented down.
+
+![A simplfied overview of On Policy algorithms](./images/simplified_onpolicy_learning_loop.png)
+The `r2l-api` exposes builder for `Sampler`s, `Agent`s and `Algorithm`s. While
+it is possible to construct `Sampler`s and `Agent`s, most users would probably
+prefer constructing algorithms, as they expose the same level of control as the
+downstream building blocks, just with a higher level API.
+
+| Builder               | Builder type      | Produces                           | Notes                                                                                                       |
+| --------------------- | ----------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `SamplerBuilder`      | Sampler builder   | `R2lSampler`                       | Useful when you want to pair rollout collection with your own agent or algorithm setup.                     |
+| `PPOAgentBuilder`     | Agent builder     | `PPOBurnAgent` or `PPOCandleAgent` | Builds the policy update component only; pair it with a sampler when not using `PPOAlgorithmBuilder`.       |
+| `A2CAgentBuilder`     | Agent builder     | `A2CBurnAgent` or `A2CCandleAgent` | Similar to `PPOAgentBuilder`, but for A2C training.                                                         |
+| `PPOAlgorithmBuilder` | Algorithm builder | A configured PPO `Algorithm`       | The highest-level PPO entry point; combines environment setup, sampler construction and agent construction. |
+| `A2CAlgorithmBuilder` | Algorithm builder | A configured A2C `Algorithm`       | The highest-level A2C entry point; usually the simplest way to start training with A2C.                     |
 
 ## Environments
 
@@ -46,7 +70,8 @@ simulation loop.
 
 Since **r2l** support multithreading, environments like these needs to be
 constructed on the host thread. For this reason, the `EnvBuilder` trait is
-introduced.
+introduced to be an argument for builders that need to eventually create the
+environment.
 
 ```rust
 {{#include ../../crates/r2l-core/src/env.rs:env_builder}}
@@ -57,8 +82,9 @@ instance of the environment. As an example, if `MyEnv` implements the `Env`
 trait, the below closure can work as an `EnvBuilder`.
 
 ```rust
+let number_of_environmnets = 10;
 let env_builder = || Ok(MyEnv);
-let ppo_builder = PPOAlgorithmBuilder::new(env_builder, 10);
+let ppo_builder = PPOAlgorithmBuilder::new(env_builder, number_of_environmnets);
 ```
 
 For more examples on how to implement the `Env` and `EnvBuilder` trait, check
@@ -73,34 +99,27 @@ environment. Algorithm builders exposed by `r2l-api` handle gym environments
 through a dedicated `gym` constructor.
 
 ```rust
+// anyhin that implements the Into<GymEnvBuilder> can be used with `gym`
 let ppo_builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 10);
 ```
 
-A sidenote on `gym` environments: while it is possible to use a
+A side-note on `gym` environments: while it is possible to use a
 `ThreadEnvironment`, thanks to the GIL, true parallelism is not going to happen.
 
-## On Policy algorithms
-
-Whitin **r2l**, on policy algorithms have distinct stages
-
-- collecting samples using the `Sampler`
-- processing the samples is done by the `Agent`
-
-The `r2l-api` exposes builder for `Sampler`s, `Agent`s and `Algorithm`.
-
-### Sampler
+## SamplerBuilder
 
 The current sampler supported by **r2l** is called `R2lSampler` and has the
 following feature set.
 
-| Feature                   | Status | Description                                                   | Blocked on    |
-| ------------------------- | ------ | ------------------------------------------------------------- | ------------- |
-| Episode based sampling    | ✅     | Collects trajectories based the number of episodes completed  |               |
-| Steps based sampling      | ✅     | Collects trajectories based the number of steps taken         |               |
-| Observation normalization | ❌     | Normalizes observations using rms                             | Sampler hooks |
-| Reward normalization      | ❌     | Normalized rewards using rms                                  | Sampler hooks |
-| Vec environments          | ✅     | Trajectories are collected in sequentially on the same thread |               |
-| Thread environments       | ✅     | Trajectories are collected in paralell using multi threading  |               |
+| Feature                    | Status | Description                                                   | Blocked on                                    |
+| -------------------------- | ------ | ------------------------------------------------------------- | --------------------------------------------- |
+| Episode based sampling     | ✅     | Collects trajectories based the number of episodes completed  |                                               |
+| Steps based sampling       | ✅     | Collects trajectories based the number of steps taken         |                                               |
+| Observation normalization  | ❌     | Normalizes observations using rms                             | Sampler hooks (v.0.0.3)                       |
+| Reward normalization       | ❌     | Normalized rewards using rms                                  | Sampler hooks (v.0.0.3)                       |
+| Vec environments           | ✅     | Trajectories are collected in sequentially on the same thread |                                               |
+| Thread environments        | ✅     | Trajectories are collected in paralell using multi threading  |                                               |
+| Subprocessing environments | ❌     | Trajectories are collected in a separate subprocesses         | Subprocessing environments (probably v.0.0.4) |
 
 You can construct the sampler using the `SamplerBuilder`.
 
@@ -118,38 +137,34 @@ It is also possible to implement your own sampler, for more info check the
 relevant section of the [On policy algorithms](./on_policy_algorithms.md)
 chapter.
 
-### A2C Agent
+## Agent builder
+
+While `A2CAgentBuilder` and `PPOAgentBuilder` differ in what `Agent` they are
+going to build, they also share a lot of the parameters. That found
+[here](file:///home/g/git/r2l/target/doc/r2l_api/struct.OnPolicyAgentBuilder.html#impl-OnPolicyAgentBuilder%3CParams,+HookBuilder,+Backend%3E).
+
+### A2C agent builder
 
 A2C is a synchronous, deterministic variant of A3C. For more info, check the
 [paper](https://arxiv.org/abs/1602.01783). It is implemented as an `Agent`
-whitin `r2l`.
+within `r2l`. `A2CAgentBuilder` exposes no extra parameters on top of the common
+ones. An example on how to use this is:
 
 ```rust
 let a2c_algo = A2CAgentBuilder::new(10)
-    .with_candle(Device::Cpu)
     .with_burn()
     .with_normalize_advantage(true)
     .with_entropy_coeff(0.)
     .with_vf_coeff(None)
-    .with_gradient_clipping(None)
-    .with_gamma(0.)
-    .with_lambda(0.)
     .with_policy_hidden_layers(vec![32, 32])
-    .with_learning_rate(3e-4)
-    .with_beta1(0.9)
-    .with_beta2(0.999)
-    .with_epsilon(1e-5)
-    .with_weight_decay(1e-4)
     .build(10, 2, ActionSpaceType::Discrete);
 ```
 
-### PPO Agent
+### PPO agent builder
 
-The Proximal Policy Optimization algorithm combines ideas from A2C (having
-multiple workers) and TRPO (it uses a trust region to improve the actor).
-
-The main idea is that after an update, the new policy should be not too far from
-the old policy. For that, ppo uses clipping to avoid too large update.
+The Proximal Policy Optimization algorithm combines ideas from A2C and TRPO .
+For more, check the [paper](https://arxiv.org/abs/1707.06347). It is implemented
+as an `Agent` within `r2l`.
 
 ```rust
 let ppo_algo = PPOAgentBuilder::new(10)
@@ -171,7 +186,7 @@ let ppo_algo = PPOAgentBuilder::new(10)
     .with_weight_decay(1e-4);
 ```
 
-### On policy algorithm
+## Algorithm builders
 
 ```rust
 let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
@@ -184,18 +199,6 @@ let algo_builder =
         .with_learning_schedule(LearningSchedule::rollout_bound(10))
         .with_learning_schedule(LearningSchedule::total_step_bound(1000));
 ```
-
-### A2C Algorithm builder
-
-Under the hood this is just a type alias for an on policy algorithm builder. On
-it, all the methods for the agent builder, the sampler builder and the on policy
-algorithm builder are exposed.
-
-### PPO Algorithm builder
-
-Under the hood this is just a type alias for an on policy algorithm builder. On
-it, all the methods for the agent builder, the sampler builder and the on policy
-algorithm builder are exposed.
 
 ## Examples {#examples}
 

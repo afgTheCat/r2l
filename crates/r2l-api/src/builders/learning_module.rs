@@ -11,7 +11,7 @@ use r2l_candle::{
 };
 use r2l_core::env::ActionSpaceType;
 
-pub enum LearningModuleType {
+pub enum OnPolicyLearningModuleType {
     Joint {
         max_grad_norm: Option<f32>,
         params: ParamsAdamW,
@@ -24,7 +24,7 @@ pub enum LearningModuleType {
     },
 }
 
-impl LearningModuleType {
+impl OnPolicyLearningModuleType {
     fn map_params<F>(self, mut f: F) -> Self
     where
         F: FnMut(&mut ParamsAdamW),
@@ -79,13 +79,13 @@ impl LearningModuleType {
     }
 }
 
-pub struct LearningModuleBuilder {
-    pub policy_hidden_layers: Vec<usize>,
-    pub value_hidden_layers: Vec<usize>,
-    pub learning_module_type: LearningModuleType,
+pub(crate) struct OnPolicyLearningModuleBuilder {
+    pub(crate) policy_hidden_layers: Vec<usize>,
+    pub(crate) value_hidden_layers: Vec<usize>,
+    pub(crate) learning_module_type: OnPolicyLearningModuleType,
 }
 
-impl LearningModuleBuilder {
+impl OnPolicyLearningModuleBuilder {
     pub fn build_candle(
         self,
         observation_size: usize,
@@ -103,7 +103,7 @@ impl LearningModuleBuilder {
             observation_size,
         )?;
         match self.learning_module_type {
-            LearningModuleType::Joint {
+            OnPolicyLearningModuleType::Joint {
                 max_grad_norm,
                 params,
             } => CandlePolicyValueModule::build_joint(
@@ -113,7 +113,7 @@ impl LearningModuleBuilder {
                 max_grad_norm,
                 params,
             ),
-            LearningModuleType::Split {
+            OnPolicyLearningModuleType::Split {
                 policy_max_grad_norm,
                 policy_params,
                 value_max_grad_norm,
@@ -144,7 +144,7 @@ impl LearningModuleBuilder {
         .concat();
         let policy = PolicyKind::build(action_space, policy_layers);
         let learning_module = match self.learning_module_type {
-            LearningModuleType::Joint {
+            OnPolicyLearningModuleType::Joint {
                 max_grad_norm,
                 params,
             } => {
@@ -161,7 +161,7 @@ impl LearningModuleBuilder {
                 }
                 BurnPolicyValueModule::joint(policy, value_layers, optimizer_config, params.lr)
             }
-            LearningModuleType::Split {
+            OnPolicyLearningModuleType::Split {
                 policy_max_grad_norm,
                 policy_params,
                 value_max_grad_norm,

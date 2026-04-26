@@ -9,11 +9,9 @@ use std::time::Duration;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l_api::builders::ppo::algorithm::PPOAlgorithmBuilder;
-use r2l_api::hooks::on_policy::LearningSchedule;
-use r2l_api::hooks::ppo::PPOStats;
+use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
 use r2l_examples::EventBox;
-use r2l_sampler::{Location, StepTrajectoryBound};
+use r2l_sampler::{SamplerExecutionMode, StepTrajectoryBound};
 
 use crate::table::UpdateTable;
 
@@ -125,7 +123,7 @@ pub fn train_ppo(
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
         .with_bound(StepTrajectoryBound::new(2048))
-        .with_location(Location::Vec)
+        .with_execution_mode(SamplerExecutionMode::Vec)
         .with_clip_range(clip_range)
         .with_learning_schedule(LearningSchedule::RolloutBound {
             total_rollouts,

@@ -5,10 +5,7 @@ use std::{
     thread,
 };
 
-use r2l_api::{
-    builders::ppo::algorithm::PPOAlgorithmBuilder,
-    hooks::{on_policy::LearningSchedule, ppo::PPOStats},
-};
+use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
 use r2l_sampler::StepTrajectoryBound;
 
 #[allow(dead_code)]

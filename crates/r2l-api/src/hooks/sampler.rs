@@ -12,10 +12,10 @@ use r2l_sampler::PreprocessorY;
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 
 pub struct EvaluatorOptions {
-    pub eval_episodes: usize,
-    pub eval_freq: usize,
-    pub eval_step: usize,
-    pub results: Arc<Mutex<Vec<Vec<f32>>>>,
+    pub(crate) eval_episodes: usize,
+    pub(crate) eval_freq: usize,
+    pub(crate) eval_step: usize,
+    pub(crate) results: Arc<Mutex<Vec<Vec<f32>>>>,
 }
 
 impl Default for EvaluatorOptions {
@@ -67,13 +67,13 @@ impl EvaluatorOptions {
 }
 
 pub struct EnvNormalizer {
-    pub obs_rms: RunningMeanStd,
-    pub ret_rms: RunningMeanStd,
-    pub returns: Tensor,
-    pub epsilon: f32,
-    pub gamma: f32,
-    pub clip_obs: f32,
-    pub clip_rew: f32,
+    pub(crate) obs_rms: RunningMeanStd,
+    pub(crate) ret_rms: RunningMeanStd,
+    pub(crate) returns: Tensor,
+    pub(crate) epsilon: f32,
+    pub(crate) gamma: f32,
+    pub(crate) clip_obs: f32,
+    pub(crate) clip_rew: f32,
 }
 
 impl EnvNormalizer {
@@ -155,10 +155,10 @@ impl<B: EditableTrajectoryContainer<Tensor = Tensor>, E: Env<Tensor = Tensor>>
 }
 
 pub struct NormalizerOptions {
-    pub epsilon: f32,
-    pub gamma: f32,
-    pub clip_obs: f32,
-    pub clip_rew: f32,
+    pub(crate) epsilon: f32,
+    pub(crate) gamma: f32,
+    pub(crate) clip_obs: f32,
+    pub(crate) clip_rew: f32,
 }
 
 impl Default for NormalizerOptions {
@@ -205,9 +205,9 @@ impl NormalizerOptions {
 
 #[derive(Default)]
 pub struct EvaluatorNormalizerOptions {
-    pub evaluator_options: Option<EvaluatorOptions>,
-    pub normalizer_options: Option<NormalizerOptions>,
-    pub device: Option<Device>,
+    pub(crate) evaluator_options: Option<EvaluatorOptions>,
+    pub(crate) normalizer_options: Option<NormalizerOptions>,
+    pub(crate) device: Option<Device>,
 }
 
 impl EvaluatorNormalizerOptions {
@@ -241,9 +241,9 @@ impl EvaluatorNormalizerOptions {
 }
 
 pub struct EvaluatorNormalizer<E: Env> {
-    pub evaluator: Evaluator<E>,
-    pub normalizer: EnvNormalizer,
-    pub device: Device,
+    pub(crate) evaluator: Evaluator<E>,
+    pub(crate) normalizer: EnvNormalizer,
+    pub(crate) device: Device,
 }
 
 impl<E: Env> EvaluatorNormalizer<E> {

@@ -10,11 +10,11 @@ use r2l_core::{buffers::TrajectoryContainer, on_policy::algorithm::Agent};
 
 use crate::hooks::a2c::DefaultA2CHook;
 
-pub struct BurnA2C<B: AutodiffBackend>(
+pub struct A2CBurnAgent<B: AutodiffBackend>(
     pub A2C<BurnPolicyValueModuleKind<B>, DefaultA2CHook<BurnPolicyValueModuleKind<B>>>,
 );
 
-impl<B: AutodiffBackend> Agent for BurnA2C<B> {
+impl<B: AutodiffBackend> Agent for A2CBurnAgent<B> {
     type Tensor = burn::Tensor<B::InnerBackend, 1>;
     type Actor = <PolicyKind<B> as AutodiffModule<B>>::InnerModule;
 
@@ -34,9 +34,11 @@ impl<B: AutodiffBackend> Agent for BurnA2C<B> {
     }
 }
 
-pub struct CandleA2C(pub A2C<CandlePolicyValueModule, DefaultA2CHook<CandlePolicyValueModule>>);
+pub struct A2CCandleAgent(
+    pub A2C<CandlePolicyValueModule, DefaultA2CHook<CandlePolicyValueModule>>,
+);
 
-impl Agent for CandleA2C {
+impl Agent for A2CCandleAgent {
     type Tensor = candle_core::Tensor;
     type Actor = CandlePolicyKind;
 

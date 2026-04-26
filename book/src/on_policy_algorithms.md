@@ -36,7 +36,7 @@ together:
 Below is a schematic overview of the training loop and the actual implementation
 of the training loop.
 
-![On policy algo overview](../images/on_policy_algo.png)
+![On policy algo overview](./images/on_policy_algo.png)
 
 <details open>
 <summary>Training loop implementation</summary>
