@@ -1,3 +1,5 @@
+//! Advantage Actor-Critic implementation and hook interface.
+
 use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryContainer,
@@ -15,9 +17,13 @@ use crate::{
     },
 };
 
+/// Hyperparameters controlling A2C training behavior.
 pub struct A2CParams {
+    /// Discount factor used for return and advantage estimation.
     pub gamma: f32,
+    /// GAE lambda used for advantage estimation.
     pub lambda: f32,
+    /// Minibatch size used during the learning pass.
     pub sample_size: usize,
 }
 
@@ -31,6 +37,11 @@ impl Default for A2CParams {
     }
 }
 
+/// Hook interface for customizing A2C training.
+///
+/// Hooks can inspect or modify rollout-derived data before learning, inspect or
+/// modify each minibatch loss before the optimizer step, and run cleanup or
+/// reporting logic after the learning pass.
 pub trait A2CHook<M: OnPolicyLearningModule> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
         &mut self,
@@ -63,16 +74,28 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
     }
 }
 
+/// Per-minibatch data exposed to [`A2CHook::batch_hook`].
 pub struct A2CBatchData<T: R2lTensor> {
+    /// Sampled observations in the minibatch.
     pub observations: Vec<T>,
+    /// Sampled actions in the minibatch.
     pub actions: Vec<T>,
+    /// Policy log-probabilities for the sampled actions.
     pub logp: T,
+    /// Value-function predictions for the sampled observations.
     pub values_pred: T,
 }
 
+/// Advantage Actor-Critic algorithm over an [`OnPolicyLearningModule`].
+///
+/// `A2C` computes rollout advantages and returns, then performs one learning
+/// pass over minibatches sampled from the collected trajectories.
 pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
+    /// A2C hyperparameters.
     pub params: A2CParams,
+    /// Learning module containing policy, value function, and optimizer state.
     pub lm: Module,
+    /// Hook implementation used to customize learning behavior.
     pub hooks: Hooks,
 }
 

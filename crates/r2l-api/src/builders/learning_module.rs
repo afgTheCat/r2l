@@ -11,11 +11,17 @@ use r2l_candle::{
 };
 use r2l_core::env::ActionSpaceType;
 
+/// Optimizer layout for on-policy policy/value learning modules.
+///
+/// This controls whether policy and value learning share a single optimizer
+/// configuration or use separate optimizer configurations.
 pub enum OnPolicyLearningModuleType {
+    /// Use one joint optimizer configuration for both policy and value updates.
     Joint {
         max_grad_norm: Option<f32>,
         params: ParamsAdamW,
     },
+    /// Use separate optimizer configurations for policy and value updates.
     Split {
         policy_max_grad_norm: Option<f32>,
         policy_params: ParamsAdamW,
@@ -25,6 +31,7 @@ pub enum OnPolicyLearningModuleType {
 }
 
 impl OnPolicyLearningModuleType {
+    /// Returns a copy with the learning rate updated everywhere it applies.
     fn map_params<F>(self, mut f: F) -> Self
     where
         F: FnMut(&mut ParamsAdamW),
@@ -58,22 +65,27 @@ impl OnPolicyLearningModuleType {
         }
     }
 
+    /// Sets the AdamW learning rate on all contained optimizer configs.
     pub fn with_lr(self, lr: f64) -> Self {
         self.map_params(|params| params.lr = lr)
     }
 
+    /// Sets the AdamW `beta1` parameter on all contained optimizer configs.
     pub fn with_beta1(self, beta1: f64) -> Self {
         self.map_params(|params| params.beta1 = beta1)
     }
 
+    /// Sets the AdamW `beta2` parameter on all contained optimizer configs.
     pub fn with_beta2(self, beta2: f64) -> Self {
         self.map_params(|params| params.beta2 = beta2)
     }
 
+    /// Sets the AdamW epsilon parameter on all contained optimizer configs.
     pub fn with_epsilon(self, epsilon: f64) -> Self {
         self.map_params(|params| params.eps = epsilon)
     }
 
+    /// Sets the AdamW weight decay on all contained optimizer configs.
     pub fn with_weight_decay(self, weight_decay: f64) -> Self {
         self.map_params(|params| params.weight_decay = weight_decay)
     }

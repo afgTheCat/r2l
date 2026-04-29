@@ -9,6 +9,11 @@ use rand::distr::weighted::WeightedIndex;
 
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 
+/// Categorical Candle policy for discrete action spaces.
+///
+/// This policy produces one-hot actions sampled from logits predicted by a
+/// feed-forward network and implements the `r2l-core` [`Actor`] and [`Policy`]
+/// traits.
 #[derive(Clone, Debug)]
 pub struct CategoricalDistribution {
     action_size: usize,
@@ -17,6 +22,7 @@ pub struct CategoricalDistribution {
 }
 
 impl CategoricalDistribution {
+    /// Builds a categorical policy network.
     pub fn build(
         observation_size: usize,
         action_size: usize,
@@ -33,10 +39,12 @@ impl CategoricalDistribution {
         })
     }
 
+    /// Returns the Candle device used by this policy.
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
+    /// Returns the flattened observation size expected by this policy.
     pub fn observation_size(&self) -> usize {
         let observation_size = self.logits.layer(0).and_then(|s| s.input_size());
         match observation_size {

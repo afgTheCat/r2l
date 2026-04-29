@@ -1,3 +1,10 @@
+//! Burn policy/value learning modules used by on-policy algorithms.
+//!
+//! The central public type here is [`PolicyValueModule`], which combines a
+//! Burn policy, a value function, and optimizer state into one
+//! [`OnPolicyLearningModule`](r2l_core::on_policy::learning_module::OnPolicyLearningModule)
+//! implementation.
+
 use burn::{
     grad_clipping::GradientClipping,
     module::{AutodiffModule, Module, ModuleDisplay},
@@ -13,6 +20,10 @@ use r2l_core::{
 use crate::{distributions::PolicyKind, sequential::Sequential};
 
 // A series constraints that we need for the policy to work nicely with AdamW
+/// Trait alias-like bound for Burn policies used by on-policy learning modules.
+///
+/// This captures the combination of Burn autodiff support and `r2l-core`
+/// [`Policy`] behavior required by the Burn learning-module implementations.
 pub trait BurnPolicy<B: AutodiffBackend>:
     AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
     + ModuleDisplay
@@ -27,9 +38,16 @@ impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
 {
 }
 
+/// Loss container used by Burn on-policy learning modules.
+///
+/// This stores the policy loss, value loss, and an optional multiplier applied
+/// to the value loss during optimization.
 pub struct PolicyValueLosses<B: AutodiffBackend> {
+    /// Policy loss to optimize.
     pub policy_loss: Tensor<B, 1>,
+    /// Value-function loss to optimize.
     pub value_loss: Tensor<B, 1>,
+    /// Optional coefficient applied to `value_loss`.
     pub vf_coeff: Option<f32>,
 }
 
@@ -44,6 +62,7 @@ impl<B: AutodiffBackend> FromPolicyValueLosses<Tensor<B, 1>> for PolicyValueLoss
 }
 
 impl<B: AutodiffBackend> PolicyValueLosses<B> {
+    /// Creates a loss container from policy and value losses.
     pub fn new(policy_loss: Tensor<B, 1>, value_loss: Tensor<B, 1>) -> Self {
         Self {
             policy_loss,
@@ -52,16 +71,19 @@ impl<B: AutodiffBackend> PolicyValueLosses<B> {
         }
     }
 
+    /// Adds an entropy term into the policy loss.
     pub fn add_entropy_loss(&mut self, entropy_loss: Tensor<B, 1>) {
         self.policy_loss = self.policy_loss.clone() + entropy_loss;
     }
 
+    /// Sets the optional value-loss coefficient used during optimization.
     pub fn set_vf_coeff(&mut self, vf_coeff: Option<f32>) {
         self.vf_coeff = vf_coeff;
     }
 }
 
 // a model with a value function
+/// Combined policy/value model used by the joint Burn optimizer path.
 #[derive(Debug, Module)]
 pub struct JointActorModel<B: Backend, M: Module<B>> {
     policy: M,
@@ -69,11 +91,13 @@ pub struct JointActorModel<B: Backend, M: Module<B>> {
 }
 
 impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
+    /// Creates a joint model from a policy and value network.
     pub fn new(policy: M, value_net: Sequential<B>) -> Self {
         Self { policy, value_net }
     }
 }
 
+/// Burn on-policy learning module with one shared optimizer configuration.
 pub struct JointPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
     lr: f64,
     model: JointActorModel<B, M>,
@@ -94,10 +118,12 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueModule<B, M> {
         }
     }
 
+    /// Sets gradient clipping for the shared optimizer.
     pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
         self.optimizer = self.optimizer.clone().with_grad_clipping(grad_clipping);
     }
 
+    /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         self.lr
     }
@@ -153,6 +179,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for JointPolic
     }
 }
 
+/// Burn on-policy learning module with separate policy and value optimizers.
 pub struct SplitPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
     policy: M,
     value_net: Sequential<B>,
@@ -181,6 +208,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
         }
     }
 
+    /// Sets gradient clipping for the policy optimizer.
     pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
         self.policy_optimizer = self
             .policy_optimizer
@@ -188,6 +216,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
             .with_grad_clipping(grad_clipping);
     }
 
+    /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         self.policy_lr
     }
@@ -249,12 +278,16 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolic
     }
 }
 
+/// Erased Burn policy/value module covering joint and split optimizer layouts.
 pub enum PolicyValueModule<B: AutodiffBackend, D: BurnPolicy<B>> {
+    /// Policy/value module with one shared optimizer configuration.
     Joint(JointPolicyValueModule<B, D>),
+    /// Policy/value module with separate policy and value optimizers.
     Split(SplitPolicyValueModule<B, D>),
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
+    /// Builds a policy/value module with a shared optimizer configuration.
     pub fn joint(
         policy: D,
         value_layers: &[usize],
@@ -267,6 +300,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
         Self::Joint(model)
     }
 
+    /// Builds a policy/value module with separate policy and value optimizers.
     pub fn split(
         policy: D,
         value_layers: &[usize],
@@ -289,6 +323,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
+    /// Sets policy-side gradient clipping on the contained optimizer state.
     pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
         match self {
             Self::Joint(lm) => lm.set_grad_clipping(grad_clipping),
@@ -296,6 +331,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
         }
     }
 
+    /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         match self {
             Self::Joint(lm) => lm.policy_learning_rate(),

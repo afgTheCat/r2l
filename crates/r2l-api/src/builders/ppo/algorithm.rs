@@ -24,7 +24,8 @@ use crate::{
     hooks::ppo::PPOStats,
 };
 
-impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, M>, EB, BD>
+impl<A, M, EB, BD>
+    OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, M>, EB, BD>
 where
     A: Agent,
     EB: EnvBuilder,

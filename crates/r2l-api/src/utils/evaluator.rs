@@ -5,6 +5,7 @@ use r2l_core::{
     buffers::variable_sized::VariableSizedStateBuffer,
     env::{Env, Snapshot},
     models::Actor,
+    prelude::EditableTrajectoryContainer,
     rng::RNG,
 };
 use rand::RngExt;
@@ -95,5 +96,15 @@ impl<E: Env> Evaluator<E> {
             self.eval_step = 0;
             Ok(())
         }
+    }
+
+    // NOTE: old hook impl
+    fn preprocess_states<B: EditableTrajectoryContainer<Tensor = E::Tensor>>(
+        &mut self,
+        policy: &dyn Actor<Tensor = E::Tensor>,
+        buffers: &mut [B],
+    ) {
+        let n_envs = buffers.len();
+        self.evaluate(policy, n_envs).unwrap();
     }
 }

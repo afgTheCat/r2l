@@ -13,6 +13,11 @@ use rand::distr::weighted::WeightedIndex;
 
 use crate::sequential::Sequential;
 
+/// Categorical Burn policy for discrete action spaces.
+///
+/// This policy produces one-hot actions sampled from logits predicted by a
+/// feed-forward network and implements the `r2l-core` [`Actor`] and [`Policy`]
+/// traits.
 #[derive(Debug, Module)]
 pub struct CategoricalDistribution<B: Backend> {
     logits: Sequential<B>,
@@ -20,6 +25,7 @@ pub struct CategoricalDistribution<B: Backend> {
 }
 
 impl<B: Backend> CategoricalDistribution<B> {
+    /// Builds a categorical policy network.
     pub fn build(logits_layers: &[usize]) -> Self {
         let action_size = *logits_layers.last().unwrap();
         let logits: Sequential<B> = Sequential::build(logits_layers);

@@ -1,4 +1,12 @@
+//! Candle policy distributions used by the on-policy stack.
+//!
+//! This module exposes concrete policy implementations for discrete and
+//! continuous action spaces together with [`CandlePolicyKind`], an enum that
+//! erases the concrete policy type behind one Candle-facing policy interface.
+
+/// Categorical policy distribution for discrete action spaces.
 pub mod categorical_distribution;
+/// Diagonal-Gaussian policy distribution for continuous action spaces.
 pub mod diagonal_distribution;
 
 use std::{f32, fmt::Debug};
@@ -13,13 +21,21 @@ use r2l_core::{
     models::{Actor, Policy},
 };
 
+/// Erased Candle policy type covering the supported action-space variants.
+///
+/// This enum is the main policy type used by the Candle on-policy learning
+/// modules. It dispatches to a categorical policy for discrete action spaces
+/// and to a diagonal-Gaussian policy for continuous action spaces.
 #[derive(Debug, Clone)]
 pub enum CandlePolicyKind {
+    /// Policy for discrete action spaces.
     Categorical(CategoricalDistribution),
+    /// Policy for continuous action spaces.
     DiagGaussian(DiagGaussianDistribution),
 }
 
 impl CandlePolicyKind {
+    /// Returns the Candle device used by the underlying policy.
     pub fn device(&self) -> Device {
         match self {
             Self::Categorical(c) => c.device(),
@@ -27,6 +43,7 @@ impl CandlePolicyKind {
         }
     }
 
+    /// Returns the flattened observation size expected by the policy.
     pub fn observation_size(&self) -> usize {
         match self {
             Self::Categorical(c) => c.observation_size(),
@@ -34,6 +51,7 @@ impl CandlePolicyKind {
         }
     }
 
+    /// Builds a categorical Candle policy.
     pub fn categorical(
         policy_varbuilder: &VarBuilder,
         hidden_layers: &[usize],
@@ -52,6 +70,7 @@ impl CandlePolicyKind {
         Ok(Self::Categorical(distr))
     }
 
+    /// Builds a diagonal-Gaussian Candle policy.
     pub fn diag_gaussian(
         policy_varbuilder: &VarBuilder,
         hidden_layers: &[usize],
@@ -70,6 +89,7 @@ impl CandlePolicyKind {
         Ok(Self::DiagGaussian(distr))
     }
 
+    /// Builds the appropriate Candle policy for the given action-space type.
     pub fn build(
         action_space: ActionSpaceType,
         policy_varbuilder: &VarBuilder,

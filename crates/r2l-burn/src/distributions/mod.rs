@@ -1,3 +1,9 @@
+//! Burn policy distributions used by the on-policy stack.
+//!
+//! This module exposes concrete policy implementations for discrete and
+//! continuous action spaces together with [`PolicyKind`], an enum that erases
+//! the concrete policy type behind one Burn-facing policy interface.
+
 use burn::{Tensor, module::Module, prelude::Backend};
 use r2l_core::{
     env::ActionSpaceType,
@@ -8,12 +14,21 @@ use crate::distributions::{
     categorical_distribution::CategoricalDistribution,
     diagonal_distribution::DiagGaussianDistribution,
 };
+/// Categorical policy distribution for discrete action spaces.
 pub mod categorical_distribution;
+/// Diagonal-Gaussian policy distribution for continuous action spaces.
 pub mod diagonal_distribution;
 
+/// Erased Burn policy type covering the supported action-space variants.
+///
+/// This enum is the main policy type used by the Burn on-policy learning
+/// modules. It dispatches to a categorical policy for discrete action spaces
+/// and to a diagonal-Gaussian policy for continuous action spaces.
 #[derive(Debug, Module)]
 pub enum PolicyKind<B: Backend> {
+    /// Policy for discrete action spaces.
     Categorical(CategoricalDistribution<B>),
+    /// Policy for continuous action spaces.
     Diag(DiagGaussianDistribution<B>),
 }
 
@@ -26,6 +41,7 @@ impl<B: Backend> PolicyKind<B> {
         PolicyKind::Diag(DiagGaussianDistribution::build(policy_layers))
     }
 
+    /// Builds the appropriate Burn policy for the given action-space type.
     pub fn build(action_space_type: ActionSpaceType, policy_layers: &[usize]) -> Self {
         match action_space_type {
             ActionSpaceType::Discrete => Self::categorical(policy_layers),

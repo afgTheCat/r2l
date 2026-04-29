@@ -21,24 +21,42 @@ use r2l_core::{
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
+/// Per-batch training statistics emitted by the default PPO hook.
+///
+/// Each value corresponds to a single optimization batch processed within one
+/// PPO epoch.
 #[derive(Debug, Clone)]
 pub struct PPOBatchStats {
+    /// Fraction of samples whose probability ratio exceeded the clip range.
     pub clip_fraction: f32,
+    /// Entropy regularization term computed for the batch.
     pub entropy_loss: f32,
+    /// Policy loss computed for the batch.
     pub policy_loss: f32,
+    /// Approximate KL divergence tracked for early stopping and reporting.
     pub approx_kl: f32,
+    /// Value-function loss computed for the batch.
     pub value_loss: f32,
 }
 
+/// Aggregated statistics emitted by the default PPO hook after a learning pass.
+///
+/// A report contains all collected [`PPOBatchStats`] for the rollout together
+/// with rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct PPOStats {
+    /// Batch-level statistics collected across PPO epochs for the rollout.
     pub batch_stats: Vec<PPOBatchStats>,
+    /// Current action-distribution standard deviation when available.
     pub std: Option<f32>,
+    /// Average completed-episode reward observed across the active env set.
     pub average_reward: f32,
+    /// Current policy optimizer learning rate.
     pub learning_rate: f64,
 }
 
 impl PPOStats {
+    /// Appends one batch report to this rollout report.
     pub fn collect_batch_data(&mut self, batch_stats: PPOBatchStats) {
         self.batch_stats.push(batch_stats);
     }
@@ -103,6 +121,16 @@ impl DefaultPPOHookReporter {
     }
 }
 
+/// Default training hook used by [`PPOAgentBuilder`](crate::PPOAgentBuilder).
+///
+/// This hook applies the crate's standard PPO training behavior: advantage
+/// normalization when enabled, repeated PPO epochs, optional value-loss
+/// weighting, optional entropy regularization, optional gradient clipping,
+/// optional target-KL early stopping, and optional rollout reporting through
+/// [`PPOStats`].
+///
+/// The generic parameter tracks the concrete learning-module backend and is not
+/// usually named directly by callers.
 pub struct DefaultPPOHook<T = ()> {
     pub(crate) normalize_advantage: bool,
     pub(crate) total_epochs: usize,

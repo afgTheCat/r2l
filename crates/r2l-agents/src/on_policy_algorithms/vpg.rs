@@ -1,3 +1,5 @@
+//! Vanilla Policy Gradient implementation.
+
 use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryContainer,
@@ -12,9 +14,13 @@ use crate::on_policy_algorithms::{
     Advantages, BatchIndexIterator, Returns, buffers_advantages_and_returns, sample,
 };
 
+/// Hyperparameters controlling VPG training behavior.
 pub struct VPGParams {
+    /// Discount factor used for return and advantage estimation.
     pub gamma: f32,
+    /// GAE lambda used for advantage estimation.
     pub lambda: f32,
+    /// Minibatch size used during the learning pass.
     pub sample_size: usize,
 }
 
@@ -28,8 +34,14 @@ impl Default for VPGParams {
     }
 }
 
+/// Vanilla Policy Gradient algorithm over an [`OnPolicyLearningModule`].
+///
+/// `VPG` computes rollout advantages and returns, then performs one learning
+/// pass over minibatches sampled from the collected trajectories.
 pub struct VPG<Module: OnPolicyLearningModule> {
+    /// VPG hyperparameters.
     pub params: VPGParams,
+    /// Learning module containing policy, value function, and optimizer state.
     pub lm: Module,
 }
 

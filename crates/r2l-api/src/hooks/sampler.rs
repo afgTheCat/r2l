@@ -7,7 +7,6 @@ use r2l_core::{
     models::Actor,
     tensor::R2lTensor,
 };
-use r2l_sampler::PreprocessorY;
 
 use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
 
@@ -136,21 +135,14 @@ impl EnvNormalizer {
         }
         Ok(())
     }
-}
 
-// TODO: this needs to be reconsidered
-impl<B: EditableTrajectoryContainer<Tensor = Tensor>> PreprocessorY<Tensor, B> for EnvNormalizer {
-    fn preprocess_states(&mut self, _policy: &dyn Actor<Tensor = Tensor>, buffers: &mut [B]) {
+    // NOTE: old hook impl
+    fn preprocess_states<B: EditableTrajectoryContainer<Tensor = Tensor>>(
+        &mut self,
+        _policy: &dyn Actor<Tensor = Tensor>,
+        buffers: &mut [B],
+    ) {
         self.normalize_buffers(buffers, &Device::Cpu).unwrap();
-    }
-}
-
-impl<B: EditableTrajectoryContainer<Tensor = Tensor>, E: Env<Tensor = Tensor>>
-    PreprocessorY<Tensor, B> for Evaluator<E>
-{
-    fn preprocess_states(&mut self, policy: &dyn Actor<Tensor = Tensor>, buffers: &mut [B]) {
-        let n_envs = buffers.len();
-        self.evaluate(policy, n_envs).unwrap();
     }
 }
 
@@ -254,12 +246,13 @@ impl<E: Env> EvaluatorNormalizer<E> {
             device,
         }
     }
-}
 
-impl<B: EditableTrajectoryContainer<Tensor = Tensor>, E: Env<Tensor = Tensor>>
-    PreprocessorY<Tensor, B> for EvaluatorNormalizer<E>
-{
-    fn preprocess_states(&mut self, policy: &dyn Actor<Tensor = Tensor>, buffers: &mut [B]) {
+    // NOTE: old hook impl
+    fn preprocess_states<B: EditableTrajectoryContainer<Tensor = candle_core::Tensor>>(
+        &mut self,
+        policy: &dyn Actor<Tensor = E::Tensor>,
+        buffers: &mut [B],
+    ) {
         let n_envs = buffers.len();
         self.evaluator.evaluate(policy, n_envs).unwrap();
         self.normalizer

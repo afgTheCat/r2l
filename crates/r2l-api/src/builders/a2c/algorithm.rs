@@ -26,7 +26,8 @@ use crate::{
     hooks::a2c::A2CStats,
 };
 
-impl<A, M, EB, BD> OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, M>, EB, BD>
+impl<A, M, EB, BD>
+    OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, M>, EB, BD>
 where
     A: Agent,
     EB: EnvBuilder,
