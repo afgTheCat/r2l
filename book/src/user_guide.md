@@ -8,7 +8,7 @@ trait and train an agent with **a2c**/**ppo** with.
 The chapter introduces
 
 - how to work with environments, whether you are defining your own, or the ones
-  provided by `gymnasium`.
+  provided by `gymnasium`,
 - how to use the builder API to work with these environments.
 
 Currently, we only support on policy algorithms. This will change in the future
@@ -106,28 +106,25 @@ let ppo_builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 10);
 A side-note on `gym` environments: while it is possible to use a
 `ThreadEnvironment`, thanks to the GIL, true parallelism is not going to happen.
 
-## SamplerBuilder
+## Sampler
 
-The current sampler supported by **r2l** is called `R2lSampler` and has the
-following feature set.
-
-| Feature                    | Status | Description                                                   | Blocked on                                    |
-| -------------------------- | ------ | ------------------------------------------------------------- | --------------------------------------------- |
-| Episode based sampling     | ✅     | Collects trajectories based the number of episodes completed  |                                               |
-| Steps based sampling       | ✅     | Collects trajectories based the number of steps taken         |                                               |
-| Observation normalization  | ❌     | Normalizes observations using rms                             | Sampler hooks (v.0.0.3)                       |
-| Reward normalization       | ❌     | Normalized rewards using rms                                  | Sampler hooks (v.0.0.3)                       |
-| Vec environments           | ✅     | Trajectories are collected in sequentially on the same thread |                                               |
-| Thread environments        | ✅     | Trajectories are collected in paralell using multi threading  |                                               |
-| Subprocessing environments | ❌     | Trajectories are collected in a separate subprocesses         | Subprocessing environments (probably v.0.0.4) |
-
-You can construct the sampler using the `SamplerBuilder`.
+The current sampler supported by **r2l** is called `R2lSampler` and can be
+easily constructed with
+[`R2lSamplerBuilder`](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/struct.SamplerBuilder.html).
+In order to construct the sampler, you have to provide an environment builder
+and the number of environments to be spawned. For each worker, an `Actor` is
+derived from the current policy and is used to step the environments until a
+stop condition is met (either the number of steps to be taken has been reached,
+or the number of episodes to be run completed). You may also change the
+`SamplerExecutionMode`. By default, environments are executed sequentially on
+the same thread. However, you can enable multithreading by setting the execution
+mode to `Thread`.
 
 ```rust
 let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
 let sampler_builder = SamplerBuilder::<GymEnvBuilder>::new(gym_env_builder, 10)
-    .with_location(Location::Vec)
-    .with_location(Location::Thread)
+    .with_execution_mode(SamplerExecutionMode::Vec)
+    .with_execution_mode(SamplerExecutionMode::Thread)
     .with_bound(EpisodeTrajectoryBound::new(10))
     .with_bound(StepTrajectoryBound::new(1000));
 let sampler = sampler_builder.build();
@@ -141,7 +138,7 @@ chapter.
 
 While `A2CAgentBuilder` and `PPOAgentBuilder` differ in what `Agent` they are
 going to build, they also share a lot of the parameters. That found
-[here](file:///home/g/git/r2l/target/doc/r2l_api/struct.OnPolicyAgentBuilder.html#impl-OnPolicyAgentBuilder%3CParams,+HookBuilder,+Backend%3E).
+[here](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/struct.OnPolicyAgentBuilder.html).
 
 ### A2C agent builder
 
@@ -216,14 +213,18 @@ implementations of the `EnvBuilder`.
 {{#include ../../crates/r2l-examples/examples/env_building/main.rs:env_builders}}
 ```
 
-### PPO {#examples-ppo}
-
-```rust
-{{#include ../../crates/r2l-examples/examples/ppo/main.rs:ppo}}
-```
-
 ### A2C {#examples-a2c}
+
+This example shows how to work with the A2C algorithm build.
 
 ```rust
 {{#include ../../crates/r2l-examples/examples/a2c/main.rs:a2c}}
+```
+
+### PPO {#examples-ppo}
+
+This example shows how to work with the PPO algorithm build.
+
+```rust
+{{#include ../../crates/r2l-examples/examples/ppo/main.rs:ppo}}
 ```
