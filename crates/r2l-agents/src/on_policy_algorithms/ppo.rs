@@ -146,13 +146,12 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
                 logp_diff,
                 ratio,
             };
-            match self
-                .hooks
-                .batch_hook(&mut self.params, lm, &mut losses, &ppo_data)?
-            {
-                HookResult::Break => return Ok(()),
-                HookResult::Continue => {}
-            }
+            r2l_core::return_on_hook_result!(self.hooks.batch_hook(
+                &mut self.params,
+                lm,
+                &mut losses,
+                &ppo_data
+            )?);
             lm.update(losses)?;
         }
     }
@@ -169,7 +168,7 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
             let rollout_hook_res = self
                 .hooks
                 .rollout_hook(&mut self.params, &mut self.lm, buffers);
-            crate::process_hook_result!(rollout_hook_res);
+            r2l_core::return_on_hook_result!(rollout_hook_res?);
         }
     }
 }
@@ -193,13 +192,13 @@ impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
             self.params.lambda,
             M::lifter,
         )?;
-        crate::process_hook_result!(self.hooks.before_learning_hook(
+        r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
             &mut self.params,
             &mut self.lm,
             buffers,
             &mut advantages,
             &mut returns
-        ));
+        )?);
         let logps = logps(buffers, &self.actor());
         self.learning_loop(buffers, advantages, returns, logps)?;
         Ok(())

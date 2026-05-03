@@ -47,9 +47,41 @@ pub mod rng;
 pub mod tensor;
 mod utils;
 
+/// Control-flow result returned by training hooks.
+///
+/// Hook implementations use this to signal whether the surrounding training
+/// loop should continue or stop at the current hook boundary.
+pub enum HookResult {
+    /// Continue the current training loop.
+    Continue,
+    /// Stop the current training loop at the current hook boundary.
+    Break,
+}
+
+#[macro_export]
+macro_rules! break_on_hook_result {
+    ($hook_res:expr) => {
+        match $hook_res {
+            $crate::HookResult::Continue => {}
+            $crate::HookResult::Break => break,
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! return_on_hook_result {
+    ($hook_res:expr) => {
+        match $hook_res {
+            $crate::HookResult::Continue => {}
+            $crate::HookResult::Break => return Ok(()),
+        }
+    };
+}
+
 /// Common imports for implementing environments, policies, agents, samplers,
 /// and learning modules.
 pub mod prelude {
+    pub use crate::HookResult;
     pub use crate::buffers::{
         EditableTrajectoryContainer, ExpandableTrajectoryContainer, Memory, TrajectoryContainer,
         fix_sized::FixedSizeStateBuffer, variable_sized::VariableSizedStateBuffer,

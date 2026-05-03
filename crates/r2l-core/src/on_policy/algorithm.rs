@@ -5,14 +5,7 @@ use crate::models::Actor;
 use crate::tensor::R2lTensor;
 use crate::utils::actor_wrapper::ActorWrapper;
 use crate::utils::buffer_wrapper::BufferWrapper;
-
-macro_rules! break_on_hook_res {
-    ($hook_res:expr) => {
-        if $hook_res {
-            break;
-        }
-    };
-}
+use crate::{HookResult, break_on_hook_result, return_on_hook_result};
 
 // ANCHOR: agent
 /// Trainable component that updates from collected trajectories.
@@ -56,7 +49,8 @@ pub trait Sampler {
 
 /// Lifecycle hooks for [`OnPolicyAlgorithm`].
 ///
-/// Hook methods return `true` to stop the training loop at that point.
+/// Hook methods return [`HookResult::Break`] to stop the training loop at that
+/// point.
 pub trait OnPolicyAlgorithmHooks {
     /// Agent type controlled by the training loop.
     type A: Agent;
@@ -64,14 +58,16 @@ pub trait OnPolicyAlgorithmHooks {
     type S: Sampler;
 
     /// Called once before rollout/training starts.
-    fn init_hook(&mut self) -> bool;
+    fn init_hook(&mut self) -> HookResult;
 
     /// Called after rollouts are collected and before agent learning.
-    fn post_rollout_hook(&mut self, rollouts: &[<Self::S as Sampler>::TrajectoryContainer])
-    -> bool;
+    fn post_rollout_hook(
+        &mut self,
+        rollouts: &[<Self::S as Sampler>::TrajectoryContainer],
+    ) -> HookResult;
 
     /// Called after the agent has learned from the latest rollouts.
-    fn post_training_hook(&mut self, actor: <Self::A as Agent>::Actor) -> bool;
+    fn post_training_hook(&mut self, actor: <Self::A as Agent>::Actor) -> HookResult;
 
     /// Called once when the loop exits.
     fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()>;
@@ -104,14 +100,12 @@ where
     // ANCHOR: train_loop
     /// Runs rollout collection and learning until a hook requests shutdown.
     pub fn train(&mut self) -> Result<()> {
-        if self.hooks.init_hook() {
-            return Ok(());
-        }
+        return_on_hook_result!(self.hooks.init_hook());
         loop {
             let actor = self.agent.actor();
             let actor = ActorWrapper::new(actor);
             let buffers = self.sampler.collect_rollouts(actor);
-            break_on_hook_res!(self.hooks.post_rollout_hook(buffers.as_ref()));
+            break_on_hook_result!(self.hooks.post_rollout_hook(buffers.as_ref()));
 
             let buffers = buffers
                 .as_ref()
@@ -120,7 +114,7 @@ where
                 .collect::<Vec<_>>();
             self.agent.learn(&buffers)?;
             let actor = self.agent.actor();
-            break_on_hook_res!(self.hooks.post_training_hook(actor));
+            break_on_hook_result!(self.hooks.post_training_hook(actor));
         }
 
         self.hooks.shutdown_hook(&mut self.agent, &mut self.sampler)

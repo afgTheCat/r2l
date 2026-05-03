@@ -10,23 +10,4 @@
 /// On-policy algorithm implementations and shared rollout-processing helpers.
 pub mod on_policy_algorithms;
 
-/// Control-flow result returned by algorithm hook methods.
-///
-/// Hook implementations use this to signal whether the surrounding training
-/// loop should continue or stop at the current hook boundary.
-pub enum HookResult {
-    /// Continue the current training loop.
-    Continue,
-    /// Stop the current training loop at the current hook boundary.
-    Break,
-}
-
-#[macro_export]
-macro_rules! process_hook_result {
-    ($hook_res:expr) => {
-        match $hook_res? {
-            $crate::HookResult::Continue => {}
-            $crate::HookResult::Break => return Ok(()),
-        }
-    };
-}
+use r2l_core::HookResult;

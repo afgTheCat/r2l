@@ -3,12 +3,9 @@ use std::{marker::PhantomData, sync::mpsc::Sender};
 use anyhow::Result;
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
-use r2l_agents::{
-    HookResult,
-    on_policy_algorithms::{
-        Advantages, Returns,
-        a2c::{A2CBatchData, A2CHook, A2CParams},
-    },
+use r2l_agents::on_policy_algorithms::{
+    Advantages, Returns,
+    a2c::{A2CBatchData, A2CHook, A2CParams},
 };
 use r2l_burn::learning_module::{
     BurnPolicy, PolicyValueLosses as BurnPolicyValueLosses,
@@ -18,7 +15,7 @@ use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
-    buffers::TrajectoryContainer, models::Policy,
+    HookResult, buffers::TrajectoryContainer, models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
 };
 

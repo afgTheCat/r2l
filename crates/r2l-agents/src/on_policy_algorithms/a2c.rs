@@ -126,13 +126,12 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
                 logp,
                 values_pred,
             };
-            match self
-                .hooks
-                .batch_hook(&mut self.params, lm, &mut losses, &a2c_data)?
-            {
-                HookResult::Break => return Ok(()),
-                HookResult::Continue => {}
-            }
+            r2l_core::return_on_hook_result!(self.hooks.batch_hook(
+                &mut self.params,
+                lm,
+                &mut losses,
+                &a2c_data
+            )?);
             lm.update(losses)?;
         }
     }
@@ -157,19 +156,19 @@ impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
             self.params.lambda,
             M::lifter,
         )?;
-        crate::process_hook_result!(self.hooks.before_learning_hook(
+        r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
             &mut self.params,
             &mut self.lm,
             buffers,
             &mut advantages,
             &mut returns
-        ));
+        )?);
         self.batch_loop(buffers, &advantages, &returns)?;
-        crate::process_hook_result!(self.hooks.after_learning_hook(
+        r2l_core::return_on_hook_result!(self.hooks.after_learning_hook(
             &mut self.params,
             &mut self.lm,
             buffers
-        ));
+        )?);
         Ok(())
     }
 }

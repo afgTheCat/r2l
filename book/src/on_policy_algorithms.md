@@ -21,9 +21,9 @@ Supported algorithms and capabilities are defined by a combination of these
 components. An illustrative example of how different components could work
 together:
 
-1. The `init_hook` ensures that a log file exists
+1. The `init_hook` sets up the pre requisits for the algorithm
 2. The `sampler` receives the current policy, runs multiple environments in
-   paralell on different threads, and fills up the trajectory buffers
+   paralell or sequentially, and fills up the trajectory buffers
 3. The `post_rollout_hook` checks whether a target rollout count has been
    achieved, if so it jumps to step 6
 4. The `agent` receives the trajectory buffers and updates the policy
@@ -66,9 +66,9 @@ implement the sampler trait.
 </details>
 
 While `r2l-core` does not give an implementation, `r2l-sampler` does provide
-one. The current `sampler` provided can run the environments on a single thread,
-or using multiple threads in paralell. The current sampler does not implement
-hooks, but that is going to change soonish.
+one. The current `R2lSampler` provided can run the environments on a single
+thread, or using multiple threads in paralell. The current sampler does not
+implement hooks, but that is going to change soonish.
 
 ## The agents
 

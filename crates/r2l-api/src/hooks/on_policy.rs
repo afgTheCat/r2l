@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::Result;
 use r2l_core::{
+    HookResult,
     buffers::TrajectoryContainer,
     on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, Sampler},
 };
@@ -74,16 +75,16 @@ impl<A: Agent, S: Sampler> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHo
     type A = A;
     type S = S;
 
-    fn init_hook(&mut self) -> bool {
-        false
+    fn init_hook(&mut self) -> HookResult {
+        HookResult::Continue
     }
 
     fn post_rollout_hook(
         &mut self,
         rollouts: &[<Self::S as Sampler>::TrajectoryContainer],
-    ) -> bool {
+    ) -> HookResult {
         self.rollout_idx += 1;
-        match &mut self.learning_schedule {
+        let should_stop = match &mut self.learning_schedule {
             LearningSchedule::RolloutBound {
                 total_rollouts,
                 current_rollout,
@@ -99,11 +100,16 @@ impl<A: Agent, S: Sampler> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHo
                 *current_step += rollout_steps;
                 current_step >= total_steps
             }
+        };
+        if should_stop {
+            HookResult::Break
+        } else {
+            HookResult::Continue
         }
     }
 
-    fn post_training_hook(&mut self, _policy: <Self::A as Agent>::Actor) -> bool {
-        false
+    fn post_training_hook(&mut self, _policy: <Self::A as Agent>::Actor) -> HookResult {
+        HookResult::Continue
     }
 
     fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()> {
