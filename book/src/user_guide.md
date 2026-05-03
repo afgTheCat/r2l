@@ -24,7 +24,7 @@ internal abstraction up front. For more details on the underlying architecture,
 see the [On policy algorithms](./on_policy_algorithms.md) chapter.
 
 This guide focuses on the common workflow. For the full API surface, refer to
-the [`r2l-api` docs on docs.rs](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/).
+the [`r2l-api` docs on docs.rs](https://docs.rs/r2l-api/0.0.2-rc2/r2l_api/).
 
 ## Environments
 
@@ -90,9 +90,9 @@ If you are getting started, pick one of these first. Only drop down to sampler
 or agent builders when you need lower-level control.
 
 For the full set of builder methods, see
-[`PPOAlgorithmBuilder`](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/type.PPOAlgorithmBuilder.html)
+[`PPOAlgorithmBuilder`](https://docs.rs/r2l-api/0.0.2-rc2/r2l_api/type.PPOAlgorithmBuilder.html)
 and
-[`A2CAlgorithmBuilder`](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/type.A2CAlgorithmBuilder.html).
+[`A2CAlgorithmBuilder`](https://docs.rs/r2l-api/0.0.2-rc2/r2l_api/type.A2CAlgorithmBuilder.html).
 
 The standard workflow is:
 
@@ -151,7 +151,7 @@ This is a lower-level customization API. You do not need it to get started with
 
 The default on-policy sampler in `r2l` is `R2lSampler`, which can be constructed
 with
-[`SamplerBuilder`](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/struct.SamplerBuilder.html).
+[`SamplerBuilder`](https://docs.rs/r2l-api/0.0.2-rc2/r2l_api/struct.SamplerBuilder.html).
 To build a sampler, provide an environment builder and the number of
 environments to spawn. For each worker, an `Actor` derived from the current
 policy steps the environment until a trajectory bound is reached.
@@ -177,7 +177,7 @@ to configure the learning step separately from the sampler or algorithm.
 
 `A2CAgentBuilder` and `PPOAgentBuilder` produce different agents, but they share
 many configuration options. Those common parameters are documented
-[here](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/struct.OnPolicyAgentBuilder.html).
+[here](https://docs.rs/r2l-api/0.0.2-rc2/r2l_api/struct.OnPolicyAgentBuilder.html).
 
 ### A2C agent builder
 
