@@ -1,127 +1,132 @@
 ## Too long, don't care
 
-Check out the [examples](#examples). They go over how to implement the `Env`
-trait and train an agent with **a2c**/**ppo** with.
+If you want a complete example first, jump to [Examples](#examples). The rest of
+this guide explains the concepts behind those examples and the main builder APIs
+exposed by `r2l-api`.
 
 ## Overview
 
-This guide contains everything to get started with **r2l**. It introduces
+This guide covers the main pieces you need to get started with **r2l**:
 
 - how to define your own environment or use an existing one provided by
   `gymnasium`
-- how to use the builder API to define the different components of the learning
-  loop
-- introduce some terminology/concepts, in order to get further with **r2l**.
+- how to construct and configure training through the builder API
+- the core terms used by the on-policy training stack
 
-For most users the **r2l-api** crate should be enough. If you don't have an
-environment to begin with, you may use **r2l-gym** to get started with `gym`
-environments. Note, that current implementation only extends to on policy
-algorithms. In the future, off policy algorithms will also be supported.
+For most users, `r2l-api` should be the only `r2l` crate they need to interact
+with directly. If you do not already have an environment, `r2l-gym` provides
+integration with `gymnasium`. At the moment, `r2l-api` focuses on on-policy
+algorithms.
 
-The `r2l-api` crate itself builds on top of many other `r2l` crates and is
-designed to be easy to use, but limited in flexibility. The goal here, it to
-reach the functionality of Stable Baselines3 (we are not there yet), and to
-validate the hooks based architecture. For more details check out the
-[On policy algorithms](./on_policy_algorithms.md) chapter.
+The `r2l-api` crate is intentionally high level. It builds on lower-level `r2l`
+crates and aims to provide an ergonomic training surface without exposing every
+internal abstraction up front. For more details on the underlying architecture,
+see the [On policy algorithms](./on_policy_algorithms.md) chapter.
 
 ## Environments
 
-In order to use `r2l` (or any other rl library for that matter) an environments
-needs to be constructed. The environment trait is defined as.
+Every training run starts with an environment. In `r2l`, environments implement
+the `Env` trait.
 
-```rust
+```rust,noplayground
 {{#include ../../crates/r2l-core/src/env.rs:env}}
 ```
 
-Notice that the `Env` trait is neither `Sync` nor `Send`. For some environments,
-we cannot make these guarantees. An example would be dynamically loading a
-shared library that has no constructors and uses global variables. Picture a
-simulator that uses
-[an embedded controller](https://betaflight.com/docs/development/SITL) in the
-simulation loop.
+The `Env` trait is neither `Sync` nor `Send`. Some environments cannot offer
+those guarantees. A typical example is a simulator backed by a dynamically
+loaded shared library with global state.
 
-Since **r2l** support multithreading, environments like these needs to be
-constructed on the host thread. For this reason, the `EnvBuilder` trait is
-introduced to be an argument for builders that need to eventually create the
-environment.
+Because `r2l` supports multithreaded rollout collection, environments are
+usually passed around as builders instead of concrete instances. The
+`EnvBuilder` trait lets higher-level builders create environments on the thread
+where they will actually run.
 
-```rust
+```rust,noplayground
 {{#include ../../crates/r2l-core/src/env.rs:env_builder}}
 ```
 
-The simplest `EnvBuilder` possible is a closure or function that returns a new
-instance of the environment. As an example, if `MyEnv` implements the `Env`
-trait, the below closure can work as an `EnvBuilder`.
+In practice, the simplest `EnvBuilder` is often just a closure or function that
+creates a fresh environment instance.
 
 ```rust
-let number_of_environmnets = 10;
+let number_of_environments = 10;
 let env_builder = || Ok(MyEnv);
-let ppo_builder = PPOAlgorithmBuilder::new(env_builder, number_of_environmnets);
+let ppo_builder = PPOAlgorithmBuilder::new(env_builder, number_of_environments);
 ```
 
-For more examples on how to implement the `Env` and `EnvBuilder` trait, check
-the [environments](#examples-environments) section of the examples.
+That is enough to start using the algorithm builders shown in the next section.
+For more complete examples of `Env` and `EnvBuilder`, see
+[Examples: Environments](#examples-environments).
 
 ### Gym environments
 
-Gym environments from `gymnasium` are implemented in `gym-env` crate. Currently
-`Discrete` and `Box` action spaces can be used. A gym environment is wrapped by
-the `GymEnv` struct, while `GymEnvBuilder` can be used to construct a `gym`
-environment. Algorithm builders exposed by `r2l-api` handle gym environments
-through a dedicated `gym` constructor.
+If you are using `gymnasium`, `r2l-gym` provides `GymEnv` and `GymEnvBuilder`.
+The algorithm builders in `r2l-api` expose a dedicated `gym` constructor, which
+is usually the shortest path to a working setup.
 
 ```rust
 // anything that implements the Into<GymEnvBuilder> can be used with `gym`
 let ppo_builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 10);
 ```
 
-A side-note on `gym` environments: while it is possible to use a
-`ThreadEnvironment`, thanks to the GIL, true parallelism is not going to happen.
+Currently, `Discrete` and `Box` action spaces are supported. Note that Python's
+GIL limits true parallelism when sampling Gym environments from multiple
+threads.
 
 ## Algorithm builders
 
-Algorithm builders are the highest-level training entry point in `r2l-api`. They
-combine environment setup, rollout collection, and policy updates into one
-builder.
+Algorithm builders are the main entry point for most users. They combine
+environment setup, rollout collection, and policy updates into one builder.
 
 At the moment, `r2l-api` exposes the following on-policy algorithm builders:
 
 - `PPOAlgorithmBuilder`
 - `A2CAlgorithmBuilder`
 
-If you are getting started, pick one of these first and only drop down to
-sampler or agent builders when you need lower-level control.
+If you are getting started, pick one of these first. Only drop down to sampler
+or agent builders when you need lower-level control.
+
+The standard workflow is:
+
+1. define an environment or environment builder
+2. choose an algorithm builder
+3. configure the builder
+4. build and train
+
+If you already have an `EnvBuilder`, you can start directly with an algorithm
+builder:
 
 ```rust
-let number_of_environmnets = 10;
+let number_of_environments = 10;
 let env_builder = || Ok(MyEnv);
-let ppo_builder = PPOAlgorithmBuilder::new(env_builder, number_of_environmnets);
+let ppo_builder = PPOAlgorithmBuilder::new(env_builder, number_of_environments);
 ```
 
-If you are using `gymnasium`, the dedicated `gym` constructor is usually the
-shortest path.
+Or if you are using `gymnasium`:
 
 ```rust
 // anything that implements the Into<GymEnvBuilder> can be used with `gym`
 let ppo_builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 10);
 ```
 
+Most users can stop at this level. The next sections describe the lower-level
+building blocks that algorithm builders compose internally.
+
 ## Core concepts of on-policy training in **r2l**
 
-Within **r2l**, the on policy algorithm's learning loop consist of two stages
+Inside `r2l`, an on-policy training loop has two main stages:
 
 - collecting samples using the `Sampler`
-- processing the samples is done by the `Agent`
+- updating the policy and value function using the `Agent`
 
-The `Algoritm` is responsible for running the loop until a fixed amount of
-steps/episodes have elapsed. The simplified overview is presented down.
+The `Algorithm` coordinates those stages and runs until a stopping condition has
+been reached, such as a fixed number of rollouts, steps, or episodes.
 
 ![A simplfied overview of On Policy algorithms](./images/simplified_onpolicy_learning_loop.png)
 
-The `r2l-api` exposes builder for `Sampler`s, `Agent`s and `Algorithm`s. While
-it is possible to construct `Sampler`s and `Agent`s, most users would probably
-prefer constructing algorithms, as they expose the same level of control as the
-downstream building blocks, just with a higher level API.
+`r2l-api` exposes builders for samplers, agents, and algorithms. Algorithm
+builders are the highest-level interface. Sampler and agent builders exist for
+users who want to customize rollout collection and learning separately.
 
 | Builder               | Builder type      | Produces                           | Notes                                                                                                       |
 | --------------------- | ----------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -133,17 +138,19 @@ downstream building blocks, just with a higher level API.
 
 ## Sampler
 
-The current sampler supported by **r2l** is called `R2lSampler` and can be
-easily constructed with
-[`R2lSamplerBuilder`](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/struct.SamplerBuilder.html).
-In order to construct the sampler, you have to provide an environment builder
-and the number of environments to be spawned. For each worker, an `Actor` is
-derived from the current policy and is used to step the environments until a
-stop condition is met (either the number of steps to be taken has been reached,
-or the number of episodes to be run completed). You may also change the
-`SamplerExecutionMode`. By default, environments are executed sequentially on
-the same thread. However, you can enable multithreading by setting the execution
-mode to `Thread`.
+This is a lower-level customization API. You do not need it to get started with
+`PPOAlgorithmBuilder` or `A2CAlgorithmBuilder`.
+
+The default on-policy sampler in `r2l` is `R2lSampler`, which can be constructed
+with
+[`SamplerBuilder`](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/struct.SamplerBuilder.html).
+To build a sampler, provide an environment builder and the number of
+environments to spawn. For each worker, an `Actor` derived from the current
+policy steps the environment until a trajectory bound is reached.
+
+You can also choose the execution mode. By default, environments are stepped
+sequentially on the current thread. To run them on worker threads, switch the
+execution mode to `Thread`.
 
 ```rust
 let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
@@ -155,24 +162,23 @@ let sampler_builder = SamplerBuilder::<GymEnvBuilder>::new(gym_env_builder, 10)
 let sampler = sampler_builder.build();
 ```
 
-It is also possible to implement your own sampler, for more info check the
-relevant section of the [On policy algorithms](./on_policy_algorithms.md)
-chapter.
+## Agent builders
 
-## Agent builder
+This is also a lower-level customization API. Use these builders when you want
+to configure the learning step separately from the sampler or algorithm.
 
-While `A2CAgentBuilder` and `PPOAgentBuilder` differ in what `Agent` they are
-going to build, they also share a lot of the parameters. That found
+`A2CAgentBuilder` and `PPOAgentBuilder` produce different agents, but they share
+many configuration options. Those common parameters are documented
 [here](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/struct.OnPolicyAgentBuilder.html).
 
 ### A2C agent builder
 
-A2C is a synchronous, deterministic variant of A3C. For more info, check the
-[paper](https://arxiv.org/abs/1602.01783). It is implemented as an `Agent`
-within `r2l`. `A2CAgentBuilder` exposes no extra parameters on top of the common
-ones. An example on how to use this is:
+A2C is a synchronous, deterministic variant of A3C. `A2CAgentBuilder` exposes no
+extra parameters beyond the shared on-policy agent configuration. For more
+background, see the [paper](https://arxiv.org/abs/1602.01783).
 
 ```rust
+// The standard Algorithm builder options
 let a2c_algo = A2CAgentBuilder::new(10)
     .with_burn()
     .with_normalize_advantage(true)
@@ -184,36 +190,22 @@ let a2c_algo = A2CAgentBuilder::new(10)
 
 ### PPO agent builder
 
-The Proximal Policy Optimization algorithm combines ideas from A2C and TRPO .
-For more, check the [paper](https://arxiv.org/abs/1707.06347). It is implemented
-as an `Agent` within `r2l`.
+PPO combines ideas from A2C and TRPO and adds PPO-specific configuration such as
+clipping and target KL settings. For more background, see the
+[paper](https://arxiv.org/abs/1707.06347).
 
 ```rust
+// target_kl and clip range are ppo specific
 let ppo_algo = PPOAgentBuilder::new(10)
-    .with_candle(Device::Cpu)
-    .with_burn()
-    .with_normalize_advantage(true)
-    .with_entropy_coeff(0.)
-    .with_vf_coeff(None)
-    .with_gradient_clipping(None)
-    .with_gamma(0.)
-    .with_lambda(0.)
-    .with_policy_hidden_layers(vec![32, 32])
-    .with_learning_rate(3e-4)
-    .with_beta1(0.9)
-    .with_beta2(0.999)
-    .with_epsilon(1e-5)
     .with_target_kl(Some(0.3))
-    .with_clip_range(0.5)
-    .with_weight_decay(1e-4);
+    .with_clip_range(0.5);
 ```
 
 ## Examples {#examples}
 
-Below are some examples how to use `r2l-api`, which provides builders and APIs
-for the most commonly used usecases. R2l is highly extensible, and if you are
-curious about the how to extend it/use it, start at
-[architecture](./architecture.md).
+The examples below show the most common `r2l-api` workflows. If you want to go
+beyond the high-level API, start with [architecture](./architecture.md) and the
+[On policy algorithms](./on_policy_algorithms.md) chapter.
 
 ### Environments {#examples-environments}
 
@@ -226,7 +218,7 @@ implementations of the `EnvBuilder`.
 
 ### A2C {#examples-a2c}
 
-This example shows how to work with the A2C algorithm build.
+This example shows how to train with the A2C algorithm builder.
 
 ```rust
 {{#include ../../crates/r2l-examples/examples/a2c/main.rs:a2c}}
@@ -234,7 +226,7 @@ This example shows how to work with the A2C algorithm build.
 
 ### PPO {#examples-ppo}
 
-This example shows how to work with the PPO algorithm build.
+This example shows how to train with the PPO algorithm builder.
 
 ```rust
 {{#include ../../crates/r2l-examples/examples/ppo/main.rs:ppo}}
