@@ -23,6 +23,9 @@ crates and aims to provide an ergonomic training surface without exposing every
 internal abstraction up front. For more details on the underlying architecture,
 see the [On policy algorithms](./on_policy_algorithms.md) chapter.
 
+This guide focuses on the common workflow. For the full API surface, refer to
+the [`r2l-api` docs on docs.rs](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/).
+
 ## Environments
 
 Every training run starts with an environment. In `r2l`, environments implement
@@ -85,6 +88,11 @@ At the moment, `r2l-api` exposes the following on-policy algorithm builders:
 
 If you are getting started, pick one of these first. Only drop down to sampler
 or agent builders when you need lower-level control.
+
+For the full set of builder methods, see
+[`PPOAlgorithmBuilder`](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/type.PPOAlgorithmBuilder.html)
+and
+[`A2CAlgorithmBuilder`](https://docs.rs/r2l-api/0.0.2-rc1/r2l_api/type.A2CAlgorithmBuilder.html).
 
 The standard workflow is:
 
