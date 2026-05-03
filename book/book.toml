@@ -5,3 +5,6 @@ src = "src"
 title = "r2l"
 
 [preprocessor.links]
+
+[output.html.playground]
+runnable = false

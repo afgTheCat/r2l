@@ -1,7 +1,8 @@
 //! Candle policy/value learning modules used by on-policy algorithms.
 //!
-//! The central public type here is [`PolicyValueModule`], which combines a
-//! Candle policy, a value function, and optimizer state into one
+//! The central public type here is [`crate::learning_module::PolicyValueModule`],
+//! which combines a Candle policy, a value function, and optimizer state into
+//! one
 //! [`OnPolicyLearningModule`](r2l_core::on_policy::learning_module::OnPolicyLearningModule)
 //! implementation.
 

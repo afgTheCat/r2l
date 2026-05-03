@@ -14,7 +14,7 @@
 //!
 //! The main extension points are:
 //!
-//! - [`Env`] and [`EnvBuilderTrait`] for environment integrations.
+//! - [`Env`] and [`EnvBuilder`] for environment integrations.
 //! - [`R2lTensor`] and [`R2lTensorMath`] for tensor types used by environments
 //!   and learning code.
 //! - [`Actor`], [`Policy`], [`ValueFunction`], and [`LearningModule`] for model
@@ -27,7 +27,7 @@
 //! [`Actor`]: crate::models::Actor
 //! [`Agent`]: crate::on_policy::algorithm::Agent
 //! [`Env`]: crate::env::Env
-//! [`EnvBuilderTrait`]: crate::env::EnvBuilderTrait
+//! [`EnvBuilder`]: crate::env::EnvBuilder
 //! [`ExpandableTrajectoryContainer`]: crate::buffers::ExpandableTrajectoryContainer
 //! [`LearningModule`]: crate::models::LearningModule
 //! [`OnPolicyAlgorithm`]: crate::on_policy::algorithm::OnPolicyAlgorithm

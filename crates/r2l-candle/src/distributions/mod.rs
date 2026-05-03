@@ -1,8 +1,9 @@
 //! Candle policy distributions used by the on-policy stack.
 //!
 //! This module exposes concrete policy implementations for discrete and
-//! continuous action spaces together with [`CandlePolicyKind`], an enum that
-//! erases the concrete policy type behind one Candle-facing policy interface.
+//! continuous action spaces together with [`crate::distributions::CandlePolicyKind`],
+//! an enum that erases the concrete policy type behind one Candle-facing policy
+//! interface.
 
 /// Categorical policy distribution for discrete action spaces.
 pub mod categorical_distribution;

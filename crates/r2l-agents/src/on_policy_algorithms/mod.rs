@@ -1,8 +1,10 @@
 //! Shared utilities and concrete implementations for on-policy algorithms.
 //!
 //! This module provides common rollout-processing helpers such as generalized
-//! advantage estimation together with the concrete [`a2c`], [`ppo`], and
-//! [`vpg`] algorithm modules.
+//! advantage estimation together with the concrete
+//! [`mod@crate::on_policy_algorithms::a2c`],
+//! [`mod@crate::on_policy_algorithms::ppo`], and
+//! [`mod@crate::on_policy_algorithms::vpg`] algorithm modules.
 
 /// Advantage values computed per rollout buffer.
 pub mod a2c;

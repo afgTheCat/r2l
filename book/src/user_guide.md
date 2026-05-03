@@ -3,54 +3,26 @@
 Check out the [examples](#examples). They go over how to implement the `Env`
 trait and train an agent with **a2c**/**ppo** with.
 
-## Context
+## Overview
 
-The chapter introduces
+This guide contains everything to get started with **r2l**. It introduces
 
-- how to work with environments, whether you are defining your own, or the ones
-  provided by `gymnasium`,
-- how to use the builder API to work with these environments.
+- how to define your own environment or use an existing one provided by
+  `gymnasium`
+- how to use the builder API to define the different components of the learning
+  loop
+- introduce some terminology/concepts, in order to get further with **r2l**.
 
-Currently, we only support on policy algorithms. This will change in the future
-and more algorithms will be covered. While **r2l** composes of multiple crates,
-only the following are necessary to get started:
-
-- `crates/r2l-api`: shared API-facing types and interfaces,
-- `crates/r2l-core`: core RL abstractions including `R2lTensor`, `Env` and
-  `EnvBuiler`,
-- `crates/r2l-gym`: wrapper around `gym` environments, if you don't already have
-  an environment already.
+For most users the **r2l-api** crate should be enough. If you don't have an
+environment to begin with, you may use **r2l-gym** to get started with `gym`
+environments. Note, that current implementation only extends to on policy
+algorithms. In the future, off policy algorithms will also be supported.
 
 The `r2l-api` crate itself builds on top of many other `r2l` crates and is
 designed to be easy to use, but limited in flexibility. The goal here, it to
 reach the functionality of Stable Baselines3 (we are not there yet), and to
-validate the hooks based architecture. That architecture is not discussed here,
-for details check out the [On policy algorithms](./on_policy_algorithms.md) and
-[Off policy algorithms](./off_policy_algorithms.md) chapter.
-
-## Core concepts of on-policy training in **r2l**
-
-Within **r2l**, the on policy algorithm's learning loop consist of two stages
-
-- collecting samples using the `Sampler`
-- processing the samples is done by the `Agent`
-
-The `Algoritm` is responsible for running the loop until a fixed amount of
-steps/episodes have elapsed. The simplified overview is presented down.
-
-![A simplfied overview of On Policy algorithms](./images/simplified_onpolicy_learning_loop.png)
-The `r2l-api` exposes builder for `Sampler`s, `Agent`s and `Algorithm`s. While
-it is possible to construct `Sampler`s and `Agent`s, most users would probably
-prefer constructing algorithms, as they expose the same level of control as the
-downstream building blocks, just with a higher level API.
-
-| Builder               | Builder type      | Produces                           | Notes                                                                                                       |
-| --------------------- | ----------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `SamplerBuilder`      | Sampler builder   | `R2lSampler`                       | Useful when you want to pair rollout collection with your own agent or algorithm setup.                     |
-| `PPOAgentBuilder`     | Agent builder     | `PPOBurnAgent` or `PPOCandleAgent` | Builds the policy update component only; pair it with a sampler when not using `PPOAlgorithmBuilder`.       |
-| `A2CAgentBuilder`     | Agent builder     | `A2CBurnAgent` or `A2CCandleAgent` | Similar to `PPOAgentBuilder`, but for A2C training.                                                         |
-| `PPOAlgorithmBuilder` | Algorithm builder | A configured PPO `Algorithm`       | The highest-level PPO entry point; combines environment setup, sampler construction and agent construction. |
-| `A2CAlgorithmBuilder` | Algorithm builder | A configured A2C `Algorithm`       | The highest-level A2C entry point; usually the simplest way to start training with A2C.                     |
+validate the hooks based architecture. For more details check out the
+[On policy algorithms](./on_policy_algorithms.md) chapter.
 
 ## Environments
 
@@ -99,12 +71,65 @@ environment. Algorithm builders exposed by `r2l-api` handle gym environments
 through a dedicated `gym` constructor.
 
 ```rust
-// anyhin that implements the Into<GymEnvBuilder> can be used with `gym`
+// anything that implements the Into<GymEnvBuilder> can be used with `gym`
 let ppo_builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 10);
 ```
 
 A side-note on `gym` environments: while it is possible to use a
 `ThreadEnvironment`, thanks to the GIL, true parallelism is not going to happen.
+
+## Algorithm builders
+
+Algorithm builders are the highest-level training entry point in `r2l-api`. They
+combine environment setup, rollout collection, and policy updates into one
+builder.
+
+At the moment, `r2l-api` exposes the following on-policy algorithm builders:
+
+- `PPOAlgorithmBuilder`
+- `A2CAlgorithmBuilder`
+
+If you are getting started, pick one of these first and only drop down to
+sampler or agent builders when you need lower-level control.
+
+```rust
+let number_of_environmnets = 10;
+let env_builder = || Ok(MyEnv);
+let ppo_builder = PPOAlgorithmBuilder::new(env_builder, number_of_environmnets);
+```
+
+If you are using `gymnasium`, the dedicated `gym` constructor is usually the
+shortest path.
+
+```rust
+// anything that implements the Into<GymEnvBuilder> can be used with `gym`
+let ppo_builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 10);
+```
+
+## Core concepts of on-policy training in **r2l**
+
+Within **r2l**, the on policy algorithm's learning loop consist of two stages
+
+- collecting samples using the `Sampler`
+- processing the samples is done by the `Agent`
+
+The `Algoritm` is responsible for running the loop until a fixed amount of
+steps/episodes have elapsed. The simplified overview is presented down.
+
+![A simplfied overview of On Policy algorithms](./images/simplified_onpolicy_learning_loop.png)
+
+The `r2l-api` exposes builder for `Sampler`s, `Agent`s and `Algorithm`s. While
+it is possible to construct `Sampler`s and `Agent`s, most users would probably
+prefer constructing algorithms, as they expose the same level of control as the
+downstream building blocks, just with a higher level API.
+
+| Builder               | Builder type      | Produces                           | Notes                                                                                                       |
+| --------------------- | ----------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `SamplerBuilder`      | Sampler builder   | `R2lSampler`                       | Useful when you want to pair rollout collection with your own agent or algorithm setup.                     |
+| `PPOAgentBuilder`     | Agent builder     | `PPOBurnAgent` or `PPOCandleAgent` | Builds the policy update component only; pair it with a sampler when not using `PPOAlgorithmBuilder`.       |
+| `A2CAgentBuilder`     | Agent builder     | `A2CBurnAgent` or `A2CCandleAgent` | Similar to `PPOAgentBuilder`, but for A2C training.                                                         |
+| `PPOAlgorithmBuilder` | Algorithm builder | A configured PPO `Algorithm`       | The highest-level PPO entry point; combines environment setup, sampler construction and agent construction. |
+| `A2CAlgorithmBuilder` | Algorithm builder | A configured A2C `Algorithm`       | The highest-level A2C entry point; usually the simplest way to start training with A2C.                     |
 
 ## Sampler
 
@@ -181,20 +206,6 @@ let ppo_algo = PPOAgentBuilder::new(10)
     .with_target_kl(Some(0.3))
     .with_clip_range(0.5)
     .with_weight_decay(1e-4);
-```
-
-## Algorithm builders
-
-```rust
-let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
-let sampler_builder = SamplerBuilder::<GymEnvBuilder>::new(gym_env_builder, 10)
-    .with_location(Location::Thread)
-    .with_bound(StepTrajectoryBound::new(1000));
-let agent_builder = PPOAgentBuilder::new(10).with_normalize_advantage(true);
-let algo_builder =
-    OnPolicyAlgorithmBuilder::from_sampler_and_agent_builder(sampler_builder, agent_builder)
-        .with_learning_schedule(LearningSchedule::rollout_bound(10))
-        .with_learning_schedule(LearningSchedule::total_step_bound(1000));
 ```
 
 ## Examples {#examples}

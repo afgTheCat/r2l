@@ -130,9 +130,8 @@ pub enum SamplerExecutionMode {
 /// - `BD`: the [`TrajectoryBound`] that decides when rollout collection stops
 ///   and which trajectory container implementation is used
 ///
-/// Instances are typically constructed through
-/// [`SamplerBuilder`](r2l_api::SamplerBuilder) or by higher-level algorithm
-/// builders in `r2l-api`.
+/// Instances are typically constructed through `r2l_api::SamplerBuilder` or by
+/// higher-level algorithm builders in `r2l-api`.
 pub struct R2lSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,

@@ -1,4 +1,3 @@
-use burn::module::Param;
 use r2l_core::{
     env::{ActionSpaceType, EnvBuilder, Space, TensorOfEnvBuilder},
     on_policy::algorithm::{Agent, OnPolicyAlgorithm},
@@ -6,7 +5,6 @@ use r2l_core::{
 use r2l_sampler::{R2lSampler, SamplerExecutionMode, StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
-    OnPolicyAgentBuilder,
     builders::{agent::AgentBuilder, sampler::SamplerBuilder},
     hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule},
 };

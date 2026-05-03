@@ -1,8 +1,9 @@
 //! Burn policy distributions used by the on-policy stack.
 //!
 //! This module exposes concrete policy implementations for discrete and
-//! continuous action spaces together with [`PolicyKind`], an enum that erases
-//! the concrete policy type behind one Burn-facing policy interface.
+//! continuous action spaces together with [`crate::distributions::PolicyKind`],
+//! an enum that erases the concrete policy type behind one Burn-facing policy
+//! interface.
 
 use burn::{Tensor, module::Module, prelude::Backend};
 use r2l_core::{
