@@ -132,11 +132,13 @@ pub enum SamplerExecutionMode {
 ///
 /// Instances are typically constructed through `r2l_api::SamplerBuilder` or by
 /// higher-level algorithm builders in `r2l-api`.
+// ANCHOR: r2l_sampler
 pub struct R2lSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,
     rollout_mode: RolloutMode,
 }
+// ANCHOR_END: r2l_sampler
 
 impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
     /// Builds a sampler from an environment builder, trajectory bound, and
@@ -205,11 +207,11 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for R2lSampler<E, 
     type Tensor = E::Tensor;
     type TrajectoryContainer = BD::Container;
 
-    fn collect_rollouts<P: Actor<Tensor = Self::Tensor> + Clone>(
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
-        policy: P,
+        actor: A,
     ) -> impl AsRef<[Self::TrajectoryContainer]> {
-        self.worker_pool.set_policy(policy.clone());
+        self.worker_pool.set_policy(actor.clone());
         let rollout_mode = self.rollout_mode;
         self.worker_pool.collect(rollout_mode);
         self.all_buffers.lock().unwrap()
