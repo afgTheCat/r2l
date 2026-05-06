@@ -10,6 +10,7 @@ use crate::hooks::a2c::{A2CStats, DefaultA2CHook, DefaultA2CHookReporter};
 #[derive(Debug, Clone)]
 pub struct DefaultA2CHookBuilder {
     normalize_advantage: bool,
+    log_progress: bool,
     entropy_coeff: f32,
     vf_coeff: Option<f32>,
     gradient_clipping: Option<f32>,
@@ -25,11 +26,18 @@ impl DefaultA2CHookBuilder {
         Self {
             n_envs,
             normalize_advantage: false,
+            log_progress: true,
             entropy_coeff: 0.,
             vf_coeff: None,
             gradient_clipping: None,
             tx: None,
         }
+    }
+
+    /// Sets wether to log the trainig progress during learning
+    pub fn with_log_progress(mut self, log_progress: bool) -> Self {
+        self.log_progress = log_progress;
+        self
     }
 
     /// Enables or disables advantage normalization before learning.
@@ -69,9 +77,7 @@ impl DefaultA2CHookBuilder {
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
             gradient_clipping: self.gradient_clipping,
-            reporter: self
-                .tx
-                .map(|tx| DefaultA2CHookReporter::new(tx, self.n_envs)),
+            reporter: DefaultA2CHookReporter::new(self.tx, self.log_progress, self.n_envs),
             _lm: PhantomData,
         }
     }

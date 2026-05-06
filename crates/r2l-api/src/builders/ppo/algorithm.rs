@@ -79,6 +79,12 @@ where
         self
     }
 
+    /// Sets wether to log the trainig progress during learning
+    pub fn with_log_progress(mut self, log_progress: bool) -> Self {
+        self.agent_builder = self.agent_builder.with_log_progress(log_progress);
+        self
+    }
+
     /// Sets the PPO clip range.
     pub fn with_clip_range(mut self, clip_range: f32) -> Self {
         self.agent_builder = self.agent_builder.with_clip_range(clip_range);

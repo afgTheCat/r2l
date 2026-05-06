@@ -18,6 +18,8 @@ use r2l_core::{
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
+use crate::utils::{fmt_stat, mean};
+
 /// Per-batch training statistics emitted by the default PPO hook.
 ///
 /// Each value corresponds to a single optimization batch processed within one
@@ -42,6 +44,8 @@ pub struct PPOBatchStats {
 /// with rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct PPOStats {
+    /// Rollout index to which the stats belong to
+    pub rollout_idx: usize,
     /// Batch-level statistics collected across PPO epochs for the rollout.
     pub batch_stats: Vec<PPOBatchStats>,
     /// Current action-distribution standard deviation when available.
@@ -50,6 +54,76 @@ pub struct PPOStats {
     pub average_reward: f32,
     /// Current policy optimizer learning rate.
     pub learning_rate: f64,
+}
+
+impl PPOStats {
+    pub fn entropy_loss(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.entropy_loss)
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    pub fn value_loss(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.value_loss)
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    pub fn policy_loss(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.policy_loss)
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    pub fn clip_fraction(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.clip_fraction)
+                .collect::<Vec<_>>(),
+        )
+    }
+}
+
+impl std::fmt::Display for PPOStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rows = [
+            ("Average reward", fmt_stat(self.average_reward)),
+            ("Clip fraction", fmt_stat(self.clip_fraction())),
+            ("Policy gradient loss", fmt_stat(self.policy_loss())),
+            ("Entropy loss", fmt_stat(self.entropy_loss())),
+            ("Value loss", fmt_stat(self.value_loss())),
+            ("Learning rate", fmt_stat(self.learning_rate as f32)),
+            (
+                "Standard deviation",
+                self.std.map(|std| std.to_string()).unwrap_or("n/a".into()),
+            ),
+        ];
+
+        let key_width = rows.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
+
+        writeln!(f, "PPO stats (rollout {})", self.rollout_idx)?;
+        writeln!(f, "{:-<1$}", "", key_width + 15)?;
+
+        for (key, value) in rows {
+            writeln!(f, "{key:<key_width$} | {value}")?;
+        }
+
+        Ok(())
+    }
 }
 
 impl PPOStats {
@@ -71,19 +145,27 @@ impl TargetKl {
 }
 
 pub(crate) struct DefaultPPOHookReporter {
+    rollout_idx: usize,
     report: PPOStats,
-    tx: Sender<PPOStats>,
+    tx: Option<Sender<PPOStats>>,
+    log_progress: bool,
     unfinished_episode_rewards: Vec<f32>,
     latest_average_reward: f32,
 }
 
 impl DefaultPPOHookReporter {
-    pub fn new(tx: Sender<PPOStats>, n_envs: usize) -> Self {
-        Self {
-            report: PPOStats::default(),
-            tx,
-            unfinished_episode_rewards: vec![0.; n_envs],
-            latest_average_reward: 0.,
+    pub fn new(tx: Option<Sender<PPOStats>>, log_progress: bool, n_envs: usize) -> Option<Self> {
+        if tx.is_some() || log_progress {
+            Some(Self {
+                rollout_idx: 0,
+                report: PPOStats::default(),
+                log_progress,
+                tx: tx,
+                unfinished_episode_rewards: vec![0.; n_envs],
+                latest_average_reward: 0.,
+            })
+        } else {
+            None
         }
     }
 }
@@ -113,7 +195,20 @@ impl DefaultPPOHookReporter {
     }
 
     fn send_report(&mut self) {
-        self.tx.send(std::mem::take(&mut self.report)).unwrap();
+        self.rollout_idx += 1;
+        let progress = std::mem::replace(
+            &mut self.report,
+            PPOStats {
+                rollout_idx: self.rollout_idx,
+                ..Default::default()
+            },
+        );
+        if self.log_progress {
+            println!("{progress}");
+        }
+        if let Some(tx) = &self.tx {
+            tx.send(progress).unwrap();
+        }
         self.report.average_reward = self.latest_average_reward;
     }
 }

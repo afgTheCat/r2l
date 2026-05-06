@@ -127,34 +127,10 @@ impl App {
     fn ppo_progress_to_table<'a>(&self, ppo_progress: &'a PPOStats, name: &'a str) -> Table<'a> {
         let block = Block::bordered().title(name).border_set(border::THICK);
         let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
-        let entropy_loss = mean(
-            &ppo_progress
-                .batch_stats
-                .iter()
-                .map(|s| s.entropy_loss)
-                .collect::<Vec<_>>(),
-        );
-        let value_loss = mean(
-            &ppo_progress
-                .batch_stats
-                .iter()
-                .map(|s| s.value_loss)
-                .collect::<Vec<_>>(),
-        );
-        let policy_loss = mean(
-            &ppo_progress
-                .batch_stats
-                .iter()
-                .map(|s| s.policy_loss)
-                .collect::<Vec<_>>(),
-        );
-        let clip_fraction = mean(
-            &ppo_progress
-                .batch_stats
-                .iter()
-                .map(|s| s.clip_fraction)
-                .collect::<Vec<_>>(),
-        );
+        let entropy_loss = ppo_progress.entropy_loss();
+        let value_loss = ppo_progress.value_loss();
+        let policy_loss = ppo_progress.policy_loss();
+        let clip_fraction = ppo_progress.clip_fraction();
         let rows = vec![
             // Row::new(vec!["approx_kl".into(), ppo_progress.approx_kl.to_string()]),
             Row::new(vec![
@@ -288,6 +264,7 @@ pub fn train_ppo(
             total_rollouts,
             current_rollout: 0,
         })
+        .with_log_progress(false)
         .with_reporter(Some(tx));
     let mut ppo = ppo_builder.build()?;
     ppo.train()

@@ -19,6 +19,8 @@ use r2l_core::{
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
+use crate::utils::{fmt_stat, mean};
+
 /// Per-batch training statistics emitted by the default A2C hook.
 ///
 /// Each value corresponds to a single optimization batch processed during one
@@ -39,6 +41,8 @@ pub struct A2CBatchStats {
 /// with rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct A2CStats {
+    /// Rollout index to which the stats belong to
+    pub rollout_idx: usize,
     /// Batch-level statistics collected during the most recent learning pass.
     pub batch_stats: Vec<A2CBatchStats>,
     /// Current action-distribution standard deviation when available.
@@ -50,26 +54,91 @@ pub struct A2CStats {
 }
 
 impl A2CStats {
+    pub fn entropy_loss(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.entropy_loss)
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    pub fn value_loss(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.value_loss)
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    pub fn policy_loss(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.policy_loss)
+                .collect::<Vec<_>>(),
+        )
+    }
+
     /// Appends one batch report to this rollout report.
     pub fn collect_batch_data(&mut self, batch_stats: A2CBatchStats) {
         self.batch_stats.push(batch_stats);
     }
 }
 
+impl std::fmt::Display for A2CStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rows = [
+            ("Average reward", fmt_stat(self.average_reward)),
+            ("Policy gradient loss", fmt_stat(self.policy_loss())),
+            ("Entropy loss", fmt_stat(self.entropy_loss())),
+            ("Value loss", fmt_stat(self.value_loss())),
+            ("Learning rate", fmt_stat(self.learning_rate as f32)),
+            (
+                "Standard deviation",
+                self.std.map(|std| std.to_string()).unwrap_or("n/a".into()),
+            ),
+        ];
+
+        let key_width = rows.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
+
+        writeln!(f, "A2C stats (rollout {})", self.rollout_idx)?;
+        writeln!(f, "{:-<1$}", "", key_width + 15)?;
+
+        for (key, value) in rows {
+            writeln!(f, "{key:<key_width$} | {value}")?;
+        }
+
+        Ok(())
+    }
+}
+
 pub(crate) struct DefaultA2CHookReporter {
+    rollout_idx: usize,
     report: A2CStats,
-    tx: Sender<A2CStats>,
+    tx: Option<Sender<A2CStats>>,
+    log_progress: bool,
     unfinished_episode_rewards: Vec<f32>,
     latest_average_reward: f32,
 }
 
 impl DefaultA2CHookReporter {
-    pub fn new(tx: Sender<A2CStats>, n_envs: usize) -> Self {
-        Self {
-            report: A2CStats::default(),
-            tx,
-            unfinished_episode_rewards: vec![0.; n_envs],
-            latest_average_reward: 0.,
+    pub fn new(tx: Option<Sender<A2CStats>>, log_progress: bool, n_envs: usize) -> Option<Self> {
+        if tx.is_some() || log_progress {
+            Some(Self {
+                rollout_idx: 0,
+                report: A2CStats::default(),
+                tx,
+                log_progress,
+                unfinished_episode_rewards: vec![0.; n_envs],
+                latest_average_reward: 0.,
+            })
+        } else {
+            None
         }
     }
 }
@@ -99,7 +168,20 @@ impl DefaultA2CHookReporter {
     }
 
     fn send_report(&mut self) {
-        self.tx.send(std::mem::take(&mut self.report)).unwrap();
+        self.rollout_idx += 1;
+        let progress = std::mem::replace(
+            &mut self.report,
+            A2CStats {
+                rollout_idx: self.rollout_idx,
+                ..Default::default()
+            },
+        );
+        if self.log_progress {
+            println!("{progress}");
+        }
+        if let Some(tx) = &self.tx {
+            tx.send(progress).unwrap();
+        }
         self.report.average_reward = self.latest_average_reward;
     }
 }

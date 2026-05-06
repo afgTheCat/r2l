@@ -11,6 +11,7 @@ use crate::hooks::ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPOStats, Target
 #[derive(Debug, Clone)]
 pub struct DefaultPPOHookBuilder {
     normalize_advantage: bool,
+    log_progress: bool,
     total_epochs: usize,
     entropy_coeff: f32,
     vf_coeff: Option<f32>,
@@ -27,6 +28,7 @@ impl DefaultPPOHookBuilder {
     pub fn new(n_envs: usize) -> Self {
         Self {
             normalize_advantage: true,
+            log_progress: true,
             total_epochs: 10,
             entropy_coeff: 0.,
             vf_coeff: None,
@@ -35,6 +37,12 @@ impl DefaultPPOHookBuilder {
             n_envs,
             tx: None,
         }
+    }
+
+    /// Sets wether to log the trainig progress during learning
+    pub fn with_log_progress(mut self, log_progress: bool) -> Self {
+        self.log_progress = log_progress;
+        self
     }
 
     /// Enables or disables advantage normalization before learning.
@@ -74,7 +82,7 @@ impl DefaultPPOHookBuilder {
     }
 
     /// Installs a channel used to emit [`PPOStats`](crate::PPOStats).
-    pub fn with_tx(mut self, tx: Option<Sender<PPOStats>>) -> Self {
+    pub fn with_reporter(mut self, tx: Option<Sender<PPOStats>>) -> Self {
         self.tx = tx;
         self
     }
@@ -92,9 +100,7 @@ impl DefaultPPOHookBuilder {
             }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
-            reporter: self
-                .tx
-                .map(|tx| DefaultPPOHookReporter::new(tx, self.n_envs)),
+            reporter: DefaultPPOHookReporter::new(self.tx, self.log_progress, self.n_envs),
             _lm: PhantomData,
         }
     }

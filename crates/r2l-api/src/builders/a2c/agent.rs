@@ -59,6 +59,12 @@ impl A2CAgentBuilder {
 }
 
 impl<Backend> OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, Backend> {
+    /// Sets wether to log the trainig progress during learning
+    pub fn with_log_progress(mut self, log_progress: bool) -> Self {
+        self.hook_builder = self.hook_builder.with_log_progress(log_progress);
+        self
+    }
+
     /// Enables or disables advantage normalization.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.hook_builder = self

@@ -34,6 +34,12 @@ where
     BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
     OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, M>: AgentBuilder<Agent = A>,
 {
+    /// Sets wether to log the trainig progress during learning
+    pub fn with_log_progress(mut self, log_progress: bool) -> Self {
+        self.agent_builder = self.agent_builder.with_log_progress(log_progress);
+        self
+    }
+
     /// Enables or disables advantage normalization in the underlying A2C hook.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.agent_builder = self

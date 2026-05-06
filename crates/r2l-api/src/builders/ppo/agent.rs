@@ -93,7 +93,13 @@ impl<Backend> OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, Backend> {
 
     /// Installs a reporter channel for `PPOStats`.
     pub fn with_reporter(mut self, tx: Option<Sender<PPOStats>>) -> Self {
-        self.hook_builder = self.hook_builder.with_tx(tx);
+        self.hook_builder = self.hook_builder.with_reporter(tx);
+        self
+    }
+
+    /// Sets wether to log the trainig progress during learning
+    pub fn with_log_progress(mut self, log_progress: bool) -> Self {
+        self.hook_builder = self.hook_builder.with_log_progress(log_progress);
         self
     }
 
