@@ -3,12 +3,9 @@ use std::{marker::PhantomData, sync::mpsc::Sender};
 use anyhow::Result;
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
-use r2l_agents::{
-    HookResult,
-    on_policy_algorithms::{
-        Advantages, Returns,
-        a2c::{A2CBatchData, A2CHook, A2CParams},
-    },
+use r2l_agents::on_policy_algorithms::{
+    Advantages, Returns,
+    a2c::{A2CBatchData, A2CHook, A2CParams},
 };
 use r2l_burn::learning_module::{
     BurnPolicy, PolicyValueLosses as BurnPolicyValueLosses,
@@ -18,32 +15,48 @@ use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
-    buffers::TrajectoryContainer, models::Policy,
+    HookResult, buffers::TrajectoryContainer, models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
+/// Per-batch training statistics emitted by the default A2C hook.
+///
+/// Each value corresponds to a single optimization batch processed during one
+/// A2C learning pass.
 #[derive(Debug, Clone)]
 pub struct A2CBatchStats {
+    /// Entropy regularization term computed for the batch.
     pub entropy_loss: f32,
+    /// Policy-gradient loss computed for the batch.
     pub policy_loss: f32,
+    /// Value-function loss computed for the batch.
     pub value_loss: f32,
 }
 
+/// Aggregated statistics emitted by the default A2C hook after a learning pass.
+///
+/// A report contains all collected [`A2CBatchStats`] for the rollout together
+/// with rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct A2CStats {
+    /// Batch-level statistics collected during the most recent learning pass.
     pub batch_stats: Vec<A2CBatchStats>,
+    /// Current action-distribution standard deviation when available.
     pub std: Option<f32>,
+    /// Average completed-episode reward observed across the active env set.
     pub average_reward: f32,
+    /// Current policy optimizer learning rate.
     pub learning_rate: f64,
 }
 
 impl A2CStats {
+    /// Appends one batch report to this rollout report.
     pub fn collect_batch_data(&mut self, batch_stats: A2CBatchStats) {
         self.batch_stats.push(batch_stats);
     }
 }
 
-pub struct DefaultA2CHookReporter {
+pub(crate) struct DefaultA2CHookReporter {
     report: A2CStats,
     tx: Sender<A2CStats>,
     unfinished_episode_rewards: Vec<f32>,
@@ -91,12 +104,21 @@ impl DefaultA2CHookReporter {
     }
 }
 
+/// Default training hook used by [`A2CAgentBuilder`](crate::A2CAgentBuilder).
+///
+/// This hook applies the crate's standard A2C training behavior:
+/// advantage normalization when enabled, optional value-loss weighting,
+/// optional entropy regularization, optional gradient clipping, and optional
+/// rollout reporting through [`A2CStats`].
+///
+/// The generic parameter tracks the concrete learning-module backend and is not
+/// usually named directly by callers.
 pub struct DefaultA2CHook<T = ()> {
-    pub normalize_advantage: bool,
-    pub entropy_coeff: f32,
-    pub vf_coeff: Option<f32>,
-    pub gradient_clipping: Option<f32>,
-    pub reporter: Option<DefaultA2CHookReporter>,
+    pub(crate) normalize_advantage: bool,
+    pub(crate) entropy_coeff: f32,
+    pub(crate) vf_coeff: Option<f32>,
+    pub(crate) gradient_clipping: Option<f32>,
+    pub(crate) reporter: Option<DefaultA2CHookReporter>,
     pub(crate) _lm: PhantomData<T>,
 }
 

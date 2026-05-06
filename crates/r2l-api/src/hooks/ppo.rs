@@ -2,12 +2,9 @@ use std::{marker::PhantomData, sync::mpsc::Sender};
 
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
-use r2l_agents::{
-    HookResult,
-    on_policy_algorithms::{
-        Advantages, Returns,
-        ppo::{PPOBatchData, PPOHook, PPOParams},
-    },
+use r2l_agents::on_policy_algorithms::{
+    Advantages, Returns,
+    ppo::{PPOBatchData, PPOHook, PPOParams},
 };
 use r2l_burn::learning_module::{
     BurnPolicy, PolicyValueLosses as BurnPolicyValueLosses,
@@ -17,34 +14,52 @@ use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
-    buffers::TrajectoryContainer, models::Policy,
+    HookResult, buffers::TrajectoryContainer, models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
+/// Per-batch training statistics emitted by the default PPO hook.
+///
+/// Each value corresponds to a single optimization batch processed within one
+/// PPO epoch.
 #[derive(Debug, Clone)]
-pub struct BatchStats {
+pub struct PPOBatchStats {
+    /// Fraction of samples whose probability ratio exceeded the clip range.
     pub clip_fraction: f32,
+    /// Entropy regularization term computed for the batch.
     pub entropy_loss: f32,
+    /// Policy loss computed for the batch.
     pub policy_loss: f32,
+    /// Approximate KL divergence tracked for early stopping and reporting.
     pub approx_kl: f32,
+    /// Value-function loss computed for the batch.
     pub value_loss: f32,
 }
 
+/// Aggregated statistics emitted by the default PPO hook after a learning pass.
+///
+/// A report contains all collected [`PPOBatchStats`] for the rollout together
+/// with rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct PPOStats {
-    pub batch_stats: Vec<BatchStats>,
+    /// Batch-level statistics collected across PPO epochs for the rollout.
+    pub batch_stats: Vec<PPOBatchStats>,
+    /// Current action-distribution standard deviation when available.
     pub std: Option<f32>,
+    /// Average completed-episode reward observed across the active env set.
     pub average_reward: f32,
+    /// Current policy optimizer learning rate.
     pub learning_rate: f64,
 }
 
 impl PPOStats {
-    pub fn collect_batch_data(&mut self, batch_stats: BatchStats) {
+    /// Appends one batch report to this rollout report.
+    pub fn collect_batch_data(&mut self, batch_stats: PPOBatchStats) {
         self.batch_stats.push(batch_stats);
     }
 }
 
-pub struct TargetKl {
+pub(crate) struct TargetKl {
     pub target: f32,
     pub target_exceeded: bool,
 }
@@ -55,7 +70,7 @@ impl TargetKl {
     }
 }
 
-pub struct DefaultPPOHookReporter {
+pub(crate) struct DefaultPPOHookReporter {
     report: PPOStats,
     tx: Sender<PPOStats>,
     unfinished_episode_rewards: Vec<f32>,
@@ -103,15 +118,25 @@ impl DefaultPPOHookReporter {
     }
 }
 
+/// Default training hook used by [`PPOAgentBuilder`](crate::PPOAgentBuilder).
+///
+/// This hook applies the crate's standard PPO training behavior: advantage
+/// normalization when enabled, repeated PPO epochs, optional value-loss
+/// weighting, optional entropy regularization, optional gradient clipping,
+/// optional target-KL early stopping, and optional rollout reporting through
+/// [`PPOStats`].
+///
+/// The generic parameter tracks the concrete learning-module backend and is not
+/// usually named directly by callers.
 pub struct DefaultPPOHook<T = ()> {
-    pub normalize_advantage: bool,
-    pub total_epochs: usize,
-    pub entropy_coeff: f32,
-    pub vf_coeff: Option<f32>,
-    pub target_kl: Option<TargetKl>,
-    pub gradient_clipping: Option<f32>,
-    pub current_epoch: usize,
-    pub reporter: Option<DefaultPPOHookReporter>,
+    pub(crate) normalize_advantage: bool,
+    pub(crate) total_epochs: usize,
+    pub(crate) entropy_coeff: f32,
+    pub(crate) vf_coeff: Option<f32>,
+    pub(crate) target_kl: Option<TargetKl>,
+    pub(crate) gradient_clipping: Option<f32>,
+    pub(crate) current_epoch: usize,
+    pub(crate) reporter: Option<DefaultPPOHookReporter>,
     pub(crate) _lm: PhantomData<T>,
 }
 
@@ -194,7 +219,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
                 .filter(|value| (**value - 1.).abs() > params.clip_range)
                 .count() as f32
                 / ratio.len() as f32;
-            report.collect_batch_data(BatchStats {
+            report.collect_batch_data(PPOBatchStats {
                 clip_fraction,
                 policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
                 entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
@@ -286,7 +311,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
                 .to_dtype(candle_core::DType::F32)?
                 .mean_all()?
                 .to_scalar::<f32>()?;
-            report.collect_batch_data(BatchStats {
+            report.collect_batch_data(PPOBatchStats {
                 clip_fraction,
                 policy_loss: losses.policy_loss.to_scalar()?,
                 entropy_loss: entropy_loss.to_scalar()?,

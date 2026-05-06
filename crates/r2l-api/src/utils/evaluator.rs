@@ -5,18 +5,19 @@ use r2l_core::{
     buffers::variable_sized::VariableSizedStateBuffer,
     env::{Env, Snapshot},
     models::Actor,
+    prelude::EditableTrajectoryContainer,
     rng::RNG,
 };
 use rand::RngExt;
 
 pub struct Evaluator<E: Env> {
-    pub env: E,
-    pub trajectory_buffer: VariableSizedStateBuffer<E::Tensor>,
-    pub eval_episodes: usize,
-    pub eval_freq: usize,
-    pub eval_step: usize,
-    pub evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
-    pub device: Device,
+    pub(crate) env: E,
+    pub(crate) trajectory_buffer: VariableSizedStateBuffer<E::Tensor>,
+    pub(crate) eval_episodes: usize,
+    pub(crate) eval_freq: usize,
+    pub(crate) eval_step: usize,
+    pub(crate) evaluations_results: Arc<Mutex<Vec<Vec<f32>>>>,
+    pub(crate) device: Device,
 }
 
 fn run_episode<E: Env>(
@@ -95,5 +96,15 @@ impl<E: Env> Evaluator<E> {
             self.eval_step = 0;
             Ok(())
         }
+    }
+
+    // NOTE: old hook impl
+    fn preprocess_states<B: EditableTrajectoryContainer<Tensor = E::Tensor>>(
+        &mut self,
+        policy: &dyn Actor<Tensor = E::Tensor>,
+        buffers: &mut [B],
+    ) {
+        let n_envs = buffers.len();
+        self.evaluate(policy, n_envs).unwrap();
     }
 }

@@ -2,17 +2,17 @@ use r2l_core::{
     env::{ActionSpaceType, EnvBuilder, Space, TensorOfEnvBuilder},
     on_policy::algorithm::{Agent, OnPolicyAlgorithm},
 };
-use r2l_sampler::{Location, R2lSampler, StepTrajectoryBound, TrajectoryBound};
+use r2l_sampler::{R2lSampler, SamplerExecutionMode, StepTrajectoryBound, TrajectoryBound};
 
 use crate::{
     builders::{agent::AgentBuilder, sampler::SamplerBuilder},
-    hooks::on_policy::{DefaultOnPolicyAlgorithmsHooks, LearningSchedule},
+    hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule},
 };
 
 type DefaultOnPolicyAlgorithm<A, EB, BD> = OnPolicyAlgorithm<
     A,
     R2lSampler<<EB as EnvBuilder>::Env, BD>,
-    DefaultOnPolicyAlgorithmsHooks<A, R2lSampler<<EB as EnvBuilder>::Env, BD>>,
+    DefaultOnPolicyAlgorithmHooks<A, R2lSampler<<EB as EnvBuilder>::Env, BD>>,
 >;
 
 pub struct OnPolicyAlgorithmBuilder<
@@ -23,9 +23,9 @@ pub struct OnPolicyAlgorithmBuilder<
         TensorOfEnvBuilder<EB>,
     >,
 > {
-    pub sampler_builder: SamplerBuilder<EB, BD>,
-    pub learning_schedule: LearningSchedule,
-    pub agent_builder: AB,
+    pub(crate) sampler_builder: SamplerBuilder<EB, BD>,
+    pub(crate) learning_schedule: LearningSchedule,
+    pub(crate) agent_builder: AB,
 }
 
 impl<
@@ -68,8 +68,8 @@ impl<
         self
     }
 
-    pub fn with_location(mut self, location: Location) -> Self {
-        self.sampler_builder = self.sampler_builder.with_location(location);
+    pub fn with_execution_mode(mut self, location: SamplerExecutionMode) -> Self {
+        self.sampler_builder = self.sampler_builder.with_execution_mode(location);
         self
     }
 
@@ -85,7 +85,7 @@ impl<
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
-        let hooks = DefaultOnPolicyAlgorithmsHooks::new(self.learning_schedule);
+        let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule);
         Ok(OnPolicyAlgorithm {
             sampler,
             agent,

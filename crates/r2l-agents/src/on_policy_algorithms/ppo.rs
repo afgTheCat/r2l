@@ -1,3 +1,5 @@
+//! Proximal Policy Optimization implementation and hook interface.
+
 use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryContainer,
@@ -16,10 +18,15 @@ use crate::{
     },
 };
 
+/// Hyperparameters controlling PPO training behavior.
 pub struct PPOParams {
+    /// Clipping range applied to the PPO policy ratio.
     pub clip_range: f32,
+    /// Discount factor used for return and advantage estimation.
     pub gamma: f32,
+    /// GAE lambda used for advantage estimation.
     pub lambda: f32,
+    /// Minibatch size used during each PPO epoch.
     pub sample_size: usize,
 }
 
@@ -34,15 +41,27 @@ impl Default for PPOParams {
     }
 }
 
+/// Per-minibatch data exposed to [`PPOHook::batch_hook`].
 pub struct PPOBatchData<T: R2lTensor> {
+    /// Sampled observations in the minibatch.
     pub observations: Vec<T>,
+    /// Sampled actions in the minibatch.
     pub actions: Vec<T>,
+    /// Current policy log-probabilities for the sampled actions.
     pub logp: T,
+    /// Value-function predictions for the sampled observations.
     pub values_pred: T,
+    /// Difference between current and old log-probabilities.
     pub logp_diff: T,
+    /// Probability ratio `exp(logp_diff)` used by the PPO objective.
     pub ratio: T,
 }
 
+/// Hook interface for customizing PPO training.
+///
+/// Hooks can inspect or modify rollout-derived data before learning, control
+/// the outer PPO epoch loop through [`rollout_hook`](Self::rollout_hook), and
+/// inspect or modify each minibatch loss before the optimizer step.
 pub trait PPOHook<M: OnPolicyLearningModule> {
     fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
         &mut self,
@@ -75,9 +94,18 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
     }
 }
 
+/// Proximal Policy Optimization algorithm over an
+/// [`OnPolicyLearningModule`].
+///
+/// `PPO` computes rollout advantages, returns, and old log-probabilities, then
+/// repeatedly iterates minibatch updates until the hook layer signals that the
+/// current rollout is finished.
 pub struct PPO<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
+    /// PPO hyperparameters.
     pub params: PPOParams,
+    /// Learning module containing policy, value function, and optimizer state.
     pub lm: Module,
+    /// Hook implementation used to customize learning behavior.
     pub hooks: Hooks,
 }
 
@@ -118,13 +146,12 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
                 logp_diff,
                 ratio,
             };
-            match self
-                .hooks
-                .batch_hook(&mut self.params, lm, &mut losses, &ppo_data)?
-            {
-                HookResult::Break => return Ok(()),
-                HookResult::Continue => {}
-            }
+            r2l_core::return_on_hook_result!(self.hooks.batch_hook(
+                &mut self.params,
+                lm,
+                &mut losses,
+                &ppo_data
+            )?);
             lm.update(losses)?;
         }
     }
@@ -141,7 +168,7 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
             let rollout_hook_res = self
                 .hooks
                 .rollout_hook(&mut self.params, &mut self.lm, buffers);
-            crate::process_hook_result!(rollout_hook_res);
+            r2l_core::return_on_hook_result!(rollout_hook_res?);
         }
     }
 }
@@ -165,13 +192,13 @@ impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
             self.params.lambda,
             M::lifter,
         )?;
-        crate::process_hook_result!(self.hooks.before_learning_hook(
+        r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
             &mut self.params,
             &mut self.lm,
             buffers,
             &mut advantages,
             &mut returns
-        ));
+        )?);
         let logps = logps(buffers, &self.actor());
         self.learning_loop(buffers, advantages, returns, logps)?;
         Ok(())

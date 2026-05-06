@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/r2l-api",
   "crates/r2l-core",
   "crates/r2l-gym",
   "crates/r2l-macros",
@@ -12,14 +13,14 @@ members = [
 resolver = "3"
 
 [workspace.dependencies]
-r2l-macros = { path = "crates/r2l-macros", version = "0.0.1" }
-r2l-core = { path = "crates/r2l-core", version = "0.0.1" }
-r2l-gym = { path = "crates/r2l-gym", version = "0.0.1" }
-r2l-agents = { path = "crates/r2l-agents", version = "0.0.1" }
-r2l-api = { path = "crates/r2l-api", version = "0.0.1" }
-r2l-candle = { path = "crates/r2l-candle" }
-r2l-burn = { path = "crates/r2l-burn" }
-r2l-sampler = { path = "crates/r2l-sampler" }
+r2l-macros = { path = "crates/r2l-macros", version = "0.0.2-rc2" }
+r2l-core = { path = "crates/r2l-core", version = "0.0.2-rc2" }
+r2l-gym = { path = "crates/r2l-gym", version = "0.0.2-rc2" }
+r2l-agents = { path = "crates/r2l-agents", version = "0.0.2-rc2" }
+r2l-api = { path = "crates/r2l-api", version = "0.0.2-rc2" }
+r2l-candle = { path = "crates/r2l-candle", version = "0.0.2-rc2" }
+r2l-burn = { path = "crates/r2l-burn", version = "0.0.2-rc2" }
+r2l-sampler = { path = "crates/r2l-sampler", version = "0.0.2-rc2" }
 candle-core = { version = "0.9.2" }
 burn = { version = "0.20.1", features = ["ndarray", "autodiff"] }
 candle-nn = { version = "0.9.2" }
@@ -29,7 +30,7 @@ rand = "0.10.0"
 anyhow = { version = "1.0.102" }
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.2-rc2"
 edition = "2024"
 description = "A rust reinforcement learning library"
 repository = "https://github.com/afgTheCat/r2l"

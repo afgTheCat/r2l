@@ -8,6 +8,11 @@ use r2l_core::models::{Actor, Policy};
 use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
 
 // TODO: we may want to resample the noise better than it is now
+/// Diagonal-Gaussian Candle policy for continuous action spaces.
+///
+/// This policy predicts the mean of a Gaussian action distribution and keeps a
+/// learned diagonal log-standard-deviation parameter. It implements the
+/// `r2l-core` [`Actor`] and [`Policy`] traits.
 #[derive(Debug, Clone)]
 pub struct DiagGaussianDistribution {
     noise: Tensor,
@@ -17,6 +22,7 @@ pub struct DiagGaussianDistribution {
 }
 
 impl DiagGaussianDistribution {
+    /// Builds a diagonal-Gaussian policy network.
     pub fn build(
         obseravtion_size: usize,
         layers: &[usize],
@@ -35,10 +41,12 @@ impl DiagGaussianDistribution {
         })
     }
 
+    /// Returns the Candle device used by this policy.
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
+    /// Returns the flattened observation size expected by this policy.
     pub fn observation_size(&self) -> usize {
         let observation_size = self.mu_net.layer(0).and_then(|s| s.input_size());
         match observation_size {

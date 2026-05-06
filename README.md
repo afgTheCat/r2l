@@ -1,16 +1,28 @@
 # r2l - a Rust Reinforcement Learning Library
 
-> [!WARNING] > **Pre-Alpha:** This library is under active development. APIs may change, documentation is sparse, features may be added or removed, and bugs should be expected.
+> [!WARNING]  
+> **Pre-Alpha:** This library is under active development. Current APIs are
+> almost surely going to change in the future and documentation might not be up
+> to date.
 
-**r2l** is a minimalist reinforcement learning library written in Rust, designed to be customizable, ergonomic, and easily embeddable.
+## Why **r2l**
 
-## Why r2l
+The goal of **r2l** is to be a customizable, ergonomic and easily embeddable
+library. To be more exact:
 
-Despite the simple nature of most reinforcement learning algorithms, existing implementations often introduce hidden complexity.
-Libraries like Stable Baselines3 include many build-in features that are not part of the original design and makes reasoning about
-the code harder. r2l takes a different approach by exposing key parts of the training loop through a hook system. This allows for more flexibility
-in logging, analysis and experimentation. Furthermore the hook system allows easy integration into the wider Rust ecosystem, allowing
-for the easy creation of TUI/GUI applications.
+- **Customizable**: the user has great control influencing _how_ agents are
+  trained. While **r2l** defines how different components interact with each
+  other, and the core logic of they implement, it also exposes the internals
+  through a hook system for the user.
+- **Ergonomic**: most users are not necessarily concerned with implementation
+  details. In order to alleviate the burden of implementing a complete
+  algorithm, building on the core components, **r2l** aims to implement commonly
+  setups.
+- **Embeddable**: my goal with **r2l** is to be able to use it within a diverse
+  set of applications/environments. Instead of choosing a single deep learning
+  framework, **r2l** uses traits to describe it's needs. In practice, we
+  currently support **candle** and **burn**. If you have a deep learning
+  framework, and would like to have **r2l** support it, open a PR/make an issue.
 
 <p align="center">
   <img src="assets/tui-demo.gif" alt="Demo GIF"/>
@@ -18,108 +30,90 @@ for the easy creation of TUI/GUI applications.
   <em>An example of embedding r2l in a terminal application</em>
 </p>
 
-## What's included
+The scope of **r2l** is what Stable Baselines3 covers (by version 0.1.0) and
+Tianshou (by version 1.0.0). On top of core algorithms, a hyperparameter tuning
+library is to be included in the future.
 
-**r2l** is organized as a set of crates:
+> [!WARNING] > **Pre-Alpha:** This library is under active development. APIs may
+> change, documentation is sparse, features may be added or removed, and bugs
+> should be expected.
 
-- **`r2l-core`** – Defines the core abstractions for reinforcement learning (environments, policy, ...). Also contains a minimal set of on-policy algorithms like PPO.
-- **`r2l-gym`** – A wrapper around Python's Gym environments.
-- **`r2l-macros`** – Provides procedural macros to simplify implementing and registering hooks.
-- **`r2l-tui`** – A TUI application that demonstrates how to embed r2l into [`ratatui`](https://github.com/ratatui-org/ratatui).
+**r2l** is a minimalist reinforcement learning library written in Rust, designed
+to be customizable, ergonomic, and easily embeddable.
 
-## How to use it
+## Getting started
 
-Set up a PPO agent:
+You can get started if you have `gymnasium` like so:
 
 ```rust
-let env = GymEnv::new("Pendulum-v1", None, &Device::Cpu)?;
-let (input_dim, out_dim) = env.io_sizes();
-let builder = PPOBuilder {
-    input_dim,
-    out_dim,
-    ..Default::default()
+use std::{
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
 };
-let mut agent = builder.build()?;
-```
 
-### Adding a batching hook
+use candle_core::Device;
+use r2l_api::{
+    LearningSchedule, PPOAlgorithmBuilder, PPOStats, SamplerExecutionMode, StepTrajectoryBound,
+};
 
-Suppose you want to observe and print the policy loss during training. You can define a batching hook like this:
-
-```rust
-fn batch_hook(policy_loss: &mut PolicyLoss) -> candle_core::Result<bool> {
-    println!("policy loss: {}", policy_loss.to_scalar::<f32>()?);
-    Ok(false)
+fn main() {
+    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
+    let ppo_builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 10)
+        .with_normalize_advantage(true)
+        .with_candle(Device::Cpu)
+        .with_burn()
+        .with_entropy_coeff(0.2)
+        .with_gradient_clipping(Some(0.5))
+        .with_target_kl(Some(0.01))
+        .with_bound(StepTrajectoryBound::new(2048))
+        .with_execution_mode(SamplerExecutionMode::Vec)
+        .with_clip_range(0.2)
+        .with_learning_schedule(LearningSchedule::rollout_bound(300))
+        .with_reporter(Some(update_tx));
+    let mut ppo = ppo_builder.build().unwrap();
+    let t = thread::spawn(move || {
+        while let Ok(stats) = update_rx.recv() {
+            println!("avg reward: {}", stats.average_reward);
+        }
+    });
+    ppo.train().unwrap();
+    drop(ppo);
+    t.join().unwrap();
 }
 ```
 
-Register it with the agent:
-
-    agent.hooks.set_batching_hook(batch_hook);
-
-### Hook function flexibility
-
-Batch hook functions can accept any subset of the following arguments:
-
-    policy: &mut PolicyKind,
-    rollout_batch: &RolloutBatch,
-    policy_loss: &mut PolicyLoss,
-    value_loss: &mut ValueLoss,
-    data: &PPOBatchData,
-
-For example, if you'd like to log both the policy loss and a derived quantity from the rollout data:
-
-```rust
-fn batch_hook(policy_loss: &mut PolicyLoss, data: &PPOBatchData) -> candle_core::Result<bool> {
-    println!("policy loss: {}", policy_loss.to_scalar::<f32>()?);
-    println!("logp diff: {:?}", data.logp_diff.deref());
-    Ok(false)
-}
-```
-
-### Training
-
-After this, you can run the training loop, and your terminal should display both the policy loss and the logp diffs:
-
-```rust
-let env_pool = DummyVecEnv {
-    n_env: 1,
-    env,
-    rollout_mode: RolloutMode::StepBound { n_steps: 1024 },
-};
-let learning_schedule = LearningSchedule::new(100);
-let mut algo = OnPolicyAlgorithm::new(env_pool, agent, learning_schedule);
-algo.train()?;
-```
-
-For a more advanced and interactive example, see the [`r2l-tui`](./r2l-tui) crate.
+For more information, read the [book](https://afgthecat.github.io/r2l/).
 
 ## Roadmap
 
-**Current version: `v0.0.1`**
-The project is in an early experimental phase. Expect missing features, frequent breaking changes, bugs, and everything in between.
+**Current version: `v0.0.2-rc2`** The project is in an early experimental phase.
+Expect missing features, frequent breaking changes, bugs, and everything in
+between.
 
 ### `v0.1.0` – Core Algorithm Coverage (SB3 parity)
 
-- Implement all algorithms available in [Stable Baselines3](https://github.com/DLR-RM/stable-baselines3)
+- Implement all algorithms available in
+  [Stable Baselines3](https://github.com/DLR-RM/stable-baselines3)
 - Add benchmarks for simple environments (e.g. CartPole, Pendulum)
-- Introduce a high-level builder API for setting up agents with established hooks for logging, observability, and training control
+- Introduce a high-level builder API for setting up agents with established
+  hooks for logging, observability, and training control
 - Expect significant API changes
 
 ### `v1.0.0` – Extended Algorithm Set (Tianshou parity)
 
-- Implement remaining algorithms from [Tianshou](https://github.com/thu-ml/tianshou)
+- Implement remaining algorithms from
+  [Tianshou](https://github.com/thu-ml/tianshou)
 - Finalize the hook and training APIs
 - Provide stable interfaces for embedding, visualization, and training control
 - Improve documentation, examples, and possibly add multi-agent support
 
 **Future directions may include:**
 
-- `r2l-gui` using `egui`
 - Snapshotting via SafeTensors or ONNX
 - TensorBoard integration for monitoring
 
 # Contributing
 
-Any and all contributions are welcome. If you have a feature request, let me know by opening an issue about it, but please understand that while
-the project is ambitious, there are no corporate backers and I work on it in my spare time.
+Any and all contributions are welcome. If you have a feature request, let me
+know by opening an issue about it, but please understand that while the project
+is ambitious, there are no corporate backers and I work on it in my spare time.

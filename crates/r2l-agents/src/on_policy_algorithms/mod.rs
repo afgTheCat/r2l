@@ -1,5 +1,16 @@
+//! Shared utilities and concrete implementations for on-policy algorithms.
+//!
+//! This module provides common rollout-processing helpers such as generalized
+//! advantage estimation together with the concrete
+//! [`mod@crate::on_policy_algorithms::a2c`],
+//! [`mod@crate::on_policy_algorithms::ppo`], and
+//! [`mod@crate::on_policy_algorithms::vpg`] algorithm modules.
+
+/// Advantage values computed per rollout buffer.
 pub mod a2c;
+/// Proximal Policy Optimization implementation and hook interface.
 pub mod ppo;
+/// Vanilla Policy Gradient implementation.
 pub mod vpg;
 
 use derive_more::Deref;
@@ -11,10 +22,14 @@ use r2l_core::{
 };
 use rand::seq::SliceRandom;
 
+/// Advantage estimates grouped by rollout buffer.
+///
+/// Each inner vector corresponds to one trajectory container.
 #[derive(Deref, Debug)]
 pub struct Advantages(pub Vec<Vec<f32>>);
 
 impl Advantages {
+    /// Samples advantage values at the provided `(buffer_index, step_index)` pairs.
     pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
         indicies
             .iter()
@@ -22,6 +37,7 @@ impl Advantages {
             .collect()
     }
 
+    /// Normalizes each buffer's advantages to zero mean and unit variance.
     pub fn normalize(&mut self) {
         for advantage in self.0.iter_mut() {
             let mean = advantage.iter().sum::<f32>() / advantage.len() as f32;
@@ -35,10 +51,12 @@ impl Advantages {
     }
 }
 
+/// Return targets grouped by rollout buffer.
 #[derive(Deref, Debug)]
 pub struct Returns(pub Vec<Vec<f32>>);
 
 impl Returns {
+    /// Samples return values at the provided `(buffer_index, step_index)` pairs.
     pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
         indicies
             .iter()
@@ -47,10 +65,12 @@ impl Returns {
     }
 }
 
+/// Log-probability values grouped by rollout buffer.
 #[derive(Deref, Debug)]
 pub struct Logps(pub Vec<Vec<f32>>);
 
 impl Logps {
+    /// Samples log-probability values at the provided `(buffer_index, step_index)` pairs.
     pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
         indicies
             .iter()
@@ -125,6 +145,7 @@ fn sample<T1: R2lTensor, B: TrajectoryContainer<Tensor = T1>, T2: R2lTensor, L: 
     (observations, actions)
 }
 
+/// Computes generalized-advantage estimates and returns for one rollout buffer.
 pub fn buffer_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) -> T2>(
     buffer: &impl TrajectoryContainer<Tensor = T1>,
     value_func: &impl ValueFunction<Tensor = T2>,
@@ -161,6 +182,7 @@ pub fn buffer_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) ->
     Ok((advantages, returns))
 }
 
+/// Computes generalized-advantage estimates and returns for multiple buffers.
 pub fn buffers_advantages_and_returns<
     T1: R2lTensor,
     B: TrajectoryContainer<Tensor = T1>,

@@ -1,3 +1,4 @@
+mod hooks;
 pub mod worker;
 
 use std::marker::PhantomData;
@@ -6,7 +7,6 @@ use std::sync::Arc;
 use bimodal_array::ArrayHandle;
 use bimodal_array::bimodal_array;
 use r2l_core::buffers::ExpandableTrajectoryContainer;
-use r2l_core::buffers::TrajectoryContainer;
 use r2l_core::buffers::fix_sized::FixedSizeStateBuffer;
 use r2l_core::buffers::variable_sized::VariableSizedStateBuffer;
 use r2l_core::env::Env;
@@ -37,12 +37,18 @@ pub trait TrajectoryBound: Send + Sync {
     fn method(&self) -> RolloutMode;
 }
 
+/// Trajectory bound that yields rollouts after a fixed number of steps.
+///
+/// This bound uses a fixed-size trajectory container and stops collection once
+/// each sampler worker has produced `steps` transitions for the current
+/// rollout.
 pub struct StepTrajectoryBound<T: R2lTensor> {
     steps: usize,
     _phantom: PhantomData<T>,
 }
 
 impl<T: R2lTensor> StepTrajectoryBound<T> {
+    /// Creates a step-bounded trajectory configuration.
     pub fn new(steps: usize) -> Self {
         Self {
             steps,
@@ -66,12 +72,18 @@ impl<T: R2lTensor> TrajectoryBound for StepTrajectoryBound<T> {
     }
 }
 
+/// Trajectory bound that yields rollouts after a fixed number of episodes.
+///
+/// This bound uses a variable-sized trajectory container and stops collection
+/// once each sampler worker has completed `episodes` full episodes for the
+/// current rollout.
 pub struct EpisodeTrajectoryBound<T: R2lTensor> {
     episodes: usize,
     _phantom: PhantomData<T>,
 }
 
 impl<T: R2lTensor> EpisodeTrajectoryBound<T> {
+    /// Creates an episode-bounded trajectory configuration.
     pub fn new(episodes: usize) -> Self {
         Self {
             episodes,
@@ -95,28 +107,50 @@ impl<T: R2lTensor> TrajectoryBound for EpisodeTrajectoryBound<T> {
     }
 }
 
-pub enum Location {
+/// Execution strategy used by [`R2lSampler`] workers.
+///
+/// This controls whether environment workers run inline in the current thread
+/// or in dedicated background threads.
+pub enum SamplerExecutionMode {
+    /// Run sampler workers inline in a local vector on the current thread.
     Vec,
+    /// Run sampler workers in dedicated background threads.
     Thread,
 }
 
-pub trait PreprocessorY<T: R2lTensor, B: TrajectoryContainer<Tensor = T>> {
-    // The question is, can we make this dyn compatible? Otherwise we just use a ref
-    fn preprocess_states(&mut self, policy: &dyn Actor<Tensor = T>, buffers: &mut [B]);
-}
-
-// BD: collection method should probably be an enum!
+/// Vectorized rollout sampler used by on-policy algorithms.
+///
+/// `R2lSampler` owns a set of environment workers together with one trajectory
+/// container per worker. On each rollout collection, it pushes the current
+/// policy to all workers, steps the environments according to the configured
+/// [`RolloutMode`], and returns the collected trajectories.
+///
+/// The sampler is parameterized by:
+/// - `E`: the environment type being sampled
+/// - `BD`: the [`TrajectoryBound`] that decides when rollout collection stops
+///   and which trajectory container implementation is used
+///
+/// Instances are typically constructed through `r2l_api::SamplerBuilder` or by
+/// higher-level algorithm builders in `r2l-api`.
+// ANCHOR: r2l_sampler
 pub struct R2lSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,
     rollout_mode: RolloutMode,
 }
+// ANCHOR_END: r2l_sampler
 
 impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
+    /// Builds a sampler from an environment builder, trajectory bound, and
+    /// execution mode.
+    ///
+    /// `collection_method` determines both the rollout stopping condition and
+    /// the trajectory container type allocated for each environment worker.
+    /// `location` controls whether workers run inline or on background threads.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         collection_method: BD,
-        location: Location,
+        location: SamplerExecutionMode,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = (0..num_envs)
@@ -124,7 +158,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
             .collect();
         let (all_buffers, buffer_handlers) = bimodal_array(buffers);
         let worker_pool = match location {
-            Location::Vec => {
+            SamplerExecutionMode::Vec => {
                 let workers = buffer_handlers
                     .into_iter()
                     .enumerate()
@@ -135,7 +169,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
                     .collect();
                 WorkerPool::Vec(workers)
             }
-            Location::Thread => {
+            SamplerExecutionMode::Thread => {
                 let env_builder = Arc::new(env_builder);
                 let workers = buffer_handlers
                     .into_iter()
@@ -163,6 +197,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
         }
     }
 
+    /// Returns the environment description shared by this sampler's workers.
     pub fn env_description(&self) -> EnvDescription<E::Tensor> {
         self.worker_pool.env_description()
     }
@@ -172,11 +207,11 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for R2lSampler<E, 
     type Tensor = E::Tensor;
     type TrajectoryContainer = BD::Container;
 
-    fn collect_rollouts<P: Actor<Tensor = Self::Tensor> + Clone>(
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
-        policy: P,
+        actor: A,
     ) -> impl AsRef<[Self::TrajectoryContainer]> {
-        self.worker_pool.set_policy(policy.clone());
+        self.worker_pool.set_policy(actor.clone());
         let rollout_mode = self.rollout_mode;
         self.worker_pool.collect(rollout_mode);
         self.all_buffers.lock().unwrap()

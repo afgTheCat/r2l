@@ -11,11 +11,17 @@ use r2l_candle::{
 };
 use r2l_core::env::ActionSpaceType;
 
-pub enum LearningModuleType {
+/// Optimizer layout for on-policy policy/value learning modules.
+///
+/// This controls whether policy and value learning share a single optimizer
+/// configuration or use separate optimizer configurations.
+pub enum OnPolicyLearningModuleType {
+    /// Use one joint optimizer configuration for both policy and value updates.
     Joint {
         max_grad_norm: Option<f32>,
         params: ParamsAdamW,
     },
+    /// Use separate optimizer configurations for policy and value updates.
     Split {
         policy_max_grad_norm: Option<f32>,
         policy_params: ParamsAdamW,
@@ -24,7 +30,8 @@ pub enum LearningModuleType {
     },
 }
 
-impl LearningModuleType {
+impl OnPolicyLearningModuleType {
+    /// Returns a copy with the learning rate updated everywhere it applies.
     fn map_params<F>(self, mut f: F) -> Self
     where
         F: FnMut(&mut ParamsAdamW),
@@ -58,34 +65,39 @@ impl LearningModuleType {
         }
     }
 
+    /// Sets the AdamW learning rate on all contained optimizer configs.
     pub fn with_lr(self, lr: f64) -> Self {
         self.map_params(|params| params.lr = lr)
     }
 
+    /// Sets the AdamW `beta1` parameter on all contained optimizer configs.
     pub fn with_beta1(self, beta1: f64) -> Self {
         self.map_params(|params| params.beta1 = beta1)
     }
 
+    /// Sets the AdamW `beta2` parameter on all contained optimizer configs.
     pub fn with_beta2(self, beta2: f64) -> Self {
         self.map_params(|params| params.beta2 = beta2)
     }
 
+    /// Sets the AdamW epsilon parameter on all contained optimizer configs.
     pub fn with_epsilon(self, epsilon: f64) -> Self {
         self.map_params(|params| params.eps = epsilon)
     }
 
+    /// Sets the AdamW weight decay on all contained optimizer configs.
     pub fn with_weight_decay(self, weight_decay: f64) -> Self {
         self.map_params(|params| params.weight_decay = weight_decay)
     }
 }
 
-pub struct LearningModuleBuilder {
-    pub policy_hidden_layers: Vec<usize>,
-    pub value_hidden_layers: Vec<usize>,
-    pub learning_module_type: LearningModuleType,
+pub(crate) struct OnPolicyLearningModuleBuilder {
+    pub(crate) policy_hidden_layers: Vec<usize>,
+    pub(crate) value_hidden_layers: Vec<usize>,
+    pub(crate) learning_module_type: OnPolicyLearningModuleType,
 }
 
-impl LearningModuleBuilder {
+impl OnPolicyLearningModuleBuilder {
     pub fn build_candle(
         self,
         observation_size: usize,
@@ -103,7 +115,7 @@ impl LearningModuleBuilder {
             observation_size,
         )?;
         match self.learning_module_type {
-            LearningModuleType::Joint {
+            OnPolicyLearningModuleType::Joint {
                 max_grad_norm,
                 params,
             } => CandlePolicyValueModule::build_joint(
@@ -113,7 +125,7 @@ impl LearningModuleBuilder {
                 max_grad_norm,
                 params,
             ),
-            LearningModuleType::Split {
+            OnPolicyLearningModuleType::Split {
                 policy_max_grad_norm,
                 policy_params,
                 value_max_grad_norm,
@@ -144,7 +156,7 @@ impl LearningModuleBuilder {
         .concat();
         let policy = PolicyKind::build(action_space, policy_layers);
         let learning_module = match self.learning_module_type {
-            LearningModuleType::Joint {
+            OnPolicyLearningModuleType::Joint {
                 max_grad_norm,
                 params,
             } => {
@@ -161,7 +173,7 @@ impl LearningModuleBuilder {
                 }
                 BurnPolicyValueModule::joint(policy, value_layers, optimizer_config, params.lr)
             }
-            LearningModuleType::Split {
+            OnPolicyLearningModuleType::Split {
                 policy_max_grad_norm,
                 policy_params,
                 value_max_grad_norm,

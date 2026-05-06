@@ -1,3 +1,11 @@
+//! Candle policy/value learning modules used by on-policy algorithms.
+//!
+//! The central public type here is [`crate::learning_module::PolicyValueModule`],
+//! which combines a Candle policy, a value function, and optimizer state into
+//! one
+//! [`OnPolicyLearningModule`](r2l_core::on_policy::learning_module::OnPolicyLearningModule)
+//! implementation.
+
 use anyhow::{Ok, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
@@ -12,9 +20,16 @@ use crate::{
     thread_safe_sequential::{ThreadSafeSequential, build_sequential},
 };
 
+/// Loss container used by Candle on-policy learning modules.
+///
+/// This stores the policy loss, value loss, and an optional multiplier applied
+/// to the value loss during optimization.
 pub struct PolicyValueLosses {
+    /// Policy loss to optimize.
     pub policy_loss: Tensor,
+    /// Value-function loss to optimize.
     pub value_loss: Tensor,
+    /// Optional coefficient applied to `value_loss`.
     pub vf_coeff: Option<f32>,
 }
 
@@ -29,6 +44,7 @@ impl FromPolicyValueLosses<Tensor> for PolicyValueLosses {
 }
 
 impl PolicyValueLosses {
+    /// Creates a loss container from policy and value losses.
     pub fn new(policy_loss: Tensor, value_loss: Tensor) -> Self {
         Self {
             policy_loss,
@@ -37,31 +53,37 @@ impl PolicyValueLosses {
         }
     }
 
+    /// Adds an entropy term into the policy loss.
     pub fn add_entropy_loss(&mut self, entropy_loss: Tensor) -> Result<()> {
         self.policy_loss = self.policy_loss.add(&entropy_loss)?;
         Ok(())
     }
 
+    /// Sets the optional value-loss coefficient used during optimization.
     pub fn set_vf_coeff(&mut self, vf_coeff: Option<f32>) {
         self.vf_coeff = vf_coeff;
     }
 }
 
+/// Policy/value optimizer with separate optimizers for policy and value nets.
 pub struct SplitPolicyValueOptimizer {
     policy_optimizer_with_grad: OptimizerWithMaxGrad,
     value_optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
 impl SplitPolicyValueOptimizer {
+    /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         self.policy_optimizer_with_grad.optimizer.learning_rate()
     }
 
+    /// Sets gradient clipping for the policy optimizer.
     pub fn set_policy_grad_clip(&mut self, max_grad_norm: Option<f32>) {
         self.policy_optimizer_with_grad
             .set_max_grad_norm(max_grad_norm);
     }
 
+    /// Sets gradient clipping for the value optimizer.
     pub fn set_value_grad_clip(&mut self, max_grad_norm: Option<f32>) {
         self.value_optimizer_with_grad
             .set_max_grad_norm(max_grad_norm);
@@ -90,15 +112,18 @@ impl LearningModule for SplitPolicyValueOptimizer {
 
 /// The policy and the value fuction has the same optimizer
 /// TODO: value_net does not need to be here
+/// Policy/value optimizer with one shared optimizer configuration.
 pub struct JointPolicyValueOptimizer {
     optimizer_with_grad: OptimizerWithMaxGrad,
 }
 
 impl JointPolicyValueOptimizer {
+    /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer_with_grad.optimizer.learning_rate()
     }
 
+    /// Sets gradient clipping for the shared optimizer.
     pub fn set_grad_clip(&mut self, max_grad_norm: Option<f32>) {
         self.optimizer_with_grad.set_max_grad_norm(max_grad_norm);
     }
@@ -148,12 +173,16 @@ impl ValueFunction for SequentialValueFunction {
     }
 }
 
+/// Erased optimizer type covering joint and split policy/value optimizers.
 pub enum PolicyValueOptimizer {
+    /// Shared optimizer configuration for policy and value updates.
     Joint(JointPolicyValueOptimizer),
+    /// Separate optimizer configurations for policy and value updates.
     Split(SplitPolicyValueOptimizer),
 }
 
 impl PolicyValueOptimizer {
+    /// Builds a joint policy/value optimizer.
     pub fn joint(
         vm: VarMap,
         params: ParamsAdamW,
@@ -166,6 +195,7 @@ impl PolicyValueOptimizer {
         }))
     }
 
+    /// Builds separate policy and value optimizers.
     pub fn split(
         policy_vm: VarMap,
         critic_vm: VarMap,
@@ -188,6 +218,7 @@ impl PolicyValueOptimizer {
 }
 
 impl PolicyValueOptimizer {
+    /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         match self {
             Self::Joint(joint) => joint.policy_learning_rate(),
@@ -195,6 +226,7 @@ impl PolicyValueOptimizer {
         }
     }
 
+    /// Sets policy-side gradient clipping on the contained optimizer state.
     pub fn set_grad_clipping(&mut self, max_grad_norm: Option<f32>) {
         match self {
             Self::Joint(joint) => joint.set_grad_clip(max_grad_norm),
@@ -214,6 +246,11 @@ impl LearningModule for PolicyValueOptimizer {
     }
 }
 
+/// Candle on-policy learning module combining policy, value function, and
+/// optimizer state.
+///
+/// This is the main Candle learning-module type consumed by the higher-level
+/// A2C and PPO integrations in the workspace.
 pub struct PolicyValueModule {
     policy: CandlePolicyKind,
     optimizer: PolicyValueOptimizer,
@@ -222,6 +259,7 @@ pub struct PolicyValueModule {
 }
 
 impl PolicyValueModule {
+    /// Builds a policy/value module with a shared optimizer configuration.
     pub fn build_joint(
         policy: CandlePolicyKind,
         value_hidden_layers: &[usize],
@@ -244,6 +282,7 @@ impl PolicyValueModule {
         })
     }
 
+    /// Builds a policy/value module with separate policy and value optimizers.
     pub fn build_split(
         policy: CandlePolicyKind,
         value_hidden_layers: &[usize],
@@ -276,10 +315,12 @@ impl PolicyValueModule {
         })
     }
 
+    /// Sets policy-side gradient clipping for future updates.
     pub fn set_grad_clipping(&mut self, gradient_clipping: Option<f32>) {
         self.optimizer.set_grad_clipping(gradient_clipping);
     }
 
+    /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer.policy_learning_rate()
     }

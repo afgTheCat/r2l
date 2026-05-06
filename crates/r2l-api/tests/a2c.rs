@@ -4,10 +4,7 @@ use std::{
 };
 
 use candle_core::Device;
-use r2l_api::{
-    builders::a2c::algorithm::A2CAlgorithmBuilder,
-    hooks::{a2c::A2CStats, on_policy::LearningSchedule},
-};
+use r2l_api::{A2CAlgorithmBuilder, A2CStats, LearningSchedule};
 use r2l_gym::GymEnvBuilder;
 use r2l_sampler::StepTrajectoryBound;
 

@@ -9,6 +9,11 @@ use r2l_core::models::{Actor, Policy};
 
 use crate::sequential::Sequential;
 
+/// Diagonal-Gaussian Burn policy for continuous action spaces.
+///
+/// This policy predicts the mean of a Gaussian action distribution and keeps a
+/// learned diagonal log-standard-deviation parameter. It implements the
+/// `r2l-core` [`Actor`] and [`Policy`] traits.
 #[derive(Debug, Module)]
 pub struct DiagGaussianDistribution<B: Backend> {
     mu_net: Sequential<B>,
@@ -16,6 +21,7 @@ pub struct DiagGaussianDistribution<B: Backend> {
 }
 
 impl<B: Backend> DiagGaussianDistribution<B> {
+    /// Builds a diagonal-Gaussian policy network.
     pub fn build(mu_layers: &[usize]) -> Self {
         let device = Default::default();
         let action_size = *mu_layers.last().unwrap();

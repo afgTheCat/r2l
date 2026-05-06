@@ -1,10 +1,6 @@
 // ANCHOR: env_builders
 use anyhow::{Ok, Result};
-use r2l_api::builders::ppo::algorithm::PPOAlgorithmBuilder;
-use r2l_core::{
-    env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
-    tensor::TensorData,
-};
+use r2l_api::{Env, EnvBuilder, EnvDescription, PPOAlgorithmBuilder, Snapshot, Space, TensorData};
 use r2l_gym::GymEnvBuilder;
 
 // Not a working implementation an actual env

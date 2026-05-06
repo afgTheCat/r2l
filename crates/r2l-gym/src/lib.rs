@@ -1,3 +1,23 @@
+//! Gymnasium-backed environment adapters for `r2l`.
+//!
+//! This crate provides a small bridge between Python Gymnasium environments and
+//! the `r2l-core` [`Env`] / [`EnvBuilder`]
+//! traits. It is primarily intended for examples and high-level algorithm
+//! builders that want to train against standard Gym-style environments without
+//! implementing a native Rust environment wrapper first.
+//!
+//! The main entry points are:
+//! - [`GymEnv`], a concrete environment wrapper around a Python Gymnasium env
+//! - [`GymEnvBuilder`], an [`EnvBuilder`]
+//!   implementation that constructs named Gymnasium environments
+//!
+//! At the moment, the adapter supports:
+//! - discrete action spaces
+//! - box-shaped continuous action spaces
+//! - observation spaces that expose a Gymnasium `shape`
+//!
+//! Other Gymnasium space variants are not yet handled by this crate.
+
 use anyhow::Result;
 use pyo3::{
     PyObject, PyResult, Python,
@@ -8,6 +28,18 @@ use r2l_core::{
     tensor::TensorData,
 };
 
+/// Python-backed Gymnasium environment implementing `r2l`'s [`Env`] trait.
+///
+/// `GymEnv` wraps a Gymnasium environment created through `gymnasium.make` and
+/// exposes its observation/action spaces through `r2l-core` space types.
+///
+/// This wrapper currently supports:
+/// - Gymnasium `Discrete` action spaces
+/// - Gymnasium `Box` action spaces
+///
+/// Continuous actions are clipped to the environment's declared bounds before
+/// stepping. Discrete actions are expected in the action tensor format produced
+/// by the rest of the `r2l` stack.
 pub struct GymEnv {
     env: PyObject,
     action_space: Space<TensorData>,
@@ -15,6 +47,9 @@ pub struct GymEnv {
 }
 
 impl GymEnv {
+    /// Creates a Gymnasium environment by name.
+    ///
+    /// `render_mode` is forwarded to `gymnasium.make` when provided.
     pub fn new(name: &str, render_mode: Option<String>) -> Result<GymEnv> {
         let env = Python::with_gil(|py| {
             let gym = py.import("gymnasium")?;
@@ -55,22 +90,27 @@ impl GymEnv {
         env.map_err(anyhow::Error::from)
     }
 
+    /// Returns the flattened observation size expected by `r2l`.
     pub fn observation_size(&self) -> usize {
         self.observation_space.size()
     }
 
+    /// Returns the action size expected by `r2l`.
     pub fn action_size(&self) -> usize {
         self.action_space.size()
     }
 
+    /// Returns the observation space description discovered from Gymnasium.
     pub fn observation_space(&self) -> Space<TensorData> {
         self.observation_space.clone()
     }
 
+    /// Returns the action space description discovered from Gymnasium.
     pub fn action_space(&self) -> Space<TensorData> {
         self.action_space.clone()
     }
 
+    /// Returns `(action_size, observation_size)`.
     pub fn io_sizes(&self) -> (usize, usize) {
         (self.action_size(), self.observation_size())
     }
@@ -130,9 +170,15 @@ impl Env for GymEnv {
     }
 }
 
+/// Builder for named Gymnasium environments.
+///
+/// This is the standard way to plug Gymnasium environments into higher-level
+/// `r2l` builders such as `r2l_api::PPOAlgorithmBuilder` and
+/// `r2l_api::A2CAlgorithmBuilder`.
 pub struct GymEnvBuilder(String);
 
 impl GymEnvBuilder {
+    /// Creates a builder for the given Gymnasium environment id.
     pub fn new(name: &str) -> Self {
         Self(name.to_owned())
     }
