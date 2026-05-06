@@ -34,13 +34,6 @@ The scope of **r2l** is what Stable Baselines3 covers (by version 0.1.0) and
 Tianshou (by version 1.0.0). On top of core algorithms, a hyperparameter tuning
 library is to be included in the future.
 
-> [!WARNING] > **Pre-Alpha:** This library is under active development. APIs may
-> change, documentation is sparse, features may be added or removed, and bugs
-> should be expected.
-
-**r2l** is a minimalist reinforcement learning library written in Rust, designed
-to be customizable, ergonomic, and easily embeddable.
-
 ## Getting started
 
 You can get started if you have `gymnasium` like so:
