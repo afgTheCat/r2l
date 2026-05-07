@@ -65,7 +65,7 @@ impl DefaultA2CHookBuilder {
     }
 
     /// Installs a channel used to emit [`A2CStats`](crate::A2CStats).
-    pub fn with_tx(mut self, tx: Option<Sender<A2CStats>>) -> Self {
+    pub fn with_reporter(mut self, tx: Option<Sender<A2CStats>>) -> Self {
         self.tx = tx;
         self
     }

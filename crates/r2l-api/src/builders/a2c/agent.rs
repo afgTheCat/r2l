@@ -93,7 +93,7 @@ impl<Backend> OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, Backend> {
 
     /// Installs a reporter channel for `A2CStats`.
     pub fn with_reporter(mut self, tx: Option<Sender<A2CStats>>) -> Self {
-        self.hook_builder = self.hook_builder.with_tx(tx);
+        self.hook_builder = self.hook_builder.with_reporter(tx);
         self
     }
 

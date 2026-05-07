@@ -5,6 +5,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
 use r2l_examples::EventBox;
 use r2l_sampler::{SamplerExecutionMode, StepTrajectoryBound};
+use ratatui::layout::Alignment;
+use ratatui::widgets::Paragraph;
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -19,11 +21,6 @@ const ENT_COEFF: f32 = 0.001;
 const MAX_GRAD_NORM: f32 = 0.5;
 const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
-
-fn mean(numbers: &[f32]) -> f32 {
-    let sum: f32 = numbers.iter().sum();
-    sum / numbers.len() as f32
-}
 
 #[derive(Debug)]
 struct App {
@@ -42,16 +39,28 @@ impl Widget for &App {
     where
         Self: Sized,
     {
-        let horizontal_area = Layout::vertical([
-            Constraint::Percentage(40),
-            Constraint::Percentage(10),
-            Constraint::Percentage(50),
-        ]);
-        let [statistics_area, progress_bar_area, chart_area] = horizontal_area.areas(area);
-        self.draw_statistics(statistics_area, buf);
-        let progress = self.current_rollout as f64 / self.total_rollouts as f64;
-        self.draw_progress_bar(progress_bar_area, buf, progress);
-        self.draw_chart(chart_area, buf);
+        if let (Some(latest_update), Some(best_update)) = (&self.latest_update, &self.best_update) {
+            let horizontal_area = Layout::vertical([
+                Constraint::Percentage(40),
+                Constraint::Percentage(10),
+                Constraint::Percentage(50),
+            ]);
+            let [statistics_area, progress_bar_area, chart_area] = horizontal_area.areas(area);
+            self.draw_statistics(statistics_area, buf, latest_update, best_update);
+            let progress = self.current_rollout as f64 / self.total_rollouts as f64;
+            self.draw_progress_bar(progress_bar_area, buf, progress);
+            self.draw_chart(chart_area, buf);
+        } else {
+            let [_, middle, _] = Layout::vertical([
+                Constraint::Percentage(50),
+                Constraint::Length(1),
+                Constraint::Percentage(50),
+            ])
+            .areas(area);
+            Paragraph::new("Waiting for progress report")
+                .alignment(Alignment::Center)
+                .render(middle, buf);
+        }
     }
 }
 
@@ -71,6 +80,7 @@ impl App {
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
+            terminal.draw(|frame| self.draw(frame))?;
             let event = self.rx.recv().unwrap();
             event
                 .downcast::<PPOStats>()
@@ -142,7 +152,7 @@ impl App {
             Row::new(vec!["Policy gradient loss".into(), policy_loss.to_string()]),
             Row::new(vec!["Entropy loss".into(), entropy_loss.to_string()]),
             Row::new(vec!["Value loss".into(), value_loss.to_string()]),
-            Row::new(vec!["explained_variance".into(), "to be added".to_string()]),
+            // Row::new(vec!["explained_variance".into(), "to be added".to_string()]),
             Row::new(vec![
                 "Learning rate".into(),
                 ppo_progress.learning_rate.to_string(),
@@ -158,16 +168,20 @@ impl App {
         Table::new(rows, widths).block(block)
     }
 
-    fn draw_statistics(&self, statistics_area: Rect, buf: &mut Buffer) {
-        if let (Some(latest_update), Some(best_update)) = (&self.latest_update, &self.best_update) {
-            let vertical_area =
-                Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
-            let [latest_stat_area, best_stat_area] = vertical_area.areas(statistics_area);
-            self.ppo_progress_to_table(latest_update, "Latest update")
-                .render(latest_stat_area, buf);
-            self.ppo_progress_to_table(best_update, "Best update")
-                .render(best_stat_area, buf);
-        }
+    fn draw_statistics(
+        &self,
+        statistics_area: Rect,
+        buf: &mut Buffer,
+        latest_update: &PPOStats,
+        best_update: &PPOStats,
+    ) {
+        let vertical_area =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let [latest_stat_area, best_stat_area] = vertical_area.areas(statistics_area);
+        self.ppo_progress_to_table(latest_update, "Latest update")
+            .render(latest_stat_area, buf);
+        self.ppo_progress_to_table(best_update, "Best update")
+            .render(best_stat_area, buf);
     }
 
     fn draw_chart(&self, chart_area: Rect, buf: &mut Buffer) {
