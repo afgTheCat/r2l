@@ -5,7 +5,6 @@ use std::{
 
 use candle_core::Device;
 use r2l_api::{A2CAlgorithmBuilder, A2CStats, LearningSchedule};
-use r2l_gym::GymEnvBuilder;
 use r2l_sampler::StepTrajectoryBound;
 
 #[allow(dead_code)]

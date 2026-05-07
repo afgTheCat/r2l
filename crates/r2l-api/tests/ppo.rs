@@ -1,11 +1,6 @@
 // Testing the capabilities according to model garden
 
-use std::{
-    sync::mpsc::{self, Receiver, Sender},
-    thread,
-};
-
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
+use r2l_api::{LearningSchedule, PPOAlgorithmBuilder};
 use r2l_sampler::StepTrajectoryBound;
 
 #[allow(dead_code)]
@@ -31,8 +26,6 @@ struct PPOTestConfig {
 }
 
 fn configure_candle_ppo_test(config: PPOTestConfig) {
-    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
-
     let mut ppo_builder = PPOAlgorithmBuilder::gym(config.env_name, config.n_envs)
         .with_candle(candle_core::Device::Cpu)
         .with_entropy_coeff(config.entropy_coeff)
@@ -40,8 +33,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         .with_gamma(config.gamma)
         .with_total_epochs(config.total_epochs)
         .with_bound(StepTrajectoryBound::new(config.n_steps))
-        .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps))
-        .with_reporter(Some(update_tx));
+        .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps));
 
     if let Some(clip_range) = config.clip_range {
         ppo_builder = ppo_builder.with_clip_range(clip_range);
@@ -64,14 +56,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
     }
 
     let mut ppo = ppo_builder.build().unwrap();
-    let t = thread::spawn(move || {
-        while let Ok(stats) = update_rx.recv() {
-            println!("avg reward: {}", stats.average_reward);
-        }
-    });
     ppo.train().unwrap();
-    drop(ppo);
-    t.join().unwrap();
 }
 
 #[test]
