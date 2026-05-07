@@ -4,7 +4,7 @@ use std::{f64, io, sync::mpsc};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
 use r2l_examples::EventBox;
-use r2l_sampler::{SamplerExecutionMode, StepTrajectoryBound};
+use r2l_sampler::StepTrajectoryBound;
 use ratatui::layout::Alignment;
 use ratatui::widgets::Paragraph;
 use ratatui::{
@@ -17,9 +17,6 @@ use ratatui::{
     widgets::{Axis, Block, Borders, Chart, Dataset, Gauge, GraphType, Row, Table, Widget},
 };
 
-const ENT_COEFF: f32 = 0.001;
-const MAX_GRAD_NORM: f32 = 0.5;
-const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
 
 #[derive(Debug)]
@@ -29,7 +26,6 @@ struct App {
     rx: Receiver<EventBox>,
     best_update: Option<PPOStats>,
     average_rollout_rewards: Vec<f32>,
-    clip_range: f32,
     total_rollouts: usize,
     current_rollout: usize,
 }
@@ -65,10 +61,9 @@ impl Widget for &App {
 }
 
 impl App {
-    fn new(total_rollouts: usize, clip_range: f32, rx: Receiver<EventBox>) -> Self {
+    fn new(total_rollouts: usize, rx: Receiver<EventBox>) -> Self {
         Self {
             total_rollouts,
-            clip_range,
             rx,
             best_update: None,
             latest_update: None,
@@ -148,7 +143,10 @@ impl App {
                 ppo_progress.average_reward.to_string(),
             ]),
             Row::new(vec!["Clip fraction".into(), clip_fraction.to_string()]),
-            Row::new(vec!["Clip range".into(), self.clip_range.to_string()]),
+            Row::new(vec![
+                "Clip range".into(),
+                ppo_progress.clip_range.to_string(),
+            ]),
             Row::new(vec!["Policy gradient loss".into(), policy_loss.to_string()]),
             Row::new(vec!["Entropy loss".into(), entropy_loss.to_string()]),
             Row::new(vec!["Value loss".into(), value_loss.to_string()]),
@@ -260,24 +258,17 @@ fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     });
 }
 
-pub fn train_ppo(
-    tx: Sender<PPOStats>,
-    total_rollouts: usize,
-    clip_range: f32,
-) -> anyhow::Result<()> {
-    // TODO: The generic here is ugly
-    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
+pub fn train_ppo(tx: Sender<PPOStats>, total_rollouts: usize) -> anyhow::Result<()> {
+    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 4)
         .with_candle(candle_core::Device::Cpu)
-        .with_entropy_coeff(ENT_COEFF)
-        .with_gradient_clipping(Some(MAX_GRAD_NORM))
-        .with_target_kl(Some(TARGET_KL))
-        .with_bound(StepTrajectoryBound::new(2048))
-        .with_execution_mode(SamplerExecutionMode::Vec)
-        .with_clip_range(clip_range)
-        .with_learning_schedule(LearningSchedule::RolloutBound {
-            total_rollouts,
-            current_rollout: 0,
-        })
+        .with_clip_range(0.2)
+        .with_entropy_coeff(0.)
+        .with_lambda(0.95)
+        .with_gamma(0.9)
+        .with_learning_rate(0.001)
+        .with_bound(StepTrajectoryBound::new(1024))
+        .with_total_epochs(10)
+        .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
         .with_log_progress(false)
         .with_reporter(Some(tx));
     let mut ppo = ppo_builder.build()?;
@@ -297,18 +288,15 @@ fn main() -> io::Result<()> {
     let (update_tx, update_rx) = mpsc::channel();
     handle_input_events(event_tx.clone());
     adapt_ppo_events(update_rx, event_tx.clone());
-    let total_rollouts = 300;
-    let clip_range = 0.2;
-    std::thread::spawn(
-        move || match train_ppo(update_tx, total_rollouts, clip_range) {
-            Ok(()) => {}
-            Err(err) => {
-                eprintln!("ppo was not trained normally, err: {err}")
-            }
-        },
-    );
+    let total_rollouts = 30;
+    std::thread::spawn(move || match train_ppo(update_tx, total_rollouts) {
+        Ok(()) => {}
+        Err(err) => {
+            eprintln!("ppo was not trained normally, err: {err}")
+        }
+    });
     let mut terminal = ratatui::init();
-    let app_result = App::new(total_rollouts, clip_range, event_rx).run(&mut terminal);
+    let app_result = App::new(total_rollouts, event_rx).run(&mut terminal);
     ratatui::restore();
     app_result
 }

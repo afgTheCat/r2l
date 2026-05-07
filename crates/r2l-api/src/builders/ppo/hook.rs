@@ -100,6 +100,7 @@ impl DefaultPPOHookBuilder {
             }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
+            rollout_idx: 0,
             reporter: DefaultPPOHookReporter::new(self.tx, self.log_progress, self.n_envs),
             _lm: PhantomData,
         }

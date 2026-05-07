@@ -54,6 +54,8 @@ pub struct PPOStats {
     pub average_reward: f32,
     /// Current policy optimizer learning rate.
     pub learning_rate: f64,
+    /// Clip range
+    pub clip_range: f32,
 }
 
 impl PPOStats {
@@ -145,7 +147,6 @@ impl TargetKl {
 }
 
 pub(crate) struct DefaultPPOHookReporter {
-    rollout_idx: usize,
     report: PPOStats,
     tx: Option<Sender<PPOStats>>,
     log_progress: bool,
@@ -157,7 +158,6 @@ impl DefaultPPOHookReporter {
     pub fn new(tx: Option<Sender<PPOStats>>, log_progress: bool, n_envs: usize) -> Option<Self> {
         if tx.is_some() || log_progress {
             Some(Self {
-                rollout_idx: 0,
                 report: PPOStats::default(),
                 log_progress,
                 tx: tx,
@@ -194,12 +194,11 @@ impl DefaultPPOHookReporter {
         self.report.average_reward = self.latest_average_reward;
     }
 
-    fn send_report(&mut self) {
-        self.rollout_idx += 1;
+    fn send_report(&mut self, rollout_idx: usize) {
         let progress = std::mem::replace(
             &mut self.report,
             PPOStats {
-                rollout_idx: self.rollout_idx,
+                rollout_idx,
                 ..Default::default()
             },
         );
@@ -232,6 +231,7 @@ pub struct DefaultPPOHook<T = ()> {
     pub(crate) gradient_clipping: Option<f32>,
     pub(crate) current_epoch: usize,
     pub(crate) reporter: Option<DefaultPPOHookReporter>,
+    pub(crate) rollout_idx: usize,
     pub(crate) _lm: PhantomData<T>,
 }
 
@@ -249,6 +249,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
         self.current_epoch = 0;
+        self.rollout_idx += 1;
         if self.normalize_advantage {
             advantages.normalize();
         }
@@ -262,7 +263,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
         T: TrajectoryContainer<Tensor = burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
     >(
         &mut self,
-        _params: &mut PPOParams,
+        params: &mut PPOParams,
         module: &mut BurnPolicyValueModule<B, D>,
         buffers: &[T],
     ) -> anyhow::Result<HookResult> {
@@ -278,7 +279,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
                 reporter.update_average_reward(buffers);
                 reporter.report.std = module.policy().std().ok();
                 reporter.report.learning_rate = module.policy_learning_rate();
-                reporter.send_report();
+                reporter.report.clip_range = params.clip_range;
+                reporter.send_report(self.rollout_idx);
             }
             Ok(HookResult::Break)
         } else {
@@ -347,6 +349,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
+        self.rollout_idx += 1;
         self.current_epoch = 0;
         if self.normalize_advantage {
             advantages.normalize();
@@ -373,7 +376,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
                 reporter.update_average_reward(buffers);
                 reporter.report.std = module.policy().std().ok();
                 reporter.report.learning_rate = module.policy_learning_rate();
-                reporter.send_report();
+                reporter.send_report(self.rollout_idx);
             }
             Ok(HookResult::Break)
         } else {
