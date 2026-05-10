@@ -1,4 +1,7 @@
+use std::marker::PhantomData;
+
 use anyhow::Result;
+use candle_core::Tensor;
 
 use crate::buffers::TrajectoryContainer;
 use crate::models::Actor;
@@ -51,7 +54,33 @@ pub trait Sampler {
 ///
 /// Hook methods return [`HookResult::Break`] to stop the training loop at that
 /// point.
-pub trait OnPolicyAlgorithmHooks {
+pub trait OnPolicyAlgorithmHooks
+// where
+//     <Self::A as Agent>::Actor: Clone,
+//     <Self::A as Agent>::Tensor: From<<Self::S as Sampler>::Tensor>,
+{
+    /// Agent type controlled by the training loop.
+    type A: Agent;
+    /// Sampler type controlled by the training loop.
+    type S: Sampler;
+
+    /// Called once before rollout/training starts.
+    fn init_hook(&mut self) -> HookResult;
+
+    /// Called after rollouts are collected and before agent learning.
+    fn post_rollout_hook(
+        &mut self,
+        rollouts: &[<Self::S as Sampler>::TrajectoryContainer],
+    ) -> HookResult;
+
+    /// Called after the agent has learned from the latest rollouts.
+    fn post_training_hook(&mut self, actor: <Self::A as Agent>::Actor) -> HookResult;
+
+    /// Called once when the loop exits.
+    fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()>;
+}
+
+pub trait OnPolicyAlgorithmHooks2 {
     /// Agent type controlled by the training loop.
     type A: Agent;
     /// Sampler type controlled by the training loop.
@@ -87,12 +116,11 @@ pub struct OnPolicyAlgorithm<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A =
 
 impl<
     B: TrajectoryContainer,
-    A: Agent,
+    A: Agent<Actor: Clone>,
     S: Sampler<TrajectoryContainer = B>,
     H: OnPolicyAlgorithmHooks<A = A, S = S>,
 > OnPolicyAlgorithm<A, S, H>
 where
-    A::Actor: Clone,
     A::Tensor: From<S::Tensor>,
     A::Tensor: From<B::Tensor>,
     S::Tensor: From<A::Tensor>,
@@ -120,4 +148,46 @@ where
         self.hooks.shutdown_hook(&mut self.agent, &mut self.sampler)
     }
     // ANCHOR_END: train_loop
+}
+
+pub trait OnPolicyAdapters<A: Agent, S: Sampler> {
+    type SamplerActor: Actor<Tensor = S::Tensor> + Clone;
+    type AgentBuffer<'a>: TrajectoryContainer<Tensor = A::Tensor>
+    where
+        Self: 'a,
+        S::TrajectoryContainer: 'a;
+
+    fn adapt_actor(actor: A::Actor) -> Self::SamplerActor;
+
+    fn adapt_buffer<'a>(buffer: &'a S::TrajectoryContainer) -> Self::AgentBuffer<'a>;
+}
+
+struct DefaultAdapter;
+
+impl<A: Agent, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter
+where
+    A::Actor: Clone,
+    S::Tensor: From<A::Tensor>,
+    A::Tensor: From<S::Tensor>,
+    A::Tensor: From<<S::TrajectoryContainer as TrajectoryContainer>::Tensor>,
+{
+    type SamplerActor = ActorWrapper<A::Actor, S::Tensor>;
+    type AgentBuffer<'a>
+        = BufferWrapper<
+        'a,
+        <S::TrajectoryContainer as TrajectoryContainer>::Tensor,
+        A::Tensor,
+        S::TrajectoryContainer,
+    >
+    where
+        Self: 'a,
+        S::TrajectoryContainer: 'a;
+
+    fn adapt_actor(actor: A::Actor) -> Self::SamplerActor {
+        ActorWrapper::new(actor)
+    }
+
+    fn adapt_buffer<'a>(buffer: &'a S::TrajectoryContainer) -> Self::AgentBuffer<'a> {
+        BufferWrapper::new(buffer)
+    }
 }

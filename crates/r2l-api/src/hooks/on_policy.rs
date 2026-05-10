@@ -1,11 +1,45 @@
 use std::marker::PhantomData;
 
 use anyhow::Result;
+use candle_core::Tensor;
 use r2l_core::{
     HookResult,
     buffers::TrajectoryContainer,
+    env::{Env, Snapshot},
+    models::Actor,
     on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, Sampler},
+    rng::RNG,
 };
+use r2l_sampler::{R2lSampler, TrajectoryBound};
+use rand::RngExt;
+
+struct Evaluator<
+    E: Env,
+    BD: TrajectoryBound<Tensor = E::Tensor>,
+    A: Actor<Tensor = E::Tensor> + Clone,
+> {
+    best_rewads: f32,
+    sampler: R2lSampler<E, BD>,
+    best_actor: A,
+}
+
+impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>, A: Actor<Tensor = E::Tensor> + Clone>
+    Evaluator<E, BD, A>
+{
+    fn eval(&mut self, actor: A) {
+        self.sampler.reset_all_envs();
+        let trajectories = self.sampler.collect_rollouts(actor.clone());
+        let avg_rewards = trajectories
+            .as_ref()
+            .iter()
+            .map(|x| x.rewards().sum::<f32>())
+            .sum::<f32>();
+        if avg_rewards > self.best_rewads {
+            self.best_actor = actor;
+            self.best_rewads = avg_rewards;
+        }
+    }
+}
 
 /// Training-stop policy for [`DefaultOnPolicyAlgorithmHooks`].
 ///
@@ -108,7 +142,7 @@ impl<A: Agent, S: Sampler> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHo
         }
     }
 
-    fn post_training_hook(&mut self, _policy: <Self::A as Agent>::Actor) -> HookResult {
+    fn post_training_hook(&mut self, _actor: <Self::A as Agent>::Actor) -> HookResult {
         HookResult::Continue
     }
 

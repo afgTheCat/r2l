@@ -110,6 +110,10 @@ impl<T: R2lTensor> Snapshot<T> {
             truncated,
         }
     }
+
+    pub fn done(&self) -> bool {
+        self.terminated || self.truncated
+    }
 }
 
 /// Tensor type used by an [`Env`] implementation.

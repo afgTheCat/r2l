@@ -38,7 +38,6 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         env.reset(seed).unwrap()
     };
-
     let action = policy.action(state.clone()).unwrap();
     let Snapshot {
         state: mut next_state,
@@ -104,11 +103,17 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
             }
         }
     }
+
+    pub fn reset(&mut self, seed: u64) {
+        let state = self.env.reset(seed).unwrap();
+        self.last_state = Some(state);
+    }
 }
 
 pub enum WorkerCommand<T: R2lTensor> {
     SetPolicy(Box<dyn Actor<Tensor = T>>),
     Collect(RolloutMode),
+    ResetEnv(u64),
     GetEnvDescription,
     Shutdown,
 }
@@ -116,6 +121,7 @@ pub enum WorkerCommand<T: R2lTensor> {
 pub enum WorkerResult<T: R2lTensor> {
     PolicySet,
     Collected,
+    EnvReset,
     EnvDescription(EnvDescription<T>),
     Shutdown,
 }
@@ -156,6 +162,10 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
                 WorkerCommand::Shutdown => {
                     self.tx.send(WorkerResult::Shutdown).unwrap();
                     break;
+                }
+                WorkerCommand::ResetEnv(seed) => {
+                    self.worker.reset(seed);
+                    self.tx.send(WorkerResult::EnvReset).unwrap();
                 }
             }
         }
@@ -214,6 +224,20 @@ impl<T: R2lTensor> ThreadWorkers<T> {
             rx.recv().unwrap();
         }
     }
+
+    pub fn reset_all(&self) {
+        let channels = &self.0;
+        let num_envs = channels.len();
+        for idx in 0..num_envs {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            let tx = &channels.get(&idx).unwrap().0;
+            tx.send(WorkerCommand::ResetEnv(seed)).unwrap();
+        }
+        for idx in 0..num_envs {
+            let rx = &channels.get(&idx).unwrap().1;
+            rx.recv().unwrap();
+        }
+    }
 }
 
 pub enum WorkerPool<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> {
@@ -266,6 +290,20 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
             }
             WorkerPool::Thread(workers) => {
                 workers.shutdown();
+            }
+        }
+    }
+
+    pub fn reset_all_envs(&mut self) {
+        match self {
+            WorkerPool::Vec(workers) => {
+                for worker in workers {
+                    let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+                    worker.reset(seed);
+                }
+            }
+            WorkerPool::Thread(workers) => {
+                workers.reset_all();
             }
         }
     }

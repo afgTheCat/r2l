@@ -1,4 +1,5 @@
 mod hooks;
+mod v2;
 pub mod worker;
 
 use std::marker::PhantomData;
@@ -200,6 +201,11 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
     /// Returns the environment description shared by this sampler's workers.
     pub fn env_description(&self) -> EnvDescription<E::Tensor> {
         self.worker_pool.env_description()
+    }
+
+    /// Resets all environments in all buffers
+    pub fn reset_all_envs(&mut self) {
+        self.worker_pool.reset_all_envs();
     }
 }
 
