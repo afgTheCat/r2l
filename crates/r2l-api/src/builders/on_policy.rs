@@ -84,6 +84,52 @@ impl<
         self
     }
 
+    pub fn with_evaluator_n_episodes(mut self, n_episodes: usize) -> Self {
+        let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
+            evaluator_builder.with_n_episodes(n_episodes)
+        } else {
+            let env_builder = self.sampler_builder.env_builder.clone();
+            EvaluatorBuilder::from_env_builder_type(env_builder).with_n_episodes(n_episodes)
+        };
+        self.evaluator_builder = Some(evaluator_builder);
+        self
+    }
+
+    pub fn with_evaluator_env_builder(
+        mut self,
+        env_builder: r2l_core::env::EnvBuilderType<EB>,
+    ) -> Self {
+        let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
+            evaluator_builder.with_env_builder(env_builder)
+        } else {
+            EvaluatorBuilder::from_env_builder_type(env_builder)
+        };
+        self.evaluator_builder = Some(evaluator_builder);
+        self
+    }
+
+    pub fn with_evaluator_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
+        let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
+            evaluator_builder.with_execution_mode(execution_mode)
+        } else {
+            let env_builder = self.sampler_builder.env_builder.clone();
+            EvaluatorBuilder::from_env_builder_type(env_builder).with_execution_mode(execution_mode)
+        };
+        self.evaluator_builder = Some(evaluator_builder);
+        self
+    }
+
+    pub fn with_evaluator_eval_path<P: Into<std::path::PathBuf>>(mut self, eval_path: P) -> Self {
+        let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
+            evaluator_builder.with_eval_path(eval_path)
+        } else {
+            let env_builder = self.sampler_builder.env_builder.clone();
+            EvaluatorBuilder::from_env_builder_type(env_builder).with_eval_path(eval_path)
+        };
+        self.evaluator_builder = Some(evaluator_builder);
+        self
+    }
+
     pub fn with_execution_mode(mut self, location: SamplerExecutionMode) -> Self {
         self.sampler_builder = self.sampler_builder.with_execution_mode(location);
         self

@@ -172,6 +172,20 @@ pub enum EnvBuilderType<EB: EnvBuilder> {
     Heterogenous { builders: Vec<Arc<EB>> },
 }
 
+impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Homogenous { builder, n_envs } => Self::Homogenous {
+                builder: builder.clone(),
+                n_envs: *n_envs,
+            },
+            Self::Heterogenous { builders } => Self::Heterogenous {
+                builders: builders.clone(),
+            },
+        }
+    }
+}
+
 impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// Creates a homogeneous builder collection.
     pub fn homogenous(builder: EB, n_envs: usize) -> Self {

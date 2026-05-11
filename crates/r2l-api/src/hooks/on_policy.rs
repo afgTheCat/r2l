@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{marker::PhantomData, path::PathBuf};
 
 use anyhow::Result;
 use r2l_core::{
@@ -13,26 +13,33 @@ use r2l_core::{
 use r2l_sampler::{EpisodeTrajectoryBound, R2lSampler, SamplerExecutionMode};
 
 pub struct EvaluatorBuilder<EB: EnvBuilder> {
-    env_builder: EB,
-    n_envs: usize,
+    env_builder: EnvBuilderType<EB>,
     n_episodes: usize,
     execution_mode: SamplerExecutionMode,
     eval_path: Option<PathBuf>,
 }
 
 impl<EB: EnvBuilder> EvaluatorBuilder<EB> {
-    pub fn new(env_builder: EB) -> Self {
+    pub fn from_env_builder_type(env_builder: EnvBuilderType<EB>) -> Self {
         Self {
             env_builder,
-            n_envs: 10,
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
         }
     }
 
-    pub fn with_n_envs(mut self, n_envs: usize) -> Self {
-        self.n_envs = n_envs;
+    pub fn new(env_builder: EB) -> Self {
+        Self {
+            env_builder: EnvBuilderType::homogenous(env_builder.into(), 10),
+            n_episodes: 5,
+            execution_mode: SamplerExecutionMode::Thread,
+            eval_path: None,
+        }
+    }
+
+    pub fn with_env_builder(mut self, env_builder: EnvBuilderType<EB>) -> Self {
+        self.env_builder = env_builder;
         self
     }
 
@@ -52,12 +59,8 @@ impl<EB: EnvBuilder> EvaluatorBuilder<EB> {
     }
 
     fn build<A: Actor>(self) -> Evaluator<EB::Env, A> {
-        let env_builder = EnvBuilderType::Homogenous {
-            builder: Arc::new(self.env_builder),
-            n_envs: self.n_envs,
-        };
         let sampler = R2lSampler::build(
-            env_builder,
+            self.env_builder,
             EpisodeTrajectoryBound::new(self.n_episodes),
             self.execution_mode,
         );
