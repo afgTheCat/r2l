@@ -28,9 +28,9 @@ pub enum RolloutMode {
     StepBound { n_steps: usize },
 }
 
-pub trait TrajectoryBound: Send + Sync {
+pub trait RolloutBound: Send + Sync {
     type Tensor: R2lTensor;
-    // The caontainer type that is able to work with the given trajectory bound
+    // The container type that is able to work with the given rollout bound.
     type Container: ExpandableTrajectoryContainer<Tensor = Self::Tensor>;
 
     fn to_container(&self) -> Self::Container;
@@ -57,7 +57,7 @@ impl<T: R2lTensor> StepTrajectoryBound<T> {
     }
 }
 
-impl<T: R2lTensor> TrajectoryBound for StepTrajectoryBound<T> {
+impl<T: R2lTensor> RolloutBound for StepTrajectoryBound<T> {
     type Tensor = T;
     type Container = FixedSizeStateBuffer<T>;
 
@@ -92,7 +92,7 @@ impl<T: R2lTensor> EpisodeTrajectoryBound<T> {
     }
 }
 
-impl<T: R2lTensor> TrajectoryBound for EpisodeTrajectoryBound<T> {
+impl<T: R2lTensor> RolloutBound for EpisodeTrajectoryBound<T> {
     type Tensor = T;
     type Container = VariableSizedStateBuffer<T>;
 
@@ -127,21 +127,21 @@ pub enum SamplerExecutionMode {
 ///
 /// The sampler is parameterized by:
 /// - `E`: the environment type being sampled
-/// - `BD`: the [`TrajectoryBound`] that decides when rollout collection stops
+/// - `BD`: the [`RolloutBound`] that decides when rollout collection stops
 ///   and which trajectory container implementation is used
 ///
 /// Instances are typically constructed through `r2l_api::SamplerBuilder` or by
 /// higher-level algorithm builders in `r2l-api`.
 // ANCHOR: r2l_sampler
-pub struct R2lSampler<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> {
+pub struct R2lSampler<E: Env, BD: RolloutBound<Tensor = E::Tensor>> {
     all_buffers: ArrayHandle<BD::Container>,
     worker_pool: WorkerPool<E, BD::Container>,
     rollout_mode: RolloutMode,
 }
 // ANCHOR_END: r2l_sampler
 
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
-    /// Builds a sampler from an environment builder, trajectory bound, and
+impl<E: Env, BD: RolloutBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
+    /// Builds a sampler from an environment builder, rollout bound, and
     /// execution mode.
     ///
     /// `collection_method` determines both the rollout stopping condition and
@@ -149,12 +149,12 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
     /// `location` controls whether workers run inline or on background threads.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
-        collection_method: BD,
+        rollout_bound: BD,
         execution_mode: SamplerExecutionMode,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = (0..num_envs)
-            .map(|_| collection_method.to_container())
+            .map(|_| rollout_bound.to_container())
             .collect();
         let (all_buffers, buffer_handlers) = bimodal_array(buffers);
         let worker_pool = match execution_mode {
@@ -193,7 +193,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
         Self {
             all_buffers,
             worker_pool,
-            rollout_mode: collection_method.method(),
+            rollout_mode: rollout_bound.method(),
         }
     }
 
@@ -208,7 +208,7 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
     }
 }
 
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for R2lSampler<E, BD> {
+impl<E: Env, BD: RolloutBound<Tensor = E::Tensor>> Sampler for R2lSampler<E, BD> {
     type Tensor = E::Tensor;
     type TrajectoryContainer = BD::Container;
 

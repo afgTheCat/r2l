@@ -27,14 +27,14 @@ struct A2CTestConfig {
 
 #[allow(dead_code)]
 fn configure_candle_ppo_test(config: A2CTestConfig) {
-    let (update_tx, update_rx): (Sender<A2CStats>, Receiver<A2CStats>) = mpsc::channel();
+    let (update_tx, update_rx) = mpsc::channel();
 
     let mut a2c_builder = A2CAlgorithmBuilder::gym(config.env_name, config.n_envs)
         .with_candle(Device::Cpu)
         .with_entropy_coeff(config.entropy_coeff)
         .with_lambda(config.gae_lambda)
         .with_gamma(config.gamma)
-        .with_bound(StepTrajectoryBound::new(config.n_steps))
+        .with_rollout_bound(StepTrajectoryBound::new(config.n_steps))
         .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps))
         .with_reporter(Some(update_tx));
 

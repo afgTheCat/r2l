@@ -4,7 +4,7 @@ use r2l_core::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
 };
-use r2l_sampler::{R2lSampler, SamplerExecutionMode, StepTrajectoryBound, TrajectoryBound};
+use r2l_sampler::{R2lSampler, RolloutBound, SamplerExecutionMode, StepTrajectoryBound};
 
 use crate::{
     builders::{agent::AgentBuilder, sampler::SamplerBuilder},
@@ -26,9 +26,7 @@ pub struct OnPolicyAlgorithmBuilder<
     A: Agent,
     AB: AgentBuilder<Agent = A>,
     EB: EnvBuilder,
-    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>> = StepTrajectoryBound<
-        TensorOfEnvBuilder<EB>,
-    >,
+    BD: RolloutBound<Tensor = TensorOfEnvBuilder<EB>> = StepTrajectoryBound<TensorOfEnvBuilder<EB>>,
 > {
     pub(crate) sampler_builder: SamplerBuilder<EB, BD>,
     pub(crate) learning_schedule: LearningSchedule,
@@ -40,7 +38,7 @@ impl<
     A: Agent,
     AB: AgentBuilder<Agent = A>,
     EB: EnvBuilder,
-    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
+    BD: RolloutBound<Tensor = TensorOfEnvBuilder<EB>>,
 > OnPolicyAlgorithmBuilder<A, AB, EB, BD>
 {
     pub fn from_sampler_and_agent_builder(
@@ -55,9 +53,9 @@ impl<
         }
     }
 
-    pub fn with_bound<BD2: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>>(
+    pub fn with_rollout_bound<BD2: RolloutBound<Tensor = TensorOfEnvBuilder<EB>>>(
         self,
-        trajectory_bound: BD2,
+        rollout_bound: BD2,
     ) -> OnPolicyAlgorithmBuilder<A, AB, EB, BD2> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
@@ -67,7 +65,7 @@ impl<
             ..
         } = self;
         OnPolicyAlgorithmBuilder {
-            sampler_builder: sampler_builder.with_bound(trajectory_bound),
+            sampler_builder: sampler_builder.with_rollout_bound(rollout_bound),
             agent_builder,
             evaluator_builder,
             learning_schedule,

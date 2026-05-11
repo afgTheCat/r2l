@@ -1,5 +1,5 @@
 use r2l_core::env::{EnvBuilder, EnvBuilderType, TensorOfEnvBuilder};
-use r2l_sampler::{R2lSampler, SamplerExecutionMode, StepTrajectoryBound, TrajectoryBound};
+use r2l_sampler::{R2lSampler, RolloutBound, SamplerExecutionMode, StepTrajectoryBound};
 
 /// Builder for [`R2lSampler`] instances.
 ///
@@ -13,12 +13,10 @@ use r2l_sampler::{R2lSampler, SamplerExecutionMode, StepTrajectoryBound, Traject
 /// [`SamplerExecutionMode::Vec`].
 pub struct SamplerBuilder<
     EB: EnvBuilder,
-    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>> = StepTrajectoryBound<
-        TensorOfEnvBuilder<EB>,
-    >,
+    BD: RolloutBound<Tensor = TensorOfEnvBuilder<EB>> = StepTrajectoryBound<TensorOfEnvBuilder<EB>>,
 > {
     pub(crate) env_builder: EnvBuilderType<EB>,
-    pub(crate) trajectory_bound: BD,
+    pub(crate) rollout_bound: BD,
     pub(crate) location: SamplerExecutionMode,
 }
 
@@ -31,13 +29,13 @@ impl<EB: EnvBuilder> SamplerBuilder<EB> {
         let env_builder = EnvBuilderType::homogenous(builder.into(), n_envs);
         Self {
             env_builder,
-            trajectory_bound: StepTrajectoryBound::new(1024),
+            rollout_bound: StepTrajectoryBound::new(1024),
             location: SamplerExecutionMode::Vec,
         }
     }
 }
 
-impl<EB: EnvBuilder, BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>> SamplerBuilder<EB, BD> {
+impl<EB: EnvBuilder, BD: RolloutBound<Tensor = TensorOfEnvBuilder<EB>>> SamplerBuilder<EB, BD> {
     /// Replaces the full environment builder configuration.
     ///
     /// This is useful when you need heterogeneous environments or when the
@@ -47,14 +45,14 @@ impl<EB: EnvBuilder, BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>> Sampl
         self
     }
 
-    /// Replaces the trajectory bound used by the sampler.
+    /// Replaces the rollout bound used by the sampler.
     ///
     /// This changes the bound type carried by the builder, allowing callers to
     /// swap the default [`StepTrajectoryBound`] for another
-    /// [`TrajectoryBound`] implementation.
-    pub fn with_bound<BD2: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>>(
+    /// [`RolloutBound`] implementation.
+    pub fn with_rollout_bound<BD2: RolloutBound<Tensor = TensorOfEnvBuilder<EB>>>(
         self,
-        trajectory_bound: BD2,
+        rollout_bound: BD2,
     ) -> SamplerBuilder<EB, BD2> {
         let Self {
             env_builder,
@@ -63,7 +61,7 @@ impl<EB: EnvBuilder, BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>> Sampl
         } = self;
         SamplerBuilder {
             env_builder,
-            trajectory_bound,
+            rollout_bound,
             location,
         }
     }
@@ -76,6 +74,6 @@ impl<EB: EnvBuilder, BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>> Sampl
 
     /// Builds the configured sampler.
     pub fn build(self) -> R2lSampler<EB::Env, BD> {
-        R2lSampler::build(self.env_builder, self.trajectory_bound, self.location)
+        R2lSampler::build(self.env_builder, self.rollout_bound, self.location)
     }
 }

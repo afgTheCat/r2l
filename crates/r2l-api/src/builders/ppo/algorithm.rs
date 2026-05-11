@@ -6,7 +6,7 @@ use r2l_agents::on_policy_algorithms::ppo::PPOParams;
 use r2l_core::env::{EnvBuilder, TensorOfEnvBuilder};
 use r2l_core::on_policy::algorithm::Agent;
 use r2l_gym::GymEnvBuilder;
-use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
+use r2l_sampler::{RolloutBound, StepTrajectoryBound};
 
 use crate::agents::ppo::{PPOBurnAgent, PPOCandleAgent};
 use crate::{
@@ -29,7 +29,7 @@ impl<A, M, EB, BD>
 where
     A: Agent,
     EB: EnvBuilder,
-    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
+    BD: RolloutBound<Tensor = TensorOfEnvBuilder<EB>>,
     OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, M>: AgentBuilder<Agent = A>,
 {
     /// Enables or disables advantage normalization in the underlying PPO hook.

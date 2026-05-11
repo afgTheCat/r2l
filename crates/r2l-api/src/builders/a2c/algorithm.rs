@@ -8,7 +8,7 @@ use r2l_core::{
     on_policy::algorithm::Agent,
 };
 use r2l_gym::GymEnvBuilder;
-use r2l_sampler::{StepTrajectoryBound, TrajectoryBound};
+use r2l_sampler::{RolloutBound, StepTrajectoryBound};
 
 use crate::{
     BurnBackend,
@@ -31,7 +31,7 @@ impl<A, M, EB, BD>
 where
     A: Agent,
     EB: EnvBuilder,
-    BD: TrajectoryBound<Tensor = TensorOfEnvBuilder<EB>>,
+    BD: RolloutBound<Tensor = TensorOfEnvBuilder<EB>>,
     OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, M>: AgentBuilder<Agent = A>,
 {
     /// Sets wether to log the trainig progress during learning

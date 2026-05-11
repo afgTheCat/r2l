@@ -6,7 +6,8 @@ fn main() {
     let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
     let algo_builder = PPOAlgorithmBuilder::new(gym_env_builder, 10)
         .with_execution_mode(SamplerExecutionMode::Thread)
-        .with_bound(StepTrajectoryBound::new(1000))
+        .with_execution_mode(SamplerExecutionMode::Vec)
+        .with_rollout_bound(StepTrajectoryBound::new(1000))
         .with_normalize_advantage(true)
         .with_learning_schedule(LearningSchedule::rollout_bound(10))
         .with_learning_schedule(LearningSchedule::total_step_bound(1000));

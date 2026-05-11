@@ -9,8 +9,8 @@ fn main() {
     let sampler_builder = SamplerBuilder::<GymEnvBuilder>::new(gym_env_builder, 10)
         .with_execution_mode(SamplerExecutionMode::Vec)
         .with_execution_mode(SamplerExecutionMode::Thread)
-        .with_bound(EpisodeTrajectoryBound::new(10))
-        .with_bound(StepTrajectoryBound::new(1000));
+        .with_rollout_bound(EpisodeTrajectoryBound::new(10))
+        .with_rollout_bound(StepTrajectoryBound::new(1000));
     let sampler = sampler_builder.build();
 
     let agents = PPOAgentBuilder::new(10)

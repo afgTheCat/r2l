@@ -12,7 +12,7 @@ fn main() {
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
-        .with_bound(StepTrajectoryBound::new(1024))
+        .with_rollout_bound(StepTrajectoryBound::new(1024))
         .with_total_epochs(10)
         .with_learning_schedule(LearningSchedule::rollout_bound(30))
         .with_evaluator_eval_path(model_path);

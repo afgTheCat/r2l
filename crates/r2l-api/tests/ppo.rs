@@ -32,7 +32,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         .with_lambda(config.gae_lambda)
         .with_gamma(config.gamma)
         .with_total_epochs(config.total_epochs)
-        .with_bound(StepTrajectoryBound::new(config.n_steps))
+        .with_rollout_bound(StepTrajectoryBound::new(config.n_steps))
         .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps));
 
     if let Some(clip_range) = config.clip_range {
@@ -117,7 +117,7 @@ fn pendulum_candle2() {
         .with_gamma(0.9)
         .with_learning_rate(0.001)
         .with_total_epochs(10)
-        .with_bound(StepTrajectoryBound::new(1024))
+        .with_rollout_bound(StepTrajectoryBound::new(1024))
         .with_learning_schedule(LearningSchedule::total_step_bound(100000));
     let mut algo = builder.build().unwrap();
     algo.train().unwrap();

@@ -122,7 +122,7 @@ pub fn train_ppo(
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
-        .with_bound(StepTrajectoryBound::new(2048))
+        .with_rollout_bound(StepTrajectoryBound::new(2048))
         .with_execution_mode(SamplerExecutionMode::Vec)
         .with_clip_range(clip_range)
         .with_learning_schedule(LearningSchedule::RolloutBound {
