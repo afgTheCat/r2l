@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use r2l_core::{
@@ -10,16 +10,45 @@ use r2l_core::{
         Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
     },
 };
-use r2l_sampler::{EpisodeTrajectoryBound, R2lSampler};
+use r2l_sampler::{EpisodeTrajectoryBound, R2lSampler, SamplerExecutionMode};
+
+pub struct EvaluatorBuilder<EB: EnvBuilder> {
+    env_builder: EB,
+    n_envs: usize,
+    n_episodes: usize,
+    execution_mode: SamplerExecutionMode,
+    eval_path: Option<PathBuf>,
+}
+
+impl<EB: EnvBuilder> EvaluatorBuilder<EB> {
+    fn build<A: Actor>(self) -> Evaluator<EB::Env, A> {
+        let env_builder = EnvBuilderType::Homogenous {
+            builder: Arc::new(self.env_builder),
+            n_envs: self.n_envs,
+        };
+        let sampler = R2lSampler::build(
+            env_builder,
+            EpisodeTrajectoryBound::new(self.n_episodes),
+            r2l_sampler::SamplerExecutionMode::Thread,
+        );
+        Evaluator {
+            sampler,
+            path: self.eval_path,
+            best_rewards: f32::MIN,
+            best_actor: None,
+        }
+    }
+}
 
 struct Evaluator<E: Env, A: Actor> {
     sampler: R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>,
+    path: Option<PathBuf>,
     best_actor: Option<A>,
     best_rewards: f32,
 }
 
 impl<E: Env, A: Actor> Evaluator<E, A> {
-    fn new(builder: impl EnvBuilder<Env = E>) -> Self {
+    fn new(builder: impl EnvBuilder<Env = E>, path: Option<PathBuf>) -> Self {
         let env_builder = EnvBuilderType::Homogenous {
             builder: Arc::new(builder),
             n_envs: 10,
@@ -30,23 +59,40 @@ impl<E: Env, A: Actor> Evaluator<E, A> {
                 EpisodeTrajectoryBound::new(5),
                 r2l_sampler::SamplerExecutionMode::Thread,
             ),
+            path,
             best_rewards: f32::MIN,
             best_actor: None,
         }
     }
 
-    // fn eval<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: A) {
-    //     self.sampler.reset_all_envs();
-    //     let trajectories = self.sampler.collect_rollouts(actor);
-    //     let avg_reward = trajectories
-    //         .as_ref()
-    //         .iter()
-    //         .map(|x| x.rewards().sum::<f32>())
-    //         .sum::<f32>();
-    //     if avg_reward > self.best_rewards {
-    //         self.best_rewards = avg_reward;
-    //     }
-    // }
+    fn eval(&mut self, adapted_actor: impl Actor<Tensor = E::Tensor> + Clone, actor: A) {
+        self.sampler.reset_all_envs();
+        let trajectories = self.sampler.collect_rollouts(adapted_actor);
+        let total_reward: f32 = trajectories
+            .as_ref()
+            .iter()
+            .map(|x| x.rewards().sum::<f32>())
+            .sum();
+        let avg_reward = total_reward / trajectories.as_ref().len() as f32;
+        if avg_reward > self.best_rewards {
+            self.best_rewards = avg_reward;
+            self.best_actor = Some(actor);
+        }
+    }
+
+    fn try_write_to_file(&self) -> Result<()> {
+        let Some(actor) = self.best_actor.as_ref() else {
+            return Ok(());
+        };
+        let Some(bytes) = actor.try_serialize() else {
+            return Ok(());
+        };
+        let Some(path) = self.path.as_ref() else {
+            return Ok(());
+        };
+        std::fs::write(path, bytes)?;
+        Ok(())
+    }
 }
 
 /// Training-stop policy for [`DefaultOnPolicyAlgorithmHooks`].
@@ -115,11 +161,12 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
     pub fn new(
         learning_schedule: LearningSchedule,
         builder: Option<impl EnvBuilder<Env = E>>,
+        model_path: Option<PathBuf>,
     ) -> Self {
         Self {
             rollout_idx: 0,
             learning_schedule,
-            evaluator: builder.map(|b| Evaluator::new(b)),
+            evaluator: builder.map(|b| Evaluator::new(b, model_path)),
             _phantom: PhantomData,
         }
     }
@@ -175,7 +222,9 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
         if let Some(evaluator) = &mut self.evaluator {
-            // evaluator.eval(runtime.adapted_actor());
+            let actor = runtime.actor();
+            let adapted_actor = runtime.adapted_actor();
+            evaluator.eval(adapted_actor, actor);
         }
         HookResult::Continue
     }
@@ -184,6 +233,9 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> Result<()> {
+        if let Some(evaluator) = &self.evaluator {
+            evaluator.try_write_to_file()?;
+        }
         runtime.shutdown();
         Ok(())
     }

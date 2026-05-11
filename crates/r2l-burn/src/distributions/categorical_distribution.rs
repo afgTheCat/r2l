@@ -2,6 +2,7 @@ use anyhow::bail;
 use burn::{
     module::Module,
     prelude::Backend,
+    record::{BinBytesRecorder, FullPrecisionSettings, Recorder},
     tensor::{
         Tensor, TensorData,
         activation::{log_softmax, softmax},
@@ -52,6 +53,12 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
             TensorData::new(action_mask, vec![self.action_size]),
             &device,
         ))
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        let recorder = BinBytesRecorder::<FullPrecisionSettings>::new();
+        let record = self.clone().into_record();
+        recorder.record(record, ()).ok()
     }
 }
 

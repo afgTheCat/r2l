@@ -197,12 +197,14 @@ impl<EB: EnvBuilder> A2CBurnAlgorithmBuilder<EB> {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder: agent_builder.with_candle(device),
         }
     }
@@ -213,12 +215,14 @@ impl<EB: EnvBuilder> A2CBurnAlgorithmBuilder<EB> {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder: agent_builder.with_burn(),
         }
     }
@@ -245,12 +249,14 @@ impl<EB: EnvBuilder> A2CAlgorithmBuilder<EB> {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder: agent_builder.with_candle(device),
         }
     }
@@ -261,12 +267,14 @@ impl<EB: EnvBuilder> A2CAlgorithmBuilder<EB> {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder: agent_builder.with_burn(),
         }
     }

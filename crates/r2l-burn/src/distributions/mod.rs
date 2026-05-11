@@ -60,6 +60,13 @@ impl<B: Backend> Actor for PolicyKind<B> {
             Self::Diag(diag) => diag.action(observation),
         }
     }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Categorical(cat) => cat.try_serialize(),
+            Self::Diag(diag) => diag.try_serialize(),
+        }
+    }
 }
 
 impl<B: Backend> Policy for PolicyKind<B> {

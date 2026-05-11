@@ -228,12 +228,14 @@ impl<EB: EnvBuilder> PPOBurnAlgorithmBuilder<EB> {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder: agent_builder.with_candle(device),
         }
     }
@@ -244,12 +246,14 @@ impl<EB: EnvBuilder> PPOBurnAlgorithmBuilder<EB> {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder: agent_builder.with_burn(),
         }
     }
@@ -268,12 +272,14 @@ impl<EB: EnvBuilder> PPOCandleAlgorithmBuilder<EB> {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder: agent_builder.with_candle(device),
         }
     }
@@ -284,12 +290,14 @@ impl<EB: EnvBuilder> PPOCandleAlgorithmBuilder<EB> {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             eval_env_builder,
+            eval_model_path,
             agent_builder: agent_builder.with_burn(),
         }
     }

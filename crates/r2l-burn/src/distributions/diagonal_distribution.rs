@@ -2,6 +2,7 @@ use std::f32;
 
 use anyhow::Result;
 use burn::module::{Module, Param};
+use burn::record::{BinBytesRecorder, FullPrecisionSettings, Recorder};
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor};
@@ -45,6 +46,12 @@ impl<B: Backend> Actor for DiagGaussianDistribution<B> {
         let noise = Tensor::random(mu.shape(), BurnDistribution::Normal(0., 1.), &device);
         let action = mu + noise * std;
         Ok(action.squeeze_dims(&[1]))
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        let recorder = BinBytesRecorder::<FullPrecisionSettings>::new();
+        let record = self.clone().into_record();
+        recorder.record(record, ()).ok()
     }
 }
 

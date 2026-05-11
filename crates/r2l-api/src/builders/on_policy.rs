@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use r2l_core::{
     env::{ActionSpaceType, EnvBuilder, Space, TensorOfEnvBuilder},
     on_policy::algorithm::{
@@ -33,6 +35,7 @@ pub struct OnPolicyAlgorithmBuilder<
     pub(crate) sampler_builder: SamplerBuilder<EB, BD>,
     pub(crate) learning_schedule: LearningSchedule,
     pub(crate) eval_env_builder: Option<EB>,
+    pub(crate) eval_model_path: Option<PathBuf>,
     pub(crate) agent_builder: AB,
 }
 
@@ -51,6 +54,7 @@ impl<
             sampler_builder,
             agent_builder,
             eval_env_builder: None,
+            eval_model_path: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
         }
     }
@@ -63,14 +67,26 @@ impl<
             sampler_builder,
             agent_builder,
             learning_schedule,
+            eval_model_path,
             ..
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_bound(trajectory_bound),
             agent_builder,
             eval_env_builder: None,
+            eval_model_path,
             learning_schedule,
         }
+    }
+
+    pub fn with_eval_env(mut self, eval_env_builder: EB) -> Self {
+        self.eval_env_builder = Some(eval_env_builder);
+        self
+    }
+
+    pub fn with_eval_model_path<P: Into<PathBuf>>(mut self, path: P) -> Self {
+        self.eval_model_path = Some(path.into());
+        self
     }
 
     pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
@@ -98,8 +114,11 @@ impl<
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
-        let hooks =
-            DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, self.eval_env_builder);
+        let hooks = DefaultOnPolicyAlgorithmHooks::new(
+            self.learning_schedule,
+            self.eval_env_builder,
+            self.eval_model_path,
+        );
         Ok(OnPolicyAlgorithm {
             runtime: OnPolicyRuntime {
                 sampler,
