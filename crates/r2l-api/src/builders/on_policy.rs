@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use r2l_core::{
     env::{ActionSpaceType, EnvBuilder, Space, TensorOfEnvBuilder},
     on_policy::algorithm::{
@@ -10,7 +8,7 @@ use r2l_sampler::{R2lSampler, SamplerExecutionMode, StepTrajectoryBound, Traject
 
 use crate::{
     builders::{agent::AgentBuilder, sampler::SamplerBuilder},
-    hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule},
+    hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, EvaluatorBuilder, LearningSchedule},
 };
 
 type DefaultOnPolicyAlgorithm<A, EB, BD> = OnPolicyAlgorithm<
@@ -34,8 +32,7 @@ pub struct OnPolicyAlgorithmBuilder<
 > {
     pub(crate) sampler_builder: SamplerBuilder<EB, BD>,
     pub(crate) learning_schedule: LearningSchedule,
-    pub(crate) eval_env_builder: Option<EB>,
-    pub(crate) eval_model_path: Option<PathBuf>,
+    pub(crate) evaluator_builder: Option<EvaluatorBuilder<EB>>,
     pub(crate) agent_builder: AB,
 }
 
@@ -53,8 +50,7 @@ impl<
         Self {
             sampler_builder,
             agent_builder,
-            eval_env_builder: None,
-            eval_model_path: None,
+            evaluator_builder: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
         }
     }
@@ -67,25 +63,19 @@ impl<
             sampler_builder,
             agent_builder,
             learning_schedule,
-            eval_model_path,
+            evaluator_builder,
             ..
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_bound(trajectory_bound),
             agent_builder,
-            eval_env_builder: None,
-            eval_model_path,
+            evaluator_builder,
             learning_schedule,
         }
     }
 
-    pub fn with_eval_env(mut self, eval_env_builder: EB) -> Self {
-        self.eval_env_builder = Some(eval_env_builder);
-        self
-    }
-
-    pub fn with_eval_model_path<P: Into<PathBuf>>(mut self, path: P) -> Self {
-        self.eval_model_path = Some(path.into());
+    pub fn with_evaluator(mut self, evaluator_builder: Option<EvaluatorBuilder<EB>>) -> Self {
+        self.evaluator_builder = evaluator_builder;
         self
     }
 
@@ -114,11 +104,8 @@ impl<
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
-        let hooks = DefaultOnPolicyAlgorithmHooks::new(
-            self.learning_schedule,
-            self.eval_env_builder,
-            self.eval_model_path,
-        );
+        let hooks =
+            DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, self.evaluator_builder);
         Ok(OnPolicyAlgorithm {
             runtime: OnPolicyRuntime {
                 sampler,

@@ -21,6 +21,36 @@ pub struct EvaluatorBuilder<EB: EnvBuilder> {
 }
 
 impl<EB: EnvBuilder> EvaluatorBuilder<EB> {
+    pub fn new(env_builder: EB) -> Self {
+        Self {
+            env_builder,
+            n_envs: 10,
+            n_episodes: 5,
+            execution_mode: SamplerExecutionMode::Thread,
+            eval_path: None,
+        }
+    }
+
+    pub fn with_n_envs(mut self, n_envs: usize) -> Self {
+        self.n_envs = n_envs;
+        self
+    }
+
+    pub fn with_n_episodes(mut self, n_episodes: usize) -> Self {
+        self.n_episodes = n_episodes;
+        self
+    }
+
+    pub fn with_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
+        self.execution_mode = execution_mode;
+        self
+    }
+
+    pub fn with_eval_path<P: Into<PathBuf>>(mut self, eval_path: P) -> Self {
+        self.eval_path = Some(eval_path.into());
+        self
+    }
+
     fn build<A: Actor>(self) -> Evaluator<EB::Env, A> {
         let env_builder = EnvBuilderType::Homogenous {
             builder: Arc::new(self.env_builder),
@@ -29,7 +59,7 @@ impl<EB: EnvBuilder> EvaluatorBuilder<EB> {
         let sampler = R2lSampler::build(
             env_builder,
             EpisodeTrajectoryBound::new(self.n_episodes),
-            r2l_sampler::SamplerExecutionMode::Thread,
+            self.execution_mode,
         );
         Evaluator {
             sampler,
@@ -48,23 +78,6 @@ struct Evaluator<E: Env, A: Actor> {
 }
 
 impl<E: Env, A: Actor> Evaluator<E, A> {
-    fn new(builder: impl EnvBuilder<Env = E>, path: Option<PathBuf>) -> Self {
-        let env_builder = EnvBuilderType::Homogenous {
-            builder: Arc::new(builder),
-            n_envs: 10,
-        };
-        Self {
-            sampler: R2lSampler::build(
-                env_builder,
-                EpisodeTrajectoryBound::new(5),
-                r2l_sampler::SamplerExecutionMode::Thread,
-            ),
-            path,
-            best_rewards: f32::MIN,
-            best_actor: None,
-        }
-    }
-
     fn eval(&mut self, adapted_actor: impl Actor<Tensor = E::Tensor> + Clone, actor: A) {
         self.sampler.reset_all_envs();
         let trajectories = self.sampler.collect_rollouts(adapted_actor);
@@ -158,15 +171,14 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
     DefaultOnPolicyAlgorithmHooks<A, S, C, E>
 {
     /// Creates the default outer-loop hooks for the given learning schedule.
-    pub fn new(
+    pub fn new<EB: EnvBuilder<Env = E>>(
         learning_schedule: LearningSchedule,
-        builder: Option<impl EnvBuilder<Env = E>>,
-        model_path: Option<PathBuf>,
+        evaluator_builder: Option<EvaluatorBuilder<EB>>,
     ) -> Self {
         Self {
             rollout_idx: 0,
             learning_schedule,
-            evaluator: builder.map(|b| Evaluator::new(b, model_path)),
+            evaluator: evaluator_builder.map(EvaluatorBuilder::build),
             _phantom: PhantomData,
         }
     }
