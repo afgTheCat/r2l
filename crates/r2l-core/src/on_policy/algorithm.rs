@@ -42,6 +42,8 @@ pub trait Sampler {
         actor: A,
     ) -> impl AsRef<[Self::TrajectoryContainer]>;
 
+    fn trajectory_containers(&mut self) -> impl AsRef<[Self::TrajectoryContainer]>;
+
     /// Releases sampler resources before the training loop exits.
     fn shutdown(&mut self) {}
 }

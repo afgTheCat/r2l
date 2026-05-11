@@ -1,3 +1,5 @@
+// Experimenting with some API changes
+
 use anyhow::Result;
 
 use crate::{
@@ -126,5 +128,38 @@ impl<
 
         self.hooks
             .shutdown_hook(&mut self.agent, &mut self.sampler, &self.adapter)
+    }
+}
+
+struct OnPolicyRuntime<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S> = DefaultAdapter> {
+    pub agent: A,
+    pub sampler: S,
+    pub adapter: C,
+}
+
+impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>> OnPolicyRuntime<A, S, C> {
+    pub fn collect(&mut self) {
+        let actor = self.agent.actor();
+        let actor = self.adapter.adapt_actor(actor);
+        self.sampler.collect_rollouts(actor);
+    }
+
+    pub fn learn(&mut self) -> Result<()> {
+        let trajectory_buffers = self.sampler.trajectory_containers();
+        let buffers = trajectory_buffers
+            .as_ref()
+            .iter()
+            .map(|b| self.adapter.adapt_buffer(b))
+            .collect::<Vec<_>>();
+        self.agent.learn(buffers.as_ref())
+    }
+
+    pub fn actor(&self) -> A::Actor {
+        self.agent.actor()
+    }
+
+    pub fn adapted_actor(&self) -> C::SamplerActor {
+        let actor = self.agent.actor();
+        self.adapter.adapt_actor(actor)
     }
 }

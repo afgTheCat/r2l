@@ -1,5 +1,4 @@
 mod hooks;
-mod v2;
 pub mod worker;
 
 use std::marker::PhantomData;
@@ -220,6 +219,10 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for R2lSampler<E, 
         self.worker_pool.set_policy(actor.clone());
         let rollout_mode = self.rollout_mode;
         self.worker_pool.collect(rollout_mode);
+        self.all_buffers.lock().unwrap()
+    }
+
+    fn trajectory_containers(&mut self) -> impl AsRef<[Self::TrajectoryContainer]> {
         self.all_buffers.lock().unwrap()
     }
 

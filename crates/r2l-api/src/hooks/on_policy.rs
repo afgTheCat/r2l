@@ -10,12 +10,12 @@ use r2l_core::{
 };
 use r2l_sampler::{EpisodeTrajectoryBound, R2lSampler};
 
-struct Evaluator2<E: Env> {
+struct Evaluator<E: Env> {
     sampler: R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>,
     best_rewards: f32,
 }
 
-impl<E: Env> Evaluator2<E> {
+impl<E: Env> Evaluator<E> {
     fn new(builder: impl EnvBuilder<Env = E>) -> Self {
         let env_builder = EnvBuilderType::Homogenous {
             builder: Arc::new(builder),
@@ -100,7 +100,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
 > {
     rollout_idx: usize,
     learning_schedule: LearningSchedule,
-    evaluator: Option<Evaluator2<E>>,
+    evaluator: Option<Evaluator<E>>,
     _phantom: PhantomData<(A, S, C)>,
 }
 
@@ -115,7 +115,7 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
         Self {
             rollout_idx: 0,
             learning_schedule,
-            evaluator: builder.map(|b| Evaluator2::new(b)),
+            evaluator: builder.map(|b| Evaluator::new(b)),
             _phantom: PhantomData,
         }
     }
