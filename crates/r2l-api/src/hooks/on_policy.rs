@@ -1,42 +1,46 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Arc};
 
 use anyhow::Result;
-use candle_core::Tensor;
 use r2l_core::{
     HookResult,
     buffers::TrajectoryContainer,
-    env::{Env, Snapshot},
+    env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
-    on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, Sampler},
-    rng::RNG,
+    on_policy::algorithm::{Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, Sampler},
 };
-use r2l_sampler::{R2lSampler, TrajectoryBound};
-use rand::RngExt;
+use r2l_sampler::{EpisodeTrajectoryBound, R2lSampler};
 
-struct Evaluator<
-    E: Env,
-    BD: TrajectoryBound<Tensor = E::Tensor>,
-    A: Actor<Tensor = E::Tensor> + Clone,
-> {
-    best_rewads: f32,
-    sampler: R2lSampler<E, BD>,
-    best_actor: A,
+struct Evaluator2<E: Env> {
+    sampler: R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>,
+    best_rewards: f32,
 }
 
-impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>, A: Actor<Tensor = E::Tensor> + Clone>
-    Evaluator<E, BD, A>
-{
-    fn eval(&mut self, actor: A) {
+impl<E: Env> Evaluator2<E> {
+    fn new(builder: impl EnvBuilder<Env = E>) -> Self {
+        let env_builder = EnvBuilderType::Homogenous {
+            builder: Arc::new(builder),
+            n_envs: 10,
+        };
+        Self {
+            sampler: R2lSampler::build(
+                env_builder,
+                EpisodeTrajectoryBound::new(5),
+                r2l_sampler::SamplerExecutionMode::Thread,
+            ),
+            best_rewards: f32::MIN,
+        }
+    }
+
+    fn eval<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: A) {
         self.sampler.reset_all_envs();
-        let trajectories = self.sampler.collect_rollouts(actor.clone());
-        let avg_rewards = trajectories
+        let trajectories = self.sampler.collect_rollouts(actor);
+        let avg_reward = trajectories
             .as_ref()
             .iter()
             .map(|x| x.rewards().sum::<f32>())
             .sum::<f32>();
-        if avg_rewards > self.best_rewads {
-            self.best_actor = actor;
-            self.best_rewads = avg_rewards;
+        if avg_reward > self.best_rewards {
+            self.best_rewards = avg_reward;
         }
     }
 }
@@ -88,26 +92,41 @@ impl LearningSchedule {
 /// [`A2CAlgorithmBuilder`](crate::A2CAlgorithmBuilder) and
 /// [`PPOAlgorithmBuilder`](crate::PPOAlgorithmBuilder) install this hook by
 /// default when building an [`OnPolicyAlgorithm`](crate::OnPolicyAlgorithm).
-pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler> {
+pub struct DefaultOnPolicyAlgorithmHooks<
+    A: Agent,
+    S: Sampler,
+    C: OnPolicyAdapters<A, S>,
+    E: Env<Tensor = S::Tensor>,
+> {
     rollout_idx: usize,
     learning_schedule: LearningSchedule,
-    _phantom: PhantomData<(A, S)>,
+    evaluator: Option<Evaluator2<E>>,
+    _phantom: PhantomData<(A, S, C)>,
 }
 
-impl<A: Agent, S: Sampler> DefaultOnPolicyAlgorithmHooks<A, S> {
+impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>>
+    DefaultOnPolicyAlgorithmHooks<A, S, C, E>
+{
     /// Creates the default outer-loop hooks for the given learning schedule.
-    pub fn new(learning_schedule: LearningSchedule) -> Self {
+    pub fn new(
+        learning_schedule: LearningSchedule,
+        builder: Option<impl EnvBuilder<Env = E>>,
+    ) -> Self {
         Self {
             rollout_idx: 0,
             learning_schedule,
+            evaluator: builder.map(|b| Evaluator2::new(b)),
             _phantom: PhantomData,
         }
     }
 }
 
-impl<A: Agent, S: Sampler> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S> {
+impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>>
+    OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E>
+{
     type A = A;
     type S = S;
+    type C = C;
 
     fn init_hook(&mut self) -> HookResult {
         HookResult::Continue
@@ -142,11 +161,24 @@ impl<A: Agent, S: Sampler> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHo
         }
     }
 
-    fn post_training_hook(&mut self, _actor: <Self::A as Agent>::Actor) -> HookResult {
+    fn post_training_hook(
+        &mut self,
+        actor: <Self::A as Agent>::Actor,
+        adapter: &Self::C,
+    ) -> HookResult {
+        if let Some(evaluator) = &mut self.evaluator {
+            let actor = adapter.adapt_actor(actor);
+            evaluator.eval(actor);
+        }
         HookResult::Continue
     }
 
-    fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()> {
+    fn shutdown_hook(
+        &mut self,
+        agent: &mut Self::A,
+        sampler: &mut Self::S,
+        _adapter: &Self::C,
+    ) -> Result<()> {
         agent.shutdown();
         sampler.shutdown();
         Ok(())

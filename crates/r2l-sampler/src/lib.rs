@@ -151,14 +151,14 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         collection_method: BD,
-        location: SamplerExecutionMode,
+        execution_mode: SamplerExecutionMode,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = (0..num_envs)
             .map(|_| collection_method.to_container())
             .collect();
         let (all_buffers, buffer_handlers) = bimodal_array(buffers);
-        let worker_pool = match location {
+        let worker_pool = match execution_mode {
             SamplerExecutionMode::Vec => {
                 let workers = buffer_handlers
                     .into_iter()

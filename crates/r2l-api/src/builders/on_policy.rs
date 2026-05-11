@@ -1,6 +1,6 @@
 use r2l_core::{
     env::{ActionSpaceType, EnvBuilder, Space, TensorOfEnvBuilder},
-    on_policy::algorithm::{Agent, OnPolicyAlgorithm},
+    on_policy::algorithm::{Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm},
 };
 use r2l_sampler::{R2lSampler, SamplerExecutionMode, StepTrajectoryBound, TrajectoryBound};
 
@@ -12,7 +12,12 @@ use crate::{
 type DefaultOnPolicyAlgorithm<A, EB, BD> = OnPolicyAlgorithm<
     A,
     R2lSampler<<EB as EnvBuilder>::Env, BD>,
-    DefaultOnPolicyAlgorithmHooks<A, R2lSampler<<EB as EnvBuilder>::Env, BD>>,
+    DefaultOnPolicyAlgorithmHooks<
+        A,
+        R2lSampler<<EB as EnvBuilder>::Env, BD>,
+        DefaultAdapter,
+        <EB as EnvBuilder>::Env,
+    >,
 >;
 
 pub struct OnPolicyAlgorithmBuilder<
@@ -25,6 +30,7 @@ pub struct OnPolicyAlgorithmBuilder<
 > {
     pub(crate) sampler_builder: SamplerBuilder<EB, BD>,
     pub(crate) learning_schedule: LearningSchedule,
+    pub(crate) eval_env_builder: Option<EB>,
     pub(crate) agent_builder: AB,
 }
 
@@ -42,6 +48,7 @@ impl<
         Self {
             sampler_builder,
             agent_builder,
+            eval_env_builder: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
         }
     }
@@ -59,6 +66,7 @@ impl<
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_bound(trajectory_bound),
             agent_builder,
+            eval_env_builder: None,
             learning_schedule,
         }
     }
@@ -73,7 +81,10 @@ impl<
         self
     }
 
-    pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm<A, EB, BD>> {
+    pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm<A, EB, BD>>
+    where
+        DefaultAdapter: OnPolicyAdapters<A, R2lSampler<<EB as EnvBuilder>::Env, BD>>,
+    {
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
         let observation_size = env_description.observation_size();
@@ -85,11 +96,13 @@ impl<
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
-        let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule);
+        let hooks =
+            DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, self.eval_env_builder);
         Ok(OnPolicyAlgorithm {
             sampler,
             agent,
             hooks,
+            adapter: DefaultAdapter,
         })
     }
 }
