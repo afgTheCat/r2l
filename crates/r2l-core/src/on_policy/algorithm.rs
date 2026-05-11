@@ -62,27 +62,25 @@ pub trait OnPolicyAlgorithmHooks {
     type C: OnPolicyAdapters<Self::A, Self::S>;
 
     /// Called once before rollout/training starts.
-    fn init_hook(&mut self) -> HookResult;
+    fn init_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>)
+    -> HookResult;
 
     /// Called after rollouts are collected and before agent learning.
     fn post_rollout_hook(
         &mut self,
-        rollouts: &[<Self::S as Sampler>::TrajectoryContainer],
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult;
 
     /// Called after the agent has learned from the latest rollouts.
     fn post_training_hook(
         &mut self,
-        actor: <Self::A as Agent>::Actor,
-        adapter: &Self::C,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult;
 
     /// Called once when the loop exits.
     fn shutdown_hook(
         &mut self,
-        agent: &mut Self::A,
-        sampler: &mut Self::S,
-        adapter: &Self::C,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> Result<()>;
 }
 
@@ -129,6 +127,58 @@ where
     }
 }
 
+/// Coupled runtime unit that binds an agent, sampler, and adapter together.
+pub struct OnPolicyRuntime<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S> = DefaultAdapter> {
+    /// Trainable agent.
+    pub agent: A,
+    /// Rollout collector.
+    pub sampler: S,
+    /// Adapter bridging sampler and agent types.
+    pub adapter: C,
+}
+
+impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>> OnPolicyRuntime<A, S, C> {
+    /// Collects a fresh set of rollouts using the adapted actor.
+    pub fn collect(&mut self) -> impl AsRef<[S::TrajectoryContainer]> {
+        let actor = self.agent.actor();
+        let actor = self.adapter.adapt_actor(actor);
+        self.sampler.collect_rollouts(actor)
+    }
+
+    /// Returns the last collected trajectory containers from the sampler.
+    pub fn trajectory_containers(&mut self) -> impl AsRef<[S::TrajectoryContainer]> {
+        self.sampler.trajectory_containers()
+    }
+
+    /// Adapts the sampler buffers and runs an agent update.
+    pub fn learn(&mut self) -> Result<()> {
+        let trajectory_buffers = self.sampler.trajectory_containers();
+        let buffers = trajectory_buffers
+            .as_ref()
+            .iter()
+            .map(|b| self.adapter.adapt_buffer(b))
+            .collect::<Vec<_>>();
+        self.agent.learn(buffers.as_ref())
+    }
+
+    /// Returns the agent-facing actor snapshot.
+    pub fn actor(&self) -> A::Actor {
+        self.agent.actor()
+    }
+
+    /// Returns the sampler-facing adapted actor snapshot.
+    pub fn adapted_actor(&self) -> C::SamplerActor {
+        let actor = self.agent.actor();
+        self.adapter.adapt_actor(actor)
+    }
+
+    /// Releases agent and sampler resources.
+    pub fn shutdown(&mut self) {
+        self.agent.shutdown();
+        self.sampler.shutdown();
+    }
+}
+
 // ANCHOR: on_policy_algorithm
 /// Default on-policy training loop over an [`Agent`], [`Sampler`], and hooks.
 pub struct OnPolicyAlgorithm<
@@ -137,14 +187,10 @@ pub struct OnPolicyAlgorithm<
     H: OnPolicyAlgorithmHooks<A = A, S = S, C = C>,
     C: OnPolicyAdapters<A, S> = DefaultAdapter,
 > {
-    /// Rollout collector.
-    pub sampler: S,
-    /// Trainable agent.
-    pub agent: A,
+    /// Coupled training runtime.
+    pub runtime: OnPolicyRuntime<A, S, C>,
     /// Lifecycle hooks.
     pub hooks: H,
-    /// Adapter bridging sampler and agent types.
-    pub adapter: C,
 }
 // ANCHOR_END: on_policy_algorithm
 
@@ -158,25 +204,16 @@ impl<
     // ANCHOR: train_loop
     /// Runs rollout collection and learning until a hook requests shutdown.
     pub fn train(&mut self) -> Result<()> {
-        return_on_hook_result!(self.hooks.init_hook());
+        return_on_hook_result!(self.hooks.init_hook(&mut self.runtime));
         loop {
-            let actor = self.agent.actor();
-            let actor = self.adapter.adapt_actor(actor);
-            let buffers = self.sampler.collect_rollouts(actor);
-            break_on_hook_result!(self.hooks.post_rollout_hook(buffers.as_ref()));
+            let _ = self.runtime.collect();
+            break_on_hook_result!(self.hooks.post_rollout_hook(&mut self.runtime));
 
-            let buffers = buffers
-                .as_ref()
-                .iter()
-                .map(|b| self.adapter.adapt_buffer(b))
-                .collect::<Vec<_>>();
-            self.agent.learn(&buffers)?;
-            let actor = self.agent.actor();
-            break_on_hook_result!(self.hooks.post_training_hook(actor, &self.adapter));
+            self.runtime.learn()?;
+            break_on_hook_result!(self.hooks.post_training_hook(&mut self.runtime));
         }
 
-        self.hooks
-            .shutdown_hook(&mut self.agent, &mut self.sampler, &self.adapter)
+        self.hooks.shutdown_hook(&mut self.runtime)
     }
     // ANCHOR_END: train_loop
 }

@@ -6,16 +6,19 @@ use r2l_core::{
     buffers::TrajectoryContainer,
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
-    on_policy::algorithm::{Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, Sampler},
+    on_policy::algorithm::{
+        Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
+    },
 };
 use r2l_sampler::{EpisodeTrajectoryBound, R2lSampler};
 
-struct Evaluator<E: Env> {
+struct Evaluator<E: Env, A: Actor> {
     sampler: R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>,
+    best_actor: Option<A>,
     best_rewards: f32,
 }
 
-impl<E: Env> Evaluator<E> {
+impl<E: Env, A: Actor> Evaluator<E, A> {
     fn new(builder: impl EnvBuilder<Env = E>) -> Self {
         let env_builder = EnvBuilderType::Homogenous {
             builder: Arc::new(builder),
@@ -28,21 +31,22 @@ impl<E: Env> Evaluator<E> {
                 r2l_sampler::SamplerExecutionMode::Thread,
             ),
             best_rewards: f32::MIN,
+            best_actor: None,
         }
     }
 
-    fn eval<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: A) {
-        self.sampler.reset_all_envs();
-        let trajectories = self.sampler.collect_rollouts(actor);
-        let avg_reward = trajectories
-            .as_ref()
-            .iter()
-            .map(|x| x.rewards().sum::<f32>())
-            .sum::<f32>();
-        if avg_reward > self.best_rewards {
-            self.best_rewards = avg_reward;
-        }
-    }
+    // fn eval<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: A) {
+    //     self.sampler.reset_all_envs();
+    //     let trajectories = self.sampler.collect_rollouts(actor);
+    //     let avg_reward = trajectories
+    //         .as_ref()
+    //         .iter()
+    //         .map(|x| x.rewards().sum::<f32>())
+    //         .sum::<f32>();
+    //     if avg_reward > self.best_rewards {
+    //         self.best_rewards = avg_reward;
+    //     }
+    // }
 }
 
 /// Training-stop policy for [`DefaultOnPolicyAlgorithmHooks`].
@@ -100,7 +104,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
 > {
     rollout_idx: usize,
     learning_schedule: LearningSchedule,
-    evaluator: Option<Evaluator<E>>,
+    evaluator: Option<Evaluator<E, A::Actor>>,
     _phantom: PhantomData<(A, S, C)>,
 }
 
@@ -128,13 +132,16 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
     type S = S;
     type C = C;
 
-    fn init_hook(&mut self) -> HookResult {
+    fn init_hook(
+        &mut self,
+        _runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
+    ) -> HookResult {
         HookResult::Continue
     }
 
     fn post_rollout_hook(
         &mut self,
-        rollouts: &[<Self::S as Sampler>::TrajectoryContainer],
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
         self.rollout_idx += 1;
         let should_stop = match &mut self.learning_schedule {
@@ -149,7 +156,9 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
                 total_steps,
                 current_step,
             } => {
-                let rollout_steps: usize = rollouts.iter().map(|e| e.actions().count()).sum();
+                let rollouts = runtime.trajectory_containers();
+                let rollout_steps: usize =
+                    rollouts.as_ref().iter().map(|e| e.actions().count()).sum();
                 *current_step += rollout_steps;
                 current_step >= total_steps
             }
@@ -163,24 +172,19 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
 
     fn post_training_hook(
         &mut self,
-        actor: <Self::A as Agent>::Actor,
-        adapter: &Self::C,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
         if let Some(evaluator) = &mut self.evaluator {
-            let actor = adapter.adapt_actor(actor);
-            evaluator.eval(actor);
+            // evaluator.eval(runtime.adapted_actor());
         }
         HookResult::Continue
     }
 
     fn shutdown_hook(
         &mut self,
-        agent: &mut Self::A,
-        sampler: &mut Self::S,
-        _adapter: &Self::C,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> Result<()> {
-        agent.shutdown();
-        sampler.shutdown();
+        runtime.shutdown();
         Ok(())
     }
 }

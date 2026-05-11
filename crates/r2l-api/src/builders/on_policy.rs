@@ -1,6 +1,8 @@
 use r2l_core::{
     env::{ActionSpaceType, EnvBuilder, Space, TensorOfEnvBuilder},
-    on_policy::algorithm::{Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm},
+    on_policy::algorithm::{
+        Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
+    },
 };
 use r2l_sampler::{R2lSampler, SamplerExecutionMode, StepTrajectoryBound, TrajectoryBound};
 
@@ -99,10 +101,12 @@ impl<
         let hooks =
             DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, self.eval_env_builder);
         Ok(OnPolicyAlgorithm {
-            sampler,
-            agent,
+            runtime: OnPolicyRuntime {
+                sampler,
+                agent,
+                adapter: DefaultAdapter,
+            },
             hooks,
-            adapter: DefaultAdapter,
         })
     }
 }

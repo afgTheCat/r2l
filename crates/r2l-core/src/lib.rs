@@ -90,7 +90,7 @@ pub mod prelude {
     pub use crate::models::{Actor, LearningModule, Policy, ValueFunction};
     pub use crate::on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyAlgorithmHooks,
-        Sampler,
+        OnPolicyRuntime, Sampler,
     };
     pub use crate::on_policy::learning_module::OnPolicyLearningModule;
     pub use crate::on_policy::losses::FromPolicyValueLosses;
