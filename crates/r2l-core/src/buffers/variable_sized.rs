@@ -73,6 +73,15 @@ impl<T: R2lTensor> TrajectoryContainer for VariableSizedStateBuffer<T> {
 }
 
 impl<T: R2lTensor> ExpandableTrajectoryContainer for VariableSizedStateBuffer<T> {
+    fn begin_rollout(&mut self) {
+        self.states.clear();
+        self.next_states.clear();
+        self.action.clear();
+        self.rewards.clear();
+        self.terminated.clear();
+        self.truncated.clear();
+    }
+
     fn push(&mut self, memory: Memory<Self::Tensor>) {
         let Memory {
             state,

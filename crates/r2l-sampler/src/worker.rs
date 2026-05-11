@@ -75,6 +75,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
             todo!()
         };
         let mut buffer = self.buffer.lock().unwrap();
+        buffer.begin_rollout();
         match bound {
             RolloutMode::StepBound { n_steps: steps } => {
                 for _ in 0..steps {

@@ -75,6 +75,11 @@ impl<T: R2lTensor> TrajectoryContainer for FixedSizeStateBuffer<T> {
 }
 
 impl<T: R2lTensor> ExpandableTrajectoryContainer for FixedSizeStateBuffer<T> {
+    fn begin_rollout(&mut self) {
+        // Step-bounded rollouts always overwrite the full fixed-capacity buffer,
+        // so there is no need to clear the ring buffers between collections.
+    }
+
     fn push(&mut self, memory: Memory<Self::Tensor>) {
         let Memory {
             state,

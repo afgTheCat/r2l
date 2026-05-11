@@ -71,6 +71,13 @@ pub trait TrajectoryContainer: Sync {
             .map(|(terminated, truncated)| terminated || truncated)
     }
 
+    /// Returns the number of terminating states in the buffer. Note that a buffer may contain
+    /// trajectories split accross different trajectory buffers, so this is might not be an accurate
+    /// measure of how many full episodes are contained in the trajectory container
+    fn episode_terminations(&self) -> usize {
+        self.dones().filter(|x| *x).count()
+    }
+
     /// Iterates over cloned transitions.
     ///
     /// This is convenient for conversion code but may be expensive for large
@@ -99,6 +106,9 @@ pub trait TrajectoryContainer: Sync {
 
 /// Mutable trajectory buffer that can receive newly collected transitions.
 pub trait ExpandableTrajectoryContainer: TrajectoryContainer + Send + 'static {
+    /// Prepares the buffer to record a fresh rollout.
+    fn begin_rollout(&mut self);
+
     /// Appends one transition to the buffer.
     fn push(&mut self, memory: Memory<Self::Tensor>);
 }
