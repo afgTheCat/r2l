@@ -1,7 +1,4 @@
-use std::marker::PhantomData;
-
 use anyhow::Result;
-use candle_core::Tensor;
 
 use crate::buffers::TrajectoryContainer;
 use crate::models::Actor;
@@ -54,33 +51,7 @@ pub trait Sampler {
 ///
 /// Hook methods return [`HookResult::Break`] to stop the training loop at that
 /// point.
-pub trait OnPolicyAlgorithmHooks
-// where
-//     <Self::A as Agent>::Actor: Clone,
-//     <Self::A as Agent>::Tensor: From<<Self::S as Sampler>::Tensor>,
-{
-    /// Agent type controlled by the training loop.
-    type A: Agent;
-    /// Sampler type controlled by the training loop.
-    type S: Sampler;
-
-    /// Called once before rollout/training starts.
-    fn init_hook(&mut self) -> HookResult;
-
-    /// Called after rollouts are collected and before agent learning.
-    fn post_rollout_hook(
-        &mut self,
-        rollouts: &[<Self::S as Sampler>::TrajectoryContainer],
-    ) -> HookResult;
-
-    /// Called after the agent has learned from the latest rollouts.
-    fn post_training_hook(&mut self, actor: <Self::A as Agent>::Actor) -> HookResult;
-
-    /// Called once when the loop exits.
-    fn shutdown_hook(&mut self, agent: &mut Self::A, sampler: &mut Self::S) -> Result<()>;
-}
-
-pub trait OnPolicyAlgorithmHooks2 {
+pub trait OnPolicyAlgorithmHooks {
     /// Agent type controlled by the training loop.
     type A: Agent;
     /// Sampler type controlled by the training loop.
