@@ -83,7 +83,8 @@ struct Evaluator<E: Env, A: Actor> {
 impl<E: Env, A: Actor> Evaluator<E, A> {
     fn eval(&mut self, adapted_actor: impl Actor<Tensor = E::Tensor> + Clone, actor: A) {
         self.sampler.reset_all_envs();
-        let trajectories = self.sampler.collect_rollouts(adapted_actor);
+        self.sampler.collect_rollouts(adapted_actor);
+        let trajectories = self.sampler.trajectory_containers();
         let total_reward: f32 = trajectories
             .as_ref()
             .iter()
@@ -108,6 +109,10 @@ impl<E: Env, A: Actor> Evaluator<E, A> {
         };
         std::fs::write(path, bytes)?;
         Ok(())
+    }
+
+    fn shutdown(&mut self) {
+        self.sampler.shutdown();
     }
 }
 
@@ -164,7 +169,6 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     C: OnPolicyAdapters<A, S>,
     E: Env<Tensor = S::Tensor>,
 > {
-    rollout_idx: usize,
     learning_schedule: LearningSchedule,
     evaluator: Option<Evaluator<E, A::Actor>>,
     _phantom: PhantomData<(A, S, C)>,
@@ -179,7 +183,6 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
         evaluator_builder: Option<EvaluatorBuilder<EB>>,
     ) -> Self {
         Self {
-            rollout_idx: 0,
             learning_schedule,
             evaluator: evaluator_builder.map(EvaluatorBuilder::build),
             _phantom: PhantomData,
@@ -203,9 +206,21 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
 
     fn post_rollout_hook(
         &mut self,
+        _runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
+    ) -> HookResult {
+        HookResult::Continue
+    }
+
+    fn post_training_hook(
+        &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
-        self.rollout_idx += 1;
+        if let Some(evaluator) = &mut self.evaluator {
+            let actor = runtime.actor();
+            let adapted_actor = runtime.adapted_actor();
+            evaluator.eval(adapted_actor, actor);
+        }
+
         let should_stop = match &mut self.learning_schedule {
             LearningSchedule::RolloutBound {
                 total_rollouts,
@@ -232,24 +247,13 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
         }
     }
 
-    fn post_training_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> HookResult {
-        if let Some(evaluator) = &mut self.evaluator {
-            let actor = runtime.actor();
-            let adapted_actor = runtime.adapted_actor();
-            evaluator.eval(adapted_actor, actor);
-        }
-        HookResult::Continue
-    }
-
     fn shutdown_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> Result<()> {
-        if let Some(evaluator) = &self.evaluator {
+        if let Some(evaluator) = &mut self.evaluator {
             evaluator.try_write_to_file()?;
+            evaluator.shutdown();
         }
         runtime.shutdown();
         Ok(())

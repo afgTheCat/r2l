@@ -37,10 +37,7 @@ pub trait Sampler {
     type TrajectoryContainer: TrajectoryContainer<Tensor = Self::Tensor>;
 
     /// Collects rollout data using the provided actor.
-    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
-        &mut self,
-        actor: A,
-    ) -> impl AsRef<[Self::TrajectoryContainer]>;
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A);
 
     fn trajectory_containers(&mut self) -> impl AsRef<[Self::TrajectoryContainer]>;
 
@@ -139,10 +136,10 @@ pub struct OnPolicyRuntime<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S> = Def
 
 impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>> OnPolicyRuntime<A, S, C> {
     /// Collects a fresh set of rollouts using the adapted actor.
-    pub fn collect(&mut self) -> impl AsRef<[S::TrajectoryContainer]> {
+    pub fn collect(&mut self) {
         let actor = self.agent.actor();
         let actor = self.adapter.adapt_actor(actor);
-        self.sampler.collect_rollouts(actor)
+        self.sampler.collect_rollouts(actor);
     }
 
     /// Returns the last collected trajectory containers from the sampler.
@@ -206,7 +203,7 @@ impl<
     pub fn train(&mut self) -> Result<()> {
         return_on_hook_result!(self.hooks.init_hook(&mut self.runtime));
         loop {
-            let _ = self.runtime.collect();
+            self.runtime.collect();
             break_on_hook_result!(self.hooks.post_rollout_hook(&mut self.runtime));
 
             self.runtime.learn()?;

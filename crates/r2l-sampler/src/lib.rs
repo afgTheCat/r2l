@@ -212,14 +212,10 @@ impl<E: Env, BD: TrajectoryBound<Tensor = E::Tensor>> Sampler for R2lSampler<E, 
     type Tensor = E::Tensor;
     type TrajectoryContainer = BD::Container;
 
-    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
-        &mut self,
-        actor: A,
-    ) -> impl AsRef<[Self::TrajectoryContainer]> {
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
         self.worker_pool.set_policy(actor.clone());
         let rollout_mode = self.rollout_mode;
         self.worker_pool.collect(rollout_mode);
-        self.all_buffers.lock().unwrap()
     }
 
     fn trajectory_containers(&mut self) -> impl AsRef<[Self::TrajectoryContainer]> {
