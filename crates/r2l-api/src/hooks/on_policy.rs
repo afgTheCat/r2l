@@ -91,6 +91,7 @@ impl<E: Env, A: Actor> Evaluator<E, A> {
             .map(|x| x.rewards().sum::<f32>())
             .sum();
         let avg_reward = total_reward / trajectories.as_ref().len() as f32;
+        println!("avg reward: {avg_reward}");
         if avg_reward > self.best_rewards {
             self.best_rewards = avg_reward;
             self.best_actor = Some(actor);
