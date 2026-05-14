@@ -1,12 +1,9 @@
 use candle_core::{DType, Device, Result, Tensor};
 use r2l_core::{
-    buffers::EditableTrajectoryContainer,
-    env::{EnvDescription},
-    models::Actor,
-    tensor::R2lTensor,
+    buffers::EditableTrajectoryContainer, env::EnvDescription, models::Actor, tensor::R2lTensor,
 };
 
-use crate::utils::{running_mean::RunningMeanStd};
+use crate::utils::running_mean::RunningMeanStd;
 
 pub struct EnvNormalizer {
     pub(crate) obs_rms: RunningMeanStd,

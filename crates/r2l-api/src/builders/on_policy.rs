@@ -7,8 +7,7 @@ use r2l_core::{
 use r2l_sampler::{R2lSampler, RolloutBound, SamplerExecutionMode, StepTrajectoryBound};
 
 use crate::{
-    builders::{agent::AgentBuilder, sampler::SamplerBuilder},
-    hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, EvaluatorBuilder, LearningSchedule},
+    BestActorEvaluatorBuilder, builders::{agent::AgentBuilder, sampler::SamplerBuilder}, hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule}
 };
 
 type DefaultOnPolicyAlgorithm<A, EB, BD> = OnPolicyAlgorithm<
@@ -30,7 +29,7 @@ pub struct OnPolicyAlgorithmBuilder<
 > {
     pub(crate) sampler_builder: SamplerBuilder<EB, BD>,
     pub(crate) learning_schedule: LearningSchedule,
-    pub(crate) evaluator_builder: Option<EvaluatorBuilder<EB>>,
+    pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
     pub(crate) agent_builder: AB,
 }
 
@@ -72,7 +71,7 @@ impl<
         }
     }
 
-    pub fn with_evaluator(mut self, evaluator_builder: Option<EvaluatorBuilder<EB>>) -> Self {
+    pub fn with_evaluator(mut self, evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>) -> Self {
         self.evaluator_builder = evaluator_builder;
         self
     }
@@ -87,7 +86,7 @@ impl<
             evaluator_builder.with_n_episodes(n_episodes)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            EvaluatorBuilder::from_env_builder_type(env_builder).with_n_episodes(n_episodes)
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder).with_n_episodes(n_episodes)
         };
         self.evaluator_builder = Some(evaluator_builder);
         self
@@ -100,7 +99,7 @@ impl<
         let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
             evaluator_builder.with_env_builder(env_builder)
         } else {
-            EvaluatorBuilder::from_env_builder_type(env_builder)
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
         };
         self.evaluator_builder = Some(evaluator_builder);
         self
@@ -111,7 +110,7 @@ impl<
             evaluator_builder.with_execution_mode(execution_mode)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            EvaluatorBuilder::from_env_builder_type(env_builder).with_execution_mode(execution_mode)
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder).with_execution_mode(execution_mode)
         };
         self.evaluator_builder = Some(evaluator_builder);
         self
@@ -125,7 +124,7 @@ impl<
             evaluator_builder.with_best_actor_path(eval_path)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            EvaluatorBuilder::from_env_builder_type(env_builder).with_best_actor_path(eval_path)
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder).with_best_actor_path(eval_path)
         };
         self.evaluator_builder = Some(evaluator_builder);
         self

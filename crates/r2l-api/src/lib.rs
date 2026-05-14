@@ -23,7 +23,7 @@ pub use builders::ppo::algorithm::{
 };
 pub use builders::sampler::SamplerBuilder;
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
-pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, EvaluatorBuilder, LearningSchedule};
+pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule};
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
 pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
@@ -33,4 +33,4 @@ pub use r2l_core::{
 pub use r2l_sampler::{
     EpisodeTrajectoryBound, R2lSampler, SamplerExecutionMode, StepTrajectoryBound,
 };
-pub use utils::evaluator2::{BestActorEvaluator, BestActorEvaluatorBuilder, Evaluator};
+pub use utils::evaluator::{BestActorEvaluator, BestActorEvaluatorBuilder, Evaluator};

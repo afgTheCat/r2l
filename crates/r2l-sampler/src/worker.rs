@@ -1,4 +1,4 @@
-use std::{thread::JoinHandle};
+use std::thread::JoinHandle;
 
 use bimodal_array::ElementHandle;
 use crossbeam::channel::{Receiver, Sender};
@@ -180,12 +180,22 @@ pub struct ThreadHandle<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> ThreadHandle<T> {
-    pub fn new(handle: JoinHandle<()>, command_tx: CommandSender<T>, worker_rx: ResultReceiver<T>) -> Self {
-        Self { handle, command_tx, worker_rx }
+    pub fn new(
+        handle: JoinHandle<()>,
+        command_tx: CommandSender<T>,
+        worker_rx: ResultReceiver<T>,
+    ) -> Self {
+        Self {
+            handle,
+            command_tx,
+            worker_rx,
+        }
     }
 
     pub fn env_description(&self) -> EnvDescription<T> {
-        self.command_tx.send(WorkerCommand::GetEnvDescription).unwrap();
+        self.command_tx
+            .send(WorkerCommand::GetEnvDescription)
+            .unwrap();
         let WorkerResult::EnvDescription(env_description) = self.worker_rx.recv().unwrap() else {
             todo!()
         };
@@ -326,7 +336,9 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
     }
 }
 
-impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Drop for WorkerPool<E, B> {
+impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Drop
+    for WorkerPool<E, B>
+{
     fn drop(&mut self) {
         self.shutdown();
     }
