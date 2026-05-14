@@ -2,12 +2,12 @@ use anyhow::bail;
 use burn::{
     module::Module,
     prelude::Backend,
-    record::{BinBytesRecorder, FullPrecisionSettings, Recorder},
     tensor::{
         Tensor, TensorData,
         activation::{log_softmax, softmax},
     },
 };
+use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
 use r2l_core::models::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
@@ -35,13 +35,24 @@ impl<B: Backend> CategoricalDistribution<B> {
             action_size,
         }
     }
+
+    // TODO: this is quite brittle like this
+    /// Builds a categoriacal policy using a safetensor store
+    pub fn from_store(store: &mut SafetensorsStore) -> Self {
+        let logits_layers = Sequential::<B>::dims_from_store("logits", store);
+        let mut distribution = Self::build(&logits_layers);
+        distribution
+            .load_from(store)
+            .expect("failed to load CategoricalDistribution from store");
+        distribution
+    }
 }
 
 impl<B: Backend> Actor for CategoricalDistribution<B> {
     type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
-        let device: <B as Backend>::Device = Default::default();
+        let device = Default::default();
         let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation);
         let action_probs: Vec<f32> = softmax(logits, 1).to_data().to_vec().unwrap();
@@ -55,10 +66,11 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
         ))
     }
 
+    // This will serialize the model to safetesnors
     fn try_serialize(&self) -> Option<Vec<u8>> {
-        let recorder = BinBytesRecorder::<FullPrecisionSettings>::new();
-        let record = self.clone().into_record();
-        recorder.record(record, ()).ok()
+        let mut store = SafetensorsStore::default();
+        store.collect_from(self).unwrap();
+        store.get_bytes().ok()
     }
 }
 

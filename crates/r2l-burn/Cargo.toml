@@ -11,6 +11,7 @@ cuda = ["r2l-core/cuda"]
 
 [dependencies]
 burn = { workspace = true }
+burn-store = { workspace = true }
 r2l-core = { workspace = true }
 anyhow = { workspace = true }
 rand = { workspace = true }

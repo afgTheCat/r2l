@@ -94,8 +94,8 @@ let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
     .with_reporter(Some(tx));
 ```
 
-For most usecases, the deafult setup should be fine, but for certain usecases
+For most usecases, the default setup should be fine, but for certain usecases
 you might want the reporter to be present and not want the stdout to be kept
-clean (such as in the case of a tui application).
+clean (such as in the case of a tui application in the examples).
 
 ## Saving the best performing agent

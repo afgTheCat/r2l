@@ -56,7 +56,7 @@ pub trait OnPolicyAlgorithmHooks {
     /// Sampler type controlled by the training loop.
     type S: Sampler;
     /// Adapter used to bridge agent and sampler types.
-    type C: OnPolicyAdapters<Self::A, Self::S>;
+    type C: OnPolicyAdapters<<Self::A as Agent>::Actor, Self::S>;
 
     /// Called once before rollout/training starts.
     fn init_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>)
@@ -81,15 +81,16 @@ pub trait OnPolicyAlgorithmHooks {
     ) -> Result<()>;
 }
 
+// TODO: we probably only need to
 /// Adapter layer between the agent-facing and sampler-facing data types.
-pub trait OnPolicyAdapters<A: Agent, S: Sampler> {
+pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
     type SamplerActor: Actor<Tensor = S::Tensor> + Clone;
     type AgentBuffer<'a>: TrajectoryContainer<Tensor = A::Tensor>
     where
         Self: 'a,
         S::TrajectoryContainer: 'a;
 
-    fn adapt_actor(&self, actor: A::Actor) -> Self::SamplerActor;
+    fn adapt_actor(&self, actor: A) -> Self::SamplerActor;
 
     fn adapt_buffer<'a>(&self, buffer: &'a S::TrajectoryContainer) -> Self::AgentBuffer<'a>;
 }
@@ -97,13 +98,13 @@ pub trait OnPolicyAdapters<A: Agent, S: Sampler> {
 /// Default adapter based on tensor-converting actor and buffer wrappers.
 pub struct DefaultAdapter;
 
-impl<A: Agent<Actor: Clone>, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter
+impl<A: Actor + Clone, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter
 where
     S::Tensor: From<A::Tensor>,
     A::Tensor: From<S::Tensor>,
     A::Tensor: From<<S::TrajectoryContainer as TrajectoryContainer>::Tensor>,
 {
-    type SamplerActor = ActorWrapper<A::Actor, S::Tensor>;
+    type SamplerActor = ActorWrapper<A, S::Tensor>;
     type AgentBuffer<'a>
         = BufferWrapper<
         'a,
@@ -115,7 +116,7 @@ where
         Self: 'a,
         S::TrajectoryContainer: 'a;
 
-    fn adapt_actor(&self, actor: A::Actor) -> Self::SamplerActor {
+    fn adapt_actor(&self, actor: A) -> Self::SamplerActor {
         ActorWrapper::new(actor)
     }
 
@@ -125,7 +126,8 @@ where
 }
 
 /// Coupled runtime unit that binds an agent, sampler, and adapter together.
-pub struct OnPolicyRuntime<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S> = DefaultAdapter> {
+pub struct OnPolicyRuntime<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S> = DefaultAdapter>
+{
     /// Trainable agent.
     pub agent: A,
     /// Rollout collector.
@@ -134,7 +136,7 @@ pub struct OnPolicyRuntime<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S> = Def
     pub adapter: C,
 }
 
-impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>> OnPolicyRuntime<A, S, C> {
+impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>> OnPolicyRuntime<A, S, C> {
     /// Collects a fresh set of rollouts using the adapted actor.
     pub fn collect(&mut self) {
         let actor = self.agent.actor();
@@ -182,7 +184,7 @@ pub struct OnPolicyAlgorithm<
     A: Agent,
     S: Sampler,
     H: OnPolicyAlgorithmHooks<A = A, S = S, C = C>,
-    C: OnPolicyAdapters<A, S> = DefaultAdapter,
+    C: OnPolicyAdapters<A::Actor, S> = DefaultAdapter,
 > {
     /// Coupled training runtime.
     pub runtime: OnPolicyRuntime<A, S, C>,
@@ -195,7 +197,7 @@ impl<
     A: Agent,
     S: Sampler,
     H: OnPolicyAlgorithmHooks<A = A, S = S, C = C>,
-    C: OnPolicyAdapters<A, S>,
+    C: OnPolicyAdapters<A::Actor, S>,
 > OnPolicyAlgorithm<A, S, H, C>
 {
     // ANCHOR: train_loop

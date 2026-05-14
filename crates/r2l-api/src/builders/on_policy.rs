@@ -117,12 +117,15 @@ impl<
         self
     }
 
-    pub fn with_evaluator_eval_path<P: Into<std::path::PathBuf>>(mut self, eval_path: P) -> Self {
+    pub fn with_evaluator_best_actor_path<P: Into<std::path::PathBuf>>(
+        mut self,
+        eval_path: P,
+    ) -> Self {
         let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
-            evaluator_builder.with_eval_path(eval_path)
+            evaluator_builder.with_best_actor_path(eval_path)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            EvaluatorBuilder::from_env_builder_type(env_builder).with_eval_path(eval_path)
+            EvaluatorBuilder::from_env_builder_type(env_builder).with_best_actor_path(eval_path)
         };
         self.evaluator_builder = Some(evaluator_builder);
         self
@@ -135,7 +138,7 @@ impl<
 
     pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm<A, EB, BD>>
     where
-        DefaultAdapter: OnPolicyAdapters<A, R2lSampler<<EB as EnvBuilder>::Env, BD>>,
+        DefaultAdapter: OnPolicyAdapters<A::Actor, R2lSampler<<EB as EnvBuilder>::Env, BD>>,
     {
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();

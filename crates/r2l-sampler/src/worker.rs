@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{thread::JoinHandle};
 
 use bimodal_array::ElementHandle;
 use crossbeam::channel::{Receiver, Sender};
@@ -173,70 +173,86 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
     }
 }
 
-pub struct ThreadWorkers<T: R2lTensor>(pub HashMap<usize, (CommandSender<T>, ResultReceiver<T>)>);
+pub struct ThreadHandle<T: R2lTensor> {
+    handle: JoinHandle<()>,
+    command_tx: CommandSender<T>,
+    worker_rx: ResultReceiver<T>,
+}
 
-impl<T: R2lTensor> ThreadWorkers<T> {
+impl<T: R2lTensor> ThreadHandle<T> {
+    pub fn new(handle: JoinHandle<()>, command_tx: CommandSender<T>, worker_rx: ResultReceiver<T>) -> Self {
+        Self { handle, command_tx, worker_rx }
+    }
+
     pub fn env_description(&self) -> EnvDescription<T> {
-        let channels = &self.0;
-        let (command_tx, worker_rx) = channels.get(&0).unwrap();
-        command_tx.send(WorkerCommand::GetEnvDescription).unwrap();
-        let WorkerResult::EnvDescription(env_description) = worker_rx.recv().unwrap() else {
+        self.command_tx.send(WorkerCommand::GetEnvDescription).unwrap();
+        let WorkerResult::EnvDescription(env_description) = self.worker_rx.recv().unwrap() else {
             todo!()
         };
         env_description
     }
 
+    pub fn send(&self, command: WorkerCommand<T>) {
+        self.command_tx.send(command).unwrap();
+    }
+
+    pub fn recv(&self) -> WorkerResult<T> {
+        self.worker_rx.recv().unwrap()
+    }
+
+    pub fn shutdown(self) {
+        self.command_tx.send(WorkerCommand::Shutdown).unwrap();
+        self.worker_rx.recv().unwrap();
+        self.handle.join().unwrap();
+    }
+}
+
+pub struct ThreadWorkers<T: R2lTensor> {
+    worker_handles: Vec<ThreadHandle<T>>,
+}
+
+impl<T: R2lTensor> ThreadWorkers<T> {
+    pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
+        Self { worker_handles }
+    }
+
+    // TODO: this can fail. We need to mark this as failible once we figured the right Error types out
+    pub fn env_description(&self) -> EnvDescription<T> {
+        self.worker_handles[0].env_description()
+    }
+
     pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
-        let channels = &self.0;
-        let num_envs = channels.len();
-        for idx in 0..num_envs {
-            let tx = &channels.get(&idx).unwrap().0;
-            tx.send(WorkerCommand::SetPolicy(Box::new(policy.clone())))
-                .unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
         }
-        for idx in 0..num_envs {
-            let rx = &channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
         }
     }
 
     pub fn collect_rollout(&self, bound: RolloutMode) {
-        let channels = &self.0;
-        let num_envs = channels.len();
-        for idx in 0..num_envs {
-            let tx = &channels.get(&idx).unwrap().0;
-            tx.send(WorkerCommand::Collect(bound)).unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.send(WorkerCommand::Collect(bound));
         }
-        for idx in 0..num_envs {
-            let rx = &channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
-        }
-    }
-
-    pub fn shutdown(&self) {
-        let channels = &self.0;
-        let num_envs = channels.len();
-        for idx in 0..num_envs {
-            let tx = &channels.get(&idx).unwrap().0;
-            tx.send(WorkerCommand::Shutdown).unwrap();
-        }
-        for idx in 0..num_envs {
-            let rx = &channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
         }
     }
 
     pub fn reset_all(&self) {
-        let channels = &self.0;
-        let num_envs = channels.len();
-        for idx in 0..num_envs {
+        for worker_handle in self.worker_handles.iter() {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            let tx = &channels.get(&idx).unwrap().0;
-            tx.send(WorkerCommand::ResetEnv(seed)).unwrap();
+            worker_handle.send(WorkerCommand::ResetEnv(seed));
         }
-        for idx in 0..num_envs {
-            let rx = &channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
+        }
+    }
+
+    pub fn shutdown(&mut self) {
+        // shutdown one by one.
+        while let Some(worker) = self.worker_handles.pop() {
+            worker.shutdown();
         }
     }
 }
@@ -284,7 +300,7 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
         self.collect(RolloutMode::StepBound { n_steps: 1 });
     }
 
-    pub fn shutdown(&self) {
+    pub fn shutdown(&mut self) {
         match self {
             WorkerPool::Vec(_) => {
                 // No need to explicitly shut down
@@ -307,5 +323,11 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
                 workers.reset_all();
             }
         }
+    }
+}
+
+impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Drop for WorkerPool<E, B> {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }

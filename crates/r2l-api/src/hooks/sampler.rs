@@ -1,69 +1,12 @@
-use std::sync::{Arc, Mutex};
-
 use candle_core::{DType, Device, Result, Tensor};
 use r2l_core::{
     buffers::EditableTrajectoryContainer,
-    env::{Env, EnvBuilder, EnvDescription},
+    env::{EnvDescription},
     models::Actor,
     tensor::R2lTensor,
 };
 
-use crate::utils::{evaluator::Evaluator, running_mean::RunningMeanStd};
-
-pub struct EvaluatorOptions {
-    pub(crate) eval_episodes: usize,
-    pub(crate) eval_freq: usize,
-    pub(crate) eval_step: usize,
-    pub(crate) results: Arc<Mutex<Vec<Vec<f32>>>>,
-}
-
-impl Default for EvaluatorOptions {
-    fn default() -> Self {
-        Self {
-            eval_episodes: 10,
-            eval_freq: 10000,
-            eval_step: 1000,
-            results: Arc::new(Mutex::new(vec![vec![]])),
-        }
-    }
-}
-
-impl EvaluatorOptions {
-    pub fn new(
-        eval_episodes: usize,
-        eval_freq: usize,
-        eval_steps: usize,
-    ) -> (Self, Arc<Mutex<Vec<Vec<f32>>>>) {
-        let results = Arc::new(Mutex::new(vec![vec![]]));
-        (
-            Self {
-                // device,
-                eval_episodes,
-                eval_freq,
-                eval_step: eval_steps,
-                results: results.clone(),
-            },
-            results,
-        )
-    }
-
-    pub fn build<EB: EnvBuilder>(
-        &self,
-        env_builder: &EB,
-        n_envs: usize,
-        device: Device,
-    ) -> Evaluator<EB::Env> {
-        let env = env_builder.build_env().unwrap();
-        Evaluator::new(
-            env,
-            self.eval_episodes,
-            self.eval_freq * n_envs,
-            self.eval_step,
-            self.results.clone(),
-            device,
-        )
-    }
-}
+use crate::utils::{running_mean::RunningMeanStd};
 
 pub struct EnvNormalizer {
     pub(crate) obs_rms: RunningMeanStd,
@@ -192,71 +135,5 @@ impl NormalizerOptions {
             self.clip_obs,
             self.clip_rew,
         )
-    }
-}
-
-#[derive(Default)]
-pub struct EvaluatorNormalizerOptions {
-    pub(crate) evaluator_options: Option<EvaluatorOptions>,
-    pub(crate) normalizer_options: Option<NormalizerOptions>,
-    pub(crate) device: Option<Device>,
-}
-
-impl EvaluatorNormalizerOptions {
-    pub fn evaluator(eval_options: EvaluatorOptions, device: Device) -> Self {
-        Self {
-            evaluator_options: Some(eval_options),
-            normalizer_options: None,
-            device: Some(device),
-        }
-    }
-
-    pub fn normalizer(norm_options: NormalizerOptions, device: Device) -> Self {
-        Self {
-            evaluator_options: None,
-            normalizer_options: Some(norm_options),
-            device: Some(device),
-        }
-    }
-
-    pub fn eval_normalizer(
-        eval_options: EvaluatorOptions,
-        norm_options: NormalizerOptions,
-        device: Device,
-    ) -> Self {
-        Self {
-            evaluator_options: Some(eval_options),
-            normalizer_options: Some(norm_options),
-            device: Some(device),
-        }
-    }
-}
-
-pub struct EvaluatorNormalizer<E: Env> {
-    pub(crate) evaluator: Evaluator<E>,
-    pub(crate) normalizer: EnvNormalizer,
-    pub(crate) device: Device,
-}
-
-impl<E: Env> EvaluatorNormalizer<E> {
-    pub fn new(evaluator: Evaluator<E>, normalizer: EnvNormalizer, device: Device) -> Self {
-        Self {
-            evaluator,
-            normalizer,
-            device,
-        }
-    }
-
-    // NOTE: old hook impl
-    fn preprocess_states<B: EditableTrajectoryContainer<Tensor = candle_core::Tensor>>(
-        &mut self,
-        policy: &dyn Actor<Tensor = E::Tensor>,
-        buffers: &mut [B],
-    ) {
-        let n_envs = buffers.len();
-        self.evaluator.evaluate(policy, n_envs).unwrap();
-        self.normalizer
-            .normalize_buffers(buffers, &self.device)
-            .unwrap()
     }
 }

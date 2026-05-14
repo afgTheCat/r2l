@@ -33,3 +33,4 @@ pub use r2l_core::{
 pub use r2l_sampler::{
     EpisodeTrajectoryBound, R2lSampler, SamplerExecutionMode, StepTrajectoryBound,
 };
+pub use utils::evaluator2::{BestActorEvaluator, BestActorEvaluatorBuilder, Evaluator};

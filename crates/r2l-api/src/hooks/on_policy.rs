@@ -53,7 +53,7 @@ impl<EB: EnvBuilder> EvaluatorBuilder<EB> {
         self
     }
 
-    pub fn with_eval_path<P: Into<PathBuf>>(mut self, eval_path: P) -> Self {
+    pub fn with_best_actor_path<P: Into<PathBuf>>(mut self, eval_path: P) -> Self {
         self.eval_path = Some(eval_path.into());
         self
     }
@@ -66,7 +66,7 @@ impl<EB: EnvBuilder> EvaluatorBuilder<EB> {
         );
         Evaluator {
             sampler,
-            path: self.eval_path,
+            best_actor_path: self.eval_path,
             best_rewards: f32::MIN,
             best_actor: None,
         }
@@ -75,7 +75,7 @@ impl<EB: EnvBuilder> EvaluatorBuilder<EB> {
 
 struct Evaluator<E: Env, A: Actor> {
     sampler: R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>,
-    path: Option<PathBuf>,
+    best_actor_path: Option<PathBuf>,
     best_actor: Option<A>,
     best_rewards: f32,
 }
@@ -109,7 +109,7 @@ impl<E: Env, A: Actor> Evaluator<E, A> {
         let Some(bytes) = actor.try_serialize() else {
             return Ok(());
         };
-        let Some(path) = self.path.as_ref() else {
+        let Some(path) = self.best_actor_path.as_ref() else {
             return Ok(());
         };
         std::fs::write(path, bytes)?;
@@ -171,7 +171,7 @@ impl LearningSchedule {
 pub struct DefaultOnPolicyAlgorithmHooks<
     A: Agent,
     S: Sampler,
-    C: OnPolicyAdapters<A, S>,
+    C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
 > {
     learning_schedule: LearningSchedule,
@@ -179,7 +179,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     _phantom: PhantomData<(A, S, C)>,
 }
 
-impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>>
+impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>, E: Env<Tensor = S::Tensor>>
     DefaultOnPolicyAlgorithmHooks<A, S, C, E>
 {
     /// Creates the default outer-loop hooks for the given learning schedule.
@@ -195,7 +195,7 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>
     }
 }
 
-impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A, S>, E: Env<Tensor = S::Tensor>>
+impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>, E: Env<Tensor = S::Tensor>>
     OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E>
 {
     type A = A;

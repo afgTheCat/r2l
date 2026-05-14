@@ -17,6 +17,7 @@ use r2l_core::models::Actor;
 use r2l_core::on_policy::algorithm::Sampler;
 use r2l_core::tensor::R2lTensor;
 
+use crate::worker::ThreadHandle;
 use crate::worker::ThreadWorker;
 use crate::worker::ThreadWorkers;
 use crate::worker::Worker;
@@ -178,16 +179,16 @@ impl<E: Env, BD: RolloutBound<Tensor = E::Tensor>> R2lSampler<E, BD> {
                         let (command_tx, command_rx) = crossbeam::channel::unbounded();
                         let (res_tx, res_rx) = crossbeam::channel::unbounded();
                         let env_builder = env_builder.clone();
-                        std::thread::spawn(move || {
+                        let handle = std::thread::spawn(move || {
                             let env = env_builder.build_idx(idx).unwrap();
                             let worker = Worker::new(env, element_handle);
                             let mut thread_worker = ThreadWorker::new(worker, command_rx, res_tx);
                             thread_worker.work();
                         });
-                        (idx, (command_tx, res_rx))
+                        ThreadHandle::new(handle, command_tx, res_rx)
                     })
                     .collect();
-                WorkerPool::Thread(ThreadWorkers(workers))
+                WorkerPool::Thread(ThreadWorkers::new(workers))
             }
         };
         Self {
