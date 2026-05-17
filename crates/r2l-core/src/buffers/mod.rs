@@ -1,4 +1,5 @@
 pub mod fix_sized;
+pub mod fixed_size2;
 pub mod variable_sized;
 
 use itertools::izip;
@@ -126,4 +127,32 @@ pub trait EditableTrajectoryContainer: TrajectoryContainer {
 
     /// Replaces the last stored reward.
     fn set_last_reward(&mut self, r: f32);
+}
+
+// the new and updated trajectory container trait. The issue is that we need to enforce that
+// states/actions can only be collected at the end of a rollout.
+pub trait TrajectorContainer2 {
+    type Tensor: R2lTensor;
+
+    fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn states(&self) -> Option<&[Self::Tensor]>;
+
+    fn next_states(&self) -> Option<&[Self::Tensor]>;
+
+    fn actions(&self) -> Option<&[Self::Tensor]>;
+
+    fn rewards(&self) -> Option<&[f32]>;
+
+    fn terminated(&self) -> Option<&[bool]>;
+
+    fn truncated(&self) -> &[bool];
+
+    fn begin_rollout(&mut self);
+
+    fn push(&mut self, memory: Memory<Self::Tensor>);
 }
