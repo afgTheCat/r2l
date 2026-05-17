@@ -131,7 +131,7 @@ pub trait EditableTrajectoryContainer: TrajectoryContainer {
 
 // the new and updated trajectory container trait. The issue is that we need to enforce that
 // states/actions can only be collected at the end of a rollout.
-pub trait TrajectorContainer2 {
+pub trait TrajectoryContainer2 {
     type Tensor: R2lTensor;
 
     fn len(&self) -> usize;
@@ -154,5 +154,8 @@ pub trait TrajectorContainer2 {
 
     fn begin_rollout(&mut self);
 
+    // pushes a new memory
     fn push(&mut self, memory: Memory<Self::Tensor>);
+
+    fn pop(&mut self) -> Option<Memory<Self::Tensor>>;
 }

@@ -18,7 +18,7 @@ impl<T> BringBufferInner<T> {
         const {
             assert!(
                 std::mem::size_of::<T>() > 0,
-                "BrinBuffer does not support ZSTs"
+                "BringBuffer does not support ZSTs"
             )
         };
         let layout = Layout::array::<T>(capacity)
@@ -97,6 +97,10 @@ impl<T> BringBuffer<T> {
             len: 0,
             start_idx: 0,
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
     }
 
     pub fn read_last(&self) -> Option<&T> {
