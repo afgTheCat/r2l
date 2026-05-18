@@ -13,8 +13,24 @@ impl<B: Backend> From<TensorData> for Tensor<B, 1> {
     }
 }
 
+impl<'a, B: Backend> From<&'a TensorData> for Tensor<B, 1> {
+    fn from(value: &'a TensorData) -> Self {
+        let device = Default::default();
+        let tensor_data = BurnTensorData::new(value.data.clone(), value.shape.clone());
+        Tensor::from_data(tensor_data, &device)
+    }
+}
+
 impl<B: Backend> From<Tensor<B, 1>> for TensorData {
     fn from(value: Tensor<B, 1>) -> Self {
+        let data = value.to_data().to_vec().unwrap();
+        let shape = vec![data.len()];
+        Self { data, shape }
+    }
+}
+
+impl<'a, B: Backend> From<&'a Tensor<B, 1>> for TensorData {
+    fn from(value: &'a Tensor<B, 1>) -> Self {
         let data = value.to_data().to_vec().unwrap();
         let shape = vec![data.len()];
         Self { data, shape }

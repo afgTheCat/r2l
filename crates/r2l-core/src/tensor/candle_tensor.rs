@@ -9,8 +9,23 @@ impl From<TensorData> for Tensor {
     }
 }
 
+impl<'a> From<&'a TensorData> for Tensor {
+    fn from(val: &TensorData) -> Self {
+        let TensorData { data, shape } = &val;
+        Tensor::from_vec(data.clone(), shape.clone(), &Device::Cpu).unwrap()
+    }
+}
+
 impl From<Tensor> for TensorData {
     fn from(value: Tensor) -> Self {
+        let shape = value.shape().clone().into_dims();
+        let data: Vec<f32> = value.to_vec1().unwrap();
+        Self { data, shape }
+    }
+}
+
+impl<'a> From<&'a Tensor> for TensorData {
+    fn from(value: &Tensor) -> Self {
         let shape = value.shape().clone().into_dims();
         let data: Vec<f32> = value.to_vec1().unwrap();
         Self { data, shape }

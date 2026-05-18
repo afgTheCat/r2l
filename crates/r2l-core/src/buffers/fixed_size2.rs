@@ -77,10 +77,10 @@ impl<T: R2lTensor> TrajectoryContainer2 for FixedSizeStateBuffer2<T> {
             .flatten()
     }
 
-    fn truncated(&self) -> &[bool] {
-        self.truncated
-            .try_slice()
-            .expect("FixedSizeStateBuffer2::truncated requires a contiguous rollout")
+    fn truncated(&self) -> Option<&[bool]> {
+        self.rollout_complete()
+            .then(|| self.truncated.try_slice())
+            .flatten()
     }
 
     fn begin_rollout(&mut self) {

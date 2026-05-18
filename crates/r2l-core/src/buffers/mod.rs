@@ -129,6 +129,15 @@ pub trait EditableTrajectoryContainer: TrajectoryContainer {
     fn set_last_reward(&mut self, r: f32);
 }
 
+struct ContainerView<T: R2lTensor> {
+    states: Vec<T>,
+    next_states: Vec<T>,
+    actions: Vec<T>,
+    rewards: Vec<f32>,
+    terminated: Vec<bool>,
+    trancuated: Vec<bool>,
+}
+
 // the new and updated trajectory container trait. The issue is that we need to enforce that
 // states/actions can only be collected at the end of a rollout.
 pub trait TrajectoryContainer2 {
@@ -140,6 +149,7 @@ pub trait TrajectoryContainer2 {
         self.len() == 0
     }
 
+    // These are potentially not needed anymore if we force a view at the end!
     fn states(&self) -> Option<&[Self::Tensor]>;
 
     fn next_states(&self) -> Option<&[Self::Tensor]>;
@@ -150,12 +160,16 @@ pub trait TrajectoryContainer2 {
 
     fn terminated(&self) -> Option<&[bool]>;
 
-    fn truncated(&self) -> &[bool];
+    fn truncated(&self) -> Option<&[bool]>;
 
+    // begin rollout woud also not be needed
     fn begin_rollout(&mut self);
 
-    // pushes a new memory
     fn push(&mut self, memory: Memory<Self::Tensor>);
 
     fn pop(&mut self) -> Option<Memory<Self::Tensor>>;
+
+    fn container_view(&mut self) -> ContainerView<Self::Tensor>;
+
+    fn cast_container_view<S: R2lTensor + From<T>>(&mut self) -> ContainerView<S>;
 }

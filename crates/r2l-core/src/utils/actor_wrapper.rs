@@ -6,14 +6,14 @@ use crate::{models::Actor, tensor::R2lTensor};
 
 #[derive(Debug, Clone)]
 pub struct ActorWrapper<A: Actor + Clone, T: R2lTensor> {
-    policy: A,
+    actor: A,
     env: PhantomData<T>,
 }
 
 impl<D: Actor + Clone, T: R2lTensor> ActorWrapper<D, T> {
-    pub fn new(policy: D) -> Self {
+    pub fn new(actor: D) -> Self {
         Self {
-            policy,
+            actor,
             env: PhantomData,
         }
     }
@@ -27,7 +27,7 @@ where
     type Tensor = T;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let action = self.policy.action(observation.into())?;
+        let action = self.actor.action(observation.into())?;
         Ok(action.into())
     }
 }

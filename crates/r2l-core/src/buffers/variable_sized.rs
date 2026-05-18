@@ -137,8 +137,8 @@ impl<T: R2lTensor> TrajectoryContainer2 for VariableSizedStateBuffer<T> {
             .then_some(self.terminated.as_slice())
     }
 
-    fn truncated(&self) -> &[bool] {
-        self.truncated.as_slice()
+    fn truncated(&self) -> Option<&[bool]> {
+        self.rollout_complete().then_some(self.truncated.as_slice())
     }
 
     fn begin_rollout(&mut self) {
