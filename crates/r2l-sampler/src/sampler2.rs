@@ -1,18 +1,18 @@
-use std::ops::Bound;
+use std::sync::Arc;
 
+use bimodal_array::bimodal_array;
 use bimodal_array::{ArrayHandle, ElementHandle};
 use r2l_core::{
     buffers::buffer::NewBuffer,
-    env::{Env, EnvDescription},
+    env::{Env, EnvBuilder, EnvBuilderType, EnvDescription},
     models::Actor,
-    on_policy::algorithm::Sampler,
     rng::RNG,
     tensor::R2lTensor,
 };
 use rand::RngExt;
 
 use crate::{
-    RolloutBound, RolloutMode,
+    RolloutMode, SamplerExecutionMode,
     worker::{CommandReceiver, ResultSender, ThreadHandle, WorkerCommand, WorkerResult, step_env},
 };
 
@@ -260,15 +260,65 @@ trait SamplerHook {
 }
 
 pub struct R2lSampler2<E: Env, H: SamplerHook<E = E>> {
-    buffer: ArrayHandle<NewBuffer<E::Tensor>>,
+    buffers: ArrayHandle<NewBuffer<E::Tensor>>,
     worker_pool: WorkerPool2<E>,
     hook: H,
 }
 
 impl<E: Env, H: SamplerHook<E = E>> R2lSampler2<E, H> {
+    pub fn build<EB: EnvBuilder<Env = E>>(
+        env_builder: EnvBuilderType<EB>,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+    ) -> Self {
+        // questionable if we want to do this, but whatever
+        let num_envs = env_builder.num_envs();
+        let buffers: Vec<NewBuffer<E::Tensor>> = vec![NewBuffer::default(); num_envs];
+        let (buffers, buffer_handlers) = bimodal_array(buffers);
+        let worker_pool = match execution_mode {
+            SamplerExecutionMode::Vec => {
+                let workers: Vec<_> = buffer_handlers
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, element_handle)| {
+                        let env = env_builder.build_idx(idx).unwrap(); // TODO: for now
+                        Worker2::new(env, element_handle)
+                    })
+                    .collect();
+                WorkerPool2::Vec(workers)
+            }
+            SamplerExecutionMode::Thread => {
+                let env_builder = Arc::new(env_builder);
+                let workers: Vec<_> = buffer_handlers
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, element_handle)| {
+                        let (command_tx, command_rx) = crossbeam::channel::unbounded();
+                        let (res_tx, res_rx) = crossbeam::channel::unbounded();
+                        let env_builder = env_builder.clone();
+                        let handle = std::thread::spawn(move || {
+                            let env = env_builder.build_idx(idx).unwrap();
+                            let worker = Worker2::new(env, element_handle);
+                            let mut thread_worker = ThreadWorker2::new(worker, command_rx, res_tx);
+                            thread_worker.work();
+                        });
+                        ThreadHandle::new(handle, command_tx, res_rx)
+                    })
+                    .collect();
+                WorkerPool2::Thread(ThreadWorkers2::new(workers))
+            }
+        };
+        Self {
+            buffers,
+            worker_pool,
+            hook,
+        }
+    }
+
     fn collect_rollouts2<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: A) {
+        self.worker_pool.set_policy(actor.clone());
         loop {
-            let result = self.hook.hook(&mut self.buffer);
+            let result = self.hook.hook(&mut self.buffers);
             match result {
                 SamplerHookResult::Bound(bound) => self.worker_pool.collect(bound),
                 SamplerHookResult::Stop => break,

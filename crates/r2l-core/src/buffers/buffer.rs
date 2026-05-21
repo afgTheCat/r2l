@@ -66,6 +66,7 @@ impl<'a, T: R2lTensor> TrajectoryBatch<'a, T> {
 }
 
 // the new buffer type? I guess we don't really need more
+#[derive(Clone)]
 pub struct NewBuffer<T: R2lTensor> {
     states: ReusableVec<T>,
     next_states: ReusableVec<T>,
@@ -73,6 +74,19 @@ pub struct NewBuffer<T: R2lTensor> {
     rewards: ReusableVec<f32>,
     terminated: ReusableVec<bool>,
     truncated: ReusableVec<bool>,
+}
+
+impl<T: R2lTensor> Default for NewBuffer<T> {
+    fn default() -> Self {
+        Self {
+            states: Default::default(),
+            next_states: Default::default(),
+            actions: Default::default(),
+            rewards: Default::default(),
+            terminated: Default::default(),
+            truncated: Default::default(),
+        }
+    }
 }
 
 impl<T: R2lTensor> NewBuffer<T> {

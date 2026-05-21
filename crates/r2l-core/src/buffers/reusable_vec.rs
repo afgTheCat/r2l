@@ -1,7 +1,14 @@
 use std::vec::Drain;
 
+#[derive(Clone)]
 pub struct ReusableVec<T> {
     vec: Vec<T>,
+}
+
+impl<T> Default for ReusableVec<T> {
+    fn default() -> Self {
+        Self { vec: Vec::new() }
+    }
 }
 
 impl<T> ReusableVec<T> {
