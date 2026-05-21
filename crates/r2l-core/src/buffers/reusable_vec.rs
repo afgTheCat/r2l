@@ -5,6 +5,10 @@ pub struct ReusableVec<T> {
 }
 
 impl<T> ReusableVec<T> {
+    pub fn push(&mut self, value: T) {
+        self.vec.push(value);
+    }
+
     pub fn to_dropping_slice(&mut self) -> ReusableVecSlice<'_, T> {
         ReusableVecSlice {
             data: &mut self.vec,

@@ -1,5 +1,5 @@
 use crate::{
-    buffers::buffer::{Buffer, TrajectoryBatch},
+    buffers::buffer::{NewBuffer, TrajectoryBatch},
     tensor::R2lTensor,
 };
 
@@ -61,7 +61,7 @@ trait BufferT {
     fn map_to_view<T2: R2lTensor + From<Self::Tensor>>(&mut self) -> impl TrajectoryBatchT<T2>;
 }
 
-impl<T: R2lTensor> BufferT for Buffer<T> {
+impl<T: R2lTensor> BufferT for NewBuffer<T> {
     type Tensor = T;
 
     fn map_to_view<T2: R2lTensor + From<Self::Tensor>>(&mut self) -> impl TrajectoryBatchT<T2> {

@@ -1,7 +1,10 @@
 use std::any::TypeId;
 
 use crate::{
-    buffers::reusable_vec::{ReusableVec, ReusableVecSlice},
+    buffers::{
+        Memory,
+        reusable_vec::{ReusableVec, ReusableVecSlice},
+    },
     tensor::R2lTensor,
 };
 
@@ -63,7 +66,7 @@ impl<'a, T: R2lTensor> TrajectoryBatch<'a, T> {
 }
 
 // the new buffer type? I guess we don't really need more
-pub struct Buffer<T: R2lTensor> {
+pub struct NewBuffer<T: R2lTensor> {
     states: ReusableVec<T>,
     next_states: ReusableVec<T>,
     actions: ReusableVec<T>,
@@ -72,26 +75,22 @@ pub struct Buffer<T: R2lTensor> {
     truncated: ReusableVec<bool>,
 }
 
-impl<T: R2lTensor> Buffer<T> {
-    pub fn map_to_view<T2: From<T> + R2lTensor>(&mut self) -> TrajectoryBatch<'_, T2> {
-        if TypeId::of::<T2>() == TypeId::of::<T>() {
-            let buffer = self.borrow_view();
-            let buffer = unsafe {
-                std::mem::transmute::<TrajectoryBatch<'_, T>, TrajectoryBatch<'_, T2>>(buffer)
-            };
-            return buffer;
-        }
-        let states = self.states.to_drain_iter().map(|t| t.into()).collect();
-        let next_states = self.next_states.to_drain_iter().map(|t| t.into()).collect();
-        let actions = self.actions.to_drain_iter().map(|t| t.into()).collect();
-        TrajectoryBatch {
-            states: TrajectoryTensorField::Owned(states),
-            next_states: TrajectoryTensorField::Owned(next_states),
-            actions: TrajectoryTensorField::Owned(actions),
-            rewards: self.rewards.to_dropping_slice(),
-            terminated: self.terminated.to_dropping_slice(),
-            truncated: self.truncated.to_dropping_slice(),
-        }
+impl<T: R2lTensor> NewBuffer<T> {
+    pub fn push(&mut self, memory: Memory<T>) {
+        let Memory {
+            state,
+            next_state,
+            action,
+            reward,
+            terminated,
+            truncated,
+        } = memory;
+        self.states.push(state);
+        self.next_states.push(next_state);
+        self.actions.push(action);
+        self.rewards.push(reward);
+        self.terminated.push(terminated);
+        self.truncated.push(truncated);
     }
 
     pub fn borrow_view(&mut self) -> TrajectoryBatch<'_, T> {
@@ -102,6 +101,25 @@ impl<T: R2lTensor> Buffer<T> {
             states: TrajectoryTensorField::Borrowed(states),
             next_states: TrajectoryTensorField::Borrowed(next_states),
             actions: TrajectoryTensorField::Borrowed(actions),
+            rewards: self.rewards.to_dropping_slice(),
+            terminated: self.terminated.to_dropping_slice(),
+            truncated: self.truncated.to_dropping_slice(),
+        }
+    }
+
+    pub fn map_to_view<T2: From<T> + R2lTensor>(&mut self) -> TrajectoryBatch<'_, T2> {
+        if TypeId::of::<T2>() == TypeId::of::<T>() {
+            let buffer = self.borrow_view();
+            let buffer = unsafe { std::mem::transmute(buffer) };
+            return buffer;
+        }
+        let states = self.states.to_drain_iter().map(|t| t.into()).collect();
+        let next_states = self.next_states.to_drain_iter().map(|t| t.into()).collect();
+        let actions = self.actions.to_drain_iter().map(|t| t.into()).collect();
+        TrajectoryBatch {
+            states: TrajectoryTensorField::Owned(states),
+            next_states: TrajectoryTensorField::Owned(next_states),
+            actions: TrajectoryTensorField::Owned(actions),
             rewards: self.rewards.to_dropping_slice(),
             terminated: self.terminated.to_dropping_slice(),
             truncated: self.truncated.to_dropping_slice(),

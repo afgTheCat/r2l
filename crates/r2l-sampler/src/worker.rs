@@ -13,11 +13,11 @@ use rand::RngExt;
 
 use crate::RolloutMode;
 
-type CommandSender<T> = Sender<WorkerCommand<T>>;
-type CommandReceiver<T> = Receiver<WorkerCommand<T>>;
+pub(crate) type CommandSender<T> = Sender<WorkerCommand<T>>;
+pub(crate) type CommandReceiver<T> = Receiver<WorkerCommand<T>>;
 
-type ResultSender<T> = Sender<WorkerResult<T>>;
-type ResultReceiver<T> = Receiver<WorkerResult<T>>;
+pub(crate) type ResultSender<T> = Sender<WorkerResult<T>>;
+pub(crate) type ResultReceiver<T> = Receiver<WorkerResult<T>>;
 
 pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
     pub env: E,
