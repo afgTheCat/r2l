@@ -1,4 +1,4 @@
-use crate::buffers::{Memory, TrajectoryContainer2};
+use crate::buffers::{ContainerView, Memory, TrajectoryContainer2};
 use crate::{tensor::R2lTensor, utils::bring_buffer::BringBuffer};
 
 pub struct FixedSizeStateBuffer2<T: R2lTensor> {
@@ -37,6 +37,15 @@ impl<T: R2lTensor> FixedSizeStateBuffer2<T> {
             .zip(self.truncated.read_last())
             .map(|(terminated, truncated)| *terminated || *truncated)
             .unwrap_or(false)
+    }
+
+    fn drain_buffer<U>(buffer: &mut BringBuffer<U>) -> Vec<U> {
+        let mut values = Vec::with_capacity(buffer.len());
+        while let Some(value) = buffer.pop_back() {
+            values.push(value);
+        }
+        values.reverse();
+        values
     }
 }
 
@@ -113,5 +122,16 @@ impl<T: R2lTensor> TrajectoryContainer2 for FixedSizeStateBuffer2<T> {
             terminated: self.terminated.pop_back()?,
             truncated: self.truncated.pop_back()?,
         })
+    }
+
+    fn container_view(&mut self) -> ContainerView<Self::Tensor> {
+        ContainerView {
+            states: Self::drain_buffer(&mut self.states),
+            next_states: Self::drain_buffer(&mut self.next_states),
+            actions: Self::drain_buffer(&mut self.action),
+            rewards: Self::drain_buffer(&mut self.rewards),
+            terminated: Self::drain_buffer(&mut self.terminated),
+            trancuated: Self::drain_buffer(&mut self.truncated),
+        }
     }
 }

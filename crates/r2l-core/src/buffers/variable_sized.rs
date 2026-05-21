@@ -1,5 +1,8 @@
 use crate::{
-    buffers::{ExpandableTrajectoryContainer, Memory, TrajectoryContainer, TrajectoryContainer2},
+    buffers::{
+        ContainerView, ExpandableTrajectoryContainer, Memory, TrajectoryContainer,
+        TrajectoryContainer2,
+    },
     tensor::R2lTensor,
 };
 
@@ -176,5 +179,16 @@ impl<T: R2lTensor> TrajectoryContainer2 for VariableSizedStateBuffer<T> {
             terminated: self.terminated.pop()?,
             truncated: self.truncated.pop()?,
         })
+    }
+
+    fn container_view(&mut self) -> ContainerView<Self::Tensor> {
+        ContainerView {
+            states: std::mem::take(&mut self.states),
+            next_states: std::mem::take(&mut self.next_states),
+            actions: std::mem::take(&mut self.action),
+            rewards: std::mem::take(&mut self.rewards),
+            terminated: std::mem::take(&mut self.terminated),
+            trancuated: std::mem::take(&mut self.truncated),
+        }
     }
 }

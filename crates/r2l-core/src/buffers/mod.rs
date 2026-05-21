@@ -1,5 +1,7 @@
+pub mod buffer;
 pub mod fix_sized;
 pub mod fixed_size2;
+pub mod reusable_vec;
 pub mod variable_sized;
 
 use itertools::izip;
@@ -129,13 +131,13 @@ pub trait EditableTrajectoryContainer: TrajectoryContainer {
     fn set_last_reward(&mut self, r: f32);
 }
 
-struct ContainerView<T: R2lTensor> {
-    states: Vec<T>,
-    next_states: Vec<T>,
-    actions: Vec<T>,
-    rewards: Vec<f32>,
-    terminated: Vec<bool>,
-    trancuated: Vec<bool>,
+pub struct ContainerView<T: R2lTensor> {
+    pub states: Vec<T>,
+    pub next_states: Vec<T>,
+    pub actions: Vec<T>,
+    pub rewards: Vec<f32>,
+    pub terminated: Vec<bool>,
+    pub trancuated: Vec<bool>,
 }
 
 // the new and updated trajectory container trait. The issue is that we need to enforce that
@@ -171,5 +173,15 @@ pub trait TrajectoryContainer2 {
 
     fn container_view(&mut self) -> ContainerView<Self::Tensor>;
 
-    fn cast_container_view<S: R2lTensor + From<T>>(&mut self) -> ContainerView<S>;
+    fn cast_container_view<S: R2lTensor + From<Self::Tensor>>(&mut self) -> ContainerView<S> {
+        let view = self.container_view();
+        ContainerView {
+            states: view.states.into_iter().map(S::from).collect(),
+            next_states: view.next_states.into_iter().map(S::from).collect(),
+            actions: view.actions.into_iter().map(S::from).collect(),
+            rewards: view.rewards,
+            terminated: view.terminated,
+            trancuated: view.trancuated,
+        }
+    }
 }
