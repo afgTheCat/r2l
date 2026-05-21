@@ -1,6 +1,7 @@
 pub mod buffer;
 pub mod fix_sized;
 pub mod fixed_size2;
+pub mod gen_buffer;
 pub mod reusable_vec;
 pub mod variable_sized;
 
