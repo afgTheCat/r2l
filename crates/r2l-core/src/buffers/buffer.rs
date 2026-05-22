@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub enum TrajectoryTensorField<'a, T: R2lTensor> {
+    // TODO: we cold probably use Rc<T> here?
     Owned(Vec<T>),
     Borrowed(ReusableVecSlice<'a, T>),
 }
