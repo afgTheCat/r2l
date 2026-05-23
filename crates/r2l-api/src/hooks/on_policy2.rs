@@ -47,6 +47,7 @@ pub struct DefaultOnPolicyAlgorithmHooks2<
 > {
     learning_schedule: LearningSchedule2,
     evaluator: Option<BestActorEvaluator<E, A::Actor>>,
+    should_stop: bool,
     _phantom: PhantomData<(A, S, C)>,
 }
 
@@ -62,6 +63,7 @@ where
         Self {
             learning_schedule,
             evaluator: evaluator_builder.map(BestActorEvaluatorBuilder::build),
+            should_stop: false,
             _phantom: PhantomData,
         }
     }
@@ -85,22 +87,9 @@ where
 
     fn post_rollout_hook(
         &mut self,
-        _runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> HookResult {
-        HookResult::Continue
-    }
-
-    fn post_training_hook(
-        &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
-        if let Some(evaluator) = &mut self.evaluator {
-            let actor = runtime.actor();
-            let adapted_actor = runtime.adapted_actor();
-            evaluator.eval(adapted_actor, actor);
-        }
-
-        let should_stop = match &mut self.learning_schedule {
+        self.should_stop = match &mut self.learning_schedule {
             LearningSchedule2::RolloutBound {
                 total_rollouts,
                 current_rollout,
@@ -113,12 +102,26 @@ where
                 current_step,
             } => {
                 let rollouts = runtime.trajectory_containers::<A::Tensor>();
-                let rollout_steps: usize = rollouts.as_ref().iter().map(|e| e.actions().len()).sum();
+                let rollout_steps: usize =
+                    rollouts.as_ref().iter().map(|e| e.actions().len()).sum();
                 *current_step += rollout_steps;
                 current_step >= total_steps
             }
         };
-        if should_stop {
+
+        HookResult::Continue
+    }
+
+    fn post_training_hook(
+        &mut self,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
+    ) -> HookResult {
+        if let Some(evaluator) = &mut self.evaluator {
+            let actor = runtime.actor();
+            let adapted_actor = runtime.adapted_actor();
+            evaluator.eval(adapted_actor, actor);
+        }
+        if self.should_stop {
             HookResult::Break
         } else {
             HookResult::Continue

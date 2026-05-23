@@ -70,8 +70,8 @@ impl<E: Env> SamplerHook2 for StepBoundHook<E> {
             SamplerHookResult::Stop
         } else {
             self.steps_scheduled = self.num_steps;
-            SamplerHookResult::Bound(RolloutMode::EpisodeBound {
-                n_episodes: self.num_steps,
+            SamplerHookResult::Bound(RolloutMode::StepBound {
+                n_steps: self.num_steps,
             })
         }
     }
