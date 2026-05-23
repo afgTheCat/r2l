@@ -4,3 +4,4 @@ pub mod ppo;
 // NOTE: sampler hooks are next release
 #[allow(dead_code)]
 pub mod sampler;
+pub mod sampler2;

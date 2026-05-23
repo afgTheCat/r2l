@@ -163,7 +163,6 @@ pub fn buffer_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) ->
     let mut advantages: Vec<f32> = vec![0.; total_steps];
     let mut returns: Vec<f32> = vec![0.; total_steps];
     let mut last_gae_lam: f32 = 0.;
-
     for i in (0..total_steps).rev() {
         let mut dones = buffer
             .terminated()

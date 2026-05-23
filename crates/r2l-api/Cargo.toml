@@ -18,11 +18,11 @@ burn = { workspace = true }
 r2l-candle = { workspace = true }
 r2l-burn = { workspace = true }
 crossbeam = { workspace = true }
-# r2l-buffer = { workspace = true }
 ringbuffer = "0.16.0"
 rand = "0.10.0"
 anyhow = { workspace = true }
 derive_more = "2.0.1"
+bimodal-array = { path = "/home/gabor/projects/bimodal-array" }
 
 [features]
 test-utils = []

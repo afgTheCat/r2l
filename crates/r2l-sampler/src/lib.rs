@@ -1,5 +1,5 @@
 mod hooks;
-mod sampler2;
+pub mod sampler2;
 pub mod worker;
 
 use std::marker::PhantomData;

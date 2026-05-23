@@ -651,12 +651,12 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 [[package]]
 name = "bimodal-array"
 version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b03cf88c7c3c5a4f997da8e49c0ad6666ea1a4548af9f7a66339bc278d869044"
 
 [[package]]
 name = "bimodal-array"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b03cf88c7c3c5a4f997da8e49c0ad6666ea1a4548af9f7a66339bc278d869044"
+version = "0.1.2"
 
 [[package]]
 name = "bincode"
@@ -6693,6 +6693,7 @@ name = "r2l-api"
 version = "0.0.2-rc2"
 dependencies = [
  "anyhow",
+ "bimodal-array 0.1.2",
  "burn",
  "candle-core 0.9.2",
  "candle-nn",
@@ -6740,7 +6741,7 @@ name = "r2l-core"
 version = "0.0.2-rc2"
 dependencies = [
  "anyhow",
- "bimodal-array 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bimodal-array 0.1.1",
  "burn",
  "candle-core 0.9.2",
  "crossbeam",
@@ -6803,7 +6804,7 @@ name = "r2l-sampler"
 version = "0.0.2-rc2"
 dependencies = [
  "anyhow",
- "bimodal-array 0.1.1",
+ "bimodal-array 0.1.2",
  "crossbeam",
  "r2l-core",
  "rand 0.10.1",

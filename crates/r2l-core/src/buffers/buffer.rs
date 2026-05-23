@@ -66,7 +66,7 @@ impl<'a, T: R2lTensor> TrajectoryBatch<'a, T> {
     }
 }
 
-// the new buffer type? I guess we don't really need more
+// the new buffer type I am experimenting with. Probably going to make things faster
 #[derive(Clone)]
 pub struct NewBuffer<T: R2lTensor> {
     states: ReusableVec<T>,

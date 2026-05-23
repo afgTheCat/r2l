@@ -3,6 +3,7 @@ use std::sync::Arc;
 use bimodal_array::bimodal_array;
 use bimodal_array::{ArrayHandle, ElementHandle};
 use r2l_core::buffers::buffer::TrajectoryBatch;
+use r2l_core::on_policy::algorithm2::Sampler2;
 use r2l_core::{
     buffers::buffer::NewBuffer,
     env::{Env, EnvBuilder, EnvBuilderType, EnvDescription},
@@ -246,12 +247,12 @@ impl<E: Env> Drop for WorkerPool2<E> {
     }
 }
 
-enum SamplerHookResult {
+pub enum SamplerHookResult {
     Stop,
     Bound(RolloutMode),
 }
 
-trait SamplerHook {
+pub trait SamplerHook2 {
     type E: Env;
 
     fn hook(
@@ -260,13 +261,13 @@ trait SamplerHook {
     ) -> SamplerHookResult;
 }
 
-pub struct R2lSampler2<E: Env, H: SamplerHook<E = E>> {
+pub struct R2lSampler2<E: Env, H: SamplerHook2<E = E>> {
     buffers: ArrayHandle<NewBuffer<E::Tensor>>,
     worker_pool: WorkerPool2<E>,
     hook: H,
 }
 
-impl<E: Env, H: SamplerHook<E = E>> R2lSampler2<E, H> {
+impl<E: Env, H: SamplerHook2<E = E>> R2lSampler2<E, H> {
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         hook: H,
@@ -315,8 +316,12 @@ impl<E: Env, H: SamplerHook<E = E>> R2lSampler2<E, H> {
             hook,
         }
     }
+}
 
-    fn collect_rollouts2<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: A) {
+impl<E: Env, H: SamplerHook2<E = E>> Sampler2 for R2lSampler2<E, H> {
+    type Tensor = E::Tensor;
+
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
         self.worker_pool.set_policy(actor.clone());
         loop {
             let result = self.hook.hook(&mut self.buffers);
@@ -327,9 +332,13 @@ impl<E: Env, H: SamplerHook<E = E>> R2lSampler2<E, H> {
         }
     }
 
-    fn trajectory_views<S: R2lTensor + From<E::Tensor>>(
+    fn trajectory_views<S: R2lTensor + From<Self::Tensor>>(
         &mut self,
     ) -> impl AsRef<[TrajectoryBatch<'_, S>]> {
         self.buffers.lock_map(|b| b.map_to_view::<S>()).unwrap()
+    }
+
+    fn shutdown(&mut self) {
+        self.worker_pool.shutdown();
     }
 }

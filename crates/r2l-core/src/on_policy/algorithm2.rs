@@ -24,7 +24,6 @@ pub trait Agent2 {
 
 pub trait Sampler2 {
     type Tensor: R2lTensor;
-    // type TrajectoryContainer: TrajectoryContainer<Tensor = Self::Tensor>;
 
     /// Collects rollout data using the provided actor.
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A);

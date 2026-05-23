@@ -88,7 +88,7 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
 }
 
 /// Prototype PPO variant over finalized trajectory batches.
-pub struct PPO<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
+pub struct PPO2<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
     /// PPO hyperparameters.
     pub params: PPOParams,
     /// Learning module containing policy, value function, and optimizer state.
@@ -97,7 +97,7 @@ pub struct PPO<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
     pub hooks: Hooks,
 }
 
-impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
+impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO2<Module, Hooks> {
     fn batch_loop(
         &mut self,
         batches: &[TrajectoryBatch<'_, Module::InferenceTensor>],
