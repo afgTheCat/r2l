@@ -25,6 +25,7 @@ pub use builders::sampler::SamplerBuilder;
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
 pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule};
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
+pub use hooks::ppo2::{DefaultPPO2Hook, PPO2BatchStats, PPO2Stats};
 pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     on_policy::algorithm::OnPolicyAlgorithm,

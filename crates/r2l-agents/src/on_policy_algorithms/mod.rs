@@ -11,7 +11,7 @@ pub mod a2c;
 /// Proximal Policy Optimization implementation and hook interface.
 pub mod ppo;
 /// Prototype PPO variant that consumes trajectory batches directly.
-pub mod ppo_new;
+pub mod ppo2;
 /// Vanilla Policy Gradient implementation.
 pub mod vpg;
 

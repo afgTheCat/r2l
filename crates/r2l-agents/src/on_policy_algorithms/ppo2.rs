@@ -4,7 +4,10 @@ use anyhow::Result;
 use r2l_core::{
     buffers::buffer::TrajectoryBatch,
     models::{LearningModule, Policy, ValueFunction},
-    on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
+    on_policy::{
+        algorithm2::Agent2, learning_module::OnPolicyLearningModule,
+        losses::FromPolicyValueLosses,
+    },
     rng::RNG,
     tensor::{R2lTensor, R2lTensorMath},
 };
@@ -183,6 +186,19 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO2<Module, Hooks>
         let logps = logps(batches, &actor)?;
         self.learning_loop(batches, advantages, returns, logps)?;
         Ok(())
+    }
+}
+
+impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent2 for PPO2<M, H> {
+    type Tensor = M::InferenceTensor;
+    type Actor = M::InferencePolicy;
+
+    fn actor(&self) -> Self::Actor {
+        self.lm.inference_policy()
+    }
+
+    fn learn(&mut self, buffers: &[TrajectoryBatch<'_, Self::Tensor>]) -> Result<()> {
+        PPO2::learn(self, buffers)
     }
 }
 

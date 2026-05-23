@@ -7,10 +7,6 @@ use r2l_sampler::{
     sampler2::{SamplerHook2, SamplerHookResult},
 };
 
-pub struct SamplerHookBuilder {
-    mode: RolloutMode,
-}
-
 pub struct EpisodeBoundHook<E: Env> {
     num_episodes: usize,
     episodes_scheduled: usize,
@@ -53,7 +49,7 @@ pub struct StepBoundHook<E: Env> {
 }
 
 impl<E: Env> StepBoundHook<E> {
-    fn new(num_steps: usize) -> Self {
+    pub fn new(num_steps: usize) -> Self {
         Self {
             num_steps,
             steps_scheduled: 0,
