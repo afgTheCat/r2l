@@ -29,6 +29,7 @@ pub use builders::ppo::algorithm2::{
     PPO2AlgorithmBuilder, PPO2BurnAlgorithmBuilder, PPO2CandleAlgorithmBuilder,
 };
 pub use builders::sampler::SamplerBuilder;
+pub use builders::sampler2::{EpisodeHookBound, StepHookBound};
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
 pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule};
 pub use hooks::on_policy2::{DefaultOnPolicyAlgorithmHooks2, LearningSchedule2};

@@ -60,7 +60,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
 }
 
 #[test]
-fn cartpole_candle() {
+fn old_cartpole_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
     // https://huggingface.co/sb3/ppo-CartPole-v1
     configure_candle_ppo_test(PPOTestConfig {

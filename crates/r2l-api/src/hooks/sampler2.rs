@@ -14,10 +14,10 @@ pub struct EpisodeBoundHook<E: Env> {
 }
 
 impl<E: Env> EpisodeBoundHook<E> {
-    fn new(num_episodes: usize, episodes_scheduled: usize) -> Self {
+    pub fn new(num_episodes: usize) -> Self {
         Self {
             num_episodes,
-            episodes_scheduled,
+            episodes_scheduled: 0,
             _p: PhantomData,
         }
     }
@@ -28,7 +28,7 @@ impl<E: Env> SamplerHook2 for EpisodeBoundHook<E> {
 
     fn hook(
         &mut self,
-        buffer: &mut ArrayHandle<NewBuffer<<Self::E as Env>::Tensor>>,
+        _buffer: &mut ArrayHandle<NewBuffer<<Self::E as Env>::Tensor>>,
     ) -> SamplerHookResult {
         if self.episodes_scheduled == self.num_episodes {
             self.episodes_scheduled = 0;

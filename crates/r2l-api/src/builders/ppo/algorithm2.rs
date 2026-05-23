@@ -18,24 +18,20 @@ use crate::{
             agent2::{PPO2BurnAgentBuilder, PPO2CandleAgentBuilder},
             hook2::DefaultPPO2HookBuilder,
         },
-        sampler2::Sampler2Builder,
+        sampler2::{Sampler2Builder, SamplerHook2Builder, StepHookBound},
     },
     hooks::ppo2::PPO2Stats,
-    hooks::sampler2::StepBoundHook,
 };
 
-impl<A, M, EB, SH>
+impl<A: Agent2, B, EB: EnvBuilder, SH: SamplerHook2Builder<Env = EB::Env>>
     OnPolicyAlgorithmBuilder2<
         A,
-        OnPolicyAgentBuilder2<PPOParams, DefaultPPO2HookBuilder, M>,
+        OnPolicyAgentBuilder2<PPOParams, DefaultPPO2HookBuilder, B>,
         EB,
         SH,
     >
 where
-    A: Agent2,
-    EB: EnvBuilder,
-    SH: r2l_sampler::sampler2::SamplerHook2<E = EB::Env>,
-    OnPolicyAgentBuilder2<PPOParams, DefaultPPO2HookBuilder, M>: AgentBuilder2<Agent = A>,
+    OnPolicyAgentBuilder2<PPOParams, DefaultPPO2HookBuilder, B>: AgentBuilder2<Agent = A>,
 {
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.agent_builder = self
@@ -173,7 +169,7 @@ where
     }
 }
 
-pub type PPO2CandleAlgorithmBuilder<EB, SH = StepBoundHook<<EB as EnvBuilder>::Env>> =
+pub type PPO2CandleAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
     OnPolicyAlgorithmBuilder2<PPO2CandleAgent, PPO2CandleAgentBuilder, EB, SH>;
 
 impl PPO2CandleAlgorithmBuilder<GymEnvBuilder> {
@@ -194,10 +190,10 @@ impl<EB: EnvBuilder> PPO2CandleAlgorithmBuilder<EB> {
     }
 }
 
-pub type PPO2BurnAlgorithmBuilder<EB, SH = StepBoundHook<<EB as EnvBuilder>::Env>> =
+pub type PPO2BurnAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
     OnPolicyAlgorithmBuilder2<PPO2BurnAgent<BurnBackend>, PPO2BurnAgentBuilder, EB, SH>;
 
-impl<EB: EnvBuilder, SH: r2l_sampler::sampler2::SamplerHook2<E = EB::Env>>
+impl<EB: EnvBuilder, SH: SamplerHook2Builder<Env = EB::Env>>
     PPO2BurnAlgorithmBuilder<EB, SH>
 {
     pub fn with_candle(self, device: candle_core::Device) -> PPO2CandleAlgorithmBuilder<EB, SH> {
@@ -231,10 +227,10 @@ impl<EB: EnvBuilder, SH: r2l_sampler::sampler2::SamplerHook2<E = EB::Env>>
     }
 }
 
-pub type PPO2AlgorithmBuilder<EB, SH = StepBoundHook<<EB as EnvBuilder>::Env>> =
+pub type PPO2AlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
     PPO2CandleAlgorithmBuilder<EB, SH>;
 
-impl<EB: EnvBuilder, SH: r2l_sampler::sampler2::SamplerHook2<E = EB::Env>>
+impl<EB: EnvBuilder, SH: SamplerHook2Builder<Env = EB::Env>>
     PPO2CandleAlgorithmBuilder<EB, SH>
 {
     pub fn with_candle(self, device: Device) -> PPO2CandleAlgorithmBuilder<EB, SH> {

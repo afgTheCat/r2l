@@ -4,20 +4,23 @@ use r2l_core::{
         Agent2, DefaultAdapter, OnPolicyAdapters2, OnPolicyAlgorithm, OnPolicyRuntime,
     },
 };
-use r2l_sampler::{SamplerExecutionMode, sampler2::R2lSampler2};
+use r2l_sampler::{
+    SamplerExecutionMode,
+    sampler2::R2lSampler2,
+};
 
 use crate::{
     BestActorEvaluatorBuilder,
-    builders::{agent2::AgentBuilder2, sampler2::Sampler2Builder},
+    builders::{agent2::AgentBuilder2, sampler2::{Sampler2Builder, SamplerHook2Builder}},
     hooks::on_policy2::{DefaultOnPolicyAlgorithmHooks2, LearningSchedule2},
 };
 
 type DefaultOnPolicyAlgorithm2<A, EB, SH> = OnPolicyAlgorithm<
     A,
-    R2lSampler2<<EB as EnvBuilder>::Env, SH>,
+    R2lSampler2<<EB as EnvBuilder>::Env, <SH as SamplerHook2Builder>::Target>,
     DefaultOnPolicyAlgorithmHooks2<
         A,
-        R2lSampler2<<EB as EnvBuilder>::Env, SH>,
+        R2lSampler2<<EB as EnvBuilder>::Env, <SH as SamplerHook2Builder>::Target>,
         DefaultAdapter,
         <EB as EnvBuilder>::Env,
     >,
@@ -27,7 +30,7 @@ pub struct OnPolicyAlgorithmBuilder2<
     A: Agent2,
     AB: AgentBuilder2<Agent = A>,
     EB: EnvBuilder,
-    SH: r2l_sampler::sampler2::SamplerHook2<E = EB::Env>,
+    SH: SamplerHook2Builder<Env = EB::Env>,
 > {
     pub(crate) sampler_builder: Sampler2Builder<EB, SH>,
     pub(crate) learning_schedule: LearningSchedule2,
@@ -35,8 +38,12 @@ pub struct OnPolicyAlgorithmBuilder2<
     pub(crate) agent_builder: AB,
 }
 
-impl<A: Agent2, AB: AgentBuilder2<Agent = A>, EB: EnvBuilder, SH: r2l_sampler::sampler2::SamplerHook2<E = EB::Env>>
-    OnPolicyAlgorithmBuilder2<A, AB, EB, SH>
+impl<
+    A: Agent2,
+    AB: AgentBuilder2<Agent = A>,
+    EB: EnvBuilder,
+    SH: SamplerHook2Builder<Env = EB::Env>,
+> OnPolicyAlgorithmBuilder2<A, AB, EB, SH>
 {
     pub fn from_sampler_and_agent_builder(
         sampler_builder: Sampler2Builder<EB, SH>,
@@ -50,9 +57,9 @@ impl<A: Agent2, AB: AgentBuilder2<Agent = A>, EB: EnvBuilder, SH: r2l_sampler::s
         }
     }
 
-    pub fn with_hook<SH2: r2l_sampler::sampler2::SamplerHook2<E = EB::Env>>(
+    pub fn with_hook<SH2: SamplerHook2Builder<Env = EB::Env>>(
         self,
-        hook: SH2,
+        hook_builder: SH2,
     ) -> OnPolicyAlgorithmBuilder2<A, AB, EB, SH2> {
         let OnPolicyAlgorithmBuilder2 {
             sampler_builder,
@@ -61,7 +68,25 @@ impl<A: Agent2, AB: AgentBuilder2<Agent = A>, EB: EnvBuilder, SH: r2l_sampler::s
             evaluator_builder,
         } = self;
         OnPolicyAlgorithmBuilder2 {
-            sampler_builder: sampler_builder.with_hook(hook),
+            sampler_builder: sampler_builder.with_hook(hook_builder),
+            agent_builder,
+            evaluator_builder,
+            learning_schedule,
+        }
+    }
+
+    pub fn with_rollout_bound<SH2: SamplerHook2Builder<Env = EB::Env>>(
+        self,
+        rollout_bound: SH2,
+    ) -> OnPolicyAlgorithmBuilder2<A, AB, EB, SH2> {
+        let OnPolicyAlgorithmBuilder2 {
+            sampler_builder,
+            agent_builder,
+            learning_schedule,
+            evaluator_builder,
+        } = self;
+        OnPolicyAlgorithmBuilder2 {
+            sampler_builder: sampler_builder.with_hook(rollout_bound),
             agent_builder,
             evaluator_builder,
             learning_schedule,
@@ -86,7 +111,8 @@ impl<A: Agent2, AB: AgentBuilder2<Agent = A>, EB: EnvBuilder, SH: r2l_sampler::s
             evaluator_builder.with_n_episodes(n_episodes)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            BestActorEvaluatorBuilder::from_env_builder_type(env_builder).with_n_episodes(n_episodes)
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+                .with_n_episodes(n_episodes)
         };
         self.evaluator_builder = Some(evaluator_builder);
         self
@@ -110,7 +136,8 @@ impl<A: Agent2, AB: AgentBuilder2<Agent = A>, EB: EnvBuilder, SH: r2l_sampler::s
             evaluator_builder.with_execution_mode(execution_mode)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            BestActorEvaluatorBuilder::from_env_builder_type(env_builder).with_execution_mode(execution_mode)
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+                .with_execution_mode(execution_mode)
         };
         self.evaluator_builder = Some(evaluator_builder);
         self
@@ -124,7 +151,8 @@ impl<A: Agent2, AB: AgentBuilder2<Agent = A>, EB: EnvBuilder, SH: r2l_sampler::s
             evaluator_builder.with_best_actor_path(eval_path)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            BestActorEvaluatorBuilder::from_env_builder_type(env_builder).with_best_actor_path(eval_path)
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+                .with_best_actor_path(eval_path)
         };
         self.evaluator_builder = Some(evaluator_builder);
         self
@@ -137,7 +165,8 @@ impl<A: Agent2, AB: AgentBuilder2<Agent = A>, EB: EnvBuilder, SH: r2l_sampler::s
 
     pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm2<A, EB, SH>>
     where
-        DefaultAdapter: OnPolicyAdapters2<A::Actor, R2lSampler2<<EB as EnvBuilder>::Env, SH>>,
+        DefaultAdapter:
+            OnPolicyAdapters2<A::Actor, R2lSampler2<<EB as EnvBuilder>::Env, SH::Target>>,
         A::Tensor: From<<EB::Env as r2l_core::env::Env>::Tensor>,
     {
         let env_description = self.sampler_builder.env_builder.env_description()?;
