@@ -2,7 +2,7 @@ use std::vec::Drain;
 
 #[derive(Clone)]
 pub struct ReusableVec<T> {
-    vec: Vec<T>,
+    pub vec: Vec<T>,
 }
 
 impl<T> Default for ReusableVec<T> {

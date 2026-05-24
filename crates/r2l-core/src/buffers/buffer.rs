@@ -90,7 +90,20 @@ impl<T: R2lTensor> Default for NewBuffer<T> {
     }
 }
 
+pub struct TrajectoryView<'a, T: R2lTensor> {
+    pub states: &'a [T],
+    pub next_states: &'a [T],
+    pub actions: &'a [T],
+    pub rewards: &'a [f32],
+    pub terminated: &'a [bool],
+    pub truncated: &'a [bool],
+}
+
 impl<T: R2lTensor> NewBuffer<T> {
+    pub fn clear(&mut self) {
+        todo!()
+    }
+
     pub fn push(&mut self, memory: Memory<T>) {
         let Memory {
             state,
@@ -106,6 +119,17 @@ impl<T: R2lTensor> NewBuffer<T> {
         self.rewards.push(reward);
         self.terminated.push(terminated);
         self.truncated.push(truncated);
+    }
+
+    pub fn to_trajectory_view(&self) -> TrajectoryView<'_, T> {
+        TrajectoryView {
+            states: &self.states.vec,
+            next_states: &self.next_states.vec,
+            actions: &self.actions.vec,
+            rewards: &self.rewards.vec,
+            terminated: &self.terminated.vec,
+            truncated: &self.truncated.vec,
+        }
     }
 
     pub fn borrow_view(&mut self) -> TrajectoryBatch<'_, T> {

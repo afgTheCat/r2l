@@ -16,6 +16,15 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns the tensor values as a flat vector.
     fn to_vec(&self) -> Vec<f32>;
 
+    fn to_vec_and_shape(&self) -> (Vec<f32>, Vec<usize>);
+
+    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self;
+
+    fn convert<S: R2lTensor>(s: &S) -> Self {
+        let (data, shape) = s.to_vec_and_shape();
+        Self::from_vec_and_shape(data, shape)
+    }
+
     /// Returns the length of the tensor
     fn len(&self) -> usize {
         self.to_vec().len()
@@ -99,5 +108,13 @@ impl TensorData {
 impl R2lTensor for TensorData {
     fn to_vec(&self) -> Vec<f32> {
         self.data.clone()
+    }
+
+    fn to_vec_and_shape(&self) -> (Vec<f32>, Vec<usize>) {
+        (self.data.clone(), self.shape.clone())
+    }
+
+    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
+        Self { data, shape }
     }
 }

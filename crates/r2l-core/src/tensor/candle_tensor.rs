@@ -36,6 +36,14 @@ impl R2lTensor for Tensor {
     fn to_vec(&self) -> Vec<f32> {
         self.to_vec1().unwrap()
     }
+
+    fn to_vec_and_shape(&self) -> (Vec<f32>, Vec<usize>) {
+        (self.to_vec1().unwrap(), self.shape().dims().to_vec())
+    }
+
+    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
+        Tensor::from_vec(data, shape, &Device::Cpu).unwrap()
+    }
 }
 
 impl R2lTensorMath for Tensor {

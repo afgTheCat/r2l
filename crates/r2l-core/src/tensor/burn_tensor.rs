@@ -41,6 +41,17 @@ impl<B: Backend, const D: usize> R2lTensor for Tensor<B, D> {
     fn to_vec(&self) -> Vec<f32> {
         self.to_data().to_vec().unwrap()
     }
+
+    fn to_vec_and_shape(&self) -> (Vec<f32>, Vec<usize>) {
+        let data = self.to_vec();
+        let shape = self.shape();
+        (data, shape.into())
+    }
+
+    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
+        let data = BurnTensorData::new(data, shape);
+        Tensor::from_data(data, &Default::default())
+    }
 }
 
 impl<B: AutodiffBackend> R2lTensorMath for Tensor<B, 1> {

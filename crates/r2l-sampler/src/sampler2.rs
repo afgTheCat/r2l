@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bimodal_array::bimodal_array;
 use bimodal_array::{ArrayHandle, ElementHandle};
-use r2l_core::buffers::buffer::TrajectoryBatch;
+use r2l_core::buffers::buffer::{TrajectoryBatch, TrajectoryView};
 use r2l_core::on_policy::algorithm2::Sampler2;
 use r2l_core::{
     buffers::buffer::NewBuffer,
@@ -178,6 +178,13 @@ pub enum WorkerPool2<E: Env> {
 }
 
 impl<E: Env> WorkerPool2<E> {
+    pub fn clear_buffers(&mut self) {
+        match self {
+            Self::Vec(workers) => {}
+            Self::Thread(thread) => {}
+        }
+    }
+
     pub fn env_description(&self) -> EnvDescription<E::Tensor> {
         match self {
             Self::Vec(workers) => workers[0].env.env_description(),
@@ -268,6 +275,12 @@ pub struct R2lSampler2<E: Env, H: SamplerHook2<E = E>> {
 }
 
 impl<E: Env, H: SamplerHook2<E = E>> R2lSampler2<E, H> {
+    pub fn to_views(&mut self) -> impl AsRef<[TrajectoryView<'_, E::Tensor>]> {
+        self.buffers
+            .lock_map(|buffer| buffer.to_trajectory_view())
+            .unwrap()
+    }
+
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         hook: H,

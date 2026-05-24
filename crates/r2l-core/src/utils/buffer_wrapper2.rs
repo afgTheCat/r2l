@@ -1,79 +1,108 @@
-use std::{any::TypeId, borrow::Cow};
+use std::any::TypeId;
 
-use crate::{buffers::TrajectoryContainer2, tensor::R2lTensor};
+use crate::{
+    buffers::{buffer::TrajectoryView, gen_buffer::TrajectoryBatchT},
+    tensor::R2lTensor,
+};
 
-struct TrajectoryFieldViewer<'a, T: Clone + 'static>(Cow<'a, [T]>);
-
-impl<'a, T: Clone + 'static> TrajectoryFieldViewer<'a, T> {
-    fn new<S: 'static>(data: &'a [S]) -> Self
-    where
-        T: From<&'a S>,
-    {
-        if TypeId::of::<S>() == TypeId::of::<T>() {
-            // SAFETY:
-            // TypeId equality for 'static types means S and T are the same concrete type.
-            let data = unsafe { &*(data as *const [S] as *const [T]) };
-            Self(Cow::Borrowed(data))
-        } else {
-            Self(Cow::Owned(data.into_iter().map(|x| x.into()).collect()))
-        }
-    }
-
-    fn as_slice(&self) -> &[T] {
-        &self.0
-    }
+struct OwnedView<T: R2lTensor> {
+    states: Vec<T>,
+    next_states: Vec<T>,
+    actions: Vec<T>,
+    rewards: Vec<f32>,
+    terminated: Vec<bool>,
+    truncated: Vec<bool>,
 }
 
-pub struct TrajectoryView<'a, T: R2lTensor> {
-    states: TrajectoryFieldViewer<'a, T>,
-    next_states: TrajectoryFieldViewer<'a, T>,
-    actions: TrajectoryFieldViewer<'a, T>,
-    rewards: &'a [f32],
-    terminated: &'a [bool],
-    trancuated: &'a [bool],
-}
-
-impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
-    fn from_buffer<T2: R2lTensor, B: TrajectoryContainer2<Tensor = T2>>(buffer: &'a B) -> Self
-    where
-        T: From<&'a T2>,
-    {
-        let states: TrajectoryFieldViewer<T> = TrajectoryFieldViewer::new(buffer.states().unwrap());
-        let next_states: TrajectoryFieldViewer<T> =
-            TrajectoryFieldViewer::new(buffer.next_states().unwrap());
-        let actions: TrajectoryFieldViewer<T> =
-            TrajectoryFieldViewer::new(buffer.actions().unwrap());
+impl<T: R2lTensor> OwnedView<T> {
+    fn new(
+        states: Vec<T>,
+        next_states: Vec<T>,
+        actions: Vec<T>,
+        rewards: Vec<f32>,
+        terminated: Vec<bool>,
+        truncated: Vec<bool>,
+    ) -> Self {
         Self {
             states,
             next_states,
             actions,
-            rewards: buffer.rewards().unwrap(),
-            terminated: buffer.terminated().unwrap(),
-            trancuated: buffer.truncated().unwrap(),
+            rewards,
+            terminated,
+            truncated,
         }
     }
+}
 
-    pub fn states(&self) -> &[T] {
-        self.states.as_slice()
+enum TrajectoryViewsWrapper<'a, T: R2lTensor> {
+    Borrowed(TrajectoryView<'a, T>),
+    Owned(OwnedView<T>),
+}
+
+impl<'a, T: R2lTensor> TrajectoryViewsWrapper<'a, T> {
+    fn from_view<'b, S: R2lTensor + Into<T>, V: TrajectoryBatchT<S>>(
+        view: &'b V,
+    ) -> TrajectoryViewsWrapper<'b, T> {
+        if TypeId::of::<S>() == TypeId::of::<T>() {
+            let states = unsafe { std::mem::transmute(view.states()) };
+            let next_states = unsafe { std::mem::transmute(view.next_states()) };
+            let actions = unsafe { std::mem::transmute(view.actions()) };
+            return TrajectoryViewsWrapper::Borrowed(TrajectoryView {
+                states,
+                next_states,
+                actions,
+                rewards: view.rewards(),
+                terminated: view.terminated(),
+                truncated: view.truncated(),
+            });
+        }
+        let states = view.states().iter().map(|v| T::convert(v)).collect();
+        let next_states = view.next_states().iter().map(|v| T::convert(v)).collect();
+        let actions = view.actions().iter().map(|v| T::convert(v)).collect();
+        let rewards = view.rewards().to_vec();
+        let terminated = view.terminated().to_vec();
+        let truncated = view.truncated().to_vec();
+        TrajectoryViewsWrapper::Owned(OwnedView::new(
+            states,
+            next_states,
+            actions,
+            rewards,
+            terminated,
+            truncated,
+        ))
+    }
+}
+
+impl<'a, T: R2lTensor> TrajectoryBatchT<T> for TrajectoryViewsWrapper<'a, T> {
+    fn len(&self) -> usize {
+        todo!()
     }
 
-    pub fn actions(&self) -> &[T] {
-        self.actions.as_slice()
+    fn is_empty(&self) -> bool {
+        todo!()
     }
 
-    pub fn next_states(&self) -> &[T] {
-        self.next_states.as_slice()
+    fn states(&self) -> &[T] {
+        todo!()
     }
 
-    pub fn rewards(&self) -> &[f32] {
-        &self.rewards
+    fn next_states(&self) -> &[T] {
+        todo!()
     }
 
-    pub fn terminated(&self) -> &[bool] {
-        &self.terminated
+    fn actions(&self) -> &[T] {
+        todo!()
     }
 
-    pub fn trancuated(&self) -> &[bool] {
-        self.trancuated
+    fn rewards(&self) -> &[f32] {
+        todo!()
+    }
+
+    fn terminated(&self) -> &[bool] {
+        todo!()
+    }
+
+    fn truncated(&self) -> &[bool] {
+        todo!()
     }
 }
