@@ -73,10 +73,11 @@ impl<E: Env> Worker2<E> {
         }
     }
 
+    // resets the initial state and clears the buffer. Used by the Evaluator hook
     pub fn reset(&mut self, seed: u64) {
         let state = self.env.reset(seed).unwrap();
         self.last_state = Some(state);
-        // TODO: do we need to force reset the buffer?
+        self.buffer.lock().unwrap().clear();
     }
 }
 
@@ -294,6 +295,10 @@ pub struct R2lSampler2<E: Env, H: SamplerHook2<E = E>> {
 }
 
 impl<E: Env, H: SamplerHook2<E = E>> R2lSampler2<E, H> {
+    pub fn reset_all_envs(&mut self) {
+        self.worker_pool.reset_all_envs();
+    }
+
     pub fn to_views(&mut self) -> impl AsRef<[TrajectoryView<'_, E::Tensor>]> {
         self.buffers
             .lock_map(|buffer| buffer.to_trajectory_view())

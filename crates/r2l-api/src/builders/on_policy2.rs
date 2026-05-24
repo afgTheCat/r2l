@@ -10,7 +10,7 @@ use r2l_sampler::{
 };
 
 use crate::{
-    BestActorEvaluatorBuilder,
+    BestActorEvaluatorBuilder2,
     builders::{agent2::AgentBuilder2, sampler2::{Sampler2Builder, SamplerHook2Builder}},
     hooks::on_policy2::{DefaultOnPolicyAlgorithmHooks2, LearningSchedule2},
 };
@@ -34,7 +34,7 @@ pub struct OnPolicyAlgorithmBuilder2<
 > {
     pub(crate) sampler_builder: Sampler2Builder<EB, SH>,
     pub(crate) learning_schedule: LearningSchedule2,
-    pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
+    pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder2<EB>>,
     pub(crate) agent_builder: AB,
 }
 
@@ -95,7 +95,7 @@ impl<
 
     pub fn with_evaluator(
         mut self,
-        evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
+        evaluator_builder: Option<BestActorEvaluatorBuilder2<EB>>,
     ) -> Self {
         self.evaluator_builder = evaluator_builder;
         self
@@ -111,7 +111,7 @@ impl<
             evaluator_builder.with_n_episodes(n_episodes)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+            BestActorEvaluatorBuilder2::from_env_builder_type(env_builder)
                 .with_n_episodes(n_episodes)
         };
         self.evaluator_builder = Some(evaluator_builder);
@@ -125,7 +125,7 @@ impl<
         let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
             evaluator_builder.with_env_builder(env_builder)
         } else {
-            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+            BestActorEvaluatorBuilder2::from_env_builder_type(env_builder)
         };
         self.evaluator_builder = Some(evaluator_builder);
         self
@@ -136,7 +136,7 @@ impl<
             evaluator_builder.with_execution_mode(execution_mode)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+            BestActorEvaluatorBuilder2::from_env_builder_type(env_builder)
                 .with_execution_mode(execution_mode)
         };
         self.evaluator_builder = Some(evaluator_builder);
@@ -151,7 +151,7 @@ impl<
             evaluator_builder.with_best_actor_path(eval_path)
         } else {
             let env_builder = self.sampler_builder.env_builder.clone();
-            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+            BestActorEvaluatorBuilder2::from_env_builder_type(env_builder)
                 .with_best_actor_path(eval_path)
         };
         self.evaluator_builder = Some(evaluator_builder);

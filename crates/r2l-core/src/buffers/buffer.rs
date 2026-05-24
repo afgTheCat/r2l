@@ -99,6 +99,19 @@ pub struct TrajectoryView<'a, T: R2lTensor> {
     pub truncated: &'a [bool],
 }
 
+impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
+    pub fn dones(&self) -> impl Iterator<Item = bool> {
+        self.terminated
+            .iter()
+            .zip(self.truncated.iter())
+            .map(|(terminated, truncated)| *terminated || *truncated)
+    }
+
+    pub fn episode_terminations(&self) -> usize {
+        self.dones().filter(|x| *x).count()
+    }
+}
+
 impl<T: R2lTensor> NewBuffer<T> {
     pub fn clear(&mut self) {
         self.states.clear();
@@ -136,37 +149,4 @@ impl<T: R2lTensor> NewBuffer<T> {
             truncated: &self.truncated,
         }
     }
-
-    // pub fn borrow_view(&mut self) -> TrajectoryBatch<'_, T> {
-    //     let states = self.states.to_dropping_slice();
-    //     let next_states = self.next_states.to_dropping_slice();
-    //     let actions = self.actions.to_dropping_slice();
-    //     TrajectoryBatch {
-    //         states: TrajectoryTensorField::Borrowed(states),
-    //         next_states: TrajectoryTensorField::Borrowed(next_states),
-    //         actions: TrajectoryTensorField::Borrowed(actions),
-    //         rewards: self.rewards.to_dropping_slice(),
-    //         terminated: self.terminated.to_dropping_slice(),
-    //         truncated: self.truncated.to_dropping_slice(),
-    //     }
-    // }
-
-    // pub fn map_to_view<T2: From<T> + R2lTensor>(&mut self) -> TrajectoryBatch<'_, T2> {
-    //     if TypeId::of::<T2>() == TypeId::of::<T>() {
-    //         let buffer = self.borrow_view();
-    //         let buffer = unsafe { std::mem::transmute(buffer) };
-    //         return buffer;
-    //     }
-    //     let states = self.states.to_drain_iter().map(|t| t.into()).collect();
-    //     let next_states = self.next_states.to_drain_iter().map(|t| t.into()).collect();
-    //     let actions = self.actions.to_drain_iter().map(|t| t.into()).collect();
-    //     TrajectoryBatch {
-    //         states: TrajectoryTensorField::Owned(states),
-    //         next_states: TrajectoryTensorField::Owned(next_states),
-    //         actions: TrajectoryTensorField::Owned(actions),
-    //         rewards: self.rewards.to_dropping_slice(),
-    //         terminated: self.terminated.to_dropping_slice(),
-    //         truncated: self.truncated.to_dropping_slice(),
-    //     }
-    // }
 }

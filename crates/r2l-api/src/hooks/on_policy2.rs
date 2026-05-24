@@ -10,7 +10,7 @@ use r2l_core::{
     },
 };
 
-use crate::{BestActorEvaluator, BestActorEvaluatorBuilder};
+use crate::{BestActorEvaluator2, BestActorEvaluatorBuilder2};
 
 #[derive(Debug, Clone, Copy)]
 pub enum LearningSchedule2 {
@@ -47,7 +47,7 @@ pub struct DefaultOnPolicyAlgorithmHooks2<
     E: Env<Tensor = S::Tensor>,
 > {
     learning_schedule: LearningSchedule2,
-    evaluator: Option<BestActorEvaluator<E, A::Actor>>,
+    evaluator: Option<BestActorEvaluator2<E, A::Actor>>,
     should_stop: bool,
     _phantom: PhantomData<(A, S, C)>,
 }
@@ -59,11 +59,11 @@ where
 {
     pub fn new<EB: EnvBuilder<Env = E>>(
         learning_schedule: LearningSchedule2,
-        evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
+        evaluator_builder: Option<BestActorEvaluatorBuilder2<EB>>,
     ) -> Self {
         Self {
             learning_schedule,
-            evaluator: evaluator_builder.map(BestActorEvaluatorBuilder::build),
+            evaluator: evaluator_builder.map(BestActorEvaluatorBuilder2::build),
             should_stop: false,
             _phantom: PhantomData,
         }
