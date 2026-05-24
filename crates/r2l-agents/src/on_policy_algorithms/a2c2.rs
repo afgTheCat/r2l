@@ -1,4 +1,4 @@
-//! Prototype PPO training path that consumes trajectory batches directly.
+//! Prototype A2C training path that consumes trajectory batches directly.
 
 use anyhow::Result;
 use r2l_core::{
@@ -13,55 +13,47 @@ use r2l_core::{
 use crate::{
     HookResult,
     on_policy_algorithms::{
-        Advantages, BatchIndexIterator2, Logps, Returns, batches_advantages_and_returns, logps2,
-        sample2,
+        Advantages, BatchIndexIterator2, Returns, batches_advantages_and_returns, sample2,
     },
 };
 
-/// Hyperparameters controlling PPO training behavior.
-pub struct PPOParams {
-    /// Clipping range applied to the PPO policy ratio.
-    pub clip_range: f32,
+/// Hyperparameters controlling A2C training behavior.
+pub struct A2CParams {
     /// Discount factor used for return and advantage estimation.
     pub gamma: f32,
-    /// GAE lambda used for advantage estimation.
+    /// GAE lambda used for return and advantage estimation.
     pub lambda: f32,
-    /// Minibatch size used during each PPO epoch.
+    /// Minibatch size used during the learning pass.
     pub sample_size: usize,
 }
 
-impl Default for PPOParams {
+impl Default for A2CParams {
     fn default() -> Self {
         Self {
-            clip_range: 0.2,
-            lambda: 0.8,
             gamma: 0.98,
+            lambda: 0.8,
             sample_size: 64,
         }
     }
 }
 
-/// Per-minibatch data exposed to [`PPOHook::batch_hook`].
-pub struct PPOBatchData<T: R2lTensor> {
+/// Per-minibatch data exposed to [`A2CHook::batch_hook`].
+pub struct A2CBatchData<T: R2lTensor> {
     /// Sampled observations in the minibatch.
     pub observations: Vec<T>,
     /// Sampled actions in the minibatch.
     pub actions: Vec<T>,
-    /// Current policy log-probabilities for the sampled actions.
+    /// Policy log-probabilities for the sampled actions.
     pub logp: T,
     /// Value-function predictions for the sampled observations.
     pub values_pred: T,
-    /// Difference between current and old log-probabilities.
-    pub logp_diff: T,
-    /// Probability ratio `exp(logp_diff)` used by the PPO objective.
-    pub ratio: T,
 }
 
-/// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
-pub trait PPOHook<M: OnPolicyLearningModule> {
+/// Hook interface for customizing A2C training over trajectory batches.
+pub trait A2CHook<M: OnPolicyLearningModule> {
     fn before_learning_hook<B: TrajectoryBatchT<M::InferenceTensor>>(
         &mut self,
-        _params: &mut PPOParams,
+        _params: &mut A2CParams,
         _module: &mut M,
         _batches: &[B],
         _advantages: &mut Advantages,
@@ -70,42 +62,41 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<B: TrajectoryBatchT<M::InferenceTensor>>(
-        &mut self,
-        _params: &mut PPOParams,
-        _module: &mut M,
-        _batches: &[B],
-    ) -> anyhow::Result<HookResult> {
-        Ok(HookResult::Break)
-    }
-
     fn batch_hook(
         &mut self,
-        _params: &mut PPOParams,
+        _params: &mut A2CParams,
         _module: &mut M,
         _losses: &mut <M as LearningModule>::Losses,
-        _data: &PPOBatchData<M::LearningTensor>,
+        _data: &A2CBatchData<M::LearningTensor>,
+    ) -> anyhow::Result<HookResult> {
+        Ok(HookResult::Continue)
+    }
+
+    fn after_learning_hook<B: TrajectoryBatchT<M::InferenceTensor>>(
+        &mut self,
+        _params: &mut A2CParams,
+        _module: &mut M,
+        _batches: &[B],
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 }
 
-/// Prototype PPO variant over finalized trajectory batches.
-pub struct PPO2<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
-    /// PPO hyperparameters.
-    pub params: PPOParams,
+/// Prototype Advantage Actor-Critic algorithm over finalized trajectory batches.
+pub struct A2C2<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
+    /// A2C hyperparameters.
+    pub params: A2CParams,
     /// Learning module containing policy, value function, and optimizer state.
     pub lm: Module,
     /// Hook implementation used to customize learning behavior.
     pub hooks: Hooks,
 }
 
-impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO2<Module, Hooks> {
+impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C2<Module, Hooks> {
     fn batch_loop<B: TrajectoryBatchT<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
-        logps: &Logps,
         returns: &Returns,
     ) -> anyhow::Result<()> {
         let mut index_iterator = BatchIndexIterator2::new(batches, self.params.sample_size);
@@ -116,50 +107,25 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO2<Module, Hooks>
             };
             let (observations, actions) = sample2(batches, &indices, Module::lifter);
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices));
-            let logp_old = lm.tensor_from_slice(&logps.sample(&indices));
             let returns = lm.tensor_from_slice(&returns.sample(&indices));
             let logp = lm.policy().log_probs(&observations, &actions)?;
             let values_pred = lm.values(&observations)?;
+            let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
-            let logp_diff = logp.sub(&logp_old)?;
-            let ratio = logp_diff.exp()?;
-            let clip_ratio =
-                ratio.clamp(1. - self.params.clip_range, 1. + self.params.clip_range)?;
-            let clipped_adv = clip_ratio.mul(&advantages)?;
-            let ratio_adv = ratio.mul(&advantages)?;
-            let policy_loss = ratio_adv.minimum(&clipped_adv)?.neg()?.mean()?;
             let mut losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
-            let ppo_data = PPOBatchData {
+            let a2c_data = A2CBatchData {
                 observations,
                 actions,
                 logp,
                 values_pred,
-                logp_diff,
-                ratio,
             };
             r2l_core::return_on_hook_result!(self.hooks.batch_hook(
                 &mut self.params,
                 lm,
                 &mut losses,
-                &ppo_data
+                &a2c_data
             )?);
             lm.update(losses)?;
-        }
-    }
-
-    fn learning_loop<B: TrajectoryBatchT<Module::InferenceTensor>>(
-        &mut self,
-        batches: &[B],
-        advantages: Advantages,
-        returns: Returns,
-        logps: Logps,
-    ) -> anyhow::Result<()> {
-        loop {
-            self.batch_loop(batches, &advantages, &logps, &returns)?;
-            let rollout_hook_res = self
-                .hooks
-                .rollout_hook(&mut self.params, &mut self.lm, batches);
-            r2l_core::return_on_hook_result!(rollout_hook_res?);
         }
     }
 
@@ -182,14 +148,17 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO2<Module, Hooks>
             &mut advantages,
             &mut returns
         )?);
-        let actor = self.lm.inference_policy();
-        let logps = logps2(batches, &actor)?;
-        self.learning_loop(batches, advantages, returns, logps)?;
+        self.batch_loop(batches, &advantages, &returns)?;
+        r2l_core::return_on_hook_result!(self.hooks.after_learning_hook(
+            &mut self.params,
+            &mut self.lm,
+            batches
+        )?);
         Ok(())
     }
 }
 
-impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent2 for PPO2<M, H> {
+impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent2 for A2C2<M, H> {
     type Tensor = M::InferenceTensor;
     type Actor = M::InferencePolicy;
 
@@ -198,6 +167,6 @@ impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent2 for PPO2<M, H> {
     }
 
     fn learn<B: TrajectoryBatchT<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
-        PPO2::learn(self, buffers)
+        A2C2::learn(self, buffers)
     }
 }

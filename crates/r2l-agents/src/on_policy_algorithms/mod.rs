@@ -8,16 +8,20 @@
 
 /// Advantage values computed per rollout buffer.
 pub mod a2c;
+/// Prototype A2C variant that consumes trajectory batches directly.
+pub mod a2c2;
 /// Proximal Policy Optimization implementation and hook interface.
 pub mod ppo;
 /// Prototype PPO variant that consumes trajectory batches directly.
 pub mod ppo2;
 /// Vanilla Policy Gradient implementation.
 pub mod vpg;
+/// Prototype VPG variant that consumes trajectory batches directly.
+pub mod vpg2;
 
 use derive_more::Deref;
 use r2l_core::{
-    buffers::TrajectoryContainer,
+    buffers::{TrajectoryContainer, gen_buffer::TrajectoryBatchT},
     models::{Policy, ValueFunction},
     rng::RNG,
     tensor::R2lTensor,
@@ -205,4 +209,125 @@ pub fn buffers_advantages_and_returns<
         returns_vec.push(returns);
     }
     Ok((Advantages(advantage_vec), Returns(returns_vec)))
+}
+
+fn batch_advantages_and_returns<
+    T1: R2lTensor,
+    T2: R2lTensor,
+    B: TrajectoryBatchT<T1>,
+    L: Fn(&T1) -> T2,
+>(
+    batch: &B,
+    value_func: &impl ValueFunction<Tensor = T2>,
+    gamma: f32,
+    lambda: f32,
+    lifter: L,
+) -> anyhow::Result<(Vec<f32>, Vec<f32>)> {
+    let mut states = batch.states().iter().map(&lifter).collect::<Vec<_>>();
+    states.push(lifter(batch.next_states().last().unwrap()));
+    let values_stacked = value_func.values(&states)?;
+    let values: Vec<f32> = values_stacked.to_vec();
+    let total_steps = batch.rewards().len();
+    let mut advantages: Vec<f32> = vec![0.; total_steps];
+    let mut returns: Vec<f32> = vec![0.; total_steps];
+    let mut last_gae_lam: f32 = 0.;
+
+    for i in (0..total_steps).rev() {
+        let done = batch.terminated()[i] || batch.truncated()[i];
+        let next_non_terminal = if done {
+            last_gae_lam = 0.;
+            0f32
+        } else {
+            1.
+        };
+        let delta = batch.rewards()[i] + next_non_terminal * gamma * values[i + 1] - values[i];
+        last_gae_lam = delta + next_non_terminal * gamma * lambda * last_gae_lam;
+        advantages[i] = last_gae_lam;
+        returns[i] = last_gae_lam + values[i];
+    }
+    Ok((advantages, returns))
+}
+
+pub fn batches_advantages_and_returns<
+    T1: R2lTensor,
+    T2: R2lTensor,
+    B: TrajectoryBatchT<T1>,
+    L: Fn(&T1) -> T2,
+>(
+    batches: &[B],
+    value_func: &impl ValueFunction<Tensor = T2>,
+    gamma: f32,
+    lambda: f32,
+    lifter: L,
+) -> anyhow::Result<(Advantages, Returns)> {
+    let mut advantage_vec = vec![];
+    let mut returns_vec = vec![];
+    for batch in batches {
+        let (advantages, returns) =
+            batch_advantages_and_returns(batch, value_func, gamma, lambda, &lifter)?;
+        advantage_vec.push(advantages);
+        returns_vec.push(returns);
+    }
+    Ok((Advantages(advantage_vec), Returns(returns_vec)))
+}
+
+pub fn sample2<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatchT<T1>, L: Fn(&T1) -> T2>(
+    batches: &[B],
+    indices: &[(usize, usize)],
+    lifter: L,
+) -> (Vec<T2>, Vec<T2>) {
+    let mut observations = vec![];
+    let mut actions = vec![];
+    for (batch_idx, idx) in indices {
+        observations.push(lifter(&batches[*batch_idx].states()[*idx]));
+        actions.push(lifter(&batches[*batch_idx].actions()[*idx]));
+    }
+    (observations, actions)
+}
+
+pub fn logps2<T: R2lTensor, B: TrajectoryBatchT<T>>(
+    batches: &[B],
+    policy: &impl Policy<Tensor = T>,
+) -> anyhow::Result<Logps> {
+    let mut logps = vec![];
+    for batch in batches {
+        let logp = policy
+            .log_probs(batch.states(), batch.actions())
+            .map(|t| t.to_vec())?;
+        logps.push(logp);
+    }
+    Ok(Logps(logps))
+}
+
+pub struct BatchIndexIterator2 {
+    indices: Vec<(usize, usize)>,
+    sample_size: usize,
+    current: usize,
+}
+
+impl BatchIndexIterator2 {
+    pub fn new<T: R2lTensor, B: TrajectoryBatchT<T>>(batches: &[B], sample_size: usize) -> Self {
+        let mut indices = (0..batches.len())
+            .flat_map(|i| {
+                let batch = &batches[i];
+                (0..batch.len()).map(|j| (i, j)).collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        RNG.with_borrow_mut(|rng| indices.shuffle(rng));
+        Self {
+            indices,
+            sample_size,
+            current: 0,
+        }
+    }
+
+    pub fn iter(&mut self) -> Option<Vec<(usize, usize)>> {
+        let total_size = self.indices.len();
+        if self.sample_size + self.current > total_size {
+            return None;
+        }
+        let batch_indices = &self.indices[self.current..self.current + self.sample_size];
+        self.current += self.sample_size;
+        Some(batch_indices.to_owned())
+    }
 }
