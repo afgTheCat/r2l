@@ -13,8 +13,12 @@ pub use agents::a2c2::{A2C2BurnAgent, A2C2CandleAgent};
 pub use agents::ppo::{PPOBurnAgent, PPOCandleAgent};
 pub use agents::ppo2::{PPO2BurnAgent, PPO2CandleAgent};
 pub use builders::a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder};
+pub use builders::a2c::agent2::{A2C2AgentBuilder, A2C2BurnAgentBuilder, A2C2CandleAgentBuilder};
 pub use builders::a2c::algorithm::{
     A2CAlgorithmBuilder, A2CBurnAlgorithmBuilder, A2CCandleAlgorithmBuilder,
+};
+pub use builders::a2c::algorithm2::{
+    A2C2AlgorithmBuilder, A2C2BurnAlgorithmBuilder, A2C2CandleAlgorithmBuilder,
 };
 pub use builders::agent::OnPolicyAgentBuilder;
 pub use builders::agent2::OnPolicyAgentBuilder2;
@@ -32,6 +36,7 @@ pub use builders::ppo::algorithm2::{
 pub use builders::sampler::SamplerBuilder;
 pub use builders::sampler2::{EpisodeHookBound, StepHookBound};
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
+pub use hooks::a2c2::DefaultA2CHook2;
 pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule};
 pub use hooks::on_policy2::{DefaultOnPolicyAlgorithmHooks2, LearningSchedule2};
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
