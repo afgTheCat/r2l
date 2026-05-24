@@ -61,10 +61,10 @@ trait BufferT {
     fn map_to_view(&mut self) -> impl TrajectoryBatchT<Self::Tensor>;
 }
 
-impl<T: R2lTensor> BufferT for NewBuffer<T> {
-    type Tensor = T;
-
-    fn map_to_view(&mut self) -> impl TrajectoryBatchT<Self::Tensor> {
-        self.to_trajectory_view()
-    }
-}
+// impl<T: R2lTensor> BufferT for NewBuffer<T> {
+//     type Tensor = T;
+//
+//     fn map_to_view(&mut self) -> impl TrajectoryBatchT<Self::Tensor> {
+//         self.to_trajectory_view()
+//     }
+// }

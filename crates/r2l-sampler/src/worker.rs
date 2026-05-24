@@ -115,6 +115,7 @@ pub enum WorkerCommand<T: R2lTensor> {
     SetPolicy(Box<dyn Actor<Tensor = T>>),
     Collect(RolloutMode),
     ResetEnv(u64),
+    ClearBuffer,
     GetEnvDescription,
     Shutdown,
 }
@@ -123,6 +124,7 @@ pub enum WorkerResult<T: R2lTensor> {
     PolicySet,
     Collected,
     EnvReset,
+    BufferCleared,
     EnvDescription(EnvDescription<T>),
     Shutdown,
 }
@@ -167,6 +169,10 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
                 WorkerCommand::ResetEnv(seed) => {
                     self.worker.reset(seed);
                     self.tx.send(WorkerResult::EnvReset).unwrap();
+                }
+                WorkerCommand::ClearBuffer => {
+                    // only for new impl
+                    unreachable!()
                 }
             }
         }

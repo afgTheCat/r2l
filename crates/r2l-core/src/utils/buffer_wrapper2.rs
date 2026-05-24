@@ -75,34 +75,58 @@ impl<'a, T: R2lTensor> TrajectoryViewsWrapper<'a, T> {
 
 impl<'a, T: R2lTensor> TrajectoryBatchT<T> for TrajectoryViewsWrapper<'a, T> {
     fn len(&self) -> usize {
-        todo!()
+        match self {
+            Self::Borrowed(t) => t.len(),
+            Self::Owned(o) => o.states.len(),
+        }
     }
 
     fn is_empty(&self) -> bool {
-        todo!()
+        match self {
+            Self::Borrowed(t) => t.is_empty(),
+            Self::Owned(o) => o.states.is_empty(),
+        }
     }
 
     fn states(&self) -> &[T] {
-        todo!()
+        match self {
+            Self::Borrowed(t) => t.states(),
+            Self::Owned(o) => &o.states,
+        }
     }
 
     fn next_states(&self) -> &[T] {
-        todo!()
+        match self {
+            Self::Borrowed(t) => t.next_states(),
+            Self::Owned(o) => &o.next_states,
+        }
     }
 
     fn actions(&self) -> &[T] {
-        todo!()
+        match self {
+            Self::Borrowed(t) => t.actions(),
+            Self::Owned(o) => &o.actions,
+        }
     }
 
     fn rewards(&self) -> &[f32] {
-        todo!()
+        match self {
+            Self::Borrowed(t) => t.rewards(),
+            Self::Owned(o) => &o.rewards,
+        }
     }
 
     fn terminated(&self) -> &[bool] {
-        todo!()
+        match self {
+            Self::Borrowed(t) => t.terminated(),
+            Self::Owned(o) => &o.terminated,
+        }
     }
 
     fn truncated(&self) -> &[bool] {
-        todo!()
+        match self {
+            Self::Borrowed(t) => t.truncated(),
+            Self::Owned(o) => &o.truncated,
+        }
     }
 }

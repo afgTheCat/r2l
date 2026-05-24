@@ -36,6 +36,10 @@ impl<E: Env> Worker2<E> {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.buffer.lock().unwrap().clear();
+    }
+
     pub fn collect(&mut self, bound: RolloutMode) {
         let Some(policy) = &mut self.policy else {
             todo!()
@@ -117,6 +121,10 @@ impl<E: Env> ThreadWorker2<E> {
                     self.worker.reset(seed);
                     self.tx.send(WorkerResult::EnvReset).unwrap();
                 }
+                WorkerCommand::ClearBuffer => {
+                    self.worker.clear();
+                    self.tx.send(WorkerResult::BufferCleared).unwrap();
+                }
             }
         }
     }
@@ -170,6 +178,15 @@ impl<T: R2lTensor> ThreadWorkers2<T> {
             worker.shutdown();
         }
     }
+
+    pub fn clear_buffers(&mut self) {
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.send(WorkerCommand::ClearBuffer);
+        }
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
+        }
+    }
 }
 
 pub enum WorkerPool2<E: Env> {
@@ -180,7 +197,9 @@ pub enum WorkerPool2<E: Env> {
 impl<E: Env> WorkerPool2<E> {
     pub fn clear_buffers(&mut self) {
         match self {
-            Self::Vec(workers) => {}
+            Self::Vec(workers) => {
+                workers.iter_mut().for_each(|w| w.clear());
+            }
             Self::Thread(thread) => {}
         }
     }
@@ -335,6 +354,7 @@ impl<E: Env, H: SamplerHook2<E = E>> Sampler2 for R2lSampler2<E, H> {
     type Tensor = E::Tensor;
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
+        self.worker_pool.clear_buffers();
         self.worker_pool.set_policy(actor.clone());
         loop {
             let result = self.hook.hook(&mut self.buffers);
