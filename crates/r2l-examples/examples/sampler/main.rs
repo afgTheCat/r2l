@@ -1,19 +1,19 @@
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
-use r2l_api::{PPOAgentBuilder, SamplerBuilder};
+use r2l_api::{EpisodeHookBound, PPO2AgentBuilder, Sampler2Builder, StepHookBound};
 use r2l_gym::GymEnvBuilder;
-use r2l_sampler::{EpisodeTrajectoryBound, SamplerExecutionMode, StepTrajectoryBound};
+use r2l_sampler::SamplerExecutionMode;
 
 fn main() {
     let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
-    let sampler_builder = SamplerBuilder::<GymEnvBuilder>::new(gym_env_builder, 10)
+    let sampler_builder = Sampler2Builder::<GymEnvBuilder, StepHookBound<_>>::new(gym_env_builder, 10)
         .with_execution_mode(SamplerExecutionMode::Vec)
         .with_execution_mode(SamplerExecutionMode::Thread)
-        .with_rollout_bound(EpisodeTrajectoryBound::new(10))
-        .with_rollout_bound(StepTrajectoryBound::new(1000));
+        .with_hook(EpisodeHookBound::new(10))
+        .with_hook(StepHookBound::new(1000));
     let sampler = sampler_builder.build();
 
-    let agents = PPOAgentBuilder::new(10)
+    let agents = PPO2AgentBuilder::new(10)
         .with_burn()
         .with_candle(Device::Cpu)
         .with_entropy_coeff(0.1)
@@ -41,4 +41,5 @@ fn main() {
                 weight_decay: 1e-4,
             },
         );
+    let _ = (sampler, agents);
 }

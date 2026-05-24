@@ -70,7 +70,7 @@ pub struct Sampler2Builder<EB: EnvBuilder, S: SamplerHook2Builder<Env = EB::Env>
 pub type DefaultSamplerBuilder<EB> = Sampler2Builder<EB, StepHookBound<<EB as EnvBuilder>::Env>>;
 
 impl<EB: EnvBuilder> DefaultSamplerBuilder<EB> {
-    pub(crate) fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
+    pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
         let env_builder = EnvBuilderType::homogenous(builder.into(), n_envs);
         Self {
             env_builder,

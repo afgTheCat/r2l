@@ -2,9 +2,8 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::{f64, io, sync::mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
+use r2l_api::{LearningSchedule2, PPO2AlgorithmBuilder, PPO2Stats, StepHookBound};
 use r2l_examples::EventBox;
-use r2l_sampler::StepTrajectoryBound;
 use ratatui::layout::Alignment;
 use ratatui::widgets::Paragraph;
 use ratatui::{
@@ -22,9 +21,9 @@ const ENV_NAME: &str = "Pendulum-v1";
 #[derive(Debug)]
 struct App {
     exit: bool,
-    latest_update: Option<PPOStats>,
+    latest_update: Option<PPO2Stats>,
     rx: Receiver<EventBox>,
-    best_update: Option<PPOStats>,
+    best_update: Option<PPO2Stats>,
     average_rollout_rewards: Vec<f32>,
     total_rollouts: usize,
     current_rollout: usize,
@@ -78,7 +77,7 @@ impl App {
             terminal.draw(|frame| self.draw(frame))?;
             let event = self.rx.recv().unwrap();
             event
-                .downcast::<PPOStats>()
+                .downcast::<PPO2Stats>()
                 .map(|progress| {
                     self.current_rollout += 1;
                     self.handle_progress(*progress);
@@ -94,7 +93,7 @@ impl App {
         Ok(())
     }
 
-    fn handle_progress(&mut self, progress: PPOStats) {
+    fn handle_progress(&mut self, progress: PPO2Stats) {
         let average_reward = progress.average_reward;
         self.average_rollout_rewards.push(average_reward);
         match &self.best_update {
@@ -129,7 +128,7 @@ impl App {
         self.exit = true;
     }
 
-    fn ppo_progress_to_table<'a>(&self, ppo_progress: &'a PPOStats, name: &'a str) -> Table<'a> {
+    fn ppo_progress_to_table<'a>(&self, ppo_progress: &'a PPO2Stats, name: &'a str) -> Table<'a> {
         let block = Block::bordered().title(name).border_set(border::THICK);
         let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
         let entropy_loss = ppo_progress.entropy_loss();
@@ -170,8 +169,8 @@ impl App {
         &self,
         statistics_area: Rect,
         buf: &mut Buffer,
-        latest_update: &PPOStats,
-        best_update: &PPOStats,
+        latest_update: &PPO2Stats,
+        best_update: &PPO2Stats,
     ) {
         let vertical_area =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
@@ -258,24 +257,24 @@ fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     });
 }
 
-pub fn train_ppo(tx: Sender<PPOStats>, total_rollouts: usize) -> anyhow::Result<()> {
-    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 4)
+pub fn train_ppo(tx: Sender<PPO2Stats>, total_rollouts: usize) -> anyhow::Result<()> {
+    let ppo_builder = PPO2AlgorithmBuilder::gym(ENV_NAME, 4)
         .with_candle(candle_core::Device::Cpu)
         .with_clip_range(0.2)
         .with_entropy_coeff(0.)
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
-        .with_rollout_bound(StepTrajectoryBound::new(1024))
+        .with_rollout_bound(StepHookBound::new(1024))
         .with_total_epochs(10)
-        .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
+        .with_learning_schedule(LearningSchedule2::rollout_bound(total_rollouts))
         .with_log_progress(false)
         .with_reporter(Some(tx));
     let mut ppo = ppo_builder.build()?;
     ppo.train()
 }
 
-pub fn adapt_ppo_events(update_rx: Receiver<PPOStats>, tx_to_updates: Sender<EventBox>) {
+pub fn adapt_ppo_events(update_rx: Receiver<PPO2Stats>, tx_to_updates: Sender<EventBox>) {
     std::thread::spawn(move || {
         while let Ok(update) = update_rx.recv() {
             tx_to_updates.send(Box::new(update)).unwrap();

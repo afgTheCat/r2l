@@ -3,18 +3,15 @@ use std::path::PathBuf;
 
 use burn::backend::NdArray;
 use burn_store::SafetensorsStore;
-use r2l_api::{
-    Evaluator, LearningSchedule, PPOAlgorithmBuilder, SamplerExecutionMode, StepTrajectoryBound,
-};
+use r2l_api::{Evaluator2, LearningSchedule2, PPO2AlgorithmBuilder, SamplerExecutionMode, StepHookBound};
 use r2l_burn::distributions::diagonal_distribution::DiagGaussianDistribution;
-use r2l_core::buffers::TrajectoryContainer;
 
 const ENV_NAME: &str = "Pendulum-v1";
 
 fn main() {
     let best_model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
     let hidden_layers = vec![64, 64];
-    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
+    let ppo_builder = PPO2AlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
         .with_policy_hidden_layers(hidden_layers.clone())
         .with_clip_range(0.2)
@@ -22,9 +19,9 @@ fn main() {
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
-        .with_rollout_bound(StepTrajectoryBound::new(1024))
+        .with_rollout_bound(StepHookBound::new(1024))
         .with_total_epochs(10)
-        .with_learning_schedule(LearningSchedule::rollout_bound(30))
+        .with_learning_schedule(LearningSchedule2::rollout_bound(30))
         .with_evaluator_best_actor_path(best_model_path.clone());
     let mut ppo = ppo_builder.build().unwrap();
     ppo.train().unwrap();
@@ -33,12 +30,13 @@ fn main() {
     let mut store = SafetensorsStore::from_file(best_model_path);
     let distribution = DiagGaussianDistribution::<NdArray>::from_store(&mut store);
     let (episodes, environments) = (10, 10);
-    let mut evaluator = Evaluator::gym(ENV_NAME, episodes, environments, SamplerExecutionMode::Vec);
+    let mut evaluator =
+        Evaluator2::gym(ENV_NAME, episodes, environments, SamplerExecutionMode::Vec);
     let results = evaluator.eval(distribution);
     let total_rewards = results
         .as_ref()
         .iter()
-        .map(|tr| tr.rewards().sum::<f32>())
+        .map(|tr| tr.rewards().iter().sum::<f32>())
         .sum::<f32>();
     println!(
         "Average rewards recieved: {}",

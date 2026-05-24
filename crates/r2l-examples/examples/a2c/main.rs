@@ -6,20 +6,20 @@ use std::{
 
 use candle_core::Device;
 use r2l_api::{
-    A2CAlgorithmBuilder, A2CStats, LearningSchedule, SamplerExecutionMode, StepTrajectoryBound,
+    A2C2AlgorithmBuilder, A2CStats, LearningSchedule2, SamplerExecutionMode, StepHookBound,
 };
 
 fn main() {
     let (update_tx, update_rx): (Sender<A2CStats>, Receiver<A2CStats>) = mpsc::channel();
 
-    let a2c_builder = A2CAlgorithmBuilder::gym("Pendulum-v1", 10)
+    let a2c_builder = A2C2AlgorithmBuilder::gym("Pendulum-v1", 10)
         .with_candle(Device::Cpu)
         .with_burn()
         .with_entropy_coeff(0.2)
         .with_gradient_clipping(Some(0.5))
-        .with_rollout_bound(StepTrajectoryBound::new(2048))
+        .with_rollout_bound(StepHookBound::new(2048))
         .with_execution_mode(SamplerExecutionMode::Vec)
-        .with_learning_schedule(LearningSchedule::rollout_bound(300))
+        .with_learning_schedule(LearningSchedule2::rollout_bound(300))
         .with_reporter(Some(update_tx));
     let mut ppo = a2c_builder.build().unwrap();
     let t = thread::spawn(move || {
