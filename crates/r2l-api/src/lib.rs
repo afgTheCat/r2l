@@ -9,6 +9,7 @@ mod utils;
 type BurnBackend = Autodiff<NdArray>;
 
 pub use agents::a2c::{A2CBurnAgent, A2CCandleAgent};
+pub use agents::a2c2::{A2C2BurnAgent, A2C2CandleAgent};
 pub use agents::ppo::{PPOBurnAgent, PPOCandleAgent};
 pub use agents::ppo2::{PPO2BurnAgent, PPO2CandleAgent};
 pub use builders::a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder};

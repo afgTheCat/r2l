@@ -15,7 +15,9 @@ use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
-    HookResult, buffers::TrajectoryContainer, models::Policy,
+    HookResult,
+    buffers::TrajectoryContainer,
+    models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
@@ -118,12 +120,12 @@ impl std::fmt::Display for A2CStats {
 }
 
 pub(crate) struct DefaultA2CHookReporter {
-    rollout_idx: usize,
-    report: A2CStats,
-    tx: Option<Sender<A2CStats>>,
-    log_progress: bool,
-    unfinished_episode_rewards: Vec<f32>,
-    latest_average_reward: f32,
+    pub(crate) rollout_idx: usize,
+    pub(crate) report: A2CStats,
+    pub(crate) tx: Option<Sender<A2CStats>>,
+    pub(crate) log_progress: bool,
+    pub(crate) unfinished_episode_rewards: Vec<f32>,
+    pub(crate) latest_average_reward: f32,
 }
 
 impl DefaultA2CHookReporter {
@@ -167,7 +169,7 @@ impl DefaultA2CHookReporter {
         self.report.average_reward = self.latest_average_reward;
     }
 
-    fn send_report(&mut self) {
+    pub(crate) fn send_report(&mut self) {
         self.rollout_idx += 1;
         let progress = std::mem::replace(
             &mut self.report,
