@@ -34,6 +34,7 @@ pub use builders::ppo::algorithm2::{
     PPO2AlgorithmBuilder, PPO2BurnAlgorithmBuilder, PPO2CandleAlgorithmBuilder,
 };
 pub use builders::sampler::SamplerBuilder;
+pub use builders::sampler2::Sampler2Builder;
 pub use builders::sampler2::{EpisodeHookBound, StepHookBound};
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
 pub use hooks::a2c2::DefaultA2CHook2;
@@ -44,10 +45,12 @@ pub use hooks::ppo2::{DefaultPPO2Hook, PPO2BatchStats, PPO2Stats};
 pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     on_policy::algorithm::OnPolicyAlgorithm,
+    on_policy::algorithm2::OnPolicyAlgorithm as OnPolicyAlgorithm2,
     tensor::TensorData,
 };
 pub use r2l_sampler::{
     EpisodeTrajectoryBound, R2lSampler, SamplerExecutionMode, StepTrajectoryBound,
+    sampler2::R2lSampler2,
 };
 pub use utils::evaluator::{BestActorEvaluator, BestActorEvaluatorBuilder, Evaluator};
-pub use utils::evaluator2::{BestActorEvaluator2, BestActorEvaluatorBuilder2};
+pub use utils::evaluator2::{BestActorEvaluator2, BestActorEvaluatorBuilder2, Evaluator2};

@@ -19,6 +19,13 @@ use r2l_core::{
 
 use crate::hooks::a2c::{A2CBatchStats, DefaultA2CHook, DefaultA2CHookReporter};
 
+/// Default training hook used by the A2C2 builder path.
+///
+/// This hook applies the standard A2C2 training behavior: optional advantage
+/// normalization, optional value-loss weighting, optional entropy
+/// regularization, optional gradient clipping, and optional rollout reporting
+/// through [`A2CBatchStats`](crate::A2CBatchStats) and
+/// [`crate::A2CStats`].
 pub type DefaultA2CHook2<T = ()> = DefaultA2CHook<T>;
 
 impl DefaultA2CHookReporter {
