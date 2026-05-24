@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use r2l_core::{
-    buffers::buffer::TrajectoryBatch,
+    buffers::gen_buffer::TrajectoryBatchT,
     models::{LearningModule, Policy, ValueFunction},
     on_policy::{
         algorithm2::Agent2, learning_module::OnPolicyLearningModule,
@@ -59,22 +59,22 @@ pub struct PPOBatchData<T: R2lTensor> {
 
 /// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
 pub trait PPOHook<M: OnPolicyLearningModule> {
-    fn before_learning_hook(
+    fn before_learning_hook<B: TrajectoryBatchT<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
-        _batches: &[TrajectoryBatch<'_, M::InferenceTensor>],
+        _batches: &[B],
         _advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook(
+    fn rollout_hook<B: TrajectoryBatchT<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
-        _batches: &[TrajectoryBatch<'_, M::InferenceTensor>],
+        _batches: &[B],
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Break)
     }
@@ -101,9 +101,9 @@ pub struct PPO2<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
 }
 
 impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO2<Module, Hooks> {
-    fn batch_loop(
+    fn batch_loop<B: TrajectoryBatchT<Module::InferenceTensor>>(
         &mut self,
-        batches: &[TrajectoryBatch<'_, Module::InferenceTensor>],
+        batches: &[B],
         advantages: &Advantages,
         logps: &Logps,
         returns: &Returns,
@@ -147,9 +147,9 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO2<Module, Hooks>
         }
     }
 
-    fn learning_loop(
+    fn learning_loop<B: TrajectoryBatchT<Module::InferenceTensor>>(
         &mut self,
-        batches: &[TrajectoryBatch<'_, Module::InferenceTensor>],
+        batches: &[B],
         advantages: Advantages,
         returns: Returns,
         logps: Logps,
@@ -164,9 +164,9 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO2<Module, Hooks>
     }
 
     /// Prototype learning entrypoint over finalized trajectory batches.
-    pub fn learn(
+    pub fn learn<B: TrajectoryBatchT<Module::InferenceTensor>>(
         &mut self,
-        batches: &[TrajectoryBatch<'_, Module::InferenceTensor>],
+        batches: &[B],
     ) -> Result<()> {
         let (mut advantages, mut returns) = batches_advantages_and_returns(
             batches,
@@ -197,13 +197,13 @@ impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent2 for PPO2<M, H> {
         self.lm.inference_policy()
     }
 
-    fn learn(&mut self, buffers: &[TrajectoryBatch<'_, Self::Tensor>]) -> Result<()> {
+    fn learn<B: TrajectoryBatchT<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
         PPO2::learn(self, buffers)
     }
 }
 
-fn sample<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) -> T2>(
-    batches: &[TrajectoryBatch<'_, T1>],
+fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatchT<T1>, L: Fn(&T1) -> T2>(
+    batches: &[B],
     indices: &[(usize, usize)],
     lifter: L,
 ) -> (Vec<T2>, Vec<T2>) {
@@ -216,8 +216,8 @@ fn sample<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) -> T2>(
     (observations, actions)
 }
 
-fn logps<T: R2lTensor>(
-    batches: &[TrajectoryBatch<'_, T>],
+fn logps<T: R2lTensor, B: TrajectoryBatchT<T>>(
+    batches: &[B],
     policy: &impl Policy<Tensor = T>,
 ) -> anyhow::Result<Logps> {
     let mut logps = vec![];
@@ -230,8 +230,8 @@ fn logps<T: R2lTensor>(
     Ok(Logps(logps))
 }
 
-fn batch_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) -> T2>(
-    batch: &TrajectoryBatch<'_, T1>,
+fn batch_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatchT<T1>, L: Fn(&T1) -> T2>(
+    batch: &B,
     value_func: &impl ValueFunction<Tensor = T2>,
     gamma: f32,
     lambda: f32,
@@ -262,8 +262,8 @@ fn batch_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) -> T2>(
     Ok((advantages, returns))
 }
 
-fn batches_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, L: Fn(&T1) -> T2>(
-    batches: &[TrajectoryBatch<'_, T1>],
+fn batches_advantages_and_returns<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatchT<T1>, L: Fn(&T1) -> T2>(
+    batches: &[B],
     value_func: &impl ValueFunction<Tensor = T2>,
     gamma: f32,
     lambda: f32,
@@ -287,7 +287,7 @@ struct BatchIndexIterator {
 }
 
 impl BatchIndexIterator {
-    fn new<T: R2lTensor>(batches: &[TrajectoryBatch<'_, T>], sample_size: usize) -> Self {
+    fn new<T: R2lTensor, B: TrajectoryBatchT<T>>(batches: &[B], sample_size: usize) -> Self {
         let mut indices = (0..batches.len())
             .flat_map(|i| {
                 let batch = &batches[i];

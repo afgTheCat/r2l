@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bimodal_array::bimodal_array;
 use bimodal_array::{ArrayHandle, ElementHandle};
-use r2l_core::buffers::buffer::{TrajectoryBatch, TrajectoryView};
+use r2l_core::buffers::buffer::TrajectoryView;
 use r2l_core::on_policy::algorithm2::Sampler2;
 use r2l_core::{
     buffers::buffer::NewBuffer,
@@ -345,10 +345,10 @@ impl<E: Env, H: SamplerHook2<E = E>> Sampler2 for R2lSampler2<E, H> {
         }
     }
 
-    fn trajectory_views<S: R2lTensor + From<Self::Tensor>>(
-        &mut self,
-    ) -> impl AsRef<[TrajectoryBatch<'_, S>]> {
-        self.buffers.lock_map(|b| b.map_to_view::<S>()).unwrap()
+    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]> {
+        self.buffers
+            .lock_map(|buffer| buffer.to_trajectory_view())
+            .unwrap()
     }
 
     fn shutdown(&mut self) {

@@ -1,8 +1,12 @@
 use anyhow::Result;
 
 use crate::{
-    HookResult, break_on_hook_result, buffers::buffer::TrajectoryBatch, models::Actor,
-    return_on_hook_result, tensor::R2lTensor, utils::actor_wrapper::ActorWrapper,
+    HookResult, break_on_hook_result,
+    buffers::{buffer::TrajectoryView, gen_buffer::TrajectoryBatchT},
+    models::Actor,
+    return_on_hook_result,
+    tensor::R2lTensor,
+    utils::{actor_wrapper::ActorWrapper, buffer_wrapper2::TrajectoryViewsWrapper},
 };
 
 pub trait Agent2 {
@@ -16,7 +20,7 @@ pub trait Agent2 {
     fn actor(&self) -> Self::Actor;
 
     /// Learns from a batch of trajectory containers.
-    fn learn(&mut self, buffers: &[TrajectoryBatch<'_, Self::Tensor>]) -> Result<()>;
+    fn learn<B: TrajectoryBatchT<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()>;
 
     /// Releases agent resources before the training loop exits.
     fn shutdown(&mut self) {}
@@ -29,9 +33,7 @@ pub trait Sampler2 {
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A);
 
     /// Creates a view for the agents.
-    fn trajectory_views<S: R2lTensor + From<Self::Tensor>>(
-        &mut self,
-    ) -> impl AsRef<[TrajectoryBatch<'_, S>]>;
+    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]>;
 
     /// Releases sampler resources before the training loop exits.
     fn shutdown(&mut self) {}
@@ -39,10 +41,20 @@ pub trait Sampler2 {
 
 pub trait OnPolicyAdapters2<A: Actor, S: Sampler2> {
     type SamplerActor: Actor<Tensor = S::Tensor> + Clone;
+    type AgentBuffer<'a>: TrajectoryBatchT<A::Tensor>
+    where
+        Self: 'a,
+        S: 'a;
 
     fn adapt_actor(&self, actor: A) -> Self::SamplerActor;
 
-    fn adapt_buffer<'a>(&self, sampler: &'a mut S) -> impl AsRef<[TrajectoryBatch<'a, A::Tensor>]>;
+    fn adapt_buffer<'a>(
+        &self,
+        buffers: &'a [TrajectoryView<'a, S::Tensor>],
+    ) -> impl AsRef<[Self::AgentBuffer<'a>]>
+    where
+        Self: 'a,
+        S: 'a;
 }
 
 pub struct DefaultAdapter;
@@ -53,6 +65,11 @@ where
     A::Tensor: From<S::Tensor>,
 {
     type SamplerActor = ActorWrapper<A, S::Tensor>;
+    type AgentBuffer<'a>
+        = TrajectoryViewsWrapper<'a, A::Tensor>
+    where
+        Self: 'a,
+        S: 'a;
 
     fn adapt_actor(&self, actor: A) -> Self::SamplerActor {
         ActorWrapper::new(actor)
@@ -60,9 +77,17 @@ where
 
     fn adapt_buffer<'a>(
         &self,
-        sampler: &'a mut S,
-    ) -> impl AsRef<[TrajectoryBatch<'a, <A as Actor>::Tensor>]> {
-        sampler.trajectory_views()
+        buffers: &'a [TrajectoryView<'a, S::Tensor>],
+    ) -> impl AsRef<[Self::AgentBuffer<'a>]>
+    where
+        Self: 'a,
+        S: 'a,
+    {
+        let views: Vec<TrajectoryViewsWrapper<'a, A::Tensor>> = buffers
+            .iter()
+            .map(TrajectoryViewsWrapper::from_view::<S::Tensor>)
+            .collect();
+        views
     }
 }
 
@@ -89,15 +114,14 @@ impl<A: Agent2, S: Sampler2, C: OnPolicyAdapters2<A::Actor, S>> OnPolicyRuntime<
     }
 
     /// Returns the last collected trajectory containers from the sampler.
-    pub fn trajectory_containers<V: R2lTensor + From<S::Tensor>>(
-        &mut self,
-    ) -> impl AsRef<[TrajectoryBatch<'_, V>]> {
+    pub fn trajectory_containers(&mut self) -> impl AsRef<[TrajectoryView<'_, S::Tensor>]> {
         self.sampler.trajectory_views()
     }
 
     /// Adapts the sampler buffers and runs an agent update.
     pub fn learn(&mut self) -> Result<()> {
-        let buffers = self.adapter.adapt_buffer(&mut self.sampler);
+        let views = self.sampler.trajectory_views();
+        let buffers = self.adapter.adapt_buffer(views.as_ref());
         self.agent.learn(buffers.as_ref())
     }
 

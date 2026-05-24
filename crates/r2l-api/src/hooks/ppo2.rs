@@ -14,7 +14,7 @@ use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
-    HookResult, buffers::buffer::TrajectoryBatch, models::Policy,
+    HookResult, buffers::gen_buffer::TrajectoryBatchT, models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
@@ -147,9 +147,9 @@ impl DefaultPPO2HookReporter {
         }
     }
 
-    fn update_average_reward<T: r2l_core::tensor::R2lTensor>(
+    fn update_average_reward<T: r2l_core::tensor::R2lTensor, B: TrajectoryBatchT<T>>(
         &mut self,
-        batches: &[TrajectoryBatch<'_, T>],
+        batches: &[B],
     ) {
         let mut completed_episode_rewards = vec![];
         for (running_reward, batch) in self
@@ -214,11 +214,11 @@ pub struct DefaultPPO2Hook<T = ()> {
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
     for DefaultPPO2Hook<BurnPolicyValueModule<B, D>>
 {
-    fn before_learning_hook(
+    fn before_learning_hook<BT: TrajectoryBatchT<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>>(
         &mut self,
         _params: &mut PPOParams,
         module: &mut BurnPolicyValueModule<B, D>,
-        _batches: &[TrajectoryBatch<'_, burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>],
+        _batches: &[BT],
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
@@ -233,11 +233,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook(
+    fn rollout_hook<BT: TrajectoryBatchT<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>>(
         &mut self,
         params: &mut PPOParams,
         module: &mut BurnPolicyValueModule<B, D>,
-        batches: &[TrajectoryBatch<'_, burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>],
+        batches: &[BT],
     ) -> anyhow::Result<HookResult> {
         self.current_epoch += 1;
         let target_kl_exceeded = if let Some(target_kl) = &mut self.target_kl {
@@ -313,11 +313,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
 }
 
 impl PPOHook<CandlePolicyValueModule> for DefaultPPO2Hook<CandlePolicyValueModule> {
-    fn before_learning_hook(
+    fn before_learning_hook<BT: TrajectoryBatchT<candle_core::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
         module: &mut CandlePolicyValueModule,
-        _batches: &[TrajectoryBatch<'_, candle_core::Tensor>],
+        _batches: &[BT],
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
@@ -330,11 +330,11 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPO2Hook<CandlePolicyValueModul
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook(
+    fn rollout_hook<BT: TrajectoryBatchT<candle_core::Tensor>>(
         &mut self,
         params: &mut PPOParams,
         module: &mut CandlePolicyValueModule,
-        batches: &[TrajectoryBatch<'_, candle_core::Tensor>],
+        batches: &[BT],
     ) -> anyhow::Result<HookResult> {
         self.current_epoch += 1;
         let target_kl_exceeded = if let Some(target_kl) = &mut self.target_kl {

@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use anyhow::Result;
 use r2l_core::{
     HookResult,
+    buffers::gen_buffer::TrajectoryBatchT,
     env::{Env, EnvBuilder},
     on_policy::algorithm2::{
         Agent2, OnPolicyAdapters2, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler2,
@@ -101,7 +102,7 @@ where
                 total_steps,
                 current_step,
             } => {
-                let rollouts = runtime.trajectory_containers::<A::Tensor>();
+                let rollouts = runtime.trajectory_containers();
                 let rollout_steps: usize =
                     rollouts.as_ref().iter().map(|e| e.actions().len()).sum();
                 *current_step += rollout_steps;

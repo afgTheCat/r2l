@@ -5,7 +5,7 @@ use crate::{
     tensor::R2lTensor,
 };
 
-struct OwnedView<T: R2lTensor> {
+pub struct OwnedView<T: R2lTensor> {
     states: Vec<T>,
     next_states: Vec<T>,
     actions: Vec<T>,
@@ -34,14 +34,14 @@ impl<T: R2lTensor> OwnedView<T> {
     }
 }
 
-enum TrajectoryViewsWrapper<'a, T: R2lTensor> {
+pub enum TrajectoryViewsWrapper<'a, T: R2lTensor> {
     Borrowed(TrajectoryView<'a, T>),
     Owned(OwnedView<T>),
 }
 
 impl<'a, T: R2lTensor> TrajectoryViewsWrapper<'a, T> {
-    fn from_view<'b, S: R2lTensor + Into<T>, V: TrajectoryBatchT<S>>(
-        view: &'b V,
+    pub fn from_view<'b, S: R2lTensor + Into<T>>(
+        view: &'b TrajectoryView<'b, S>,
     ) -> TrajectoryViewsWrapper<'b, T> {
         if TypeId::of::<S>() == TypeId::of::<T>() {
             let states = unsafe { std::mem::transmute(view.states()) };
