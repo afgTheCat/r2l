@@ -110,6 +110,12 @@ impl<T: R2lTensor> TrajectoryBuffer<T> {
         self.truncated.push(truncated);
     }
 
+    pub fn replace_last_next_state(&mut self, next_state: T) {
+        if let Some(last_next_state) = self.next_states.last_mut() {
+            *last_next_state = next_state;
+        }
+    }
+
     pub fn to_trajectory_view(&self) -> TrajectoryView<'_, T> {
         TrajectoryView {
             states: &self.states,

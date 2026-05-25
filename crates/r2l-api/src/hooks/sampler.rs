@@ -1,12 +1,12 @@
 use std::marker::PhantomData;
 
 use bimodal_array::ArrayHandle;
-use candle_core::Tensor;
-use r2l_core::{buffers::buffer::TrajectoryBuffer, env::Env, tensor::RunningMeanTensor};
-use r2l_sampler::{
-    RolloutMode, SamplerHook, SamplerHookResult,
-    worker::{self, WorkerPool},
+use r2l_core::{
+    buffers::buffer::TrajectoryBuffer,
+    env::Env,
+    tensor::{R2lTensor, RunningMeanTensor},
 };
+use r2l_sampler::{RolloutMode, SamplerHook, SamplerHookResult, worker::WorkerPool};
 
 use crate::utils::running_mean2::RunningMeanStd2;
 
@@ -104,7 +104,43 @@ pub struct ObservationNormalizerHook<E: Env<Tensor: RunningMeanTensor>> {
 
 impl<E: Env<Tensor: RunningMeanTensor>> ObservationNormalizerHook<E> {
     fn normalize_observations(&mut self, observations: Vec<E::Tensor>) -> Vec<E::Tensor> {
-        todo!()
+        const EPS: f32 = 1e-8;
+        const CLIP_OBS: f32 = 10.0;
+
+        if observations.is_empty() {
+            return observations;
+        }
+
+        let mut batch_data = Vec::new();
+        let mut feature_shape = None;
+        for observation in &observations {
+            let (data, shape) = observation.to_vec_and_shape();
+            feature_shape = Some(shape);
+            batch_data.extend(data);
+        }
+
+        let mut batch_shape = vec![observations.len()];
+        batch_shape.extend(feature_shape.unwrap_or_default());
+        let batch = E::Tensor::from_vec_and_shape(batch_data, batch_shape);
+        self.rm.update(&batch).unwrap();
+
+        let (mean, _) = self.rm.mean.to_vec_and_shape();
+        let (var, _) = self.rm.var.to_vec_and_shape();
+
+        observations
+            .into_iter()
+            .map(|observation| {
+                let (data, shape) = observation.to_vec_and_shape();
+                let normalized = data
+                    .into_iter()
+                    .zip(mean.iter().zip(var.iter()))
+                    .map(|(value, (mean, var))| {
+                        ((value - *mean) / (var + EPS).sqrt()).clamp(-CLIP_OBS, CLIP_OBS)
+                    })
+                    .collect();
+                E::Tensor::from_vec_and_shape(normalized, shape)
+            })
+            .collect()
     }
 }
 
@@ -113,7 +149,7 @@ impl<E: Env<Tensor: RunningMeanTensor>> SamplerHook for ObservationNormalizerHoo
 
     fn hook(
         &mut self,
-        _buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
+        buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
         worker_pool: &mut WorkerPool<Self::E>,
     ) -> SamplerHookResult {
         if self.steps_scheduled < self.num_steps {
@@ -127,6 +163,13 @@ impl<E: Env<Tensor: RunningMeanTensor>> SamplerHook for ObservationNormalizerHoo
             SamplerHookResult::Bound(RolloutMode::StepBound { n_steps: 1 })
         } else {
             self.steps_scheduled = 0;
+            let last_states = worker_pool.get_last_states().unwrap();
+            let normalized_observations = self.normalize_observations(last_states);
+            let mut buffers = buffer.lock().unwrap();
+            for (buffer, next_state) in buffers.iter_mut().zip(normalized_observations.into_iter())
+            {
+                buffer.replace_last_next_state(next_state);
+            }
             SamplerHookResult::Stop
         }
     }
