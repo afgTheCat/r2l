@@ -32,6 +32,10 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         .with_rollout_bound(StepHookBound::new(config.n_steps))
         .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps));
 
+    if let Some(norm_obs) = config.norm_obs {
+        ppo_builder = ppo_builder.with_observation_normalizer();
+    }
+
     if let Some(clip_range) = config.clip_range {
         ppo_builder = ppo_builder.with_clip_range(clip_range);
     }

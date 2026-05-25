@@ -1,8 +1,10 @@
 use r2l_core::{
-    env::{ActionSpaceType, EnvBuilder, Space},
+    env::{ActionSpaceType, Env, EnvBuilder, Space},
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
+    running_mean::RunningMeanStd2,
+    tensor::RunningMeanTensor,
 };
 use r2l_sampler::{R2lSampler, SamplerExecutionMode};
 
@@ -10,7 +12,7 @@ use crate::{
     BestActorEvaluatorBuilder,
     builders::{
         agent::AgentBuilder,
-        sampler::{SamplerBuilder, SamplerHookBuilder},
+        sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
     },
     hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule},
 };
@@ -187,6 +189,7 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
     pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm<A, EB, SH>>
     where
         DefaultAdapter: OnPolicyAdapters<A::Actor, R2lSampler<<EB as EnvBuilder>::Env, SH::Target>>,
+        <<EB as EnvBuilder>::Env as r2l_core::env::Env>::Tensor: RunningMeanTensor,
     {
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
@@ -209,5 +212,25 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
             },
             hooks,
         })
+    }
+}
+
+impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder<Env: Env<Tensor: RunningMeanTensor>>>
+    OnPolicyAlgorithmBuilder<A, AB, EB, StepHookBound<EB::Env>>
+{
+    /// Enables observation normalization for step-bound rollout collection.
+    pub fn with_observation_normalizer(mut self) -> Self {
+        let observation_size = self
+            .sampler_builder
+            .env_builder
+            .env_description()
+            .expect("environment description should be available")
+            .observation_size();
+        let observation_normalizer = RunningMeanStd2::new(vec![observation_size]);
+        self.sampler_builder.hook_builder = self
+            .sampler_builder
+            .hook_builder
+            .with_observation_normalizer(observation_normalizer);
+        self
     }
 }

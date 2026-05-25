@@ -5,7 +5,8 @@ use crate::{
     buffers::{TrajectoryBatch, buffer::TrajectoryView},
     models::Actor,
     return_on_hook_result,
-    tensor::R2lTensor,
+    running_mean::RunningMeanStd2,
+    tensor::{R2lTensor, RunningMeanTensor},
     utils::{actor_wrapper::ActorWrapper, buffer_wrapper::TrajectoryViewsWrapper},
 };
 
@@ -34,6 +35,13 @@ pub trait Sampler {
 
     /// Creates a view for the agents.
     fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]>;
+
+    fn observation_normalizer(&self) -> Option<RunningMeanStd2<Self::Tensor>>
+    where
+        Self::Tensor: RunningMeanTensor,
+    {
+        None
+    }
 
     /// Releases sampler resources before the training loop exits.
     fn shutdown(&mut self) {}

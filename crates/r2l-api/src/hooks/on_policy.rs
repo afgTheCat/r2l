@@ -8,6 +8,7 @@ use r2l_core::{
     on_policy::algorithm::{
         Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
     },
+    tensor::RunningMeanTensor,
 };
 
 use crate::{BestActorEvaluator, BestActorEvaluatorBuilder};
@@ -58,7 +59,7 @@ impl LearningSchedule {
 /// algorithm exits.
 pub struct DefaultOnPolicyAlgorithmHooks<
     A: Agent,
-    S: Sampler,
+    S: Sampler<Tensor: RunningMeanTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
 > {
@@ -68,8 +69,12 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     _phantom: PhantomData<(A, S, C)>,
 }
 
-impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>, E: Env<Tensor = S::Tensor>>
-    DefaultOnPolicyAlgorithmHooks<A, S, C, E>
+impl<
+    A: Agent,
+    S: Sampler<Tensor: RunningMeanTensor>,
+    C: OnPolicyAdapters<A::Actor, S>,
+    E: Env<Tensor = S::Tensor>,
+> DefaultOnPolicyAlgorithmHooks<A, S, C, E>
 {
     /// Creates the default outer-loop hooks for the given learning schedule.
     pub fn new<EB: EnvBuilder<Env = E>>(
@@ -85,8 +90,12 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>, E: Env<Tensor = S::
     }
 }
 
-impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>, E: Env<Tensor = S::Tensor>>
-    OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E>
+impl<
+    A: Agent,
+    S: Sampler<Tensor: RunningMeanTensor>,
+    C: OnPolicyAdapters<A::Actor, S>,
+    E: Env<Tensor = S::Tensor>,
+> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E>
 {
     type A = A;
     type S = S;
@@ -131,6 +140,8 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>, E: Env<Tensor = S::
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
         if let Some(evaluator) = &mut self.evaluator {
+            let observation_normalizer = runtime.sampler.observation_normalizer();
+            evaluator.set_observation_normalizer(observation_normalizer);
             let actor = runtime.actor();
             let adapted_actor = runtime.adapted_actor();
             evaluator.eval(adapted_actor, actor);

@@ -44,6 +44,7 @@ pub mod error;
 pub mod models;
 pub mod on_policy;
 pub mod rng;
+pub mod running_mean;
 pub mod tensor;
 mod utils;
 

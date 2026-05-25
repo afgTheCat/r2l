@@ -3,8 +3,11 @@ use std::sync::mpsc::Sender;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::PPOParams;
-use r2l_core::env::EnvBuilder;
 use r2l_core::on_policy::algorithm::Agent;
+use r2l_core::{
+    env::{Env, EnvBuilder},
+    tensor::RunningMeanTensor,
+};
 use r2l_gym::GymEnvBuilder;
 
 use crate::agents::ppo::{PPOBurnAgent, PPOCandleAgent};
@@ -203,7 +206,7 @@ impl PPOCandleAlgorithmBuilder<GymEnvBuilder> {
     }
 }
 
-impl<EB: EnvBuilder> PPOCandleAlgorithmBuilder<EB> {
+impl<EB: EnvBuilder<Env: Env<Tensor: RunningMeanTensor>>> PPOCandleAlgorithmBuilder<EB> {
     /// Creates a PPO algorithm builder for a custom environment builder.
     pub fn new(builder: EB, n_envs: usize) -> Self {
         Self::from_sampler_and_agent_builder(
