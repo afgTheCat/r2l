@@ -10,8 +10,7 @@ use crate::{
     agents::ppo::{PPOBurnAgent, PPOCandleAgent},
     builders::{
         agent::{
-            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend,
-            OnPolicyAgentBuilder,
+            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
         },
         learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
         ppo::hook::DefaultPPOHookBuilder,
@@ -23,8 +22,7 @@ use crate::{
 ///
 /// This is the main entry point for configuring PPO-specific agent behavior,
 /// such as clipping, advantage normalization, and PPO hook settings.
-pub type PPOAgentBuilder =
-    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, CandleBackend>;
+pub type PPOAgentBuilder = OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, CandleBackend>;
 
 /// PPO agent builder specialized to the Candle backend.
 pub type PPOCandleAgentBuilder = PPOAgentBuilder;

@@ -24,12 +24,7 @@ use crate::{
 };
 
 impl<A: Agent, B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
-    OnPolicyAlgorithmBuilder<
-        A,
-        OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>,
-        EB,
-        SH,
-    >
+    OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>, EB, SH>
 where
     OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>: AgentBuilder<Agent = A>,
 {

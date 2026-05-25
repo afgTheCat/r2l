@@ -74,6 +74,14 @@ pub trait R2lTensorMath: R2lTensor {
     fn sqr(&self) -> anyhow::Result<Self>;
 }
 
+pub trait RunningMeanTensor: R2lTensorMath {
+    fn zeros(shape: Vec<usize>) -> Self;
+    fn batch_mean(&self) -> anyhow::Result<Self>;
+    fn biased_var(&self) -> anyhow::Result<Self>;
+    fn batch_count(&self) -> anyhow::Result<f32>;
+    fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self>;
+}
+
 /// Backend-neutral owned tensor payload.
 ///
 /// `TensorData` stores flat `f32` data with an explicit shape. It is useful for
@@ -119,5 +127,169 @@ impl R2lTensor for TensorData {
 
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
         Self { data, shape }
+    }
+}
+
+impl R2lTensorMath for TensorData {
+    fn add(&self, other: &Self) -> anyhow::Result<Self> {
+        anyhow::ensure!(self.shape == other.shape, "shape mismatch");
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a + b)
+            .collect();
+        Ok(Self::new(data, self.shape.clone()))
+    }
+
+    fn sub(&self, other: &Self) -> anyhow::Result<Self> {
+        anyhow::ensure!(self.shape == other.shape, "shape mismatch");
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a - b)
+            .collect();
+        Ok(Self::new(data, self.shape.clone()))
+    }
+
+    fn mul(&self, other: &Self) -> anyhow::Result<Self> {
+        anyhow::ensure!(self.shape == other.shape, "shape mismatch");
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a * b)
+            .collect();
+        Ok(Self::new(data, self.shape.clone()))
+    }
+
+    fn exp(&self) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data.iter().map(|value| value.exp()).collect(),
+            self.shape.clone(),
+        ))
+    }
+
+    fn clamp(&self, min: f32, max: f32) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data
+                .iter()
+                .map(|value| value.clamp(min, max))
+                .collect(),
+            self.shape.clone(),
+        ))
+    }
+
+    fn minimum(&self, other: &Self) -> anyhow::Result<Self> {
+        anyhow::ensure!(self.shape == other.shape, "shape mismatch");
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a.min(*b))
+            .collect();
+        Ok(Self::new(data, self.shape.clone()))
+    }
+
+    fn neg(&self) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data.iter().map(|value| -value).collect(),
+            self.shape.clone(),
+        ))
+    }
+
+    fn mean(&self) -> anyhow::Result<Self> {
+        let mean = self.data.iter().sum::<f32>() / self.data.len() as f32;
+        Ok(Self::from_vec(vec![mean]))
+    }
+
+    fn sqr(&self) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data.iter().map(|value| value * value).collect(),
+            self.shape.clone(),
+        ))
+    }
+}
+
+impl RunningMeanTensor for TensorData {
+    fn zeros(shape: Vec<usize>) -> Self {
+        let len = shape.iter().product();
+        Self {
+            data: vec![0.0; len],
+            shape,
+        }
+    }
+
+    fn batch_mean(&self) -> anyhow::Result<Self> {
+        anyhow::ensure!(
+            !self.shape.is_empty(),
+            "running mean update expects a batch dimension"
+        );
+        let batch_count = self.shape[0];
+        let feature_shape = self.shape[1..].to_vec();
+        let feature_size = feature_shape.iter().product::<usize>();
+        anyhow::ensure!(
+            batch_count * feature_size == self.data.len(),
+            "batch tensor shape does not match data length"
+        );
+
+        let mut batch_mean = vec![0.0; feature_size];
+        for sample in self.data.chunks_exact(feature_size) {
+            for (mean, value) in batch_mean.iter_mut().zip(sample.iter()) {
+                *mean += *value;
+            }
+        }
+        for mean in &mut batch_mean {
+            *mean /= batch_count as f32;
+        }
+        Ok(Self::from_vec_and_shape(batch_mean, feature_shape))
+    }
+
+    fn biased_var(&self) -> anyhow::Result<Self> {
+        anyhow::ensure!(
+            !self.shape.is_empty(),
+            "running mean update expects a batch dimension"
+        );
+        let batch_count = self.shape[0];
+        let feature_shape = self.shape[1..].to_vec();
+        let feature_size = feature_shape.iter().product::<usize>();
+        anyhow::ensure!(
+            batch_count * feature_size == self.data.len(),
+            "batch tensor shape does not match data length"
+        );
+
+        let batch_mean = self.batch_mean()?;
+        let batch_mean = batch_mean.data;
+        let mut batch_var = vec![0.0; feature_size];
+        for sample in self.data.chunks_exact(feature_size) {
+            for ((var, value), mean) in batch_var
+                .iter_mut()
+                .zip(sample.iter())
+                .zip(batch_mean.iter())
+            {
+                let delta = *value - *mean;
+                *var += delta * delta;
+            }
+        }
+        for var in &mut batch_var {
+            *var /= batch_count as f32;
+        }
+        Ok(Self::from_vec_and_shape(batch_var, feature_shape))
+    }
+
+    fn batch_count(&self) -> anyhow::Result<f32> {
+        anyhow::ensure!(
+            !self.shape.is_empty(),
+            "running mean update expects a batch dimension"
+        );
+        Ok(self.shape[0] as f32)
+    }
+
+    fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data.iter().map(|value| value * scalar).collect(),
+            self.shape.clone(),
+        ))
     }
 }

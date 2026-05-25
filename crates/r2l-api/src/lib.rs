@@ -28,7 +28,7 @@ pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule};
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
 pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
-    on_policy::algorithm::OnPolicyAlgorithm as OnPolicyAlgorithm,
+    on_policy::algorithm::OnPolicyAlgorithm,
     tensor::TensorData,
 };
 pub use r2l_sampler::{R2lSampler, SamplerExecutionMode};

@@ -49,12 +49,8 @@ pub struct OnPolicyAlgorithmBuilder<
     pub(crate) agent_builder: AB,
 }
 
-impl<
-    A: Agent,
-    AB: AgentBuilder<Agent = A>,
-    EB: EnvBuilder,
-    SH: SamplerHookBuilder<Env = EB::Env>,
-> OnPolicyAlgorithmBuilder<A, AB, EB, SH>
+impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
+    OnPolicyAlgorithmBuilder<A, AB, EB, SH>
 {
     /// Creates an on-policy algorithm builder from an explicit sampler builder
     /// and agent builder.
@@ -190,8 +186,7 @@ impl<
     /// Builds the configured on-policy algorithm runtime.
     pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm<A, EB, SH>>
     where
-        DefaultAdapter:
-            OnPolicyAdapters<A::Actor, R2lSampler<<EB as EnvBuilder>::Env, SH::Target>>,
+        DefaultAdapter: OnPolicyAdapters<A::Actor, R2lSampler<<EB as EnvBuilder>::Env, SH::Target>>,
     {
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();

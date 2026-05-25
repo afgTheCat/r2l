@@ -47,6 +47,7 @@ pub trait SamplerHook {
     fn hook(
         &mut self,
         buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
+        worker_pool: &mut WorkerPool<Self::E>,
     ) -> SamplerHookResult;
 }
 
@@ -124,7 +125,7 @@ impl<E: Env, H: SamplerHook<E = E>> Sampler for R2lSampler<E, H> {
         self.worker_pool.clear_buffers();
         self.worker_pool.set_policy(actor.clone());
         loop {
-            let result = self.hook.hook(&mut self.buffers);
+            let result = self.hook.hook(&mut self.buffers, &mut self.worker_pool);
             match result {
                 SamplerHookResult::Bound(bound) => self.worker_pool.collect(bound),
                 SamplerHookResult::Stop => break,

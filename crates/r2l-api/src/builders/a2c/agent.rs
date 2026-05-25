@@ -11,8 +11,7 @@ use crate::{
     builders::{
         a2c::hook::DefaultA2CHookBuilder,
         agent::{
-            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend,
-            OnPolicyAgentBuilder,
+            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
         },
         learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
     },
@@ -23,8 +22,7 @@ use crate::{
 ///
 /// This is the main entry point for configuring A2C-specific agent behavior,
 /// such as advantage normalization and A2C hook settings.
-pub type A2CAgentBuilder =
-    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, CandleBackend>;
+pub type A2CAgentBuilder = OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, CandleBackend>;
 
 /// A2C agent builder specialized to the Candle backend.
 pub type A2CCandleAgentBuilder = A2CAgentBuilder;

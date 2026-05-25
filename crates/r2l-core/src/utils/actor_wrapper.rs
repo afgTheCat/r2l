@@ -19,8 +19,7 @@ impl<D: Actor + Clone, T: R2lTensor> ActorWrapper<D, T> {
     }
 }
 
-impl<D: Actor + Clone, T: R2lTensor> Actor for ActorWrapper<D, T>
-{
+impl<D: Actor + Clone, T: R2lTensor> Actor for ActorWrapper<D, T> {
     type Tensor = T;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {

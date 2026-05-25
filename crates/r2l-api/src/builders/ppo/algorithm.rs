@@ -24,12 +24,7 @@ use crate::{
 };
 
 impl<A: Agent, B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
-    OnPolicyAlgorithmBuilder<
-        A,
-        OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>,
-        EB,
-        SH,
-    >
+    OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>, EB, SH>
 where
     OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>: AgentBuilder<Agent = A>,
 {
@@ -222,9 +217,7 @@ impl<EB: EnvBuilder> PPOCandleAlgorithmBuilder<EB> {
 pub type PPOBurnAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
     OnPolicyAlgorithmBuilder<PPOBurnAgent<BurnBackend>, PPOBurnAgentBuilder, EB, SH>;
 
-impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
-    PPOBurnAlgorithmBuilder<EB, SH>
-{
+impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> PPOBurnAlgorithmBuilder<EB, SH> {
     /// Switches the algorithm builder to the Candle backend.
     pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuilder<EB, SH> {
         let OnPolicyAlgorithmBuilder {
@@ -264,9 +257,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
 pub type PPOAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
     PPOCandleAlgorithmBuilder<EB, SH>;
 
-impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
-    PPOCandleAlgorithmBuilder<EB, SH>
-{
+impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> PPOCandleAlgorithmBuilder<EB, SH> {
     /// Switches the algorithm builder to the Candle backend.
     pub fn with_candle(self, device: Device) -> PPOCandleAlgorithmBuilder<EB, SH> {
         let OnPolicyAlgorithmBuilder {
