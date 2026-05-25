@@ -20,14 +20,11 @@ impl<D: Actor + Clone, T: R2lTensor> ActorWrapper<D, T> {
 }
 
 impl<D: Actor + Clone, T: R2lTensor> Actor for ActorWrapper<D, T>
-where
-    T: From<D::Tensor>,
-    T: Into<D::Tensor>,
 {
     type Tensor = T;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let action = self.actor.action(observation.into())?;
-        Ok(action.into())
+        let action = self.actor.action(D::Tensor::convert(&observation))?;
+        Ok(T::convert(&action))
     }
 }

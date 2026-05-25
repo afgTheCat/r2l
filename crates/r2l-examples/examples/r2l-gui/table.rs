@@ -1,15 +1,15 @@
 use egui::{Id, Margin};
 use egui_table::{Column, HeaderCellInfo};
-use r2l_api::PPO2Stats;
+use r2l_api::PPOStats;
 
 #[derive(Default)]
 pub struct UpdateTable {
-    pub progress: PPO2Stats,
+    pub progress: PPOStats,
     pub clip_range: f32,
 }
 
 impl UpdateTable {
-    pub fn set_progress(&mut self, progress: PPO2Stats) {
+    pub fn set_progress(&mut self, progress: PPOStats) {
         self.progress = progress
     }
 

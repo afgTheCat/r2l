@@ -19,6 +19,5 @@ candle-core = { workspace = true }
 candle-nn = { workspace = true }
 either = { workspace = true }
 rand = { workspace = true }
-safetensors = "0.4.1"
 derive_more = { version = "2.0.1", features = ["full"] }
 anyhow = { workspace = true }

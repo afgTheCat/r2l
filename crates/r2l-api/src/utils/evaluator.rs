@@ -2,14 +2,17 @@ use std::{marker::PhantomData, path::PathBuf};
 
 use anyhow::Result;
 use r2l_core::{
-    buffers::{TrajectoryContainer, variable_sized::VariableSizedStateBuffer},
+    buffers::{buffer::TrajectoryView, gen_buffer::TrajectoryBatchT},
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::{DefaultAdapter, OnPolicyAdapters, Sampler},
 };
 use r2l_gym::{GymEnv, GymEnvBuilder};
-use r2l_sampler::{EpisodeTrajectoryBound, R2lSampler, SamplerExecutionMode};
+use r2l_sampler::{R2lSampler, SamplerExecutionMode};
 
+use crate::hooks::sampler::EpisodeBoundHook;
+
+/// Builder for [`BestActorEvaluator`] instances.
 pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     env_builder: EnvBuilderType<EB>,
     n_episodes: usize,
@@ -18,6 +21,7 @@ pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
 }
 
 impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
+    /// Creates an evaluator builder from an already-prepared environment builder type.
     pub fn from_env_builder_type(env_builder: EnvBuilderType<EB>) -> Self {
         Self {
             env_builder,
@@ -27,6 +31,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
         }
     }
 
+    /// Creates an evaluator builder from a homogeneous environment builder.
     pub fn new(env_builder: EB) -> Self {
         Self {
             env_builder: EnvBuilderType::homogenous(env_builder.into(), 10),
@@ -36,30 +41,35 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
         }
     }
 
+    /// Replaces the environment builder used for evaluation.
     pub fn with_env_builder(mut self, env_builder: EnvBuilderType<EB>) -> Self {
         self.env_builder = env_builder;
         self
     }
 
+    /// Sets the number of episodes collected during each evaluation pass.
     pub fn with_n_episodes(mut self, n_episodes: usize) -> Self {
         self.n_episodes = n_episodes;
         self
     }
 
+    /// Sets how evaluation workers are executed.
     pub fn with_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
         self.execution_mode = execution_mode;
         self
     }
 
+    /// Sets the optional file path used to persist the best actor.
     pub fn with_best_actor_path<P: Into<PathBuf>>(mut self, eval_path: P) -> Self {
         self.eval_path = Some(eval_path.into());
         self
     }
 
+    /// Builds a best-actor evaluator for the requested actor type.
     pub fn build<A: Actor>(self) -> BestActorEvaluator<EB::Env, A> {
         let sampler = R2lSampler::build(
             self.env_builder,
-            EpisodeTrajectoryBound::new(self.n_episodes),
+            EpisodeBoundHook::new(self.n_episodes),
             self.execution_mode,
         );
         BestActorEvaluator {
@@ -71,24 +81,28 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     }
 }
 
-/// Evaluates an actor and if it performs better than the previous one,
-/// it saves backs it up. Optionally can also write it to a file.
+/// Evaluates an actor through the sampler path and keeps the best one seen.
+///
+/// This evaluator collects episode-bounded rollouts with [`R2lSampler`],
+/// computes the average completed-episode reward, and retains the best actor
+/// observed so far.
 pub struct BestActorEvaluator<E: Env, A: Actor> {
-    sampler: R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>,
+    sampler: R2lSampler<E, EpisodeBoundHook<E>>,
     best_actor_path: Option<PathBuf>,
     best_actor: Option<A>,
     best_rewards: f32,
 }
 
 impl<E: Env, A: Actor> BestActorEvaluator<E, A> {
+    /// Evaluates the actor and stores it if it outperforms the current best actor.
     pub fn eval(&mut self, adapted_actor: impl Actor<Tensor = E::Tensor> + Clone, actor: A) {
         self.sampler.reset_all_envs();
         self.sampler.collect_rollouts(adapted_actor);
-        let trajectories = self.sampler.trajectory_containers();
+        let trajectories = self.sampler.trajectory_views();
         let total_reward: f32 = trajectories
             .as_ref()
             .iter()
-            .map(|x| x.rewards().sum::<f32>())
+            .map(|x| x.rewards().iter().sum::<f32>())
             .sum();
         let total_episodes: f32 = trajectories
             .as_ref()
@@ -102,6 +116,7 @@ impl<E: Env, A: Actor> BestActorEvaluator<E, A> {
         }
     }
 
+    /// Serializes and writes the current best actor to disk when supported.
     pub fn try_write_to_file(&self) -> Result<()> {
         let Some(actor) = self.best_actor.as_ref() else {
             return Ok(());
@@ -116,34 +131,41 @@ impl<E: Env, A: Actor> BestActorEvaluator<E, A> {
         Ok(())
     }
 
+    /// Releases evaluator resources.
     pub fn shutdown(&mut self) {
         self.sampler.shutdown();
     }
 }
 
+/// Generic evaluation helper for the sampler/adapter path.
+///
+/// This helper adapts an actor to the sampler tensor type, collects
+/// episode-bounded rollouts through [`R2lSampler`], and returns the resulting
+/// trajectory views for inspection.
 pub struct Evaluator<
     E: Env,
     A: Actor,
-    AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>> = DefaultAdapter,
+    AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>> = DefaultAdapter,
 > {
-    sampler: R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>,
+    sampler: R2lSampler<E, EpisodeBoundHook<E>>,
     adapter: AD,
     _phantom: PhantomData<A>,
 }
 
 impl<E: Env, A: Actor> Evaluator<E, A, DefaultAdapter>
 where
-    DefaultAdapter: OnPolicyAdapters<A, R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>>,
+    DefaultAdapter: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>>,
 {
+    /// Creates a new evaluator for a custom environment builder.
     pub fn new<EB: EnvBuilder<Env = E>>(
         builder: EB,
         n_episodes: usize,
         n_env: usize,
         execution_mode: SamplerExecutionMode,
     ) -> Self {
-        let rollout_bound = EpisodeTrajectoryBound::new(n_episodes);
+        let hook = EpisodeBoundHook::new(n_episodes);
         let env_builder = EnvBuilderType::homogenous(builder, n_env);
-        let sampler = R2lSampler::build(env_builder, rollout_bound, execution_mode);
+        let sampler = R2lSampler::build(env_builder, hook, execution_mode);
         Self {
             sampler,
             adapter: DefaultAdapter,
@@ -154,9 +176,9 @@ where
 
 impl<A: Actor> Evaluator<GymEnv, A, DefaultAdapter>
 where
-    DefaultAdapter:
-        OnPolicyAdapters<A, R2lSampler<GymEnv, EpisodeTrajectoryBound<<GymEnv as Env>::Tensor>>>,
+    DefaultAdapter: OnPolicyAdapters<A, R2lSampler<GymEnv, EpisodeBoundHook<GymEnv>>>,
 {
+    /// Creates a new evaluator for a Gym environment.
     pub fn gym<EB: Into<GymEnvBuilder>>(
         builder: EB,
         n_episodes: usize,
@@ -167,13 +189,18 @@ where
     }
 }
 
-impl<E: Env, A: Actor, AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeTrajectoryBound<E::Tensor>>>>
+impl<E: Env, A: Actor, AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>>>
     Evaluator<E, A, AD>
 {
-    pub fn eval(&mut self, actor: A) -> impl AsRef<[VariableSizedStateBuffer<E::Tensor>]> {
+    /// Evaluates an actor and returns the collected trajectory views.
+    pub fn eval(
+        &mut self,
+        actor: A,
+    ) -> impl AsRef<[TrajectoryView<'_, <<AD as OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>>>::SamplerActor as Actor>::Tensor>]>
+    {
         let adapted_actor = self.adapter.adapt_actor(actor);
         self.sampler.reset_all_envs();
         self.sampler.collect_rollouts(adapted_actor);
-        self.sampler.trajectory_containers()
+        self.sampler.trajectory_views()
     }
 }

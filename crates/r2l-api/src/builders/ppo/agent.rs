@@ -10,7 +10,8 @@ use crate::{
     agents::ppo::{PPOBurnAgent, PPOCandleAgent},
     builders::{
         agent::{
-            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
+            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend,
+            OnPolicyAgentBuilder,
         },
         learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
         ppo::hook::DefaultPPOHookBuilder,
@@ -22,7 +23,8 @@ use crate::{
 ///
 /// This is the main entry point for configuring PPO-specific agent behavior,
 /// such as clipping, advantage normalization, and PPO hook settings.
-pub type PPOAgentBuilder = OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, CandleBackend>;
+pub type PPOAgentBuilder =
+    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, CandleBackend>;
 
 /// PPO agent builder specialized to the Candle backend.
 pub type PPOCandleAgentBuilder = PPOAgentBuilder;
@@ -97,7 +99,7 @@ impl<Backend> OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, Backend> {
         self
     }
 
-    /// Sets wether to log the trainig progress during learning
+    /// Sets whether to log training progress during learning.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
         self.hook_builder = self.hook_builder.with_log_progress(log_progress);
         self

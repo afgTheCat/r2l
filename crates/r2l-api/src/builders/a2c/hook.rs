@@ -4,9 +4,9 @@ use crate::hooks::a2c::{A2CStats, DefaultA2CHook, DefaultA2CHookReporter};
 
 /// Builder for the default A2C training hook.
 ///
-/// This builder controls the hook behavior used by
-/// [`A2CAgentBuilder`](crate::A2CAgentBuilder), including advantage
-/// normalization, loss coefficients, gradient clipping, and optional reporting.
+/// This builder configures the hook behavior used by the A2C agent and
+/// algorithm builders, including advantage normalization, loss coefficients,
+/// gradient clipping, and optional reporting.
 #[derive(Debug, Clone)]
 pub struct DefaultA2CHookBuilder {
     normalize_advantage: bool,
@@ -20,8 +20,6 @@ pub struct DefaultA2CHookBuilder {
 
 impl DefaultA2CHookBuilder {
     /// Creates a default A2C hook builder.
-    ///
-    /// `n_envs` is used when reporting rollout statistics.
     pub fn new(n_envs: usize) -> Self {
         Self {
             n_envs,
@@ -34,7 +32,7 @@ impl DefaultA2CHookBuilder {
         }
     }
 
-    /// Sets wether to log the trainig progress during learning
+    /// Sets whether to log training progress during learning.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
         self.log_progress = log_progress;
         self

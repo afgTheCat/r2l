@@ -1,8 +1,8 @@
-//! Vanilla Policy Gradient implementation.
+//! Prototype VPG training path that consumes trajectory batches directly.
 
 use anyhow::Result;
 use r2l_core::{
-    buffers::TrajectoryContainer,
+    buffers::gen_buffer::TrajectoryBatchT,
     models::Policy,
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
@@ -11,7 +11,7 @@ use r2l_core::{
 };
 
 use crate::on_policy_algorithms::{
-    Advantages, BatchIndexIterator, Returns, buffers_advantages_and_returns, sample,
+    Advantages, BatchIndexIterator, Returns, batches_advantages_and_returns, sample,
 };
 
 /// Hyperparameters controlling VPG training behavior.
@@ -34,10 +34,7 @@ impl Default for VPGParams {
     }
 }
 
-/// Vanilla Policy Gradient algorithm over an [`OnPolicyLearningModule`].
-///
-/// `VPG` computes rollout advantages and returns, then performs one learning
-/// pass over minibatches sampled from the collected trajectories.
+/// Prototype Vanilla Policy Gradient algorithm over finalized trajectory batches.
 pub struct VPG<Module: OnPolicyLearningModule> {
     /// VPG hyperparameters.
     pub params: VPGParams,
@@ -46,19 +43,19 @@ pub struct VPG<Module: OnPolicyLearningModule> {
 }
 
 impl<Module: OnPolicyLearningModule> VPG<Module> {
-    fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatchT<Module::InferenceTensor>>(
         &mut self,
-        buffers: &[B],
+        batches: &[B],
         advantages: &Advantages,
         returns: &Returns,
     ) -> anyhow::Result<()> {
-        let mut index_iterator = BatchIndexIterator::new(buffers, self.params.sample_size);
+        let mut index_iterator = BatchIndexIterator::new(batches, self.params.sample_size);
         let lm = &mut self.lm;
         loop {
             let Some(indices) = index_iterator.iter() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(buffers, &indices, Module::lifter);
+            let (observations, actions) = sample(batches, &indices, Module::lifter);
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices));
             let returns = lm.tensor_from_slice(&returns.sample(&indices));
             let logp = lm.policy().log_probs(&observations, &actions)?;
@@ -68,6 +65,22 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
             let losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
             lm.update(losses)?;
         }
+    }
+
+    /// Prototype learning entrypoint over finalized trajectory batches.
+    pub fn learn<B: TrajectoryBatchT<Module::InferenceTensor>>(
+        &mut self,
+        batches: &[B],
+    ) -> Result<()> {
+        let (advantages, returns) = batches_advantages_and_returns(
+            batches,
+            &self.lm,
+            self.params.gamma,
+            self.params.lambda,
+            Module::lifter,
+        )?;
+        self.batch_loop(batches, &advantages, &returns)?;
+        Ok(())
     }
 }
 
@@ -79,18 +92,7 @@ impl<M: OnPolicyLearningModule> Agent for VPG<M> {
         self.lm.inference_policy()
     }
 
-    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
-        &mut self,
-        buffers: &[C],
-    ) -> Result<()> {
-        let (advantages, returns) = buffers_advantages_and_returns(
-            buffers,
-            &self.lm,
-            self.params.gamma,
-            self.params.lambda,
-            M::lifter,
-        )?;
-        self.batch_loop(buffers, &advantages, &returns)?;
-        Ok(())
+    fn learn<B: TrajectoryBatchT<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
+        VPG::learn(self, buffers)
     }
 }

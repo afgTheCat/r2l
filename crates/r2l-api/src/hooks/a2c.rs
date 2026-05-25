@@ -15,9 +15,7 @@ use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
-    HookResult,
-    buffers::TrajectoryContainer,
-    models::Policy,
+    HookResult, buffers::gen_buffer::TrajectoryBatchT, models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
@@ -143,31 +141,6 @@ impl DefaultA2CHookReporter {
             None
         }
     }
-}
-
-impl DefaultA2CHookReporter {
-    fn update_average_reward<T: TrajectoryContainer>(&mut self, buffers: &[T]) {
-        let mut completed_episode_rewards = vec![];
-        for (running_reward, buffer) in self
-            .unfinished_episode_rewards
-            .iter_mut()
-            .zip(buffers.iter())
-        {
-            for (reward, done) in buffer.rewards().zip(buffer.dones()) {
-                *running_reward += reward;
-                if done {
-                    completed_episode_rewards.push(*running_reward);
-                    *running_reward = 0.;
-                }
-            }
-        }
-
-        if !completed_episode_rewards.is_empty() {
-            self.latest_average_reward = completed_episode_rewards.iter().sum::<f32>()
-                / completed_episode_rewards.len() as f32;
-        }
-        self.report.average_reward = self.latest_average_reward;
-    }
 
     pub(crate) fn send_report(&mut self) {
         self.rollout_idx += 1;
@@ -183,6 +156,40 @@ impl DefaultA2CHookReporter {
         }
         if let Some(tx) = &self.tx {
             tx.send(progress).unwrap();
+        }
+        self.report.average_reward = self.latest_average_reward;
+    }
+}
+
+impl DefaultA2CHookReporter {
+    fn update_average_reward<T: r2l_core::tensor::R2lTensor, B: TrajectoryBatchT<T>>(
+        &mut self,
+        batches: &[B],
+    ) {
+        let mut completed_episode_rewards = vec![];
+        for (running_reward, batch) in self
+            .unfinished_episode_rewards
+            .iter_mut()
+            .zip(batches.iter())
+        {
+            for (reward, done) in batch.rewards().iter().copied().zip(
+                batch
+                    .terminated()
+                    .iter()
+                    .zip(batch.truncated().iter())
+                    .map(|(terminated, truncated)| *terminated || *truncated),
+            ) {
+                *running_reward += reward;
+                if done {
+                    completed_episode_rewards.push(*running_reward);
+                    *running_reward = 0.;
+                }
+            }
+        }
+
+        if !completed_episode_rewards.is_empty() {
+            self.latest_average_reward = completed_episode_rewards.iter().sum::<f32>()
+                / completed_episode_rewards.len() as f32;
         }
         self.report.average_reward = self.latest_average_reward;
     }
@@ -210,9 +217,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
     for DefaultA2CHook<BurnPolicyValueModule<B, D>>
 {
     fn before_learning_hook<
-        C: TrajectoryContainer<
-            Tensor = <BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor,
-        >,
+        C: TrajectoryBatchT<<BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
@@ -254,9 +259,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
     }
 
     fn after_learning_hook<
-        C: TrajectoryContainer<
-            Tensor = <BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor,
-        >,
+        C: TrajectoryBatchT<<BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
@@ -275,9 +278,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
 
 impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule> {
     fn before_learning_hook<
-        B: TrajectoryContainer<
-            Tensor = <CandlePolicyValueModule as OnPolicyLearningModule>::InferenceTensor,
-        >,
+        B: TrajectoryBatchT<<CandlePolicyValueModule as OnPolicyLearningModule>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
@@ -317,7 +318,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
         Ok(HookResult::Continue)
     }
 
-    fn after_learning_hook<B: TrajectoryContainer<Tensor = candle_core::Tensor>>(
+    fn after_learning_hook<B: TrajectoryBatchT<candle_core::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
         module: &mut CandlePolicyValueModule,

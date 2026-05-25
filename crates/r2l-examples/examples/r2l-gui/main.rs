@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l_api::{LearningSchedule2, PPO2AlgorithmBuilder, PPO2Stats, StepHookBound};
+use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats, StepHookBound};
 use r2l_examples::EventBox;
 use r2l_sampler::SamplerExecutionMode;
 
@@ -52,7 +52,7 @@ impl eframe::App for App {
             let Ok(event) = event else {
                 break;
             };
-            let Ok(progress) = event.downcast::<PPO2Stats>() else {
+            let Ok(progress) = event.downcast::<PPOStats>() else {
                 break;
             };
             let average_reward = progress.average_reward;
@@ -112,12 +112,12 @@ const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
 
 pub fn train_ppo(
-    tx: Sender<PPO2Stats>,
+    tx: Sender<PPOStats>,
     total_rollouts: usize,
     clip_range: f32,
 ) -> anyhow::Result<()> {
     // TODO: The generic here is ugly
-    let ppo_builder = PPO2AlgorithmBuilder::gym(ENV_NAME, 10)
+    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
@@ -125,7 +125,7 @@ pub fn train_ppo(
         .with_rollout_bound(StepHookBound::new(2048))
         .with_execution_mode(SamplerExecutionMode::Vec)
         .with_clip_range(clip_range)
-        .with_learning_schedule(LearningSchedule2::rollout_bound(total_rollouts))
+        .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
         .with_reporter(Some(tx));
     let mut ppo = ppo_builder.build()?;
     ppo.train()
@@ -139,7 +139,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
-    let (update_tx, update_rx): (Sender<PPO2Stats>, Receiver<PPO2Stats>) = mpsc::channel();
+    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
     let tx_to_events = event_tx.clone();
     std::thread::spawn(move || {
         while let Ok(update) = update_rx.recv() {

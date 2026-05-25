@@ -6,7 +6,7 @@ use r2l_burn::{
 use r2l_candle::{
     distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
 };
-use r2l_core::{buffers::TrajectoryContainer, on_policy::algorithm::Agent};
+use r2l_core::{buffers::gen_buffer::TrajectoryBatchT, on_policy::algorithm::Agent};
 
 use crate::hooks::a2c::DefaultA2CHook;
 
@@ -32,10 +32,7 @@ impl<B: AutodiffBackend> Agent for A2CBurnAgent<B> {
         self.0.actor()
     }
 
-    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
-        &mut self,
-        buffers: &[C],
-    ) -> anyhow::Result<()> {
+    fn learn<BT: TrajectoryBatchT<Self::Tensor>>(&mut self, buffers: &[BT]) -> anyhow::Result<()> {
         self.0.learn(buffers)
     }
 
@@ -68,10 +65,7 @@ impl Agent for A2CCandleAgent {
         self.0.actor()
     }
 
-    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
-        &mut self,
-        buffers: &[C],
-    ) -> anyhow::Result<()> {
+    fn learn<BT: TrajectoryBatchT<Self::Tensor>>(&mut self, buffers: &[BT]) -> anyhow::Result<()> {
         self.0.learn(buffers)
     }
 

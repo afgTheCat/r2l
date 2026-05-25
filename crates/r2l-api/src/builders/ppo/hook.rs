@@ -39,7 +39,7 @@ impl DefaultPPOHookBuilder {
         }
     }
 
-    /// Sets wether to log the trainig progress during learning
+    /// Sets whether to log training progress during learning.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
         self.log_progress = log_progress;
         self

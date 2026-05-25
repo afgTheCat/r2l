@@ -1,134 +1,89 @@
-use candle_core::{DType, Device, Result, Tensor};
-use r2l_core::{env::EnvDescription, models::Actor, tensor::R2lTensor};
+use std::marker::PhantomData;
 
-use crate::utils::running_mean::RunningMeanStd;
+use bimodal_array::ArrayHandle;
+use r2l_core::{buffers::buffer::NewBuffer, env::Env};
+use r2l_sampler::{RolloutMode, SamplerHook, SamplerHookResult};
 
-pub struct EnvNormalizer {
-    pub(crate) obs_rms: RunningMeanStd,
-    pub(crate) ret_rms: RunningMeanStd,
-    pub(crate) returns: Tensor,
-    pub(crate) epsilon: f32,
-    pub(crate) gamma: f32,
-    pub(crate) clip_obs: f32,
-    pub(crate) clip_rew: f32,
+/// Sampler hook that requests rollout collection until a fixed number of
+/// episodes has been scheduled.
+///
+/// The hook returns an episode-bound rollout mode once, then returns
+/// [`SamplerHookResult::Stop`] on the next call so the outer sampler loop can
+/// hand the collected data off for training.
+pub struct EpisodeBoundHook<E: Env> {
+    num_episodes: usize,
+    episodes_scheduled: usize,
+    _p: PhantomData<E>,
 }
 
-impl EnvNormalizer {
-    pub fn new(
-        obs_rms: RunningMeanStd,
-        ret_rms: RunningMeanStd,
-        returns: Tensor,
-        epsilon: f32,
-        gamma: f32,
-        clip_obs: f32,
-        clip_rew: f32,
-    ) -> Self {
+impl<E: Env> EpisodeBoundHook<E> {
+    /// Creates an episode-bound sampler hook.
+    pub fn new(num_episodes: usize) -> Self {
         Self {
-            obs_rms,
-            ret_rms,
-            returns,
-            epsilon,
-            gamma,
-            clip_obs,
-            clip_rew,
-        }
-    }
-
-    fn normalize_obs(&self, obs: Tensor) -> Result<Tensor> {
-        let eps = Tensor::full(self.epsilon, (), self.ret_rms.var.device())?;
-        let normalized_obs = (obs
-            .broadcast_sub(&self.obs_rms.mean)?
-            .broadcast_div(&self.obs_rms.var.broadcast_add(&eps)?.sqrt()?))?;
-        normalized_obs.clamp(-self.clip_obs, self.clip_obs)
-    }
-
-    fn normalize_rew(&self, rew: Tensor) -> Result<Tensor> {
-        let eps = Tensor::full(self.epsilon, (), self.ret_rms.var.device())?;
-        let normalized_rew = (rew.broadcast_div(&self.ret_rms.var.broadcast_add(&eps)?.sqrt()?))?;
-        normalized_rew.clamp(-self.clip_rew, self.clip_rew)
-    }
-
-    // fn normalize_buffers<B: EditableTrajectoryContainer<Tensor = Tensor>>(
-    //     &mut self,
-    //     states: &mut [B],
-    //     device: &Device,
-    // ) -> Result<()> {
-    //     let n_envs = states.len();
-    //     let obs: Vec<_> = states.iter_mut().map(|b| b.pop_last_state()).collect();
-    //     let obs = Tensor::stack(&obs, 0)?;
-    //     self.obs_rms.update(&obs)?;
-    //     let obs = self.normalize_obs(obs)?;
-    //     for (state_idx, obs) in obs.chunk(n_envs, 0)?.into_iter().enumerate() {
-    //         let obs = obs.squeeze(0)?;
-    //         states[state_idx].set_last_state(obs);
-    //     }
-    //     let rewards: Vec<_> = states.iter_mut().map(|buf| buf.pop_last_reward()).collect();
-    //     let rewards = Tensor::from_slice(&rewards, rewards.len(), device)?;
-    //     let gamma = Tensor::full(self.gamma, (), device)?;
-    //     self.returns = self.returns.broadcast_mul(&gamma)?.add(&rewards)?;
-    //     self.ret_rms.update(&self.returns)?;
-    //     let rewards = self.normalize_rew(rewards)?;
-    //     for (rew_idx, rew) in (rewards.to_vec1()? as Vec<f32>).iter().enumerate() {
-    //         states[rew_idx].set_last_reward(*rew);
-    //     }
-    //     Ok(())
-    // }
-
-    // // NOTE: old hook impl
-    // fn preprocess_states<B: EditableTrajectoryContainer<Tensor = Tensor>>(
-    //     &mut self,
-    //     _policy: &dyn Actor<Tensor = Tensor>,
-    //     buffers: &mut [B],
-    // ) {
-    //     self.normalize_buffers(buffers, &Device::Cpu).unwrap();
-    // }
-}
-
-pub struct NormalizerOptions {
-    pub(crate) epsilon: f32,
-    pub(crate) gamma: f32,
-    pub(crate) clip_obs: f32,
-    pub(crate) clip_rew: f32,
-}
-
-impl Default for NormalizerOptions {
-    fn default() -> Self {
-        Self {
-            clip_obs: 10.,
-            clip_rew: 10.,
-            epsilon: 1e-8,
-            gamma: 0.99,
+            num_episodes,
+            episodes_scheduled: 0,
+            _p: PhantomData,
         }
     }
 }
 
-impl NormalizerOptions {
-    pub fn new(epsilon: f32, gamma: f32, clip_obs: f32, clip_rew: f32) -> Self {
-        Self {
-            epsilon,
-            gamma,
-            clip_obs,
-            clip_rew,
+impl<E: Env> SamplerHook for EpisodeBoundHook<E> {
+    type E = E;
+
+    fn hook(
+        &mut self,
+        _buffer: &mut ArrayHandle<NewBuffer<<Self::E as Env>::Tensor>>,
+    ) -> SamplerHookResult {
+        if self.episodes_scheduled == self.num_episodes {
+            self.episodes_scheduled = 0;
+            SamplerHookResult::Stop
+        } else {
+            self.episodes_scheduled = self.num_episodes;
+            SamplerHookResult::Bound(RolloutMode::EpisodeBound {
+                n_episodes: self.num_episodes,
+            })
         }
     }
+}
 
-    pub fn build<T: R2lTensor>(
-        &self,
-        env_description: EnvDescription<T>,
-        n_envs: usize,
-        device: &Device,
-    ) -> EnvNormalizer {
-        let obs_rms = RunningMeanStd::new(env_description.observation_size(), device.clone());
-        let ret_rms = RunningMeanStd::new((), device.clone());
-        let returns = Tensor::zeros(n_envs, DType::F32, device).unwrap();
-        EnvNormalizer::new(
-            obs_rms,
-            ret_rms,
-            returns,
-            self.epsilon,
-            self.gamma,
-            self.clip_obs,
-            self.clip_rew,
-        )
+/// Sampler hook that requests rollout collection until a fixed number of steps
+/// has been scheduled.
+///
+/// The hook returns a step-bound rollout mode once, then returns
+/// [`SamplerHookResult::Stop`] on the next call so the outer sampler loop can
+/// hand the collected data off for training.
+pub struct StepBoundHook<E: Env> {
+    num_steps: usize,
+    steps_scheduled: usize,
+    _p: PhantomData<E>,
+}
+
+impl<E: Env> StepBoundHook<E> {
+    /// Creates a step-bound sampler hook.
+    pub fn new(num_steps: usize) -> Self {
+        Self {
+            num_steps,
+            steps_scheduled: 0,
+            _p: PhantomData,
+        }
+    }
+}
+
+impl<E: Env> SamplerHook for StepBoundHook<E> {
+    type E = E;
+
+    fn hook(
+        &mut self,
+        _buffer: &mut ArrayHandle<NewBuffer<<Self::E as Env>::Tensor>>,
+    ) -> SamplerHookResult {
+        if self.steps_scheduled == self.num_steps {
+            self.steps_scheduled = 0;
+            SamplerHookResult::Stop
+        } else {
+            self.steps_scheduled = self.num_steps;
+            SamplerHookResult::Bound(RolloutMode::StepBound {
+                n_steps: self.num_steps,
+            })
+        }
     }
 }

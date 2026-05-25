@@ -6,6 +6,9 @@ mod candle_tensor;
 
 use std::fmt::Debug;
 
+// NOTE: we might want to add int_vec_and_shape method for less allocations, since to_vec_and_shape
+// usually clones the inner vector. Would be useful in ActorWrapper.
+//
 /// Minimal tensor contract shared by environments, policies, buffers, and agents.
 ///
 /// Implementors should be cheap enough to clone for rollout storage and safe to

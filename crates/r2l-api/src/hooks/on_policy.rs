@@ -1,9 +1,9 @@
-use std::{marker::PhantomData};
+use std::marker::PhantomData;
 
 use anyhow::Result;
 use r2l_core::{
     HookResult,
-    buffers::TrajectoryContainer,
+    buffers::gen_buffer::TrajectoryBatchT,
     env::{Env, EnvBuilder},
     on_policy::algorithm::{
         Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
@@ -53,12 +53,9 @@ impl LearningSchedule {
 ///
 /// This hook is responsible for lifecycle behavior around training rather than
 /// algorithm-specific loss logic. It tracks rollout progress, applies the
-/// configured [`LearningSchedule`] to decide when training should stop, and
-/// shuts down both the agent and sampler when the algorithm exits.
-///
-/// [`A2CAlgorithmBuilder`](crate::A2CAlgorithmBuilder) and
-/// [`PPOAlgorithmBuilder`](crate::PPOAlgorithmBuilder) install this hook by
-/// default when building an [`OnPolicyAlgorithm`](crate::OnPolicyAlgorithm).
+/// configured [`LearningSchedule`] to decide when training should stop,
+/// optionally evaluates the current actor, and shuts down the runtime when the
+/// algorithm exits.
 pub struct DefaultOnPolicyAlgorithmHooks<
     A: Agent,
     S: Sampler,
@@ -67,6 +64,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
 > {
     learning_schedule: LearningSchedule,
     evaluator: Option<BestActorEvaluator<E, A::Actor>>,
+    should_stop: bool,
     _phantom: PhantomData<(A, S, C)>,
 }
 
@@ -81,6 +79,7 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>, E: Env<Tensor = S::
         Self {
             learning_schedule,
             evaluator: evaluator_builder.map(BestActorEvaluatorBuilder::build),
+            should_stop: false,
             _phantom: PhantomData,
         }
     }
@@ -102,22 +101,9 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>, E: Env<Tensor = S::
 
     fn post_rollout_hook(
         &mut self,
-        _runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> HookResult {
-        HookResult::Continue
-    }
-
-    fn post_training_hook(
-        &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
-        if let Some(evaluator) = &mut self.evaluator {
-            let actor = runtime.actor();
-            let adapted_actor = runtime.adapted_actor();
-            evaluator.eval(adapted_actor, actor);
-        }
-
-        let should_stop = match &mut self.learning_schedule {
+        self.should_stop = match &mut self.learning_schedule {
             LearningSchedule::RolloutBound {
                 total_rollouts,
                 current_rollout,
@@ -131,12 +117,25 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>, E: Env<Tensor = S::
             } => {
                 let rollouts = runtime.trajectory_containers();
                 let rollout_steps: usize =
-                    rollouts.as_ref().iter().map(|e| e.actions().count()).sum();
+                    rollouts.as_ref().iter().map(|e| e.actions().len()).sum();
                 *current_step += rollout_steps;
                 current_step >= total_steps
             }
         };
-        if should_stop {
+
+        HookResult::Continue
+    }
+
+    fn post_training_hook(
+        &mut self,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
+    ) -> HookResult {
+        if let Some(evaluator) = &mut self.evaluator {
+            let actor = runtime.actor();
+            let adapted_actor = runtime.adapted_actor();
+            evaluator.eval(adapted_actor, actor);
+        }
+        if self.should_stop {
             HookResult::Break
         } else {
             HookResult::Continue

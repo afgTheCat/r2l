@@ -19,14 +19,6 @@ pub(crate) type CommandReceiver<T> = Receiver<WorkerCommand<T>>;
 pub(crate) type ResultSender<T> = Sender<WorkerResult<T>>;
 pub(crate) type ResultReceiver<T> = Receiver<WorkerResult<T>>;
 
-// pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
-//     pub env: E,
-//     pub buffer: ElementHandle<D>,
-//     // TODO: this is a bit archaic, we might want somethings else here
-//     pub policy: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
-//     pub last_state: Option<E::Tensor>,
-// }
-
 pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
     policy: &mut Box<dyn Actor<Tensor = T>>,
@@ -60,57 +52,6 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     }
 }
 
-// impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> {
-//     pub fn new(env: E, buffer: ElementHandle<D>) -> Self {
-//         Self {
-//             env,
-//             buffer,
-//             policy: None,
-//             last_state: None,
-//         }
-//     }
-//
-//     pub fn collect_rollout(&mut self, bound: RolloutMode) {
-//         let Some(policy) = &mut self.policy else {
-//             todo!()
-//         };
-//         let mut buffer = self.buffer.lock().unwrap();
-//         buffer.begin_rollout();
-//         match bound {
-//             RolloutMode::StepBound { n_steps: steps } => {
-//                 for _ in 0..steps {
-//                     let last_state = self.last_state.take();
-//                     let memory = step_env(&mut self.env, policy, last_state);
-//                     self.last_state = Some(memory.next_state.clone());
-//                     buffer.push(memory);
-//                 }
-//             }
-//             RolloutMode::EpisodeBound { n_episodes } => {
-//                 let mut episodes = 0;
-//                 loop {
-//                     // TODO: this is a bit awkward.
-//                     let last_state = self.last_state.take();
-//                     let memory = step_env(&mut self.env, policy, last_state);
-//                     let terminates = memory.is_done();
-//                     self.last_state = Some(memory.next_state.clone());
-//                     buffer.push(memory);
-//                     if terminates {
-//                         episodes += 1;
-//                     }
-//                     if episodes >= n_episodes {
-//                         break;
-//                     }
-//                 }
-//             }
-//         }
-//     }
-//
-//     pub fn reset(&mut self, seed: u64) {
-//         let state = self.env.reset(seed).unwrap();
-//         self.last_state = Some(state);
-//     }
-// }
-
 pub enum WorkerCommand<T: R2lTensor> {
     SetPolicy(Box<dyn Actor<Tensor = T>>),
     Collect(RolloutMode),
@@ -128,56 +69,6 @@ pub enum WorkerResult<T: R2lTensor> {
     EnvDescription(EnvDescription<T>),
     Shutdown,
 }
-
-// pub struct ThreadWorker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
-//     worker: Worker<E, D>,
-//     rx: CommandReceiver<E::Tensor>,
-//     tx: ResultSender<E::Tensor>,
-// }
-//
-// impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<E, D> {
-//     pub fn new(
-//         worker: Worker<E, D>,
-//         rx: CommandReceiver<E::Tensor>,
-//         tx: ResultSender<E::Tensor>,
-//     ) -> Self {
-//         Self { worker, rx, tx }
-//     }
-//
-//     pub fn work(&mut self) {
-//         loop {
-//             let command = self.rx.recv().unwrap();
-//             match command {
-//                 WorkerCommand::SetPolicy(policy) => {
-//                     self.worker.policy = Some(policy);
-//                     self.tx.send(WorkerResult::PolicySet).unwrap();
-//                 }
-//                 WorkerCommand::Collect(bound) => {
-//                     self.worker.collect_rollout(bound);
-//                     self.tx.send(WorkerResult::Collected).unwrap();
-//                 }
-//                 WorkerCommand::GetEnvDescription => {
-//                     let environment_descriotion = self.worker.env.env_description();
-//                     self.tx
-//                         .send(WorkerResult::EnvDescription(environment_descriotion))
-//                         .unwrap();
-//                 }
-//                 WorkerCommand::Shutdown => {
-//                     self.tx.send(WorkerResult::Shutdown).unwrap();
-//                     break;
-//                 }
-//                 WorkerCommand::ResetEnv(seed) => {
-//                     self.worker.reset(seed);
-//                     self.tx.send(WorkerResult::EnvReset).unwrap();
-//                 }
-//                 WorkerCommand::ClearBuffer => {
-//                     // only for new impl
-//                     unreachable!()
-//                 }
-//             }
-//         }
-//     }
-// }
 
 pub struct ThreadHandle<T: R2lTensor> {
     handle: JoinHandle<()>,
@@ -223,11 +114,11 @@ impl<T: R2lTensor> ThreadHandle<T> {
     }
 }
 
-pub struct ThreadWorkers<T: R2lTensor> {
+pub struct LegacyThreadWorkers<T: R2lTensor> {
     worker_handles: Vec<ThreadHandle<T>>,
 }
 
-impl<T: R2lTensor> ThreadWorkers<T> {
+impl<T: R2lTensor> LegacyThreadWorkers<T> {
     pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
         Self { worker_handles }
     }
@@ -273,91 +164,14 @@ impl<T: R2lTensor> ThreadWorkers<T> {
     }
 }
 
-// pub enum WorkerPool<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> {
-//     Vec(Vec<Worker<E, B>>),
-//     Thread(ThreadWorkers<E::Tensor>),
-// }
-
-// impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> WorkerPool<E, B> {
-//     pub fn env_description(&self) -> EnvDescription<E::Tensor> {
-//         match self {
-//             Self::Vec(workers) => workers[0].env.env_description(),
-//             Self::Thread(tw) => tw.env_description(),
-//         }
-//     }
-//
-//     pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
-//         match self {
-//             WorkerPool::Vec(workers) => {
-//                 for worker in workers.iter_mut() {
-//                     worker.policy = Some(Box::new(policy.clone()))
-//                 }
-//             }
-//             WorkerPool::Thread(thread_workers) => {
-//                 thread_workers.set_policy(policy);
-//             }
-//         }
-//     }
-//
-//     pub fn collect(&mut self, bound: RolloutMode) {
-//         match self {
-//             WorkerPool::Vec(workers) => {
-//                 for worker in workers {
-//                     worker.collect_rollout(bound);
-//                 }
-//             }
-//             WorkerPool::Thread(thread_workers) => {
-//                 thread_workers.collect_rollout(bound);
-//             }
-//         }
-//     }
-//
-//     pub fn single_step(&mut self) {
-//         self.collect(RolloutMode::StepBound { n_steps: 1 });
-//     }
-//
-//     pub fn shutdown(&mut self) {
-//         match self {
-//             WorkerPool::Vec(_) => {
-//                 // No need to explicitly shut down
-//             }
-//             WorkerPool::Thread(workers) => {
-//                 workers.shutdown();
-//             }
-//         }
-//     }
-//
-//     pub fn reset_all_envs(&mut self) {
-//         match self {
-//             WorkerPool::Vec(workers) => {
-//                 for worker in workers {
-//                     let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-//                     worker.reset(seed);
-//                 }
-//             }
-//             WorkerPool::Thread(workers) => {
-//                 workers.reset_all();
-//             }
-//         }
-//     }
-// }
-
-// impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Drop
-//     for WorkerPool<E, B>
-// {
-//     fn drop(&mut self) {
-//         self.shutdown();
-//     }
-// }
-
-pub struct Worker2<E: Env> {
+pub struct Worker<E: Env> {
     pub env: E,
     pub buffer: ElementHandle<NewBuffer<E::Tensor>>,
     pub policy: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
     pub last_state: Option<E::Tensor>,
 }
 
-impl<E: Env> Worker2<E> {
+impl<E: Env> Worker<E> {
     pub fn new(env: E, buffer: ElementHandle<NewBuffer<E::Tensor>>) -> Self {
         Self {
             env,
@@ -412,15 +226,15 @@ impl<E: Env> Worker2<E> {
     }
 }
 
-pub struct ThreadWorker2<E: Env> {
-    worker: Worker2<E>,
+pub struct ThreadWorker<E: Env> {
+    worker: Worker<E>,
     rx: CommandReceiver<E::Tensor>,
     tx: ResultSender<E::Tensor>,
 }
 
-impl<E: Env> ThreadWorker2<E> {
+impl<E: Env> ThreadWorker<E> {
     pub fn new(
-        worker: Worker2<E>,
+        worker: Worker<E>,
         rx: CommandReceiver<E::Tensor>,
         tx: ResultSender<E::Tensor>,
     ) -> Self {
@@ -462,11 +276,11 @@ impl<E: Env> ThreadWorker2<E> {
     }
 }
 
-pub struct ThreadWorkers2<T: R2lTensor> {
+pub struct ThreadWorkers<T: R2lTensor> {
     worker_handles: Vec<ThreadHandle<T>>,
 }
 
-impl<T: R2lTensor> ThreadWorkers2<T> {
+impl<T: R2lTensor> ThreadWorkers<T> {
     pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
         Self { worker_handles }
     }
@@ -521,18 +335,20 @@ impl<T: R2lTensor> ThreadWorkers2<T> {
     }
 }
 
-pub enum WorkerPool2<E: Env> {
-    Vec(Vec<Worker2<E>>),
-    Thread(ThreadWorkers2<E::Tensor>),
+pub enum WorkerPool<E: Env> {
+    Vec(Vec<Worker<E>>),
+    Thread(ThreadWorkers<E::Tensor>),
 }
 
-impl<E: Env> WorkerPool2<E> {
+impl<E: Env> WorkerPool<E> {
     pub fn clear_buffers(&mut self) {
         match self {
             Self::Vec(workers) => {
                 workers.iter_mut().for_each(|w| w.clear());
             }
-            Self::Thread(thread) => {}
+            Self::Thread(thread) => {
+                thread.clear_buffers();
+            }
         }
     }
 
@@ -599,7 +415,7 @@ impl<E: Env> WorkerPool2<E> {
     }
 }
 
-impl<E: Env> Drop for WorkerPool2<E> {
+impl<E: Env> Drop for WorkerPool<E> {
     fn drop(&mut self) {
         self.shutdown();
     }

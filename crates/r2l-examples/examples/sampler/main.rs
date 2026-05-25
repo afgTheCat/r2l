@@ -1,19 +1,19 @@
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
-use r2l_api::{EpisodeHookBound, PPO2AgentBuilder, Sampler2Builder, StepHookBound};
+use r2l_api::{EpisodeHookBound, PPOAgentBuilder, SamplerBuilder, StepHookBound};
 use r2l_gym::GymEnvBuilder;
 use r2l_sampler::SamplerExecutionMode;
 
 fn main() {
     let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
-    let sampler_builder = Sampler2Builder::<GymEnvBuilder, StepHookBound<_>>::new(gym_env_builder, 10)
+    let sampler_builder = SamplerBuilder::<GymEnvBuilder, StepHookBound<_>>::new(gym_env_builder, 10)
         .with_execution_mode(SamplerExecutionMode::Vec)
         .with_execution_mode(SamplerExecutionMode::Thread)
         .with_hook(EpisodeHookBound::new(10))
         .with_hook(StepHookBound::new(1000));
     let sampler = sampler_builder.build();
 
-    let agents = PPO2AgentBuilder::new(10)
+    let agents = PPOAgentBuilder::new(10)
         .with_burn()
         .with_candle(Device::Cpu)
         .with_entropy_coeff(0.1)

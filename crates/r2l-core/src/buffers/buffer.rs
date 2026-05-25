@@ -6,64 +6,6 @@ use crate::{
     tensor::R2lTensor,
 };
 
-// pub enum TrajectoryTensorField<'a, T: R2lTensor> {
-//     // TODO: we cold probably use Rc<T> here?
-//     Owned(Vec<T>),
-//     Borrowed(ReusableVecSlice<'a, T>),
-// }
-//
-// impl<'a, T: R2lTensor> AsRef<[T]> for TrajectoryTensorField<'a, T> {
-//     fn as_ref(&self) -> &[T] {
-//         match self {
-//             Self::Owned(data) => data.as_slice(),
-//             Self::Borrowed(data) => data.as_ref(),
-//         }
-//     }
-// }
-
-// pub struct TrajectoryBatch<'a, T: R2lTensor> {
-//     states: TrajectoryTensorField<'a, T>,
-//     next_states: TrajectoryTensorField<'a, T>,
-//     actions: TrajectoryTensorField<'a, T>,
-//     rewards: ReusableVecSlice<'a, f32>,
-//     terminated: ReusableVecSlice<'a, bool>,
-//     truncated: ReusableVecSlice<'a, bool>,
-// }
-//
-// impl<'a, T: R2lTensor> TrajectoryBatch<'a, T> {
-//     pub fn len(&self) -> usize {
-//         self.states.as_ref().len()
-//     }
-//
-//     pub fn is_empty(&self) -> bool {
-//         self.len() == 0
-//     }
-//
-//     pub fn states(&self) -> &[T] {
-//         self.states.as_ref()
-//     }
-//
-//     pub fn next_states(&self) -> &[T] {
-//         self.next_states.as_ref()
-//     }
-//
-//     pub fn actions(&self) -> &[T] {
-//         self.actions.as_ref()
-//     }
-//
-//     pub fn rewards(&self) -> &[f32] {
-//         self.rewards.as_ref()
-//     }
-//
-//     pub fn terminated(&self) -> &[bool] {
-//         self.terminated.as_ref()
-//     }
-//
-//     pub fn truncated(&self) -> &[bool] {
-//         self.truncated.as_ref()
-//     }
-// }
-
 // the new buffer type I am experimenting with. Probably going to make things faster
 #[derive(Clone)]
 pub struct NewBuffer<T: R2lTensor> {
