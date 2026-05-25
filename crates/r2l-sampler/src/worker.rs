@@ -3,7 +3,7 @@ use std::thread::JoinHandle;
 use bimodal_array::ElementHandle;
 use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
-    buffers::{Memory, buffer::NewBuffer},
+    buffers::{Memory, buffer::TrajectoryBuffer},
     env::{Env, EnvDescription, Snapshot},
     models::Actor,
     rng::RNG,
@@ -166,13 +166,13 @@ impl<T: R2lTensor> LegacyThreadWorkers<T> {
 
 pub struct Worker<E: Env> {
     pub env: E,
-    pub buffer: ElementHandle<NewBuffer<E::Tensor>>,
+    pub buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>,
     pub policy: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
     pub last_state: Option<E::Tensor>,
 }
 
 impl<E: Env> Worker<E> {
-    pub fn new(env: E, buffer: ElementHandle<NewBuffer<E::Tensor>>) -> Self {
+    pub fn new(env: E, buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>) -> Self {
         Self {
             env,
             buffer,

@@ -1,5 +1,6 @@
+use crate::tensor::R2lTensor;
+
 pub mod buffer;
-pub mod gen_buffer;
 
 /// One transition collected from an environment.
 #[derive(Debug)]
@@ -23,4 +24,22 @@ impl<T> Memory<T> {
     pub fn is_done(&self) -> bool {
         self.terminated || self.truncated
     }
+}
+
+pub trait TrajectoryBatch<T: R2lTensor> {
+    fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool;
+
+    fn states(&self) -> &[T];
+
+    fn next_states(&self) -> &[T];
+
+    fn actions(&self) -> &[T];
+
+    fn rewards(&self) -> &[f32];
+
+    fn terminated(&self) -> &[bool];
+
+    fn truncated(&self) -> &[bool];
 }

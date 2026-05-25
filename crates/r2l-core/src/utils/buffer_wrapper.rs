@@ -1,7 +1,7 @@
 use std::any::TypeId;
 
 use crate::{
-    buffers::{buffer::TrajectoryView, gen_buffer::TrajectoryBatchT},
+    buffers::{TrajectoryBatch, buffer::TrajectoryView},
     tensor::R2lTensor,
 };
 
@@ -73,7 +73,7 @@ impl<'a, T: R2lTensor> TrajectoryViewsWrapper<'a, T> {
     }
 }
 
-impl<'a, T: R2lTensor> TrajectoryBatchT<T> for TrajectoryViewsWrapper<'a, T> {
+impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryViewsWrapper<'a, T> {
     fn len(&self) -> usize {
         match self {
             Self::Borrowed(t) => t.len(),

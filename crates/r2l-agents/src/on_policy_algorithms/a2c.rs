@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use r2l_core::{
-    buffers::gen_buffer::TrajectoryBatchT,
+    buffers::TrajectoryBatch,
     models::{LearningModule, Policy},
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
@@ -51,7 +51,7 @@ pub struct A2CBatchData<T: R2lTensor> {
 
 /// Hook interface for customizing A2C training over trajectory batches.
 pub trait A2CHook<M: OnPolicyLearningModule> {
-    fn before_learning_hook<B: TrajectoryBatchT<M::InferenceTensor>>(
+    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut A2CParams,
         _module: &mut M,
@@ -72,7 +72,7 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Continue)
     }
 
-    fn after_learning_hook<B: TrajectoryBatchT<M::InferenceTensor>>(
+    fn after_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut A2CParams,
         _module: &mut M,
@@ -93,7 +93,7 @@ pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
 }
 
 impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
-    fn batch_loop<B: TrajectoryBatchT<Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -130,7 +130,7 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
     }
 
     /// Prototype learning entrypoint over finalized trajectory batches.
-    pub fn learn<B: TrajectoryBatchT<Module::InferenceTensor>>(
+    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
     ) -> Result<()> {
@@ -166,7 +166,7 @@ impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
         self.lm.inference_policy()
     }
 
-    fn learn<B: TrajectoryBatchT<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
         A2C::learn(self, buffers)
     }
 }

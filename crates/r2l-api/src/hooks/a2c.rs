@@ -15,7 +15,7 @@ use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
-    HookResult, buffers::gen_buffer::TrajectoryBatchT, models::Policy,
+    HookResult, buffers::TrajectoryBatch, models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
@@ -162,7 +162,7 @@ impl DefaultA2CHookReporter {
 }
 
 impl DefaultA2CHookReporter {
-    fn update_average_reward<T: r2l_core::tensor::R2lTensor, B: TrajectoryBatchT<T>>(
+    fn update_average_reward<T: r2l_core::tensor::R2lTensor, B: TrajectoryBatch<T>>(
         &mut self,
         batches: &[B],
     ) {
@@ -217,7 +217,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
     for DefaultA2CHook<BurnPolicyValueModule<B, D>>
 {
     fn before_learning_hook<
-        C: TrajectoryBatchT<<BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor>,
+        C: TrajectoryBatch<<BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
@@ -259,7 +259,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
     }
 
     fn after_learning_hook<
-        C: TrajectoryBatchT<<BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor>,
+        C: TrajectoryBatch<<BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
@@ -278,7 +278,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
 
 impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule> {
     fn before_learning_hook<
-        B: TrajectoryBatchT<<CandlePolicyValueModule as OnPolicyLearningModule>::InferenceTensor>,
+        B: TrajectoryBatch<<CandlePolicyValueModule as OnPolicyLearningModule>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
@@ -318,7 +318,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
         Ok(HookResult::Continue)
     }
 
-    fn after_learning_hook<B: TrajectoryBatchT<candle_core::Tensor>>(
+    fn after_learning_hook<B: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
         module: &mut CandlePolicyValueModule,

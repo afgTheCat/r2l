@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use bimodal_array::ArrayHandle;
 use bimodal_array::bimodal_array;
-use r2l_core::buffers::buffer::NewBuffer;
+use r2l_core::buffers::buffer::TrajectoryBuffer;
 use r2l_core::buffers::buffer::TrajectoryView;
 use r2l_core::env::Env;
 use r2l_core::env::EnvBuilder;
@@ -46,12 +46,12 @@ pub trait SamplerHook {
 
     fn hook(
         &mut self,
-        buffer: &mut ArrayHandle<NewBuffer<<Self::E as Env>::Tensor>>,
+        buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
     ) -> SamplerHookResult;
 }
 
 pub struct R2lSampler<E: Env, H: SamplerHook<E = E>> {
-    buffers: ArrayHandle<NewBuffer<E::Tensor>>,
+    buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
     worker_pool: WorkerPool<E>,
     hook: H,
 }
@@ -74,7 +74,7 @@ impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
     ) -> Self {
         // questionable if we want to do this, but whatever
         let num_envs = env_builder.num_envs();
-        let buffers: Vec<NewBuffer<E::Tensor>> = vec![NewBuffer::default(); num_envs];
+        let buffers: Vec<TrajectoryBuffer<E::Tensor>> = vec![TrajectoryBuffer::default(); num_envs];
         let (buffers, buffer_handlers) = bimodal_array(buffers);
         let worker_pool = match execution_mode {
             SamplerExecutionMode::Vec => {

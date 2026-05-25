@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use bimodal_array::ArrayHandle;
-use r2l_core::{buffers::buffer::NewBuffer, env::Env};
+use r2l_core::{buffers::buffer::TrajectoryBuffer, env::Env};
 use r2l_sampler::{RolloutMode, SamplerHook, SamplerHookResult};
 
 /// Sampler hook that requests rollout collection until a fixed number of
@@ -32,7 +32,7 @@ impl<E: Env> SamplerHook for EpisodeBoundHook<E> {
 
     fn hook(
         &mut self,
-        _buffer: &mut ArrayHandle<NewBuffer<<Self::E as Env>::Tensor>>,
+        _buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
     ) -> SamplerHookResult {
         if self.episodes_scheduled == self.num_episodes {
             self.episodes_scheduled = 0;
@@ -74,7 +74,7 @@ impl<E: Env> SamplerHook for StepBoundHook<E> {
 
     fn hook(
         &mut self,
-        _buffer: &mut ArrayHandle<NewBuffer<<Self::E as Env>::Tensor>>,
+        _buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
     ) -> SamplerHookResult {
         if self.steps_scheduled == self.num_steps {
             self.steps_scheduled = 0;

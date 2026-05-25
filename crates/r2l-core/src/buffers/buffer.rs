@@ -1,14 +1,11 @@
 use crate::{
-    buffers::{
-        Memory,
-        // reusable_vec::{ReusableVec, ReusableVecSlice},
-    },
+    buffers::{Memory, TrajectoryBatch},
     tensor::R2lTensor,
 };
 
 // the new buffer type I am experimenting with. Probably going to make things faster
 #[derive(Clone)]
-pub struct NewBuffer<T: R2lTensor> {
+pub struct TrajectoryBuffer<T: R2lTensor> {
     states: Vec<T>,
     next_states: Vec<T>,
     actions: Vec<T>,
@@ -17,7 +14,7 @@ pub struct NewBuffer<T: R2lTensor> {
     truncated: Vec<bool>,
 }
 
-impl<T: R2lTensor> Default for NewBuffer<T> {
+impl<T: R2lTensor> Default for TrajectoryBuffer<T> {
     fn default() -> Self {
         Self {
             states: Default::default(),
@@ -39,6 +36,40 @@ pub struct TrajectoryView<'a, T: R2lTensor> {
     pub truncated: &'a [bool],
 }
 
+impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryView<'a, T> {
+    fn len(&self) -> usize {
+        self.states.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.states.is_empty()
+    }
+
+    fn states(&self) -> &[T] {
+        self.states
+    }
+
+    fn next_states(&self) -> &[T] {
+        self.next_states
+    }
+
+    fn actions(&self) -> &[T] {
+        self.actions
+    }
+
+    fn rewards(&self) -> &[f32] {
+        self.rewards
+    }
+
+    fn terminated(&self) -> &[bool] {
+        self.terminated
+    }
+
+    fn truncated(&self) -> &[bool] {
+        self.truncated
+    }
+}
+
 impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
     pub fn dones(&self) -> impl Iterator<Item = bool> {
         self.terminated
@@ -52,7 +83,7 @@ impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
     }
 }
 
-impl<T: R2lTensor> NewBuffer<T> {
+impl<T: R2lTensor> TrajectoryBuffer<T> {
     pub fn clear(&mut self) {
         self.states.clear();
         self.next_states.clear();

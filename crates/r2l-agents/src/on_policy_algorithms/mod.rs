@@ -15,7 +15,7 @@ pub mod vpg;
 
 use derive_more::Deref;
 use r2l_core::{
-    buffers::gen_buffer::TrajectoryBatchT,
+    buffers::TrajectoryBatch,
     models::{Policy, ValueFunction},
     rng::RNG,
     tensor::R2lTensor,
@@ -82,7 +82,7 @@ impl Logps {
 fn batch_advantages_and_returns<
     T1: R2lTensor,
     T2: R2lTensor,
-    B: TrajectoryBatchT<T1>,
+    B: TrajectoryBatch<T1>,
     L: Fn(&T1) -> T2,
 >(
     batch: &B,
@@ -119,7 +119,7 @@ fn batch_advantages_and_returns<
 pub fn batches_advantages_and_returns<
     T1: R2lTensor,
     T2: R2lTensor,
-    B: TrajectoryBatchT<T1>,
+    B: TrajectoryBatch<T1>,
     L: Fn(&T1) -> T2,
 >(
     batches: &[B],
@@ -139,7 +139,7 @@ pub fn batches_advantages_and_returns<
     Ok((Advantages(advantage_vec), Returns(returns_vec)))
 }
 
-pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatchT<T1>, L: Fn(&T1) -> T2>(
+pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -> T2>(
     batches: &[B],
     indices: &[(usize, usize)],
     lifter: L,
@@ -153,7 +153,7 @@ pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatchT<T1>, L: Fn(&T1) 
     (observations, actions)
 }
 
-pub fn logps<T: R2lTensor, B: TrajectoryBatchT<T>>(
+pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
     batches: &[B],
     policy: &impl Policy<Tensor = T>,
 ) -> anyhow::Result<Logps> {
@@ -174,7 +174,7 @@ pub struct BatchIndexIterator {
 }
 
 impl BatchIndexIterator {
-    pub fn new<T: R2lTensor, B: TrajectoryBatchT<T>>(batches: &[B], sample_size: usize) -> Self {
+    pub fn new<T: R2lTensor, B: TrajectoryBatch<T>>(batches: &[B], sample_size: usize) -> Self {
         let mut indices = (0..batches.len())
             .flat_map(|i| {
                 let batch = &batches[i];

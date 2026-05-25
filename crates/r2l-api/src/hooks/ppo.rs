@@ -14,7 +14,7 @@ use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
-    HookResult, buffers::gen_buffer::TrajectoryBatchT, models::Policy,
+    HookResult, buffers::TrajectoryBatch, models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
 };
 
@@ -172,7 +172,7 @@ impl DefaultPPOHookReporter {
         }
     }
 
-    fn update_average_reward<T: r2l_core::tensor::R2lTensor, B: TrajectoryBatchT<T>>(
+    fn update_average_reward<T: r2l_core::tensor::R2lTensor, B: TrajectoryBatch<T>>(
         &mut self,
         batches: &[B],
     ) {
@@ -182,14 +182,13 @@ impl DefaultPPOHookReporter {
             .iter_mut()
             .zip(batches.iter())
         {
-            for (reward, done) in batch
-                .rewards()
-                .iter()
-                .copied()
-                .zip(batch.terminated().iter().zip(batch.truncated().iter()).map(
-                    |(terminated, truncated)| *terminated || *truncated,
-                ))
-            {
+            for (reward, done) in batch.rewards().iter().copied().zip(
+                batch
+                    .terminated()
+                    .iter()
+                    .zip(batch.truncated().iter())
+                    .map(|(terminated, truncated)| *terminated || *truncated),
+            ) {
                 *running_reward += reward;
                 if done {
                     completed_episode_rewards.push(*running_reward);
@@ -249,7 +248,9 @@ pub struct DefaultPPOHook<T = ()> {
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
     for DefaultPPOHook<BurnPolicyValueModule<B, D>>
 {
-    fn before_learning_hook<BT: TrajectoryBatchT<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>>(
+    fn before_learning_hook<
+        BT: TrajectoryBatch<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
+    >(
         &mut self,
         _params: &mut PPOParams,
         module: &mut BurnPolicyValueModule<B, D>,
@@ -268,7 +269,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<BT: TrajectoryBatchT<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>>(
+    fn rollout_hook<BT: TrajectoryBatch<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>>(
         &mut self,
         params: &mut PPOParams,
         module: &mut BurnPolicyValueModule<B, D>,
@@ -348,7 +349,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
 }
 
 impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule> {
-    fn before_learning_hook<BT: TrajectoryBatchT<candle_core::Tensor>>(
+    fn before_learning_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
         module: &mut CandlePolicyValueModule,
@@ -365,7 +366,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<BT: TrajectoryBatchT<candle_core::Tensor>>(
+    fn rollout_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         params: &mut PPOParams,
         module: &mut CandlePolicyValueModule,

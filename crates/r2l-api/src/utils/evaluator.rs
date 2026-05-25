@@ -2,7 +2,7 @@ use std::{marker::PhantomData, path::PathBuf};
 
 use anyhow::Result;
 use r2l_core::{
-    buffers::{buffer::TrajectoryView, gen_buffer::TrajectoryBatchT},
+    buffers::{TrajectoryBatch, buffer::TrajectoryView},
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::{DefaultAdapter, OnPolicyAdapters, Sampler},

@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::{
     HookResult, break_on_hook_result,
-    buffers::{buffer::TrajectoryView, gen_buffer::TrajectoryBatchT},
+    buffers::{TrajectoryBatch, buffer::TrajectoryView},
     models::Actor,
     return_on_hook_result,
     tensor::R2lTensor,
@@ -20,7 +20,7 @@ pub trait Agent {
     fn actor(&self) -> Self::Actor;
 
     /// Learns from a batch of trajectory containers.
-    fn learn<B: TrajectoryBatchT<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()>;
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()>;
 
     /// Releases agent resources before the training loop exits.
     fn shutdown(&mut self) {}
@@ -41,7 +41,7 @@ pub trait Sampler {
 
 pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
     type SamplerActor: Actor<Tensor = S::Tensor> + Clone;
-    type AgentBuffer<'a>: TrajectoryBatchT<A::Tensor>
+    type AgentBuffer<'a>: TrajectoryBatch<A::Tensor>
     where
         Self: 'a,
         S: 'a;
@@ -59,8 +59,7 @@ pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
 
 pub struct DefaultAdapter;
 
-impl<A: Actor + Clone, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter
-{
+impl<A: Actor + Clone, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter {
     type SamplerActor = ActorWrapper<A, S::Tensor>;
     type AgentBuffer<'a>
         = TrajectoryViewsWrapper<'a, A::Tensor>
@@ -89,11 +88,8 @@ impl<A: Actor + Clone, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter
 }
 
 /// Coupled runtime unit that binds an agent, sampler, and adapter together.
-pub struct OnPolicyRuntime<
-    A: Agent,
-    S: Sampler,
-    C: OnPolicyAdapters<A::Actor, S> = DefaultAdapter,
-> {
+pub struct OnPolicyRuntime<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S> = DefaultAdapter>
+{
     /// Trainable agent.
     pub agent: A,
     /// Rollout collector.

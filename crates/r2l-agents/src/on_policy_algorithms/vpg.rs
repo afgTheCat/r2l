@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use r2l_core::{
-    buffers::gen_buffer::TrajectoryBatchT,
+    buffers::TrajectoryBatch,
     models::Policy,
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
@@ -43,7 +43,7 @@ pub struct VPG<Module: OnPolicyLearningModule> {
 }
 
 impl<Module: OnPolicyLearningModule> VPG<Module> {
-    fn batch_loop<B: TrajectoryBatchT<Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -68,7 +68,7 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
     }
 
     /// Prototype learning entrypoint over finalized trajectory batches.
-    pub fn learn<B: TrajectoryBatchT<Module::InferenceTensor>>(
+    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
     ) -> Result<()> {
@@ -92,7 +92,7 @@ impl<M: OnPolicyLearningModule> Agent for VPG<M> {
         self.lm.inference_policy()
     }
 
-    fn learn<B: TrajectoryBatchT<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
         VPG::learn(self, buffers)
     }
 }

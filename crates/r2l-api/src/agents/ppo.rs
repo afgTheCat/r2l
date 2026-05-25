@@ -6,7 +6,7 @@ use r2l_burn::{
 use r2l_candle::{
     distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
 };
-use r2l_core::{buffers::gen_buffer::TrajectoryBatchT, on_policy::algorithm::Agent};
+use r2l_core::{buffers::TrajectoryBatch, on_policy::algorithm::Agent};
 
 use crate::hooks::ppo::DefaultPPOHook;
 
@@ -23,10 +23,7 @@ impl<B: AutodiffBackend> Agent for PPOBurnAgent<B> {
         self.0.actor()
     }
 
-    fn learn<BT: TrajectoryBatchT<Self::Tensor>>(
-        &mut self,
-        buffers: &[BT],
-    ) -> anyhow::Result<()> {
+    fn learn<BT: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[BT]) -> anyhow::Result<()> {
         self.0.learn(buffers)
     }
 
@@ -48,10 +45,7 @@ impl Agent for PPOCandleAgent {
         self.0.actor()
     }
 
-    fn learn<BT: TrajectoryBatchT<Self::Tensor>>(
-        &mut self,
-        buffers: &[BT],
-    ) -> anyhow::Result<()> {
+    fn learn<BT: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[BT]) -> anyhow::Result<()> {
         self.0.learn(buffers)
     }
 
