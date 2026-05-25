@@ -3,7 +3,9 @@ use std::path::PathBuf;
 
 use burn::backend::NdArray;
 use burn_store::SafetensorsStore;
-use r2l_api::{Evaluator2, LearningSchedule2, PPO2AlgorithmBuilder, SamplerExecutionMode, StepHookBound};
+use r2l_api::{
+    Evaluator2, LearningSchedule2, PPO2AlgorithmBuilder, SamplerExecutionMode, StepHookBound,
+};
 use r2l_burn::distributions::diagonal_distribution::DiagGaussianDistribution;
 
 const ENV_NAME: &str = "Pendulum-v1";
@@ -36,7 +38,7 @@ fn main() {
     let total_rewards = results
         .as_ref()
         .iter()
-        .map(|tr| tr.rewards().iter().sum::<f32>())
+        .map(|tr| tr.rewards.iter().sum::<f32>())
         .sum::<f32>();
     println!(
         "Average rewards recieved: {}",

@@ -26,6 +26,17 @@ type DefaultOnPolicyAlgorithm2<A, EB, SH> = OnPolicyAlgorithm<
     >,
 >;
 
+/// Generic builder for on-policy algorithms on the new training stack.
+///
+/// This builder combines:
+/// - environment construction
+/// - rollout collection via `Sampler2Builder`
+/// - agent construction
+/// - learning schedule configuration
+/// - optional evaluation of the best actor during training
+///
+/// Algorithm-specific builders such as `PPO2AlgorithmBuilder` and
+/// `A2C2AlgorithmBuilder` build on top of this type.
 pub struct OnPolicyAlgorithmBuilder2<
     A: Agent2,
     AB: AgentBuilder2<Agent = A>,
@@ -45,6 +56,8 @@ impl<
     SH: SamplerHook2Builder<Env = EB::Env>,
 > OnPolicyAlgorithmBuilder2<A, AB, EB, SH>
 {
+    /// Creates an on-policy algorithm builder from an explicit sampler builder
+    /// and agent builder.
     pub fn from_sampler_and_agent_builder(
         sampler_builder: Sampler2Builder<EB, SH>,
         agent_builder: AB,
@@ -57,6 +70,7 @@ impl<
         }
     }
 
+    /// Replaces the sampler hook builder used to control rollout collection.
     pub fn with_hook<SH2: SamplerHook2Builder<Env = EB::Env>>(
         self,
         hook_builder: SH2,
@@ -75,6 +89,8 @@ impl<
         }
     }
 
+    /// Replaces the rollout bound configuration by installing a new sampler
+    /// hook builder.
     pub fn with_rollout_bound<SH2: SamplerHook2Builder<Env = EB::Env>>(
         self,
         rollout_bound: SH2,
@@ -93,6 +109,7 @@ impl<
         }
     }
 
+    /// Installs or clears the evaluator used during training.
     pub fn with_evaluator(
         mut self,
         evaluator_builder: Option<BestActorEvaluatorBuilder2<EB>>,
@@ -101,11 +118,14 @@ impl<
         self
     }
 
+    /// Replaces the learning schedule that controls training termination.
     pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule2) -> Self {
         self.learning_schedule = learning_schedule;
         self
     }
 
+    /// Sets the number of evaluation episodes used by the best-actor
+    /// evaluator.
     pub fn with_evaluator_n_episodes(mut self, n_episodes: usize) -> Self {
         let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
             evaluator_builder.with_n_episodes(n_episodes)
@@ -118,6 +138,7 @@ impl<
         self
     }
 
+    /// Replaces the environment builder used by the evaluator.
     pub fn with_evaluator_env_builder(
         mut self,
         env_builder: r2l_core::env::EnvBuilderType<EB>,
@@ -131,6 +152,7 @@ impl<
         self
     }
 
+    /// Sets how evaluation environments are executed.
     pub fn with_evaluator_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
         let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
             evaluator_builder.with_execution_mode(execution_mode)
@@ -143,6 +165,7 @@ impl<
         self
     }
 
+    /// Sets the filesystem path used to persist the best-performing actor.
     pub fn with_evaluator_best_actor_path<P: Into<std::path::PathBuf>>(
         mut self,
         eval_path: P,
@@ -158,11 +181,13 @@ impl<
         self
     }
 
+    /// Sets how training environments are executed.
     pub fn with_execution_mode(mut self, location: SamplerExecutionMode) -> Self {
         self.sampler_builder = self.sampler_builder.with_execution_mode(location);
         self
     }
 
+    /// Builds the configured on-policy algorithm runtime.
     pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm2<A, EB, SH>>
     where
         DefaultAdapter:

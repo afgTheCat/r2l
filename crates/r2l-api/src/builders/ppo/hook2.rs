@@ -2,6 +2,12 @@ use std::{marker::PhantomData, sync::mpsc::Sender};
 
 use crate::hooks::ppo2::{DefaultPPO2Hook, DefaultPPO2HookReporter, PPO2Stats, TargetKl};
 
+/// Builder for the default PPO2 training hook.
+///
+/// This builder controls the hook behavior used by
+/// [`PPO2AgentBuilder`](crate::PPO2AgentBuilder), including PPO epoch count,
+/// advantage normalization, target KL handling, gradient clipping, and
+/// optional reporting.
 #[derive(Debug, Clone)]
 pub struct DefaultPPO2HookBuilder {
     normalize_advantage: bool,
@@ -16,6 +22,9 @@ pub struct DefaultPPO2HookBuilder {
 }
 
 impl DefaultPPO2HookBuilder {
+    /// Creates a default PPO2 hook builder.
+    ///
+    /// `n_envs` is used when reporting rollout statistics.
     pub fn new(n_envs: usize) -> Self {
         Self {
             normalize_advantage: true,
@@ -30,46 +39,55 @@ impl DefaultPPO2HookBuilder {
         }
     }
 
+    /// Sets whether to log training progress during learning.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
         self.log_progress = log_progress;
         self
     }
 
+    /// Enables or disables advantage normalization before learning.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.normalize_advantage = normalize_advantage;
         self
     }
 
+    /// Sets the maximum number of PPO epochs per rollout.
     pub fn with_total_epochs(mut self, total_epochs: usize) -> Self {
         self.total_epochs = total_epochs;
         self
     }
 
+    /// Sets the entropy coefficient added during optimization.
     pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
         self.entropy_coeff = entropy_coeff;
         self
     }
 
+    /// Sets the optional value-function loss coefficient.
     pub fn with_vf_coeff(mut self, vf_coeff: Option<f32>) -> Self {
         self.vf_coeff = vf_coeff;
         self
     }
 
+    /// Sets the optional target KL threshold used for early stopping.
     pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
         self.target_kl = target_kl;
         self
     }
 
+    /// Sets the optional gradient clipping threshold used during learning.
     pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
         self.gradient_clipping = gradient_clipping;
         self
     }
 
+    /// Installs a channel used to emit [`PPO2Stats`](crate::PPO2Stats).
     pub fn with_reporter(mut self, tx: Option<Sender<PPO2Stats>>) -> Self {
         self.tx = tx;
         self
     }
 
+    /// Builds the default PPO2 hook.
     pub fn build<T>(self) -> DefaultPPO2Hook<T> {
         DefaultPPO2Hook {
             normalize_advantage: self.normalize_advantage,

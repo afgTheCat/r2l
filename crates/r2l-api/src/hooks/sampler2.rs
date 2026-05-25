@@ -7,6 +7,12 @@ use r2l_sampler::{
     sampler2::{SamplerHook2, SamplerHookResult},
 };
 
+/// Sampler hook that requests rollout collection until a fixed number of
+/// episodes has been scheduled.
+///
+/// The hook returns an episode-bound rollout mode once, then returns
+/// [`SamplerHookResult::Stop`] on the next call so the outer sampler loop can
+/// hand the collected data off for training.
 pub struct EpisodeBoundHook<E: Env> {
     num_episodes: usize,
     episodes_scheduled: usize,
@@ -14,6 +20,7 @@ pub struct EpisodeBoundHook<E: Env> {
 }
 
 impl<E: Env> EpisodeBoundHook<E> {
+    /// Creates an episode-bound sampler hook.
     pub fn new(num_episodes: usize) -> Self {
         Self {
             num_episodes,
@@ -42,6 +49,12 @@ impl<E: Env> SamplerHook2 for EpisodeBoundHook<E> {
     }
 }
 
+/// Sampler hook that requests rollout collection until a fixed number of steps
+/// has been scheduled.
+///
+/// The hook returns a step-bound rollout mode once, then returns
+/// [`SamplerHookResult::Stop`] on the next call so the outer sampler loop can
+/// hand the collected data off for training.
 pub struct StepBoundHook<E: Env> {
     num_steps: usize,
     steps_scheduled: usize,
@@ -49,6 +62,7 @@ pub struct StepBoundHook<E: Env> {
 }
 
 impl<E: Env> StepBoundHook<E> {
+    /// Creates a step-bound sampler hook.
     pub fn new(num_steps: usize) -> Self {
         Self {
             num_steps,

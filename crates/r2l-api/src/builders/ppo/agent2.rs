@@ -19,15 +19,22 @@ use crate::{
     hooks::ppo2::PPO2Stats,
 };
 
+/// Builder for PPO2 agents.
+///
+/// This is the main entry point for configuring PPO2-specific agent behavior,
+/// such as clipping, advantage normalization, and PPO2 hook settings.
 pub type PPO2AgentBuilder =
     OnPolicyAgentBuilder2<PPOParams, DefaultPPO2HookBuilder, CandleBackend2>;
 
+/// PPO2 agent builder specialized to the Candle backend.
 pub type PPO2CandleAgentBuilder = PPO2AgentBuilder;
 
+/// PPO2 agent builder specialized to the Burn backend.
 pub type PPO2BurnAgentBuilder =
     OnPolicyAgentBuilder2<PPOParams, DefaultPPO2HookBuilder, BuilderBurnBackend2>;
 
 impl PPO2AgentBuilder {
+    /// Creates a PPO2 agent builder with default hyperparameters.
     pub fn new(n_envs: usize) -> Self {
         Self {
             hook_builder: DefaultPPO2HookBuilder::new(n_envs),
@@ -54,6 +61,7 @@ impl PPO2AgentBuilder {
 }
 
 impl<Backend> OnPolicyAgentBuilder2<PPOParams, DefaultPPO2HookBuilder, Backend> {
+    /// Enables or disables advantage normalization.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         self.hook_builder = self
             .hook_builder
@@ -61,51 +69,61 @@ impl<Backend> OnPolicyAgentBuilder2<PPOParams, DefaultPPO2HookBuilder, Backend> 
         self
     }
 
+    /// Sets the entropy coefficient.
     pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
         self.hook_builder = self.hook_builder.with_entropy_coeff(entropy_coeff);
         self
     }
 
+    /// Sets the value-function loss coefficient.
     pub fn with_vf_coeff(mut self, vf_coeff: Option<f32>) -> Self {
         self.hook_builder = self.hook_builder.with_vf_coeff(vf_coeff);
         self
     }
 
+    /// Sets the target KL threshold used by the default PPO2 hook.
     pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
         self.hook_builder = self.hook_builder.with_target_kl(target_kl);
         self
     }
 
+    /// Sets gradient clipping for the default PPO2 hook.
     pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
         self.hook_builder = self.hook_builder.with_gradient_clipping(gradient_clipping);
         self
     }
 
+    /// Installs a reporter channel for `PPO2Stats`.
     pub fn with_reporter(mut self, tx: Option<Sender<PPO2Stats>>) -> Self {
         self.hook_builder = self.hook_builder.with_reporter(tx);
         self
     }
 
+    /// Sets whether to log training progress during learning.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
         self.hook_builder = self.hook_builder.with_log_progress(log_progress);
         self
     }
 
+    /// Sets the PPO clip range.
     pub fn with_clip_range(mut self, clip_range: f32) -> Self {
         self.params.clip_range = clip_range;
         self
     }
 
+    /// Sets the discount factor.
     pub fn with_gamma(mut self, gamma: f32) -> Self {
         self.params.gamma = gamma;
         self
     }
 
+    /// Sets the GAE lambda parameter.
     pub fn with_lambda(mut self, lambda: f32) -> Self {
         self.params.lambda = lambda;
         self
     }
 
+    /// Sets the rollout sample size used during training updates.
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
         self.params.sample_size = sample_size;
         self
