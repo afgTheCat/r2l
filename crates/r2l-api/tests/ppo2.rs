@@ -57,7 +57,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
 }
 
 #[test]
-fn new_cartpole_candle() {
+fn cartpole_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
     // https://huggingface.co/sb3/ppo-CartPole-v1
     configure_candle_ppo_test(PPOTestConfig {
@@ -72,6 +72,173 @@ fn new_cartpole_candle() {
         total_epochs: 20,
         n_steps: 32,
         n_timesteps: 100000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(false),
+        norm_reward: None,
+        use_sde: None,
+        sde_sample_freq: None,
+    });
+}
+
+#[test]
+fn pendulum_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-Pendulum-v1
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "Pendulum-v1",
+        n_envs: 4,
+        clip_range: Some(0.2),
+        entropy_coeff: 0.0,
+        gae_lambda: 0.95,
+        gamma: 0.9,
+        learning_rate: Some(0.001),
+        sample_size: None,
+        total_epochs: 10,
+        n_steps: 1024,
+        n_timesteps: 100000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(false),
+        norm_reward: None,
+        use_sde: Some(true),
+        sde_sample_freq: Some(4),
+    });
+}
+
+#[test]
+fn pendulum_candle2() {
+    let builder = PPO2AlgorithmBuilder::gym("Pendulum-v1", 4)
+        .with_clip_range(0.2)
+        .with_lambda(0.95)
+        .with_gamma(0.9)
+        .with_learning_rate(0.001)
+        .with_total_epochs(10)
+        .with_rollout_bound(StepHookBound::new(1024))
+        .with_learning_schedule(LearningSchedule2::total_step_bound(100000));
+    let mut algo = builder.build().unwrap();
+    algo.train().unwrap();
+}
+
+#[test]
+fn acrobot_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-Acrobot-v1
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "Acrobot-v1",
+        n_envs: 16,
+        clip_range: None,
+        entropy_coeff: 0.0,
+        gae_lambda: 0.94,
+        gamma: 0.99,
+        learning_rate: None,
+        sample_size: None,
+        total_epochs: 4,
+        n_steps: 256,
+        n_timesteps: 1_000_000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(true),
+        norm_reward: Some(false),
+        use_sde: None,
+        sde_sample_freq: None,
+    });
+}
+
+#[test]
+fn mountain_car_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-MountainCar-v0
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "MountainCar-v0",
+        n_envs: 16,
+        clip_range: None,
+        entropy_coeff: 0.0,
+        gae_lambda: 0.98,
+        gamma: 0.99,
+        learning_rate: None,
+        sample_size: None,
+        total_epochs: 4,
+        n_steps: 16,
+        n_timesteps: 1_000_000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(true),
+        norm_reward: Some(false),
+        use_sde: None,
+        sde_sample_freq: None,
+    });
+}
+
+// TODO: this does not learn, as we will need norm_obs and norm_reward to work
+#[test]
+fn mountain_car_continuous_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-MountainCarContinuous-v0
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "MountainCarContinuous-v0",
+        n_envs: 1,
+        clip_range: Some(0.1),
+        entropy_coeff: 0.00429,
+        gae_lambda: 0.9,
+        gamma: 0.9999,
+        learning_rate: Some(7.77e-05),
+        sample_size: Some(256),
+        total_epochs: 10,
+        n_steps: 8,
+        n_timesteps: 20000,
+        vf_coeff: Some(0.19),
+        gradient_clipping: Some(5.0),
+        norm_obs: Some(true),
+        norm_reward: Some(true),
+        use_sde: Some(true),
+        sde_sample_freq: None,
+    });
+}
+
+// TODO: this does not learn, as we will need norm_obs and norm_reward to work
+#[test]
+fn lunar_lander_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-LunarLander-v2
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "LunarLander-v2",
+        n_envs: 16,
+        clip_range: None,
+        entropy_coeff: 0.01,
+        gae_lambda: 0.98,
+        gamma: 0.999,
+        learning_rate: None,
+        sample_size: Some(64),
+        total_epochs: 4,
+        n_steps: 1024,
+        n_timesteps: 1_000_000,
+        vf_coeff: None,
+        gradient_clipping: None,
+        norm_obs: Some(false),
+        norm_reward: None,
+        use_sde: None,
+        sde_sample_freq: None,
+    });
+}
+
+// TODO: this does not learn, as we will need norm_obs and norm_reward to work
+#[test]
+fn lunar_lander_continuous_candle() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-LunarLanderContinuous-v2
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "LunarLanderContinuous-v2",
+        n_envs: 16,
+        clip_range: None,
+        entropy_coeff: 0.01,
+        gae_lambda: 0.98,
+        gamma: 0.999,
+        learning_rate: None,
+        sample_size: Some(64),
+        total_epochs: 4,
+        n_steps: 1024,
+        n_timesteps: 1_000_000,
         vf_coeff: None,
         gradient_clipping: None,
         norm_obs: Some(false),
