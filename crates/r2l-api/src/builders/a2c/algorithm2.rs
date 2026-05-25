@@ -8,6 +8,7 @@ use r2l_core::on_policy::algorithm2::Agent2;
 use r2l_gym::GymEnvBuilder;
 
 use crate::agents::a2c2::{A2C2BurnAgent, A2C2CandleAgent};
+use crate::hooks::a2c2::A2CStats;
 use crate::{
     BurnBackend,
     builders::{
@@ -20,7 +21,6 @@ use crate::{
         on_policy2::OnPolicyAlgorithmBuilder2,
         sampler2::{Sampler2Builder, SamplerHook2Builder, StepHookBound},
     },
-    hooks::a2c::A2CStats,
 };
 
 impl<A: Agent2, B, EB: EnvBuilder, SH: SamplerHook2Builder<Env = EB::Env>>
@@ -198,9 +198,7 @@ impl<EB: EnvBuilder> A2C2CandleAlgorithmBuilder<EB> {
 pub type A2C2BurnAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
     OnPolicyAlgorithmBuilder2<A2C2BurnAgent<BurnBackend>, A2C2BurnAgentBuilder, EB, SH>;
 
-impl<EB: EnvBuilder, SH: SamplerHook2Builder<Env = EB::Env>>
-    A2C2BurnAlgorithmBuilder<EB, SH>
-{
+impl<EB: EnvBuilder, SH: SamplerHook2Builder<Env = EB::Env>> A2C2BurnAlgorithmBuilder<EB, SH> {
     /// Switches the algorithm builder to the Candle backend.
     pub fn with_candle(self, device: candle_core::Device) -> A2C2CandleAlgorithmBuilder<EB, SH> {
         let OnPolicyAlgorithmBuilder2 {
@@ -240,9 +238,7 @@ impl<EB: EnvBuilder, SH: SamplerHook2Builder<Env = EB::Env>>
 pub type A2C2AlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
     A2C2CandleAlgorithmBuilder<EB, SH>;
 
-impl<EB: EnvBuilder, SH: SamplerHook2Builder<Env = EB::Env>>
-    A2C2CandleAlgorithmBuilder<EB, SH>
-{
+impl<EB: EnvBuilder, SH: SamplerHook2Builder<Env = EB::Env>> A2C2CandleAlgorithmBuilder<EB, SH> {
     /// Switches the algorithm builder to the Candle backend.
     pub fn with_candle(self, device: Device) -> A2C2CandleAlgorithmBuilder<EB, SH> {
         let OnPolicyAlgorithmBuilder2 {

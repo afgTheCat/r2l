@@ -1,9 +1,9 @@
 pub mod buffer;
-pub mod fix_sized;
-pub mod fixed_size2;
+// pub mod fix_sized;
+// pub mod fixed_size2;
 pub mod gen_buffer;
-pub mod reusable_vec;
-pub mod variable_sized;
+// pub mod reusable_vec;
+// pub mod variable_sized;
 
 use itertools::izip;
 
@@ -33,104 +33,104 @@ impl<T> Memory<T> {
     }
 }
 
-/// Read-only access to a trajectory or rollout buffer.
-///
-/// All iterators should yield items in the same order and length. Algorithms
-/// assume that the `n`th state, action, reward, and done flags describe one
-/// transition.
-pub trait TrajectoryContainer: Sync {
-    /// Tensor type stored in this trajectory.
-    type Tensor: R2lTensor;
-
-    /// Number of transitions in the trajectory.
-    fn len(&self) -> usize;
-
-    /// Returns whether the trajectory contains no transitions.
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Iterates over observations before each action.
-    fn states(&self) -> impl Iterator<Item = &Self::Tensor>;
-
-    /// Iterates over observations after each action.
-    fn next_states(&self) -> impl Iterator<Item = &Self::Tensor>;
-
-    /// Iterates over actions.
-    fn actions(&self) -> impl Iterator<Item = &Self::Tensor>;
-
-    /// Iterates over rewards.
-    fn rewards(&self) -> impl Iterator<Item = f32>;
-
-    /// Iterates over terminal-state flags.
-    fn terminated(&self) -> impl Iterator<Item = bool>;
-
-    /// Iterates over time-limit or external-cutoff flags.
-    fn truncated(&self) -> impl Iterator<Item = bool>;
-
-    /// Iterates over combined done flags.
-    fn dones(&self) -> impl Iterator<Item = bool> {
-        self.terminated()
-            .zip(self.truncated())
-            .map(|(terminated, truncated)| terminated || truncated)
-    }
-
-    /// Returns the number of terminating states in the buffer. Note that a buffer may contain
-    /// trajectories split accross different trajectory buffers, so this is might not be an accurate
-    /// measure of how many full episodes are contained in the trajectory container
-    fn episode_terminations(&self) -> usize {
-        self.dones().filter(|x| *x).count()
-    }
-
-    /// Iterates over cloned transitions.
-    ///
-    /// This is convenient for conversion code but may be expensive for large
-    /// tensor payloads.
-    fn memories(&self) -> impl Iterator<Item = Memory<Self::Tensor>> {
-        izip!(
-            self.states(),
-            self.next_states(),
-            self.actions(),
-            self.rewards(),
-            self.terminated(),
-            self.truncated()
-        )
-        .map(
-            |(state, next_state, action, reward, terminated, truncated)| Memory {
-                state: state.clone(),
-                next_state: next_state.clone(),
-                action: action.clone(),
-                reward,
-                terminated,
-                truncated,
-            },
-        )
-    }
-}
-
-/// Mutable trajectory buffer that can receive newly collected transitions.
-pub trait ExpandableTrajectoryContainer: TrajectoryContainer + Send + 'static {
-    /// Prepares the buffer to record a fresh rollout.
-    fn begin_rollout(&mut self);
-
-    /// Appends one transition to the buffer.
-    fn push(&mut self, memory: Memory<Self::Tensor>);
-}
-
-/// Mutable access for correcting the most recent state or reward.
-pub trait EditableTrajectoryContainer: TrajectoryContainer {
-    /// Removes and returns the last stored state.
-    fn pop_last_state(&mut self) -> Self::Tensor;
-
-    /// Removes and returns the last stored reward.
-    fn pop_last_reward(&mut self) -> f32;
-
-    /// Replaces the last stored state.
-    fn set_last_state(&mut self, t: Self::Tensor);
-
-    /// Replaces the last stored reward.
-    fn set_last_reward(&mut self, r: f32);
-}
+// /// Read-only access to a trajectory or rollout buffer.
+// ///
+// /// All iterators should yield items in the same order and length. Algorithms
+// /// assume that the `n`th state, action, reward, and done flags describe one
+// /// transition.
+// pub trait TrajectoryContainer: Sync {
+//     /// Tensor type stored in this trajectory.
+//     type Tensor: R2lTensor;
+//
+//     /// Number of transitions in the trajectory.
+//     fn len(&self) -> usize;
+//
+//     /// Returns whether the trajectory contains no transitions.
+//     fn is_empty(&self) -> bool {
+//         self.len() == 0
+//     }
+//
+//     /// Iterates over observations before each action.
+//     fn states(&self) -> impl Iterator<Item = &Self::Tensor>;
+//
+//     /// Iterates over observations after each action.
+//     fn next_states(&self) -> impl Iterator<Item = &Self::Tensor>;
+//
+//     /// Iterates over actions.
+//     fn actions(&self) -> impl Iterator<Item = &Self::Tensor>;
+//
+//     /// Iterates over rewards.
+//     fn rewards(&self) -> impl Iterator<Item = f32>;
+//
+//     /// Iterates over terminal-state flags.
+//     fn terminated(&self) -> impl Iterator<Item = bool>;
+//
+//     /// Iterates over time-limit or external-cutoff flags.
+//     fn truncated(&self) -> impl Iterator<Item = bool>;
+//
+//     /// Iterates over combined done flags.
+//     fn dones(&self) -> impl Iterator<Item = bool> {
+//         self.terminated()
+//             .zip(self.truncated())
+//             .map(|(terminated, truncated)| terminated || truncated)
+//     }
+//
+//     /// Returns the number of terminating states in the buffer. Note that a buffer may contain
+//     /// trajectories split accross different trajectory buffers, so this is might not be an accurate
+//     /// measure of how many full episodes are contained in the trajectory container
+//     fn episode_terminations(&self) -> usize {
+//         self.dones().filter(|x| *x).count()
+//     }
+//
+//     /// Iterates over cloned transitions.
+//     ///
+//     /// This is convenient for conversion code but may be expensive for large
+//     /// tensor payloads.
+//     fn memories(&self) -> impl Iterator<Item = Memory<Self::Tensor>> {
+//         izip!(
+//             self.states(),
+//             self.next_states(),
+//             self.actions(),
+//             self.rewards(),
+//             self.terminated(),
+//             self.truncated()
+//         )
+//         .map(
+//             |(state, next_state, action, reward, terminated, truncated)| Memory {
+//                 state: state.clone(),
+//                 next_state: next_state.clone(),
+//                 action: action.clone(),
+//                 reward,
+//                 terminated,
+//                 truncated,
+//             },
+//         )
+//     }
+// }
+//
+// /// Mutable trajectory buffer that can receive newly collected transitions.
+// pub trait ExpandableTrajectoryContainer: TrajectoryContainer + Send + 'static {
+//     /// Prepares the buffer to record a fresh rollout.
+//     fn begin_rollout(&mut self);
+//
+//     /// Appends one transition to the buffer.
+//     fn push(&mut self, memory: Memory<Self::Tensor>);
+// }
+//
+// /// Mutable access for correcting the most recent state or reward.
+// pub trait EditableTrajectoryContainer: TrajectoryContainer {
+//     /// Removes and returns the last stored state.
+//     fn pop_last_state(&mut self) -> Self::Tensor;
+//
+//     /// Removes and returns the last stored reward.
+//     fn pop_last_reward(&mut self) -> f32;
+//
+//     /// Replaces the last stored state.
+//     fn set_last_state(&mut self, t: Self::Tensor);
+//
+//     /// Replaces the last stored reward.
+//     fn set_last_reward(&mut self, r: f32);
+// }
 
 pub struct ContainerView<T: R2lTensor> {
     pub states: Vec<T>,

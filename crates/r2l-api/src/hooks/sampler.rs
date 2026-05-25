@@ -1,7 +1,5 @@
 use candle_core::{DType, Device, Result, Tensor};
-use r2l_core::{
-    buffers::EditableTrajectoryContainer, env::EnvDescription, models::Actor, tensor::R2lTensor,
-};
+use r2l_core::{env::EnvDescription, models::Actor, tensor::R2lTensor};
 
 use crate::utils::running_mean::RunningMeanStd;
 
@@ -50,40 +48,40 @@ impl EnvNormalizer {
         normalized_rew.clamp(-self.clip_rew, self.clip_rew)
     }
 
-    fn normalize_buffers<B: EditableTrajectoryContainer<Tensor = Tensor>>(
-        &mut self,
-        states: &mut [B],
-        device: &Device,
-    ) -> Result<()> {
-        let n_envs = states.len();
-        let obs: Vec<_> = states.iter_mut().map(|b| b.pop_last_state()).collect();
-        let obs = Tensor::stack(&obs, 0)?;
-        self.obs_rms.update(&obs)?;
-        let obs = self.normalize_obs(obs)?;
-        for (state_idx, obs) in obs.chunk(n_envs, 0)?.into_iter().enumerate() {
-            let obs = obs.squeeze(0)?;
-            states[state_idx].set_last_state(obs);
-        }
-        let rewards: Vec<_> = states.iter_mut().map(|buf| buf.pop_last_reward()).collect();
-        let rewards = Tensor::from_slice(&rewards, rewards.len(), device)?;
-        let gamma = Tensor::full(self.gamma, (), device)?;
-        self.returns = self.returns.broadcast_mul(&gamma)?.add(&rewards)?;
-        self.ret_rms.update(&self.returns)?;
-        let rewards = self.normalize_rew(rewards)?;
-        for (rew_idx, rew) in (rewards.to_vec1()? as Vec<f32>).iter().enumerate() {
-            states[rew_idx].set_last_reward(*rew);
-        }
-        Ok(())
-    }
+    // fn normalize_buffers<B: EditableTrajectoryContainer<Tensor = Tensor>>(
+    //     &mut self,
+    //     states: &mut [B],
+    //     device: &Device,
+    // ) -> Result<()> {
+    //     let n_envs = states.len();
+    //     let obs: Vec<_> = states.iter_mut().map(|b| b.pop_last_state()).collect();
+    //     let obs = Tensor::stack(&obs, 0)?;
+    //     self.obs_rms.update(&obs)?;
+    //     let obs = self.normalize_obs(obs)?;
+    //     for (state_idx, obs) in obs.chunk(n_envs, 0)?.into_iter().enumerate() {
+    //         let obs = obs.squeeze(0)?;
+    //         states[state_idx].set_last_state(obs);
+    //     }
+    //     let rewards: Vec<_> = states.iter_mut().map(|buf| buf.pop_last_reward()).collect();
+    //     let rewards = Tensor::from_slice(&rewards, rewards.len(), device)?;
+    //     let gamma = Tensor::full(self.gamma, (), device)?;
+    //     self.returns = self.returns.broadcast_mul(&gamma)?.add(&rewards)?;
+    //     self.ret_rms.update(&self.returns)?;
+    //     let rewards = self.normalize_rew(rewards)?;
+    //     for (rew_idx, rew) in (rewards.to_vec1()? as Vec<f32>).iter().enumerate() {
+    //         states[rew_idx].set_last_reward(*rew);
+    //     }
+    //     Ok(())
+    // }
 
-    // NOTE: old hook impl
-    fn preprocess_states<B: EditableTrajectoryContainer<Tensor = Tensor>>(
-        &mut self,
-        _policy: &dyn Actor<Tensor = Tensor>,
-        buffers: &mut [B],
-    ) {
-        self.normalize_buffers(buffers, &Device::Cpu).unwrap();
-    }
+    // // NOTE: old hook impl
+    // fn preprocess_states<B: EditableTrajectoryContainer<Tensor = Tensor>>(
+    //     &mut self,
+    //     _policy: &dyn Actor<Tensor = Tensor>,
+    //     buffers: &mut [B],
+    // ) {
+    //     self.normalize_buffers(buffers, &Device::Cpu).unwrap();
+    // }
 }
 
 pub struct NormalizerOptions {

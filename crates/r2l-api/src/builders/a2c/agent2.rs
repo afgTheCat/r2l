@@ -16,7 +16,7 @@ use crate::{
         },
         learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
     },
-    hooks::a2c::A2CStats,
+    hooks::a2c2::A2CStats,
 };
 
 /// Builder for A2C2 agents.

@@ -1,7 +1,4 @@
-use crate::{
-    buffers::buffer::{NewBuffer, TrajectoryView},
-    tensor::R2lTensor,
-};
+use crate::{buffers::buffer::TrajectoryView, tensor::R2lTensor};
 
 pub trait TrajectoryBatchT<T: R2lTensor> {
     fn len(&self) -> usize;
@@ -54,17 +51,3 @@ impl<'a, T: R2lTensor> TrajectoryBatchT<T> for TrajectoryView<'a, T> {
         self.truncated
     }
 }
-
-trait BufferT {
-    type Tensor: R2lTensor;
-
-    fn map_to_view(&mut self) -> impl TrajectoryBatchT<Self::Tensor>;
-}
-
-// impl<T: R2lTensor> BufferT for NewBuffer<T> {
-//     type Tensor = T;
-//
-//     fn map_to_view(&mut self) -> impl TrajectoryBatchT<Self::Tensor> {
-//         self.to_trajectory_view()
-//     }
-// }

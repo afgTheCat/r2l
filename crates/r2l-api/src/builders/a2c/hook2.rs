@@ -1,9 +1,6 @@
 use std::{marker::PhantomData, sync::mpsc::Sender};
 
-use crate::{
-    hooks::a2c::{A2CStats, DefaultA2CHookReporter},
-    hooks::a2c2::DefaultA2CHook2,
-};
+use crate::hooks::a2c2::{A2CStats, DefaultA2CHook2, DefaultA2CHookReporter};
 
 /// Builder for the default A2C2 training hook.
 ///
