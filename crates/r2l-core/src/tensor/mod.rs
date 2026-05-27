@@ -74,6 +74,7 @@ pub trait R2lTensorMath: R2lTensor {
     fn sqr(&self) -> anyhow::Result<Self>;
 }
 
+// TODO: we need this to be removed
 pub trait RunningMeanTensor: R2lTensorMath {
     fn zeros(shape: Vec<usize>) -> Self;
     fn batch_mean(&self) -> anyhow::Result<Self>;

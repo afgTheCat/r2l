@@ -12,3 +12,4 @@ bimodal-array = { version = "0.1.2" }
 r2l-core = { workspace = true }
 crossbeam = { workspace = true }
 rand = { workspace = true }
+itertools = "0.14.0"

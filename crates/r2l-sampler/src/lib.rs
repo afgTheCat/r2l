@@ -1,4 +1,4 @@
-// pub mod sampler;
+mod new_sampler;
 pub mod worker;
 
 use std::sync::Arc;

@@ -6796,6 +6796,7 @@ dependencies = [
  "anyhow",
  "bimodal-array",
  "crossbeam",
+ "itertools 0.14.0",
  "r2l-core",
  "rand 0.10.1",
 ]
