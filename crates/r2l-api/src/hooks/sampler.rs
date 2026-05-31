@@ -7,7 +7,7 @@ use r2l_core::{
     running_mean::RunningMeanStd2,
     tensor::{R2lTensor, RunningMeanTensor},
 };
-use r2l_sampler::{RolloutMode, SamplerHook, SamplerHookResult, worker::WorkerPool};
+use r2l_sampler::{RolloutMode, SamplerHook, SamplerHookResult, WorkerPool};
 
 /// Sampler hook that requests rollout collection until a fixed number of
 /// episodes has been scheduled.
