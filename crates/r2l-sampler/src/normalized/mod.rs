@@ -18,19 +18,12 @@ struct Coordinator<E: Env<Tensor: RunningMeanTensor>> {
     pool: WorkerPool<E>,
     obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    // This is only for backing shit up. we probably don't need it
-    old_obs: Vec<E::Tensor>,
-    old_rewards: Vec<f32>,
-    policy: Box<dyn Actor<Tensor = E::Tensor>>,
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
     fn step_inner(&mut self) -> (Vec<E::Tensor>, Vec<f32>, Vec<bool>) {
         // something like this is implemented
         let (obs, rewards, dones) = self.pool.step();
-        // This is not normalied, why do we need this?
-        self.old_obs = obs.clone();
-        self.old_rewards = rewards.clone();
         let obs = if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
             // TODO: update should be able to have a vector passed in. Will have to check what this
             // means in reality.

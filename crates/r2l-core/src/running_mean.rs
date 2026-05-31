@@ -1,6 +1,6 @@
-use crate::tensor::RunningMeanTensor;
+use crate::tensor::{R2lTensor, RunningMeanTensor};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RunningMeanStd2<T: RunningMeanTensor> {
     pub mean: T,
     pub var: T,
@@ -16,14 +16,6 @@ impl<T: RunningMeanTensor> RunningMeanStd2<T> {
             var,
             count: 0.,
         }
-    }
-
-    pub fn update(&mut self, arr: &T) -> anyhow::Result<()> {
-        let batch_mean = arr.batch_mean()?;
-        let batch_var = arr.biased_var()?;
-        let batch_count = arr.batch_count()?;
-        self.update_from_moments(batch_mean, batch_var, batch_count)?;
-        Ok(())
     }
 
     fn update_from_moments(
@@ -48,5 +40,98 @@ impl<T: RunningMeanTensor> RunningMeanStd2<T> {
         self.var = m_2.mul_scalar(1.0 / tot_count)?;
         self.count = tot_count;
         Ok(())
+    }
+
+    pub fn update(&mut self, arr: &T) -> anyhow::Result<()> {
+        let batch_mean = arr.batch_mean()?;
+        let batch_var = arr.biased_var()?;
+        let batch_count = arr.batch_count()?;
+        self.update_from_moments(batch_mean, batch_var, batch_count)?;
+        Ok(())
+    }
+}
+
+// super simplified running mean, only for vectors
+struct RunningMeanStd3 {
+    mean: Vec<f32>,
+    var: Vec<f32>,
+    count: f32,
+}
+
+fn vector_sub(a: &[f32], b: &[f32]) -> Vec<f32> {
+    a.into_iter()
+        .zip(b.into_iter())
+        .map(|(a, b)| *a - *b)
+        .collect()
+}
+
+fn vector_add(a: &[f32], b: &[f32]) -> Vec<f32> {
+    a.into_iter()
+        .zip(b.into_iter())
+        .map(|(a, b)| *a + *b)
+        .collect()
+}
+
+fn vector_mul_scalar(a: &[f32], c: f32) -> Vec<f32> {
+    a.into_iter().map(|a| *a * c).collect()
+}
+
+fn vector_sqr(a: &[f32]) -> Vec<f32> {
+    a.into_iter().map(|a| a * a).collect()
+}
+
+// mega simplified view
+impl RunningMeanStd3 {
+    pub fn new(size: usize) -> Self {
+        let mean = vec![0.; size];
+        let var = vec![0.; size];
+        Self {
+            mean,
+            var,
+            count: 0.,
+        }
+    }
+
+    fn update_from_moments(
+        &mut self,
+        batch_mean: Vec<f32>,
+        batch_var: Vec<f32>,
+        batch_count: f32,
+    ) -> anyhow::Result<()> {
+        if batch_count == 0.0 {
+            return Ok(());
+        }
+        let tot_count = self.count + batch_count;
+        let delta = vector_sub(&batch_mean, &self.mean);
+        self.mean = vector_add(
+            &self.mean,
+            &vector_mul_scalar(&delta, batch_count / tot_count),
+        );
+        let m_a = vector_mul_scalar(&self.var, self.count);
+        let m_b = vector_mul_scalar(&batch_var, batch_count);
+        let m_2 = vector_add(
+            &vector_add(&m_a, &m_b),
+            &vector_mul_scalar(&vector_sqr(&delta), self.count * batch_count / tot_count),
+        );
+        self.var = vector_mul_scalar(&m_2, 1.0 / tot_count);
+        self.count = tot_count;
+        Ok(())
+    }
+
+    // NOTE: we should only accept
+    pub fn update<T: R2lTensor>(&mut self, t: &[T]) {}
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{running_mean::RunningMeanStd2, tensor::TensorData};
+
+    #[test]
+    fn test_normalize() {
+        // 2d observation
+        let mut rm = RunningMeanStd2::new(vec![2]);
+        let t1 = TensorData::new(vec![1., 2., 3., 4., 5., 6.], vec![3, 2]);
+        rm.update(&t1).unwrap();
+        println!("{:?}", rm);
     }
 }

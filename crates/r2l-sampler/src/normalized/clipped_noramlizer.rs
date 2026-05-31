@@ -10,6 +10,8 @@ pub struct ClippedNormalizer<T: RunningMeanTensor> {
 }
 
 impl<T: RunningMeanTensor> ClippedNormalizer<T> {
+    pub fn update(&mut self) {}
+
     pub fn normalize(&self, obs: Vec<T>) -> Vec<T> {
         let (mean, _) = self.rm.mean.to_vec_and_shape();
         let (var, _) = self.rm.var.to_vec_and_shape();
