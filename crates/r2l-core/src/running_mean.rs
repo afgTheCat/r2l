@@ -119,7 +119,15 @@ impl RunningMeanStd3 {
     }
 
     // NOTE: we should only accept
-    pub fn update<T: R2lTensor>(&mut self, t: &[T]) {}
+    pub fn update<T: R2lTensor>(&mut self, t: &[T]) {
+        let mut datas = vec![];
+        let mut shapes = vec![];
+        for t in t {
+            let (data, shape) = t.to_vec_and_shape();
+            datas.push(data);
+            shapes.push(shape);
+        }
+    }
 }
 
 #[cfg(test)]
