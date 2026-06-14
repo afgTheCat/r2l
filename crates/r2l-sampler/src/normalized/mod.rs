@@ -7,8 +7,13 @@
 mod clipped_noramlizer;
 mod worker;
 
-use itertools::izip;
-use r2l_core::{env::Env, models::Actor, running_mean::RunningMeanStd2, tensor::RunningMeanTensor};
+use r2l_core::{
+    buffers::buffer::{TrajectoryBuffer, TrajectoryView},
+    env::Env,
+    models::Actor,
+    on_policy::algorithm::Sampler,
+    tensor::RunningMeanTensor,
+};
 
 use crate::normalized::{clipped_noramlizer::ClippedNormalizer, worker::WorkerPool};
 
@@ -18,6 +23,8 @@ struct Coordinator<E: Env<Tensor: RunningMeanTensor>> {
     pool: WorkerPool<E>,
     obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    // Here there is no need to have each thread own the buffer
+    buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
@@ -37,4 +44,23 @@ impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
     }
 
     fn step(&mut self) {}
+}
+
+impl<E: Env<Tensor: RunningMeanTensor>> Sampler for Coordinator<E> {
+    type Tensor = E::Tensor;
+
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
+        todo!()
+    }
+
+    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]> {
+        self.buffers
+            .iter()
+            .map(|b| b.to_trajectory_view())
+            .collect::<Vec<_>>()
+    }
+
+    fn shutdown(&mut self) {
+        todo!()
+    }
 }
