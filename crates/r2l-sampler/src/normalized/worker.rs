@@ -4,6 +4,7 @@ use std::{marker::PhantomData, thread::JoinHandle};
 
 use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
+    buffers::{Memory, MultiMemory},
     env::{Env, Snapshot},
     models::Actor,
     rng::RNG,
@@ -13,14 +14,14 @@ use rand::RngExt;
 
 pub struct Worker<E: Env<Tensor: RunningMeanTensor>> {
     last_state: Option<E::Tensor>,
-    policy: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
+    actor: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
     env: E,
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> Worker<E> {
     // state, next_state,
-    fn step(&mut self) -> (E::Tensor, f32, bool) {
-        let Some(policy) = &mut self.policy else {
+    fn step(&mut self) -> Memory<E::Tensor> {
+        let Some(policy) = &mut self.actor else {
             todo!()
         };
         let state = if let Some(state) = self.last_state.take() {
@@ -31,18 +32,25 @@ impl<E: Env<Tensor: RunningMeanTensor>> Worker<E> {
         };
         let action = policy.action(state.clone()).unwrap();
         let Snapshot {
-            mut state,
+            state: mut next_state,
             reward,
             terminated,
             truncated,
-        } = self.env.step(action).unwrap();
+        } = self.env.step(action.clone()).unwrap();
         let done = terminated || truncated;
         if done {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            state = self.env.reset(seed).unwrap();
+            next_state = self.env.reset(seed).unwrap();
         }
-        self.last_state = Some(state.clone());
-        (state, reward, done)
+        self.last_state = Some(next_state.clone());
+        Memory {
+            state,
+            next_state,
+            action,
+            reward,
+            terminated,
+            truncated,
+        }
     }
 }
 
@@ -51,7 +59,7 @@ enum WorkerCommand<T: RunningMeanTensor> {
 }
 
 enum WorkerResult<T: RunningMeanTensor> {
-    Stepped((T, f32, bool)),
+    Stepped(Memory<T>),
 }
 
 type CommandReceiver<T> = Receiver<WorkerCommand<T>>;
@@ -68,9 +76,9 @@ pub struct ThreadWorker<E: Env<Tensor: RunningMeanTensor>> {
 
 impl<E: Env<Tensor: RunningMeanTensor>> ThreadWorker<E> {
     fn step(&mut self) {
-        let step_res = self.worker.step();
+        let memory = self.worker.step();
         self.result_sender
-            .send(WorkerResult::Stepped(step_res))
+            .send(WorkerResult::Stepped(memory))
             .unwrap();
     }
 
@@ -88,10 +96,8 @@ pub struct ThreadWorkers<T: RunningMeanTensor> {
 }
 
 impl<T: RunningMeanTensor> ThreadWorkers<T> {
-    fn step(&self) -> (Vec<T>, Vec<f32>, Vec<bool>) {
-        let mut states = Vec::with_capacity(self.worker_handles.len());
-        let mut rewards = Vec::with_capacity(self.worker_handles.len());
-        let mut dones = Vec::with_capacity(self.worker_handles.len());
+    fn step(&self) -> MultiMemory<T> {
+        let mut multi_memory = MultiMemory::with_capacity(self.worker_handles.len());
         for worker in &self.worker_handles {
             worker
                 .command_sender
@@ -99,13 +105,10 @@ impl<T: RunningMeanTensor> ThreadWorkers<T> {
                 .unwrap();
         }
         for worker in &self.worker_handles {
-            let WorkerResult::Stepped((state, reward, done)) =
-                worker.result_receiver.recv().unwrap();
-            states.push(state);
-            rewards.push(reward);
-            dones.push(done);
+            let WorkerResult::Stepped(memory) = worker.result_receiver.recv().unwrap();
+            multi_memory.push_memory(memory);
         }
-        (states, rewards, dones)
+        multi_memory
     }
 }
 
@@ -115,27 +118,31 @@ pub struct ThreadHandle<T: RunningMeanTensor> {
     result_receiver: ResultReceiver<T>,
 }
 
+struct VecWorkers<E: Env<Tensor: RunningMeanTensor>> {
+    workers: Vec<Worker<E>>,
+}
+
+impl<E: Env<Tensor: RunningMeanTensor>> VecWorkers<E> {
+    fn step(&mut self) -> MultiMemory<E::Tensor> {
+        let mut multi_memory = MultiMemory::with_capacity(self.workers.len());
+        for worker in &mut self.workers {
+            let memory = worker.step();
+            multi_memory.push_memory(memory);
+        }
+        multi_memory
+    }
+}
+
 pub enum WorkerPool<E: Env<Tensor: RunningMeanTensor>> {
-    VecCoord(Vec<Worker<E>>),
+    VecCoord(VecWorkers<E>),
     Thread(ThreadWorkers<E::Tensor>),
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> WorkerPool<E> {
-    pub fn step(&mut self) -> (Vec<E::Tensor>, Vec<f32>, Vec<bool>) {
+    pub fn step(&mut self) -> MultiMemory<E::Tensor> {
         match self {
             Self::Thread(threads) => threads.step(),
-            Self::VecCoord(workers) => {
-                let mut states = Vec::with_capacity(workers.len());
-                let mut rewards = Vec::with_capacity(workers.len());
-                let mut dones = Vec::with_capacity(workers.len());
-                for worker in workers {
-                    let (state, reward, done) = worker.step();
-                    states.push(state);
-                    rewards.push(reward);
-                    dones.push(done);
-                }
-                (states, rewards, dones)
-            }
+            Self::VecCoord(workers) => workers.step(),
         }
     }
 }

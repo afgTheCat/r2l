@@ -1,3 +1,5 @@
+use itertools::izip;
+
 use crate::tensor::R2lTensor;
 
 pub mod buffer;
@@ -26,6 +28,78 @@ impl<T> Memory<T> {
     }
 }
 
+#[derive(Debug)]
+pub struct MultiMemory<T> {
+    pub states: Vec<T>,
+    pub next_states: Vec<T>,
+    pub actions: Vec<T>,
+    pub rewards: Vec<f32>,
+    pub terminateds: Vec<bool>,
+    pub truncateds: Vec<bool>,
+}
+
+impl<T> MultiMemory<T> {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            states: Vec::with_capacity(capacity),
+            next_states: Vec::with_capacity(capacity),
+            actions: Vec::with_capacity(capacity),
+            rewards: Vec::with_capacity(capacity),
+            terminateds: Vec::with_capacity(capacity),
+            truncateds: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn push_memory(&mut self, memory: Memory<T>) {
+        let Memory {
+            state,
+            next_state,
+            action,
+            reward,
+            terminated,
+            truncated,
+        } = memory;
+        self.states.push(state);
+        self.next_states.push(next_state);
+        self.actions.push(action);
+        self.rewards.push(reward);
+        self.terminateds.push(terminated);
+        self.truncateds.push(truncated);
+    }
+
+    // TODO: maybe an iterator would be better
+    pub fn into_memories(self) -> Vec<Memory<T>> {
+        let mut memories = Vec::with_capacity(self.states.len());
+        let Self {
+            states,
+            next_states,
+            actions,
+            rewards,
+            terminateds,
+            truncateds,
+        } = self;
+        for (state, next_state, action, reward, terminated, truncated) in izip!(
+            states,
+            next_states,
+            actions,
+            rewards,
+            terminateds,
+            truncateds
+        ) {
+            memories.push(Memory {
+                state,
+                next_state,
+                action,
+                reward,
+                terminated,
+                truncated,
+            });
+        }
+        memories
+    }
+}
+
+// TODO: do we need this trait?
 pub trait TrajectoryBatch<T: R2lTensor> {
     fn len(&self) -> usize;
 

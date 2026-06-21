@@ -52,7 +52,7 @@ impl<T: RunningMeanTensor> RunningMeanStd2<T> {
 }
 
 // super simplified running mean, only for vectors
-struct RunningMeanStd3 {
+pub struct RunningMeanStd3 {
     mean: Vec<f32>,
     var: Vec<f32>,
     count: f32,
@@ -119,14 +119,56 @@ impl RunningMeanStd3 {
     }
 
     // NOTE: we should only accept
-    pub fn update<T: R2lTensor>(&mut self, t: &[T]) {
+    pub fn update<T: R2lTensor>(&mut self, t: &[T]) -> anyhow::Result<()> {
         let mut datas = vec![];
         let mut shapes = vec![];
         for t in t {
             let (data, shape) = t.to_vec_and_shape();
+            anyhow::ensure!(shape.len() == 1, "RunningMeanStd3 only accepts vectors");
+            anyhow::ensure!(
+                data.len() == self.mean.len(),
+                "observation size does not match running mean size"
+            );
             datas.push(data);
             shapes.push(shape);
         }
+
+        let batch_count = datas.len() as f32;
+        if batch_count == 0.0 {
+            return self.update_from_moments(
+                vec![0.0; self.mean.len()],
+                vec![0.0; self.var.len()],
+                batch_count,
+            );
+        }
+        anyhow::ensure!(
+            shapes.iter().all(|shape| shape == &shapes[0]),
+            "all observations must have the same shape"
+        );
+
+        let mut batch_mean = vec![0.0; self.mean.len()];
+        for data in &datas {
+            for (mean, value) in batch_mean.iter_mut().zip(data) {
+                *mean += value;
+            }
+        }
+        for mean in &mut batch_mean {
+            *mean /= batch_count;
+        }
+
+        let mut batch_var = vec![0.0; self.var.len()];
+        for data in &datas {
+            for ((var, value), mean) in batch_var.iter_mut().zip(data).zip(&batch_mean) {
+                let delta = value - mean;
+                *var += delta * delta;
+            }
+        }
+        for var in &mut batch_var {
+            *var /= batch_count;
+        }
+
+        self.update_from_moments(batch_mean, batch_var, batch_count)?;
+        Ok(())
     }
 }
 

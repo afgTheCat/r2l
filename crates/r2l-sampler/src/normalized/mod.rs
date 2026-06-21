@@ -7,10 +7,12 @@
 mod clipped_noramlizer;
 mod worker;
 
+use std::sync::MutexGuard;
+
 use itertools::izip;
 use r2l_core::{
     buffers::{
-        Memory,
+        Memory, MultiMemory,
         buffer::{TrajectoryBuffer, TrajectoryView},
     },
     env::Env,
@@ -32,41 +34,19 @@ struct Coordinator<E: Env<Tensor: RunningMeanTensor>> {
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
-    fn step_inner(&mut self) -> (Vec<E::Tensor>, Vec<f32>, Vec<bool>) {
-        // something like this is implemented
-        let (obs, rewards, dones) = self.pool.step();
-        let obs = if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
-            // TODO: update should be able to have a vector passed in. Will have to check what this
-            // means in reality.
-            // obs_normalizer.rm.update(&obs);
-            // TODO: In sb3, this is normalized either way
-            obs_normalizer.normalize(obs)
-        } else {
-            obs
-        };
-        (obs, rewards, dones)
-    }
-
     fn step(&mut self) {
-        let (obs, rewards, dones) = self.pool.step();
-        let obs = if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
+        let mut multi_memory = self.pool.step();
+        multi_memory.next_states = if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
             // TODO: update should be able to have a vector passed in. Will have to check what this
             // means in reality.
             // obs_normalizer.rm.update(&obs);
             // TODO: In sb3, this is normalized either way
-            obs_normalizer.normalize(obs)
+            obs_normalizer.normalize(std::mem::take(&mut multi_memory.next_states))
         } else {
-            obs
+            std::mem::take(&mut multi_memory.next_states)
         };
-        for (idx, (state, reward, done)) in izip!(obs, rewards, dones).enumerate() {
-            let memory = Memory {
-                state: state.clone(),
-                next_state: state.clone(),
-                action: state.clone(),
-                reward,
-                terminated: done,
-                truncated: done,
-            };
+        let memories = multi_memory.into_memories();
+        for (idx, memory) in memories.into_iter().enumerate() {
             self.buffers[idx].push(memory);
         }
     }
