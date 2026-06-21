@@ -7,8 +7,12 @@
 mod clipped_noramlizer;
 mod worker;
 
+use itertools::izip;
 use r2l_core::{
-    buffers::buffer::{TrajectoryBuffer, TrajectoryView},
+    buffers::{
+        Memory,
+        buffer::{TrajectoryBuffer, TrajectoryView},
+    },
     env::Env,
     models::Actor,
     on_policy::algorithm::Sampler,
@@ -43,7 +47,29 @@ impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
         (obs, rewards, dones)
     }
 
-    fn step(&mut self) {}
+    fn step(&mut self) {
+        let (obs, rewards, dones) = self.pool.step();
+        let obs = if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
+            // TODO: update should be able to have a vector passed in. Will have to check what this
+            // means in reality.
+            // obs_normalizer.rm.update(&obs);
+            // TODO: In sb3, this is normalized either way
+            obs_normalizer.normalize(obs)
+        } else {
+            obs
+        };
+        for (idx, (state, reward, done)) in izip!(obs, rewards, dones).enumerate() {
+            let memory = Memory {
+                state: state.clone(),
+                next_state: state.clone(),
+                action: state.clone(),
+                reward,
+                terminated: done,
+                truncated: done,
+            };
+            self.buffers[idx].push(memory);
+        }
+    }
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> Sampler for Coordinator<E> {

@@ -18,6 +18,7 @@ pub struct Worker<E: Env<Tensor: RunningMeanTensor>> {
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> Worker<E> {
+    // state, next_state,
     fn step(&mut self) -> (E::Tensor, f32, bool) {
         let Some(policy) = &mut self.policy else {
             todo!()
