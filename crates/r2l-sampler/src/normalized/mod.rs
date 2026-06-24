@@ -7,14 +7,8 @@
 mod clipped_noramlizer;
 mod worker;
 
-use std::sync::MutexGuard;
-
-use itertools::izip;
 use r2l_core::{
-    buffers::{
-        Memory, MultiMemory,
-        buffer::{TrajectoryBuffer, TrajectoryView},
-    },
+    buffers::buffer::{TrajectoryBuffer, TrajectoryView},
     env::Env,
     models::Actor,
     on_policy::algorithm::Sampler,
@@ -23,14 +17,14 @@ use r2l_core::{
 
 use crate::normalized::{clipped_noramlizer::ClippedNormalizer, worker::WorkerPool};
 
-const EPS: f32 = 1e-8;
-
-struct Coordinator<E: Env<Tensor: RunningMeanTensor>> {
+pub struct Coordinator<E: Env<Tensor: RunningMeanTensor>> {
     pool: WorkerPool<E>,
     obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     // Here there is no need to have each thread own the buffer
     buffers: Vec<TrajectoryBuffer<E::Tensor>>,
+    // TODO: we might want later on. Maybe other things?
+    n_steps: usize,
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
@@ -45,6 +39,12 @@ impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
         } else {
             std::mem::take(&mut multi_memory.next_states)
         };
+
+        // multi_memory.rewards = if let Some(rew_normalizer) = self.reward_normalizer.as_mut() {
+        //     rew_normalizer.normalize(std::mem::take(&mut multi_memory.rewards))
+        // } else {
+        //     std::mem::take(&mut multi_memory.rewards)
+        // };
         let memories = multi_memory.into_memories();
         for (idx, memory) in memories.into_iter().enumerate() {
             self.buffers[idx].push(memory);
@@ -56,7 +56,13 @@ impl<E: Env<Tensor: RunningMeanTensor>> Sampler for Coordinator<E> {
     type Tensor = E::Tensor;
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
-        todo!()
+        self.buffers.iter_mut().for_each(|b| b.clear());
+        self.pool.set_policy(actor.clone());
+        let mut steps = 0;
+        while steps < self.n_steps {
+            self.step();
+            steps += 1;
+        }
     }
 
     fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]> {
@@ -66,7 +72,5 @@ impl<E: Env<Tensor: RunningMeanTensor>> Sampler for Coordinator<E> {
             .collect::<Vec<_>>()
     }
 
-    fn shutdown(&mut self) {
-        todo!()
-    }
+    fn shutdown(&mut self) {}
 }

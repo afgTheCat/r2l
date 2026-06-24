@@ -17,17 +17,12 @@ use r2l_core::on_policy::algorithm::Sampler;
 use r2l_core::running_mean::RunningMeanStd2;
 use r2l_core::tensor::RunningMeanTensor;
 
+use crate::RolloutMode;
 use crate::direct::worker::ThreadHandle;
 use crate::direct::worker::ThreadWorker;
 use crate::direct::worker::ThreadWorkers;
 use crate::direct::worker::Worker;
 use crate::direct::worker::WorkerPool;
-
-#[derive(Debug, Clone, Copy)]
-pub enum RolloutMode {
-    EpisodeBound { n_episodes: usize },
-    StepBound { n_steps: usize },
-}
 
 /// Execution strategy used by [`R2lSampler`] workers.
 ///
