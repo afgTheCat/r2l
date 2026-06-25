@@ -61,7 +61,6 @@ impl<E: Env> SamplerHook for EpisodeBoundHook<E> {
 pub struct StepBoundHook<E: Env<Tensor: RunningMeanTensor>> {
     num_steps: usize,
     steps_scheduled: usize,
-    observation_normalizer: Option<RunningMeanStd2<E::Tensor>>,
     _p: PhantomData<E>,
 }
 
@@ -71,55 +70,8 @@ impl<E: Env<Tensor: RunningMeanTensor>> StepBoundHook<E> {
         Self {
             num_steps,
             steps_scheduled: 0,
-            observation_normalizer: None,
             _p: PhantomData,
         }
-    }
-
-    /// Enables observation normalization with the provided running statistics.
-    pub fn with_observation_normalizer(mut self, normalizer: RunningMeanStd2<E::Tensor>) -> Self {
-        self.observation_normalizer = Some(normalizer);
-        self
-    }
-
-    fn normalize_observations(&mut self, observations: Vec<E::Tensor>) -> Vec<E::Tensor> {
-        const EPS: f32 = 1e-8;
-        const CLIP_OBS: f32 = 10.0;
-
-        let Some(observation_normalizer) = self.observation_normalizer.as_mut() else {
-            return observations;
-        };
-
-        let mut batch_data = Vec::new();
-        let mut feature_shape = None;
-        for observation in &observations {
-            let (data, shape) = observation.to_vec_and_shape();
-            feature_shape = Some(shape);
-            batch_data.extend(data);
-        }
-
-        let mut batch_shape = vec![observations.len()];
-        batch_shape.extend(feature_shape.unwrap_or_default());
-        let batch = E::Tensor::from_vec_and_shape(batch_data, batch_shape);
-        observation_normalizer.update(&batch).unwrap();
-
-        let (mean, _) = observation_normalizer.mean.to_vec_and_shape();
-        let (var, _) = observation_normalizer.var.to_vec_and_shape();
-
-        observations
-            .into_iter()
-            .map(|observation| {
-                let (data, shape) = observation.to_vec_and_shape();
-                let normalized = data
-                    .into_iter()
-                    .zip(mean.iter().zip(var.iter()))
-                    .map(|(value, (mean, var))| {
-                        ((value - *mean) / (var + EPS).sqrt()).clamp(-CLIP_OBS, CLIP_OBS)
-                    })
-                    .collect();
-                E::Tensor::from_vec_and_shape(normalized, shape)
-            })
-            .collect()
     }
 }
 
@@ -131,39 +83,14 @@ impl<E: Env<Tensor: RunningMeanTensor>> SamplerHook for StepBoundHook<E> {
         _buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
         worker_pool: &mut WorkerPool<Self::E>,
     ) -> SamplerHookResult {
-        if self.observation_normalizer.is_none() {
-            if self.steps_scheduled == self.num_steps {
-                self.steps_scheduled = 0;
-                SamplerHookResult::Stop
-            } else {
-                self.steps_scheduled = self.num_steps;
-                SamplerHookResult::Bound(RolloutMode::StepBound {
-                    n_steps: self.num_steps,
-                })
-            }
-        } else if self.steps_scheduled < self.num_steps {
-            let last_states = worker_pool
-                .get_last_states()
-                .or_else(|| Some(worker_pool.reset_envs_uninserted()))
-                .unwrap();
-            let normalized_observations = self.normalize_observations(last_states);
-            worker_pool.set_last_states(normalized_observations.clone());
-            worker_pool.replace_last_next_states(normalized_observations);
-            self.steps_scheduled += 1;
-            SamplerHookResult::Bound(RolloutMode::StepBound { n_steps: 1 })
-        } else {
+        if self.steps_scheduled == self.num_steps {
             self.steps_scheduled = 0;
-            let last_states = worker_pool.get_last_states().unwrap();
-            let normalized_observations = self.normalize_observations(last_states);
-            worker_pool.replace_last_next_states(normalized_observations);
             SamplerHookResult::Stop
+        } else {
+            self.steps_scheduled = self.num_steps;
+            SamplerHookResult::Bound(RolloutMode::StepBound {
+                n_steps: self.num_steps,
+            })
         }
-    }
-
-    fn observation_normalizer(&self) -> Option<RunningMeanStd2<<Self::E as Env>::Tensor>>
-    where
-        <Self::E as Env>::Tensor: RunningMeanTensor,
-    {
-        self.observation_normalizer.clone()
     }
 }

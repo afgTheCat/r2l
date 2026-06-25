@@ -214,23 +214,3 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
         })
     }
 }
-
-impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder<Env: Env<Tensor: RunningMeanTensor>>>
-    OnPolicyAlgorithmBuilder<A, AB, EB, StepHookBound<EB::Env>>
-{
-    /// Enables observation normalization for step-bound rollout collection.
-    pub fn with_observation_normalizer(mut self) -> Self {
-        let observation_size = self
-            .sampler_builder
-            .env_builder
-            .env_description()
-            .expect("environment description should be available")
-            .observation_size();
-        let observation_normalizer = RunningMeanStd2::new(vec![observation_size]);
-        self.sampler_builder.hook_builder = self
-            .sampler_builder
-            .hook_builder
-            .with_observation_normalizer(observation_normalizer);
-        self
-    }
-}

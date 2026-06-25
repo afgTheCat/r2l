@@ -140,8 +140,6 @@ impl<
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
         if let Some(evaluator) = &mut self.evaluator {
-            let observation_normalizer = runtime.sampler.observation_normalizer();
-            evaluator.set_observation_normalizer(observation_normalizer);
             let actor = runtime.actor();
             let adapted_actor = runtime.adapted_actor();
             evaluator.eval(adapted_actor, actor);

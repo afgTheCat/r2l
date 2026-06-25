@@ -36,14 +36,6 @@ pub trait Sampler {
     /// Creates a view for the agents.
     fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]>;
 
-    // TODO: THIS SHOULD BE REMOVED
-    fn observation_normalizer(&self) -> Option<RunningMeanStd2<Self::Tensor>>
-    where
-        Self::Tensor: RunningMeanTensor,
-    {
-        None
-    }
-
     /// Releases sampler resources before the training loop exits.
     fn shutdown(&mut self) {}
 }

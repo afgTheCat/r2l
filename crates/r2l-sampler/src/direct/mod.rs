@@ -38,13 +38,6 @@ pub trait SamplerHook {
         buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
         worker_pool: &mut WorkerPool<Self::E>,
     ) -> SamplerHookResult;
-
-    fn observation_normalizer(&self) -> Option<RunningMeanStd2<<Self::E as Env>::Tensor>>
-    where
-        <Self::E as Env>::Tensor: RunningMeanTensor,
-    {
-        None
-    }
 }
 
 pub struct R2lSampler<E: Env, H: SamplerHook<E = E>> {
@@ -62,13 +55,6 @@ impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
         self.buffers
             .lock_map(|buffer| buffer.to_trajectory_view())
             .unwrap()
-    }
-
-    pub fn observation_normalizer(&self) -> Option<RunningMeanStd2<E::Tensor>>
-    where
-        E::Tensor: RunningMeanTensor,
-    {
-        self.hook.observation_normalizer()
     }
 
     pub fn build<EB: EnvBuilder<Env = E>>(
@@ -140,13 +126,6 @@ impl<E: Env, H: SamplerHook<E = E>> Sampler for R2lSampler<E, H> {
         self.buffers
             .lock_map(|buffer| buffer.to_trajectory_view())
             .unwrap()
-    }
-
-    fn observation_normalizer(&self) -> Option<RunningMeanStd2<Self::Tensor>>
-    where
-        Self::Tensor: RunningMeanTensor,
-    {
-        self.hook.observation_normalizer()
     }
 
     fn shutdown(&mut self) {

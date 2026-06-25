@@ -32,7 +32,6 @@ pub trait SamplerHookBuilder {
 /// number of environment steps have been collected per active worker.
 pub struct StepHookBound<E: Env<Tensor: RunningMeanTensor>> {
     n_step: usize,
-    observation_normalizer: Option<RunningMeanStd2<E::Tensor>>,
     _phantom: PhantomData<E>,
 }
 
@@ -41,21 +40,8 @@ impl<E: Env<Tensor: RunningMeanTensor>> StepHookBound<E> {
     pub fn new(n_step: usize) -> Self {
         Self {
             n_step,
-            observation_normalizer: None,
             _phantom: PhantomData,
         }
-    }
-
-    /// Enables observation normalization for the step-bound hook.
-    pub fn with_observation_normalizer(
-        mut self,
-        observation_normalizer: RunningMeanStd2<E::Tensor>,
-    ) -> Self
-    where
-        E::Tensor: RunningMeanTensor,
-    {
-        self.observation_normalizer = Some(observation_normalizer);
-        self
     }
 }
 
@@ -65,11 +51,7 @@ impl<E: Env<Tensor: RunningMeanTensor>> SamplerHookBuilder for StepHookBound<E> 
 
     fn build(self) -> Self::Target {
         let hook = StepBoundHook::new(self.n_step);
-        if let Some(observation_normalizer) = self.observation_normalizer {
-            hook.with_observation_normalizer(observation_normalizer)
-        } else {
-            hook
-        }
+        hook
     }
 }
 
