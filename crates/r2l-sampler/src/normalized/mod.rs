@@ -7,17 +7,25 @@
 mod clipped_noramlizer;
 mod worker;
 
+use std::sync::Arc;
+
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
-    env::Env,
+    env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::Sampler,
     tensor::RunningMeanTensor,
 };
 
-use crate::normalized::{clipped_noramlizer::ClippedNormalizer, worker::WorkerPool};
+use crate::{
+    SamplerExecutionMode,
+    normalized::{
+        clipped_noramlizer::ClippedNormalizer,
+        worker::{ThreadHandle, ThreadWorker, ThreadWorkers, VecWorkers, Worker, WorkerPool},
+    },
+};
 
-pub struct Coordinator<E: Env<Tensor: RunningMeanTensor>> {
+pub struct R2lNormalizedSampler<E: Env<Tensor: RunningMeanTensor>> {
     pool: WorkerPool<E>,
     obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
@@ -27,7 +35,51 @@ pub struct Coordinator<E: Env<Tensor: RunningMeanTensor>> {
     n_steps: usize,
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
+impl<E: Env<Tensor: RunningMeanTensor>> R2lNormalizedSampler<E> {
+    fn build<EB: EnvBuilder<Env = E>>(
+        env_builder: EnvBuilderType<EB>,
+        n_steps: usize,
+        execution_mode: SamplerExecutionMode,
+    ) -> Self {
+        let num_envs = env_builder.num_envs();
+        let buffers = vec![TrajectoryBuffer::default(); num_envs];
+        let pool = match execution_mode {
+            SamplerExecutionMode::Vec => {
+                let vec_workers = VecWorkers::from_env_builder(env_builder);
+                WorkerPool::VecCoord(vec_workers)
+            }
+            SamplerExecutionMode::Thread => {
+                let (command_tx, command_rx) = crossbeam::channel::unbounded();
+                let (res_tx, res_rx) = crossbeam::channel::unbounded();
+                let num_envs = env_builder.num_envs();
+                let env_builder = Arc::new(env_builder);
+                let thread_handles = (0..num_envs)
+                    .map(|env_idx| {
+                        let env_builder = env_builder.clone();
+                        let res_tx = res_tx.clone();
+                        let command_rx = command_rx.clone();
+                        let handle = std::thread::spawn(move || {
+                            let env = env_builder.build_idx(env_idx).unwrap();
+                            let worker = Worker::from_env(env);
+                            let mut thread_worker = ThreadWorker::new(worker, command_rx, res_tx);
+                            thread_worker.work();
+                        });
+                        ThreadHandle::new(handle, command_tx.clone(), res_rx.clone())
+                    })
+                    .collect();
+                let thread_workers = ThreadWorkers::new(thread_handles);
+                WorkerPool::Thread(thread_workers)
+            }
+        };
+        Self {
+            buffers,
+            pool,
+            obs_normalizer: None,
+            reward_normalizer: None,
+            n_steps,
+        }
+    }
+
     fn step(&mut self) {
         let mut multi_memory = self.pool.step();
         multi_memory.next_states = if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
@@ -40,6 +92,7 @@ impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
             std::mem::take(&mut multi_memory.next_states)
         };
 
+        // TODO: add this once the normalizer is working as intended
         // multi_memory.rewards = if let Some(rew_normalizer) = self.reward_normalizer.as_mut() {
         //     rew_normalizer.normalize(std::mem::take(&mut multi_memory.rewards))
         // } else {
@@ -52,7 +105,7 @@ impl<E: Env<Tensor: RunningMeanTensor>> Coordinator<E> {
     }
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> Sampler for Coordinator<E> {
+impl<E: Env<Tensor: RunningMeanTensor>> Sampler for R2lNormalizedSampler<E> {
     type Tensor = E::Tensor;
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {

@@ -5,7 +5,7 @@ use std::{marker::PhantomData, thread::JoinHandle};
 use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{Memory, MultiMemory},
-    env::{Env, Snapshot},
+    env::{Env, EnvBuilder, EnvBuilderType, Snapshot},
     models::Actor,
     rng::RNG,
     tensor::RunningMeanTensor,
@@ -19,6 +19,14 @@ pub struct Worker<E: Env<Tensor: RunningMeanTensor>> {
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> Worker<E> {
+    pub fn from_env(env: E) -> Self {
+        Self {
+            last_state: None,
+            actor: None,
+            env,
+        }
+    }
+
     // state, next_state,
     fn step(&mut self) -> Memory<E::Tensor> {
         let Some(policy) = &mut self.actor else {
@@ -54,12 +62,12 @@ impl<E: Env<Tensor: RunningMeanTensor>> Worker<E> {
     }
 }
 
-enum WorkerCommand<T: RunningMeanTensor> {
+pub enum WorkerCommand<T: RunningMeanTensor> {
     Step(PhantomData<T>),
     SetPolicy(Box<dyn Actor<Tensor = T>>),
 }
 
-enum WorkerResult<T: RunningMeanTensor> {
+pub enum WorkerResult<T: RunningMeanTensor> {
     Stepped(Memory<T>),
     PolicySet,
 }
@@ -77,6 +85,18 @@ pub struct ThreadWorker<E: Env<Tensor: RunningMeanTensor>> {
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> ThreadWorker<E> {
+    pub fn new(
+        worker: Worker<E>,
+        command_receiver: CommandReceiver<E::Tensor>,
+        result_sender: ResultSender<E::Tensor>,
+    ) -> Self {
+        Self {
+            worker,
+            command_receiver,
+            result_sender,
+        }
+    }
+
     fn step(&mut self) {
         let memory = self.worker.step();
         self.result_sender
@@ -84,7 +104,7 @@ impl<E: Env<Tensor: RunningMeanTensor>> ThreadWorker<E> {
             .unwrap();
     }
 
-    fn work(&mut self) {
+    pub fn work(&mut self) {
         while let Ok(command) = self.command_receiver.recv() {
             match command {
                 WorkerCommand::Step(_) => self.step(),
@@ -102,6 +122,10 @@ pub struct ThreadWorkers<T: RunningMeanTensor> {
 }
 
 impl<T: RunningMeanTensor> ThreadWorkers<T> {
+    pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
+        Self { worker_handles }
+    }
+
     fn step(&self) -> MultiMemory<T> {
         let mut multi_memory = MultiMemory::with_capacity(self.worker_handles.len());
         for worker in &self.worker_handles {
@@ -138,11 +162,36 @@ pub struct ThreadHandle<T: RunningMeanTensor> {
     result_receiver: ResultReceiver<T>,
 }
 
-struct VecWorkers<E: Env<Tensor: RunningMeanTensor>> {
+impl<T: RunningMeanTensor> ThreadHandle<T> {
+    pub fn new(
+        handle: JoinHandle<()>,
+        command_sender: CommandSender<T>,
+        result_receiver: ResultReceiver<T>,
+    ) -> Self {
+        Self {
+            handle,
+            command_sender,
+            result_receiver,
+        }
+    }
+}
+
+pub struct VecWorkers<E: Env<Tensor: RunningMeanTensor>> {
     workers: Vec<Worker<E>>,
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> VecWorkers<E> {
+    pub fn from_env_builder<EB: EnvBuilder<Env = E>>(env_builder: EnvBuilderType<EB>) -> Self {
+        let num_envs = env_builder.num_envs();
+        let workers = (0..num_envs)
+            .map(|idx| {
+                let env = env_builder.build_idx(idx).unwrap();
+                Worker::from_env(env)
+            })
+            .collect();
+        Self { workers }
+    }
+
     fn step(&mut self) -> MultiMemory<E::Tensor> {
         let mut multi_memory = MultiMemory::with_capacity(self.workers.len());
         for worker in &mut self.workers {

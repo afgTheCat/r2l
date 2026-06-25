@@ -18,22 +18,12 @@ use r2l_core::running_mean::RunningMeanStd2;
 use r2l_core::tensor::RunningMeanTensor;
 
 use crate::RolloutMode;
+use crate::SamplerExecutionMode;
 use crate::direct::worker::ThreadHandle;
 use crate::direct::worker::ThreadWorker;
 use crate::direct::worker::ThreadWorkers;
 use crate::direct::worker::Worker;
 use crate::direct::worker::WorkerPool;
-
-/// Execution strategy used by [`R2lSampler`] workers.
-///
-/// This controls whether environment workers run inline in the current thread
-/// or in dedicated background threads.
-pub enum SamplerExecutionMode {
-    /// Run sampler workers inline in a local vector on the current thread.
-    Vec,
-    /// Run sampler workers in dedicated background threads.
-    Thread,
-}
 
 pub enum SamplerHookResult {
     Stop,
