@@ -95,3 +95,22 @@ fn mountain_car_continuous_candle_normalized_sampler() {
         gradient_clipping: Some(5.0),
     });
 }
+
+#[test]
+fn pendulum_candle_normalized_sampler() {
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "Pendulum-v1",
+        n_envs: 4,
+        clip_range: Some(0.2),
+        entropy_coeff: 0.0,
+        gae_lambda: 0.95,
+        gamma: 0.9,
+        learning_rate: Some(0.001),
+        sample_size: None,
+        total_epochs: 10,
+        n_steps: 1024,
+        n_timesteps: 100000,
+        vf_coeff: None,
+        gradient_clipping: None,
+    });
+}
