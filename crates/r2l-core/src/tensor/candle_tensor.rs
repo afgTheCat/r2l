@@ -7,8 +7,8 @@ impl R2lTensor for Tensor {
         self.to_vec1().unwrap()
     }
 
-    fn to_vec_and_shape(&self) -> (Vec<f32>, Vec<usize>) {
-        (self.to_vec1().unwrap(), self.shape().dims().to_vec())
+    fn to_shape(&self) -> Vec<usize> {
+        self.shape().dims().to_vec()
     }
 
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {

@@ -19,7 +19,15 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns the tensor values as a flat vector.
     fn to_vec(&self) -> Vec<f32>;
 
-    fn to_vec_and_shape(&self) -> (Vec<f32>, Vec<usize>);
+    /// Returns the tensor shape
+    fn to_shape(&self) -> Vec<usize>;
+
+    /// Returns the tensors vec and shape
+    fn to_vec_and_shape(&self) -> (Vec<f32>, Vec<usize>) {
+        let vec = self.to_vec();
+        let shape = self.to_shape();
+        (vec, shape)
+    }
 
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self;
 
@@ -28,11 +36,13 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
         Self::from_vec_and_shape(data, shape)
     }
 
+    // TODO: this default impl might be wasteful
     /// Returns the length of the tensor
     fn len(&self) -> usize {
         self.to_vec().len()
     }
 
+    // TODO: this deafult might be wasteful
     /// Returns true if the tensor is empty
     fn is_empty(&self) -> bool {
         self.to_vec().is_empty()
@@ -122,8 +132,8 @@ impl R2lTensor for TensorData {
         self.data.clone()
     }
 
-    fn to_vec_and_shape(&self) -> (Vec<f32>, Vec<usize>) {
-        (self.data.clone(), self.shape.clone())
+    fn to_shape(&self) -> Vec<usize> {
+        self.shape.clone()
     }
 
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
