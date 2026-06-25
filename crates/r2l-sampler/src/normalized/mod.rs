@@ -36,7 +36,7 @@ pub struct R2lNormalizedSampler<E: Env<Tensor: RunningMeanTensor>> {
 }
 
 impl<E: Env<Tensor: RunningMeanTensor>> R2lNormalizedSampler<E> {
-    fn build<EB: EnvBuilder<Env = E>>(
+    pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         n_steps: usize,
         execution_mode: SamplerExecutionMode,
