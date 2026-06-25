@@ -14,7 +14,7 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::Sampler,
-    tensor::RunningMeanTensor,
+    tensor::R2lTensor,
 };
 
 use crate::{
@@ -25,7 +25,7 @@ use crate::{
     },
 };
 
-pub struct R2lNormalizedSampler<E: Env<Tensor: RunningMeanTensor>> {
+pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>> {
     pool: WorkerPool<E>,
     obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
@@ -35,7 +35,7 @@ pub struct R2lNormalizedSampler<E: Env<Tensor: RunningMeanTensor>> {
     n_steps: usize,
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> R2lNormalizedSampler<E> {
+impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         n_steps: usize,
@@ -105,7 +105,7 @@ impl<E: Env<Tensor: RunningMeanTensor>> R2lNormalizedSampler<E> {
     }
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> Sampler for R2lNormalizedSampler<E> {
+impl<E: Env<Tensor: R2lTensor>> Sampler for R2lNormalizedSampler<E> {
     type Tensor = E::Tensor;
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {

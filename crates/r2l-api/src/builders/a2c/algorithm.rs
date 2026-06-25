@@ -6,7 +6,7 @@ use r2l_agents::on_policy_algorithms::a2c::A2CParams;
 use r2l_core::on_policy::algorithm::Agent;
 use r2l_core::{
     env::{Env, EnvBuilder},
-    tensor::RunningMeanTensor,
+    tensor::R2lTensor,
 };
 use r2l_gym::GymEnvBuilder;
 
@@ -182,7 +182,7 @@ impl A2CCandleAlgorithmBuilder<GymEnvBuilder> {
     }
 }
 
-impl<EB: EnvBuilder<Env: Env<Tensor: RunningMeanTensor>>> A2CCandleAlgorithmBuilder<EB> {
+impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> A2CCandleAlgorithmBuilder<EB> {
     /// Creates an A2C algorithm builder for a custom environment builder.
     pub fn new(builder: EB, n_envs: usize) -> Self {
         Self::from_sampler_and_agent_builder(

@@ -8,17 +8,17 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType, Snapshot},
     models::Actor,
     rng::RNG,
-    tensor::RunningMeanTensor,
+    tensor::R2lTensor,
 };
 use rand::RngExt;
 
-pub struct Worker<E: Env<Tensor: RunningMeanTensor>> {
+pub struct Worker<E: Env<Tensor: R2lTensor>> {
     last_state: Option<E::Tensor>,
     actor: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
     env: E,
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> Worker<E> {
+impl<E: Env<Tensor: R2lTensor>> Worker<E> {
     pub fn from_env(env: E) -> Self {
         Self {
             last_state: None,
@@ -62,12 +62,12 @@ impl<E: Env<Tensor: RunningMeanTensor>> Worker<E> {
     }
 }
 
-pub enum WorkerCommand<T: RunningMeanTensor> {
+pub enum WorkerCommand<T: R2lTensor> {
     Step(PhantomData<T>),
     SetPolicy(Box<dyn Actor<Tensor = T>>),
 }
 
-pub enum WorkerResult<T: RunningMeanTensor> {
+pub enum WorkerResult<T: R2lTensor> {
     Stepped(Memory<T>),
     PolicySet,
 }
@@ -78,13 +78,13 @@ type CommandSender<T> = Sender<WorkerCommand<T>>;
 type ResultReceiver<T> = Receiver<WorkerResult<T>>;
 type ResultSender<T> = Sender<WorkerResult<T>>;
 
-pub struct ThreadWorker<E: Env<Tensor: RunningMeanTensor>> {
+pub struct ThreadWorker<E: Env<Tensor: R2lTensor>> {
     worker: Worker<E>,
     command_receiver: CommandReceiver<E::Tensor>,
     result_sender: ResultSender<E::Tensor>,
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> ThreadWorker<E> {
+impl<E: Env<Tensor: R2lTensor>> ThreadWorker<E> {
     pub fn new(
         worker: Worker<E>,
         command_receiver: CommandReceiver<E::Tensor>,
@@ -117,11 +117,11 @@ impl<E: Env<Tensor: RunningMeanTensor>> ThreadWorker<E> {
     }
 }
 
-pub struct ThreadWorkers<T: RunningMeanTensor> {
+pub struct ThreadWorkers<T: R2lTensor> {
     worker_handles: Vec<ThreadHandle<T>>,
 }
 
-impl<T: RunningMeanTensor> ThreadWorkers<T> {
+impl<T: R2lTensor> ThreadWorkers<T> {
     pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
         Self { worker_handles }
     }
@@ -156,13 +156,13 @@ impl<T: RunningMeanTensor> ThreadWorkers<T> {
     }
 }
 
-pub struct ThreadHandle<T: RunningMeanTensor> {
+pub struct ThreadHandle<T: R2lTensor> {
     handle: JoinHandle<()>,
     command_sender: CommandSender<T>,
     result_receiver: ResultReceiver<T>,
 }
 
-impl<T: RunningMeanTensor> ThreadHandle<T> {
+impl<T: R2lTensor> ThreadHandle<T> {
     pub fn new(
         handle: JoinHandle<()>,
         command_sender: CommandSender<T>,
@@ -176,11 +176,11 @@ impl<T: RunningMeanTensor> ThreadHandle<T> {
     }
 }
 
-pub struct VecWorkers<E: Env<Tensor: RunningMeanTensor>> {
+pub struct VecWorkers<E: Env<Tensor: R2lTensor>> {
     workers: Vec<Worker<E>>,
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> VecWorkers<E> {
+impl<E: Env<Tensor: R2lTensor>> VecWorkers<E> {
     pub fn from_env_builder<EB: EnvBuilder<Env = E>>(env_builder: EnvBuilderType<EB>) -> Self {
         let num_envs = env_builder.num_envs();
         let workers = (0..num_envs)
@@ -202,12 +202,12 @@ impl<E: Env<Tensor: RunningMeanTensor>> VecWorkers<E> {
     }
 }
 
-pub enum WorkerPool<E: Env<Tensor: RunningMeanTensor>> {
+pub enum WorkerPool<E: Env<Tensor: R2lTensor>> {
     VecCoord(VecWorkers<E>),
     Thread(ThreadWorkers<E::Tensor>),
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> WorkerPool<E> {
+impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
     pub fn step(&mut self) -> MultiMemory<E::Tensor> {
         match self {
             Self::Thread(threads) => threads.step(),

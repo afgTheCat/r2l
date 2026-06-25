@@ -2,8 +2,7 @@ use std::marker::PhantomData;
 
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
-    running_mean::RunningMeanStd2,
-    tensor::RunningMeanTensor,
+    tensor::R2lTensor,
 };
 use r2l_sampler::{R2lSampler, SamplerExecutionMode, SamplerHook};
 
@@ -30,12 +29,12 @@ pub trait SamplerHookBuilder {
 ///
 /// This hook builder configures rollout collection to stop after a fixed
 /// number of environment steps have been collected per active worker.
-pub struct StepHookBound<E: Env<Tensor: RunningMeanTensor>> {
+pub struct StepHookBound<E: Env<Tensor: R2lTensor>> {
     n_step: usize,
     _phantom: PhantomData<E>,
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> StepHookBound<E> {
+impl<E: Env<Tensor: R2lTensor>> StepHookBound<E> {
     /// Creates a step-bounded sampler hook configuration.
     pub fn new(n_step: usize) -> Self {
         Self {
@@ -45,7 +44,7 @@ impl<E: Env<Tensor: RunningMeanTensor>> StepHookBound<E> {
     }
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> SamplerHookBuilder for StepHookBound<E> {
+impl<E: Env<Tensor: R2lTensor>> SamplerHookBuilder for StepHookBound<E> {
     type Env = E;
     type Target = StepBoundHook<Self::Env>;
 
@@ -101,7 +100,7 @@ pub struct SamplerBuilder<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>> 
 /// Default sampler builder using a step-bounded rollout policy.
 pub type DefaultSamplerBuilder<EB> = SamplerBuilder<EB, StepHookBound<<EB as EnvBuilder>::Env>>;
 
-impl<EB: EnvBuilder<Env: Env<Tensor: RunningMeanTensor>>> DefaultSamplerBuilder<EB> {
+impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> DefaultSamplerBuilder<EB> {
     /// Creates a sampler builder from a single environment builder and count.
     ///
     /// The provided builder is replicated into a homogeneous environment set

@@ -1,6 +1,6 @@
 use candle_core::{Device, Tensor};
 
-use crate::tensor::{R2lTensor, R2lTensorMath, RunningMeanTensor, TensorData};
+use crate::tensor::{R2lTensor, TensorData};
 
 impl R2lTensor for Tensor {
     fn to_vec(&self) -> Vec<f32> {
@@ -14,9 +14,7 @@ impl R2lTensor for Tensor {
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
         Tensor::from_vec(data, shape, &Device::Cpu).unwrap()
     }
-}
 
-impl R2lTensorMath for Tensor {
     fn add(&self, other: &Self) -> anyhow::Result<Self> {
         Ok(self.add(other)?)
     }
@@ -52,9 +50,7 @@ impl R2lTensorMath for Tensor {
     fn sqr(&self) -> anyhow::Result<Self> {
         Ok(self.sqr()?)
     }
-}
 
-impl RunningMeanTensor for Tensor {
     fn zeros(shape: Vec<usize>) -> Self {
         Tensor::zeros(shape, candle_core::DType::F32, &Device::Cpu).unwrap()
     }

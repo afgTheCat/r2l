@@ -1,13 +1,13 @@
-use crate::tensor::{R2lTensor, RunningMeanTensor};
+use crate::tensor::R2lTensor;
 
 #[derive(Clone, Debug)]
-pub struct RunningMeanStd2<T: RunningMeanTensor> {
+pub struct RunningMeanStd2<T: R2lTensor> {
     pub mean: T,
     pub var: T,
     pub count: f32,
 }
 
-impl<T: RunningMeanTensor> RunningMeanStd2<T> {
+impl<T: R2lTensor> RunningMeanStd2<T> {
     pub fn new(shape: Vec<usize>) -> Self {
         let mean = T::zeros(shape.clone());
         let var = T::zeros(shape.clone());

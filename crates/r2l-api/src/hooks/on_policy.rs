@@ -8,7 +8,7 @@ use r2l_core::{
     on_policy::algorithm::{
         Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
     },
-    tensor::RunningMeanTensor,
+    tensor::R2lTensor,
 };
 
 use crate::{BestActorEvaluator, BestActorEvaluatorBuilder};
@@ -59,7 +59,7 @@ impl LearningSchedule {
 /// algorithm exits.
 pub struct DefaultOnPolicyAlgorithmHooks<
     A: Agent,
-    S: Sampler<Tensor: RunningMeanTensor>,
+    S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
 > {
@@ -71,7 +71,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
 
 impl<
     A: Agent,
-    S: Sampler<Tensor: RunningMeanTensor>,
+    S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
 > DefaultOnPolicyAlgorithmHooks<A, S, C, E>
@@ -92,7 +92,7 @@ impl<
 
 impl<
     A: Agent,
-    S: Sampler<Tensor: RunningMeanTensor>,
+    S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
 > OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E>

@@ -7,7 +7,7 @@ use r2l_core::{
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
     },
-    tensor::{R2lTensor, R2lTensorMath},
+    tensor::R2lTensor,
 };
 
 use crate::{

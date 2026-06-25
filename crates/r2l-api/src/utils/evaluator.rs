@@ -6,8 +6,7 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::{DefaultAdapter, OnPolicyAdapters, Sampler},
-    running_mean::RunningMeanStd2,
-    tensor::RunningMeanTensor,
+    tensor::R2lTensor,
 };
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{R2lSampler, SamplerExecutionMode};
@@ -70,7 +69,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     /// Builds a best-actor evaluator for the requested actor type.
     pub fn build<A: Actor>(self) -> BestActorEvaluator<EB::Env, A>
     where
-        EB::Env: Env<Tensor: RunningMeanTensor>,
+        EB::Env: Env<Tensor: R2lTensor>,
     {
         let sampler = R2lSampler::build(
             self.env_builder,
@@ -91,14 +90,14 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
 /// This evaluator collects episode-bounded rollouts with [`R2lSampler`],
 /// computes the average completed-episode reward, and retains the best actor
 /// observed so far.
-pub struct BestActorEvaluator<E: Env<Tensor: RunningMeanTensor>, A: Actor> {
+pub struct BestActorEvaluator<E: Env<Tensor: R2lTensor>, A: Actor> {
     sampler: R2lSampler<E, EpisodeBoundHook<E>>,
     best_actor_path: Option<PathBuf>,
     best_actor: Option<A>,
     best_rewards: f32,
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>, A: Actor> BestActorEvaluator<E, A> {
+impl<E: Env<Tensor: R2lTensor>, A: Actor> BestActorEvaluator<E, A> {
     /// Evaluates the actor and stores it if it outperforms the current best actor.
     pub fn eval(&mut self, adapted_actor: impl Actor<Tensor = E::Tensor> + Clone, actor: A) {
         self.sampler.reset_all_envs();

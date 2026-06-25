@@ -5,8 +5,7 @@ use crate::{
     buffers::{TrajectoryBatch, buffer::TrajectoryView},
     models::Actor,
     return_on_hook_result,
-    running_mean::RunningMeanStd2,
-    tensor::{R2lTensor, RunningMeanTensor},
+    tensor::R2lTensor,
     utils::{actor_wrapper::ActorWrapper, buffer_wrapper::TrajectoryViewsWrapper},
 };
 

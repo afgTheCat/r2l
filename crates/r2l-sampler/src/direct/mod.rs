@@ -14,8 +14,6 @@ use r2l_core::env::EnvBuilder;
 use r2l_core::env::EnvBuilderType;
 use r2l_core::models::Actor;
 use r2l_core::on_policy::algorithm::Sampler;
-use r2l_core::running_mean::RunningMeanStd2;
-use r2l_core::tensor::RunningMeanTensor;
 
 use crate::RolloutMode;
 use crate::SamplerExecutionMode;

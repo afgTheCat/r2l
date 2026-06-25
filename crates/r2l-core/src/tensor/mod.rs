@@ -9,7 +9,8 @@ use std::fmt::Debug;
 // NOTE: we might want to add int_vec_and_shape method for less allocations, since to_vec_and_shape
 // usually clones the inner vector. Would be useful in ActorWrapper.
 //
-/// Minimal tensor contract shared by environments, policies, buffers, and agents.
+/// Tensor contract shared by environments, policies, buffers, agents, and
+/// built-in algorithm utilities.
 ///
 /// Implementors should be cheap enough to clone for rollout storage and safe to
 /// move across worker threads. `to_vec` is mainly for inspection, logging, and
@@ -47,15 +48,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn is_empty(&self) -> bool {
         self.to_vec().is_empty()
     }
-}
 
-/// Elementwise and reduction operations required by the built-in on-policy
-/// algorithms.
-///
-/// Backends implement this trait for the tensor type used during learning. The
-/// methods return `Result` so backend-specific shape or device errors can be
-/// propagated without constraining the core crate to one tensor library.
-pub trait R2lTensorMath: R2lTensor {
     /// Elementwise addition.
     fn add(&self, other: &Self) -> anyhow::Result<Self>;
 
@@ -82,10 +75,7 @@ pub trait R2lTensorMath: R2lTensor {
 
     /// Elementwise square.
     fn sqr(&self) -> anyhow::Result<Self>;
-}
 
-// TODO: we need this to be removed
-pub trait RunningMeanTensor: R2lTensorMath {
     fn zeros(shape: Vec<usize>) -> Self;
     fn batch_mean(&self) -> anyhow::Result<Self>;
     fn biased_var(&self) -> anyhow::Result<Self>;
@@ -139,9 +129,7 @@ impl R2lTensor for TensorData {
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
         Self { data, shape }
     }
-}
 
-impl R2lTensorMath for TensorData {
     fn add(&self, other: &Self) -> anyhow::Result<Self> {
         anyhow::ensure!(self.shape == other.shape, "shape mismatch");
         let data = self
@@ -221,9 +209,7 @@ impl R2lTensorMath for TensorData {
             self.shape.clone(),
         ))
     }
-}
 
-impl RunningMeanTensor for TensorData {
     fn zeros(shape: Vec<usize>) -> Self {
         let len = shape.iter().product();
         Self {

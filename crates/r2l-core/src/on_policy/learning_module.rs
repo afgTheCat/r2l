@@ -1,7 +1,7 @@
 use crate::{
     models::{LearningModule, Policy, ValueFunction},
     on_policy::losses::FromPolicyValueLosses,
-    tensor::{R2lTensor, R2lTensorMath},
+    tensor::R2lTensor,
 };
 
 /// Learning module contract required by the built-in on-policy algorithms.
@@ -16,7 +16,7 @@ pub trait OnPolicyLearningModule:
     /// Tensor type used by rollout actors and environment buffers.
     type InferenceTensor: R2lTensor;
     /// Tensor type used for differentiable learning computations.
-    type LearningTensor: R2lTensorMath;
+    type LearningTensor: R2lTensor;
 
     /// Policy type used for rollout/inference.
     type InferencePolicy: Policy<Tensor = Self::InferenceTensor>;

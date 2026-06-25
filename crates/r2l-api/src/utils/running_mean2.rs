@@ -5,7 +5,7 @@ pub use r2l_core::running_mean::RunningMeanStd2;
 mod test {
     use anyhow::Result;
     use candle_core::{Device, Tensor};
-    use r2l_core::tensor::RunningMeanTensor;
+    use r2l_core::tensor::R2lTensor;
     use rand::{RngExt, rng};
 
     use crate::utils::running_mean2::RunningMeanStd2;

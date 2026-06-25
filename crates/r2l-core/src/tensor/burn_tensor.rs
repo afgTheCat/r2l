@@ -1,11 +1,11 @@
 use burn::{
     prelude::Backend,
-    tensor::{Tensor, TensorData as BurnTensorData, backend::AutodiffBackend},
+    tensor::{Tensor, TensorData as BurnTensorData},
 };
 
-use crate::tensor::{R2lTensor, R2lTensorMath, RunningMeanTensor};
+use crate::tensor::R2lTensor;
 
-impl<B: Backend, const D: usize> R2lTensor for Tensor<B, D> {
+impl<B: Backend> R2lTensor for Tensor<B, 1> {
     fn to_vec(&self) -> Vec<f32> {
         self.to_data().to_vec().unwrap()
     }
@@ -18,9 +18,7 @@ impl<B: Backend, const D: usize> R2lTensor for Tensor<B, D> {
         let data = BurnTensorData::new(data, shape);
         Tensor::from_data(data, &Default::default())
     }
-}
 
-impl<B: AutodiffBackend> R2lTensorMath for Tensor<B, 1> {
     fn add(&self, other: &Self) -> anyhow::Result<Self> {
         Ok(self.clone() + other.clone())
     }
@@ -56,9 +54,7 @@ impl<B: AutodiffBackend> R2lTensorMath for Tensor<B, 1> {
     fn sqr(&self) -> anyhow::Result<Self> {
         Ok(self.clone().powf_scalar(2.0))
     }
-}
 
-impl<B: AutodiffBackend> RunningMeanTensor for Tensor<B, 1> {
     fn zeros(shape: Vec<usize>) -> Self {
         let data = BurnTensorData::new(vec![0.0; shape.iter().product()], shape);
         Tensor::from_data(data, &Default::default())

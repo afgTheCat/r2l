@@ -1,12 +1,7 @@
 use std::marker::PhantomData;
 
 use bimodal_array::ArrayHandle;
-use r2l_core::{
-    buffers::buffer::TrajectoryBuffer,
-    env::Env,
-    running_mean::RunningMeanStd2,
-    tensor::{R2lTensor, RunningMeanTensor},
-};
+use r2l_core::{buffers::buffer::TrajectoryBuffer, env::Env, tensor::R2lTensor};
 use r2l_sampler::{RolloutMode, SamplerHook, SamplerHookResult, WorkerPool};
 
 /// Sampler hook that requests rollout collection until a fixed number of
@@ -58,13 +53,13 @@ impl<E: Env> SamplerHook for EpisodeBoundHook<E> {
 /// When configured with observation statistics, the hook also normalizes
 /// observations before each single-step rollout and keeps the buffered
 /// `next_state` values aligned with the normalized worker state.
-pub struct StepBoundHook<E: Env<Tensor: RunningMeanTensor>> {
+pub struct StepBoundHook<E: Env<Tensor: R2lTensor>> {
     num_steps: usize,
     steps_scheduled: usize,
     _p: PhantomData<E>,
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> StepBoundHook<E> {
+impl<E: Env<Tensor: R2lTensor>> StepBoundHook<E> {
     /// Creates a step-bound sampler hook.
     pub fn new(num_steps: usize) -> Self {
         Self {
@@ -75,13 +70,13 @@ impl<E: Env<Tensor: RunningMeanTensor>> StepBoundHook<E> {
     }
 }
 
-impl<E: Env<Tensor: RunningMeanTensor>> SamplerHook for StepBoundHook<E> {
+impl<E: Env<Tensor: R2lTensor>> SamplerHook for StepBoundHook<E> {
     type E = E;
 
     fn hook(
         &mut self,
         _buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
-        worker_pool: &mut WorkerPool<Self::E>,
+        _worker_pool: &mut WorkerPool<Self::E>,
     ) -> SamplerHookResult {
         if self.steps_scheduled == self.num_steps {
             self.steps_scheduled = 0;
