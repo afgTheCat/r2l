@@ -6,6 +6,8 @@ mod candle_tensor;
 
 use std::fmt::Debug;
 
+use candle_core::shape;
+
 // NOTE: we might want to add int_vec_and_shape method for less allocations, since to_vec_and_shape
 // usually clones the inner vector. Would be useful in ActorWrapper.
 //
@@ -30,8 +32,12 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
         (vec, shape)
     }
 
+    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self;
+
     /// Constructs a new tensor based on the a vector and shape
-    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self;
+    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
+        Self::from_slice_and_shape(&data, shape)
+    }
 
     /// Convert between tensors of different types
     fn convert<S: R2lTensor>(s: &S) -> Self {
@@ -39,14 +45,14 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
         Self::from_vec_and_shape(data, shape)
     }
 
-    /// Returns the length of the tensor
-    fn len(&self) -> usize {
+    /// Returns the size of the tensor
+    fn size(&self) -> usize {
         self.to_shape().iter().product()
     }
 
     /// Returns true if the tensor is empty
     fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.size() == 0
     }
 
     /// Elementwise addition.
@@ -153,6 +159,13 @@ impl R2lTensor for TensorData {
 
     fn to_shape(&self) -> Vec<usize> {
         self.shape.clone()
+    }
+
+    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self {
+        Self {
+            data: data.to_vec(),
+            shape,
+        }
     }
 
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {

@@ -14,6 +14,11 @@ impl<B: Backend> R2lTensor for Tensor<B, 1> {
         self.shape().into()
     }
 
+    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self {
+        let data = BurnTensorData::new(data.to_vec(), shape);
+        Tensor::from_data(data, &Default::default())
+    }
+
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
         let data = BurnTensorData::new(data, shape);
         Tensor::from_data(data, &Default::default())

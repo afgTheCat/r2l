@@ -11,6 +11,10 @@ impl R2lTensor for Tensor {
         self.shape().dims().to_vec()
     }
 
+    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self {
+        Tensor::from_slice(data, shape, &Device::Cpu).unwrap()
+    }
+
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
         Tensor::from_vec(data, shape, &Device::Cpu).unwrap()
     }

@@ -34,10 +34,10 @@ impl<T: R2lTensor> Space<T> {
 
     pub fn continuous(size: usize, min: Option<T>, max: Option<T>) -> Self {
         if let Some(min) = min.as_ref() {
-            debug_assert_eq!(min.len(), size);
+            debug_assert_eq!(min.size(), size);
         }
         if let Some(max) = max.as_ref() {
-            debug_assert_eq!(max.len(), size);
+            debug_assert_eq!(max.size(), size);
         }
         Self::Continuous { min, max, size }
     }
