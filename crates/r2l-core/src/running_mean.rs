@@ -19,7 +19,7 @@ impl<T: R2lTensor> RunningMeanStd<T> {
         }
     }
 
-    fn update_from_moments2(
+    fn update_from_moments(
         &mut self,
         batch_mean: T,
         batch_var: T,
@@ -55,7 +55,7 @@ impl<T: R2lTensor> RunningMeanStd<T> {
     pub fn update(&mut self, t: &[T]) {
         let mean = T::mean_tensors(t);
         let var = T::var_tensors(t);
-        self.update_from_moments2(mean, var, t.len() as f32);
+        self.update_from_moments(mean, var, t.len() as f32);
     }
 
     pub fn update_from_vec(&mut self, t: &[Vec<f32>]) {

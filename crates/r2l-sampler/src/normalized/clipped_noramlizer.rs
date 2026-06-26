@@ -10,9 +10,11 @@ pub struct ClippedNormalizer<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> ClippedNormalizer<T> {
-    pub fn update(&mut self) {}
+    pub fn update(&mut self, obs: &[T]) {
+        self.rm.update(obs);
+    }
 
-    pub fn normalize(&self, obs: Vec<T>) -> Vec<T> {
+    pub fn normalize(&self, obs: &[T]) -> Vec<T> {
         let mean = self.rm.mean.to_vec();
         let var = self.rm.var.to_vec();
         obs.into_iter()
@@ -26,5 +28,11 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
                 T::from_vec_and_shape(normalized, shape)
             })
             .collect()
+    }
+
+    // updates the rms + returns the noremalized observation
+    pub fn update_and_normalize(&self, obs: &[T]) -> Vec<T> {
+        self.update(obs);
+        self.normalize(obs)
     }
 }

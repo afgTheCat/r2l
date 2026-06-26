@@ -40,6 +40,8 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
         env_builder: EnvBuilderType<EB>,
         n_steps: usize,
         execution_mode: SamplerExecutionMode,
+        with_obs_normalizer: bool,
+        with_reward_normalizer: bool,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
@@ -83,11 +85,8 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
     fn step(&mut self) {
         let mut multi_memory = self.pool.step();
         multi_memory.next_states = if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
-            // TODO: update should be able to have a vector passed in. Will have to check what this
-            // means in reality.
-            // obs_normalizer.rm.update(&obs);
-            // TODO: In sb3, this is normalized either way
-            obs_normalizer.normalize(std::mem::take(&mut multi_memory.next_states))
+            let next_states = std::mem::take(&mut multi_memory.next_states);
+            obs_normalizer.update_and_normalize(&next_states)
         } else {
             std::mem::take(&mut multi_memory.next_states)
         };
