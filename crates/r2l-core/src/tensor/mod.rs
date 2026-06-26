@@ -20,7 +20,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns the tensor values as a flat vector.
     fn to_vec(&self) -> Vec<f32>;
 
-    /// Returns the tensor shape
+    /// Returns the tensor shape.
     fn to_shape(&self) -> Vec<usize>;
 
     /// Returns the tensors vec and shape
@@ -30,23 +30,23 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
         (vec, shape)
     }
 
+    /// Constructs a new tensor based on the a vector and shape
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self;
 
+    /// Convert between tensors of different types
     fn convert<S: R2lTensor>(s: &S) -> Self {
         let (data, shape) = s.to_vec_and_shape();
         Self::from_vec_and_shape(data, shape)
     }
 
-    // TODO: this default impl might be wasteful
     /// Returns the length of the tensor
     fn len(&self) -> usize {
-        self.to_vec().len()
+        self.to_shape().iter().product()
     }
 
-    // TODO: this deafult might be wasteful
     /// Returns true if the tensor is empty
     fn is_empty(&self) -> bool {
-        self.to_vec().is_empty()
+        self.len() == 0
     }
 
     /// Elementwise addition.
@@ -76,11 +76,40 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Elementwise square.
     fn sqr(&self) -> anyhow::Result<Self>;
 
-    fn zeros(shape: Vec<usize>) -> Self;
-    fn batch_mean(&self) -> anyhow::Result<Self>;
-    fn biased_var(&self) -> anyhow::Result<Self>;
-    fn batch_count(&self) -> anyhow::Result<f32>;
+    fn zeros(shape: Vec<usize>) -> Self {
+        let data = vec![0f32; shape.iter().product()];
+        Self::from_vec_and_shape(data, shape)
+    }
+
     fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self>;
+
+    fn add_multiple(tensors: &[Self]) -> Self {
+        assert!(tensors.len() > 0);
+        let shape = tensors[0].to_shape();
+        let init = Self::zeros(shape);
+        tensors
+            .iter()
+            .fold(init, |acc, elem| acc.add(elem).unwrap())
+    }
+
+    /// Calculates the mean of the tensors.
+    fn mean_tensors(tensors: &[Self]) -> Self {
+        assert!(tensors.len() > 0);
+        let sum = Self::add_multiple(tensors);
+        sum.mul_scalar(1f32 / tensors.len() as f32).unwrap()
+    }
+
+    fn var_tensors(tensors: &[Self]) -> Self {
+        let mean = Self::mean_tensors(tensors);
+        let diffs_sqr = tensors
+            .iter()
+            .map(|t| t.sub(&mean).unwrap().sqr().unwrap())
+            .collect::<Vec<_>>();
+        let diffs_sqr_sum = Self::add_multiple(&diffs_sqr);
+        diffs_sqr_sum
+            .mul_scalar(1f32 / tensors.len() as f32)
+            .unwrap()
+    }
 }
 
 /// Backend-neutral owned tensor payload.
@@ -216,71 +245,6 @@ impl R2lTensor for TensorData {
             data: vec![0.0; len],
             shape,
         }
-    }
-
-    fn batch_mean(&self) -> anyhow::Result<Self> {
-        anyhow::ensure!(
-            !self.shape.is_empty(),
-            "running mean update expects a batch dimension"
-        );
-        let batch_count = self.shape[0];
-        let feature_shape = self.shape[1..].to_vec();
-        let feature_size = feature_shape.iter().product::<usize>();
-        anyhow::ensure!(
-            batch_count * feature_size == self.data.len(),
-            "batch tensor shape does not match data length"
-        );
-
-        let mut batch_mean = vec![0.0; feature_size];
-        for sample in self.data.chunks_exact(feature_size) {
-            for (mean, value) in batch_mean.iter_mut().zip(sample.iter()) {
-                *mean += *value;
-            }
-        }
-        for mean in &mut batch_mean {
-            *mean /= batch_count as f32;
-        }
-        Ok(Self::from_vec_and_shape(batch_mean, feature_shape))
-    }
-
-    fn biased_var(&self) -> anyhow::Result<Self> {
-        anyhow::ensure!(
-            !self.shape.is_empty(),
-            "running mean update expects a batch dimension"
-        );
-        let batch_count = self.shape[0];
-        let feature_shape = self.shape[1..].to_vec();
-        let feature_size = feature_shape.iter().product::<usize>();
-        anyhow::ensure!(
-            batch_count * feature_size == self.data.len(),
-            "batch tensor shape does not match data length"
-        );
-
-        let batch_mean = self.batch_mean()?;
-        let batch_mean = batch_mean.data;
-        let mut batch_var = vec![0.0; feature_size];
-        for sample in self.data.chunks_exact(feature_size) {
-            for ((var, value), mean) in batch_var
-                .iter_mut()
-                .zip(sample.iter())
-                .zip(batch_mean.iter())
-            {
-                let delta = *value - *mean;
-                *var += delta * delta;
-            }
-        }
-        for var in &mut batch_var {
-            *var /= batch_count as f32;
-        }
-        Ok(Self::from_vec_and_shape(batch_var, feature_shape))
-    }
-
-    fn batch_count(&self) -> anyhow::Result<f32> {
-        anyhow::ensure!(
-            !self.shape.is_empty(),
-            "running mean update expects a batch dimension"
-        );
-        Ok(self.shape[0] as f32)
     }
 
     fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self> {

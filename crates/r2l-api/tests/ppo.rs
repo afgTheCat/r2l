@@ -33,7 +33,8 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps));
 
     if let Some(norm_obs) = config.norm_obs {
-        ppo_builder = ppo_builder.with_observation_normalizer();
+        // TODO: readd this once we have new sampler
+        // ppo_builder = ppo_builder.with_observation_normalizer();
     }
 
     if let Some(clip_range) = config.clip_range {

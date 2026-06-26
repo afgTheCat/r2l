@@ -55,20 +55,6 @@ impl R2lTensor for Tensor {
         Tensor::zeros(shape, candle_core::DType::F32, &Device::Cpu).unwrap()
     }
 
-    fn batch_mean(&self) -> anyhow::Result<Self> {
-        Ok(self.mean(0)?)
-    }
-
-    fn biased_var(&self) -> anyhow::Result<Self> {
-        let mean = self.mean_keepdim(0)?;
-        let squares = self.broadcast_sub(&mean)?.sqr()?;
-        Ok((squares.sum_keepdim(0)? / self.dim(0)? as f64)?.squeeze(0)?)
-    }
-
-    fn batch_count(&self) -> anyhow::Result<f32> {
-        Ok(self.shape().dim(0)? as f32)
-    }
-
     fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self> {
         let scalar = Tensor::full(scalar, (), self.device())?;
         Ok(self.broadcast_mul(&scalar)?)
@@ -82,5 +68,29 @@ impl TensorData {
         let min_t = Tensor::convert(min);
         let max_t = Tensor::convert(max);
         TensorData::convert(&t.clamp(&min_t, &max_t).unwrap())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use candle_core::Tensor;
+
+    #[test]
+    fn mean_things() {
+        // what we have here is the following:
+        let bm = Tensor::from_vec(
+            // [0][0], [0][1], [1][0], [1][1]
+            vec![1f32, 2., 3., 4.],
+            vec![2, 2],
+            &candle_core::Device::Cpu,
+        )
+        .unwrap();
+        dbg!(&bm);
+        let m = bm.mean(0).unwrap();
+        // result is 2, [0][0], [1][0]
+        // result is 3, [0][1], [1][1]
+        dbg!(&m);
+        let m = bm.mean(1).unwrap();
+        dbg!(&m);
     }
 }

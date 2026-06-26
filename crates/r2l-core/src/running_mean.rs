@@ -43,10 +43,10 @@ impl<T: R2lTensor> RunningMeanStd2<T> {
     }
 
     pub fn update(&mut self, arr: &T) -> anyhow::Result<()> {
-        let batch_mean = arr.batch_mean()?;
-        let batch_var = arr.biased_var()?;
-        let batch_count = arr.batch_count()?;
-        self.update_from_moments(batch_mean, batch_var, batch_count)?;
+        // let batch_mean = arr.batch_mean()?;
+        // let batch_var = arr.biased_var()?;
+        // let batch_count = arr.batch_count()?;
+        // self.update_from_moments(batch_mean, batch_var, batch_count)?;
         Ok(())
     }
 }
@@ -118,7 +118,12 @@ impl RunningMeanStd3 {
         Ok(())
     }
 
-    // NOTE: we should only accept
+    pub fn update2<T: R2lTensor>(&mut self, t: &[T]) {
+        let mean = T::mean_tensors(t);
+    }
+
+    // NOTE: we should only accept vectors here!
+    // Should we though?
     pub fn update<T: R2lTensor>(&mut self, t: &[T]) -> anyhow::Result<()> {
         let mut datas = vec![];
         let mut shapes = vec![];
@@ -169,19 +174,5 @@ impl RunningMeanStd3 {
 
         self.update_from_moments(batch_mean, batch_var, batch_count)?;
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::{running_mean::RunningMeanStd2, tensor::TensorData};
-
-    #[test]
-    fn test_normalize() {
-        // 2d observation
-        let mut rm = RunningMeanStd2::new(vec![2]);
-        let t1 = TensorData::new(vec![1., 2., 3., 4., 5., 6.], vec![3, 2]);
-        rm.update(&t1).unwrap();
-        println!("{:?}", rm);
     }
 }
