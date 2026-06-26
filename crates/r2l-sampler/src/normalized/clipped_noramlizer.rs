@@ -1,11 +1,11 @@
 // I think we should move this to a different crate eventually
 use itertools::izip;
-use r2l_core::{running_mean::RunningMeanStd2, tensor::R2lTensor};
+use r2l_core::{running_mean::RunningMeanStd3, tensor::R2lTensor};
 
 const EPS: f32 = 1e-8;
 
 pub struct ClippedNormalizer<T: R2lTensor> {
-    rm: RunningMeanStd2<T>,
+    rm: RunningMeanStd3<T>,
     clip: f32,
 }
 
@@ -13,8 +13,8 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     pub fn update(&mut self) {}
 
     pub fn normalize(&self, obs: Vec<T>) -> Vec<T> {
-        let (mean, _) = self.rm.mean.to_vec_and_shape();
-        let (var, _) = self.rm.var.to_vec_and_shape();
+        let mean = self.rm.mean.to_vec();
+        let var = self.rm.var.to_vec();
         obs.into_iter()
             .map(|obs| {
                 let (data, shape) = obs.to_vec_and_shape();
