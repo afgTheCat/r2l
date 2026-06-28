@@ -21,7 +21,7 @@ pub(crate) type ResultReceiver<T> = Receiver<WorkerResult<T>>;
 
 pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
-    policy: &mut Box<dyn Actor<Tensor = T>>,
+    actor: &mut Box<dyn Actor<Tensor = T>>,
     last_state: Option<T>,
 ) -> Memory<T> {
     let state = if let Some(state) = last_state {
@@ -30,7 +30,7 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         env.reset(seed).unwrap()
     };
-    let action = policy.action(state.clone()).unwrap();
+    let action = actor.action(state.clone()).unwrap();
     let Snapshot {
         state: mut next_state,
         reward,
@@ -449,7 +449,7 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
-    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
+    pub fn set_actor<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
         match self {
             Self::Vec(workers) => {
                 for worker in workers.iter_mut() {

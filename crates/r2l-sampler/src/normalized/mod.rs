@@ -9,6 +9,7 @@ mod worker;
 
 use std::sync::Arc;
 
+use bimodal_array::{ArrayHandle, bimodal_array};
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
     env::{Env, EnvBuilder, EnvBuilderType},
@@ -29,6 +30,7 @@ pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>> {
     pool: WorkerPool<E>,
     obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    last_states: ArrayHandle<Option<E::Tensor>>,
     // Here there is no need to have each thread own the buffer
     buffers: Vec<TrajectoryBuffer<E::Tensor>>,
     // TODO: we might want later on. Maybe other things?
@@ -45,9 +47,10 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
+        let (last_states, last_state_handles) = bimodal_array(vec![None; num_envs]);
         let pool = match execution_mode {
             SamplerExecutionMode::Vec => {
-                let vec_workers = VecWorkers::from_env_builder(env_builder);
+                let vec_workers = VecWorkers::from_env_builder(env_builder, last_state_handles);
                 WorkerPool::VecCoord(vec_workers)
             }
             SamplerExecutionMode::Thread => {
@@ -56,13 +59,14 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
                 let num_envs = env_builder.num_envs();
                 let env_builder = Arc::new(env_builder);
                 let thread_handles = (0..num_envs)
-                    .map(|env_idx| {
+                    .zip(last_state_handles)
+                    .map(|(env_idx, last_state)| {
                         let env_builder = env_builder.clone();
                         let res_tx = res_tx.clone();
                         let command_rx = command_rx.clone();
                         let handle = std::thread::spawn(move || {
                             let env = env_builder.build_idx(env_idx).unwrap();
-                            let worker = Worker::from_env(env);
+                            let worker = Worker::from_env(env, last_state);
                             let mut thread_worker = ThreadWorker::new(worker, command_rx, res_tx);
                             thread_worker.work();
                         });
@@ -76,6 +80,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
         Self {
             buffers,
             pool,
+            last_states,
             obs_normalizer: None,
             reward_normalizer: None,
             n_steps,
@@ -86,7 +91,17 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
         let mut multi_memory = self.pool.step();
         multi_memory.next_states = if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
             let next_states = std::mem::take(&mut multi_memory.next_states);
-            obs_normalizer.update_and_normalize(&next_states)
+            let normalized_next_states = obs_normalizer.update_and_normalize(&next_states);
+            for (last_state, normalized_next_state) in self
+                .last_states
+                .lock()
+                .unwrap()
+                .iter_mut()
+                .zip(normalized_next_states.iter())
+            {
+                *last_state = Some(normalized_next_state.clone());
+            }
+            normalized_next_states
         } else {
             std::mem::take(&mut multi_memory.next_states)
         };

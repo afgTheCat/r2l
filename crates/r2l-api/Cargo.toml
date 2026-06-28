@@ -21,7 +21,7 @@ crossbeam = { workspace = true }
 rand = "0.10.0"
 anyhow = { workspace = true }
 derive_more = "2.0.1"
-bimodal-array = { version = "0.1.2" }
+bimodal-array = { workspace = true }
 
 [features]
 test-utils = []

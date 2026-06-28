@@ -659,9 +659,9 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "bimodal-array"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08b569295b63a476aef9f0b5b8bab5c2a365dcdfe9214063c4cd03c8e9529834"
+checksum = "c589e012957ab39b1c224cbd040311ed55d427ae50e58e23fbbfdbc8f9206bc6"
 
 [[package]]
 name = "bincode"
@@ -4770,6 +4770,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6842,7 +6851,7 @@ dependencies = [
  "anyhow",
  "bimodal-array",
  "crossbeam",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "r2l-core",
  "rand 0.10.1",
 ]

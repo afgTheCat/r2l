@@ -31,7 +31,7 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     }
 
     // updates the rms + returns the noremalized observation
-    pub fn update_and_normalize(&self, obs: &[T]) -> Vec<T> {
+    pub fn update_and_normalize(&mut self, obs: &[T]) -> Vec<T> {
         self.update(obs);
         self.normalize(obs)
     }

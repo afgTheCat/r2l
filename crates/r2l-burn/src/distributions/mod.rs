@@ -19,6 +19,8 @@ use crate::distributions::{
 pub mod categorical_distribution;
 /// Diagonal-Gaussian policy distribution for continuous action spaces.
 pub mod diagonal_distribution;
+/// Recurrent categorical policy distribution for discrete action spaces.
+pub mod recurrent_categorical_distribution;
 
 /// Erased Burn policy type covering the supported action-space variants.
 ///

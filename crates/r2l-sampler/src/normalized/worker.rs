@@ -2,6 +2,7 @@
 
 use std::{marker::PhantomData, thread::JoinHandle};
 
+use bimodal_array::ElementHandle;
 use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{Memory, MultiMemory},
@@ -13,15 +14,15 @@ use r2l_core::{
 use rand::RngExt;
 
 pub struct Worker<E: Env<Tensor: R2lTensor>> {
-    last_state: Option<E::Tensor>,
+    last_state: ElementHandle<Option<E::Tensor>>,
     actor: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
     env: E,
 }
 
 impl<E: Env<Tensor: R2lTensor>> Worker<E> {
-    pub fn from_env(env: E) -> Self {
+    pub fn from_env(env: E, last_state: ElementHandle<Option<E::Tensor>>) -> Self {
         Self {
-            last_state: None,
+            last_state,
             actor: None,
             env,
         }
@@ -32,7 +33,8 @@ impl<E: Env<Tensor: R2lTensor>> Worker<E> {
         let Some(policy) = &mut self.actor else {
             todo!()
         };
-        let state = if let Some(state) = self.last_state.take() {
+        let last_state = self.last_state.lock().unwrap().take();
+        let state = if let Some(state) = last_state {
             state
         } else {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
@@ -50,7 +52,7 @@ impl<E: Env<Tensor: R2lTensor>> Worker<E> {
             let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
             next_state = self.env.reset(seed).unwrap();
         }
-        self.last_state = Some(next_state.clone());
+        *self.last_state.lock().unwrap() = Some(next_state.clone());
         Memory {
             state,
             next_state,
@@ -181,12 +183,18 @@ pub struct VecWorkers<E: Env<Tensor: R2lTensor>> {
 }
 
 impl<E: Env<Tensor: R2lTensor>> VecWorkers<E> {
-    pub fn from_env_builder<EB: EnvBuilder<Env = E>>(env_builder: EnvBuilderType<EB>) -> Self {
+    pub fn from_env_builder<EB: EnvBuilder<Env = E>>(
+        env_builder: EnvBuilderType<EB>,
+        last_states: Vec<ElementHandle<Option<E::Tensor>>>,
+    ) -> Self {
         let num_envs = env_builder.num_envs();
-        let workers = (0..num_envs)
-            .map(|idx| {
+        let workers = last_states
+            .into_iter()
+            .enumerate()
+            .take(num_envs)
+            .map(|(idx, last_state)| {
                 let env = env_builder.build_idx(idx).unwrap();
-                Worker::from_env(env)
+                Worker::from_env(env, last_state)
             })
             .collect();
         Self { workers }

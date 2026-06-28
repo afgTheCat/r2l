@@ -110,7 +110,7 @@ impl<E: Env, H: SamplerHook<E = E>> Sampler for R2lSampler<E, H> {
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
         self.worker_pool.clear_buffers();
-        self.worker_pool.set_policy(actor.clone());
+        self.worker_pool.set_actor(actor.clone());
         loop {
             let result = self.hook.hook(&mut self.buffers, &mut self.worker_pool);
             match result {

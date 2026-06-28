@@ -8,8 +8,8 @@ license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-bimodal-array = { version = "0.1.2" }
+bimodal-array = { workspace = true }
 r2l-core = { workspace = true }
 crossbeam = { workspace = true }
 rand = { workspace = true }
-itertools = "0.14.0"
+itertools = "0.15.0"
