@@ -7,17 +7,10 @@
 mod clipped_noramlizer;
 mod worker;
 
-use std::marker::PhantomData;
-
-use bimodal_array::{
-    ArrayHandle, ElementHandle, ElementWorker, ElementWorkerFactory, bimodal_array,
-    bimodal_array_with_factory,
-};
-use crossbeam::channel::{Receiver, Sender};
+use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
-    buffers::{Memory, MultiMemory},
-    env::{Env, EnvBuilder, EnvBuilderType, Snapshot},
+    env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::Sampler,
     rng::RNG,
@@ -29,12 +22,12 @@ use crate::{
     SamplerExecutionMode,
     normalized::{
         clipped_noramlizer::ClippedNormalizer,
-        worker::{WorkerCommand, WorkerResult},
+        worker::{ThreadWorkerFactory, ThreadWorkers, VecWorkers, WorkerPool},
     },
 };
 
 pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>> {
-    pool: NewWorkerPool<E>,
+    pool: WorkerPool<E>,
     obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     last_states: ArrayHandle<E::Tensor>,
@@ -42,201 +35,6 @@ pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>> {
     buffers: Vec<TrajectoryBuffer<E::Tensor>>,
     // TODO: we might want later on. Maybe other things?
     n_steps: usize,
-}
-
-struct NewWorker<T: R2lTensor, E: Env<Tensor = T>> {
-    actor: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
-    env: E,
-}
-
-impl<T: R2lTensor, E: Env<Tensor = T>> NewWorker<T, E> {
-    fn step(&mut self, handle: &mut ElementHandle<T>) -> Memory<T> {
-        let Some(policy) = &mut self.actor else {
-            todo!()
-        };
-        let state = handle.lock().unwrap().clone();
-        let action = policy.action(state.clone()).unwrap();
-        let Snapshot {
-            state: mut next_state,
-            reward,
-            terminated,
-            truncated,
-        } = self.env.step(action.clone()).unwrap();
-        let done = terminated || truncated;
-        if done {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            next_state = self.env.reset(seed).unwrap();
-        }
-        *handle.lock().unwrap() = next_state.clone();
-        Memory {
-            state,
-            next_state,
-            action,
-            reward,
-            terminated,
-            truncated,
-        }
-    }
-}
-
-struct NewVecWorker<T: R2lTensor, E: Env<Tensor = T>> {
-    worker: NewWorker<T, E>,
-    handle: bimodal_array::ElementHandle<T>,
-}
-
-impl<T: R2lTensor, E: Env<Tensor = T>> NewVecWorker<T, E> {
-    fn step(&mut self) -> Memory<T> {
-        self.worker.step(&mut self.handle)
-    }
-
-    fn set_policy(&mut self, policy: Box<dyn Actor<Tensor = T>>) {
-        self.worker.actor = Some(policy);
-    }
-}
-
-struct NewThreadWorker<T: R2lTensor, E: Env<Tensor = T>> {
-    worker: NewWorker<T, E>,
-    rx: Receiver<WorkerCommand<T>>,
-    tx: Sender<WorkerResult<T>>,
-}
-
-impl<T: R2lTensor, E: Env<Tensor = T>> NewThreadWorker<T, E> {
-    fn new(env: E, rx: Receiver<WorkerCommand<T>>, tx: Sender<WorkerResult<T>>) -> Self {
-        Self {
-            worker: NewWorker { actor: None, env },
-            rx,
-            tx,
-        }
-    }
-}
-
-impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for NewThreadWorker<T, E> {
-    type T = T;
-
-    fn build(&mut self) -> Self::T {
-        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-        self.worker.env.reset(seed).unwrap()
-    }
-
-    fn work(&mut self, mut handle: ElementHandle<Self::T>) {
-        while let Ok(command) = self.rx.recv() {
-            match command {
-                WorkerCommand::Step(_) => {
-                    let memory = self.worker.step(&mut handle);
-                    self.tx.send(WorkerResult::Stepped(memory)).unwrap();
-                }
-                WorkerCommand::SetPolicy(policy) => {
-                    self.worker.actor = Some(policy);
-                    self.tx.send(WorkerResult::PolicySet).unwrap();
-                }
-            }
-        }
-    }
-}
-
-struct NewThreadWorkerFactory<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> {
-    rx: Receiver<WorkerCommand<T>>,
-    tx: Sender<WorkerResult<T>>,
-    env_builder: EB,
-}
-
-impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> NewThreadWorkerFactory<T, EB> {
-    fn new(rx: Receiver<WorkerCommand<T>>, tx: Sender<WorkerResult<T>>, env_builder: EB) -> Self {
-        Self {
-            rx,
-            tx,
-            env_builder,
-        }
-    }
-}
-
-impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ElementWorkerFactory
-    for NewThreadWorkerFactory<T, EB>
-{
-    type Worker = NewThreadWorker<T, <EB as EnvBuilder>::Env>;
-
-    fn build(self) -> Self::Worker {
-        let env = self.env_builder.build_env().unwrap();
-        NewThreadWorker::new(env, self.rx, self.tx)
-    }
-}
-
-struct NewVecWorkers<T: R2lTensor, E: Env<Tensor = T>> {
-    workers: Vec<NewVecWorker<T, E>>,
-}
-
-impl<T: R2lTensor, E: Env<Tensor = T>> NewVecWorkers<T, E> {
-    fn step(&mut self) -> MultiMemory<T> {
-        let mut multi_memory = MultiMemory::with_capacity(self.workers.len());
-        for worker in &mut self.workers {
-            multi_memory.push_memory(worker.step());
-        }
-        multi_memory
-    }
-
-    fn set_policy<A: Actor<Tensor = T> + Clone>(&mut self, policy: A) {
-        for worker in &mut self.workers {
-            worker.set_policy(Box::new(policy.clone()));
-        }
-    }
-}
-
-struct NewThreadWorkers<T: R2lTensor> {
-    worker_count: usize,
-    command_tx: Sender<WorkerCommand<T>>,
-    result_rx: Receiver<WorkerResult<T>>,
-}
-
-impl<T: R2lTensor> NewThreadWorkers<T> {
-    fn step(&self) -> MultiMemory<T> {
-        for _ in 0..self.worker_count {
-            self.command_tx
-                .send(WorkerCommand::Step(PhantomData))
-                .unwrap();
-        }
-        let mut multi_memory = MultiMemory::with_capacity(self.worker_count);
-        for _ in 0..self.worker_count {
-            let WorkerResult::Stepped(memory) = self.result_rx.recv().unwrap() else {
-                unreachable!()
-            };
-            multi_memory.push_memory(memory);
-        }
-        multi_memory
-    }
-
-    fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
-        for _ in 0..self.worker_count {
-            self.command_tx
-                .send(WorkerCommand::SetPolicy(Box::new(policy.clone())))
-                .unwrap();
-        }
-        for _ in 0..self.worker_count {
-            let WorkerResult::PolicySet = self.result_rx.recv().unwrap() else {
-                unreachable!()
-            };
-        }
-    }
-}
-
-enum NewWorkerPool<E: Env<Tensor: R2lTensor>> {
-    Vec(NewVecWorkers<E::Tensor, E>),
-    Thread(NewThreadWorkers<E::Tensor>),
-}
-
-impl<E: Env<Tensor: R2lTensor>> NewWorkerPool<E> {
-    fn step(&mut self) -> MultiMemory<E::Tensor> {
-        match self {
-            Self::Vec(workers) => workers.step(),
-            Self::Thread(workers) => workers.step(),
-        }
-    }
-
-    fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
-        match self {
-            Self::Vec(workers) => workers.set_policy(policy),
-            Self::Thread(workers) => workers.set_policy(policy),
-        }
-    }
 }
 
 impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
@@ -267,7 +65,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
     fn build_vec_workers<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         num_envs: usize,
-    ) -> (ArrayHandle<E::Tensor>, NewWorkerPool<E>) {
+    ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
         let mut envs_and_states = Vec::with_capacity(num_envs);
         for env_idx in 0..num_envs {
             let mut env = env_builder.build_idx(env_idx).unwrap();
@@ -283,38 +81,27 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
         let workers = envs_and_states
             .into_iter()
             .zip(last_state_handles)
-            .map(|((env, _), handle)| NewVecWorker {
-                worker: NewWorker { actor: None, env },
-                handle,
-            })
+            .map(|((env, _), handle)| (env, handle))
             .collect();
-        (last_states, NewWorkerPool::Vec(NewVecWorkers { workers }))
+        (last_states, WorkerPool::Vec(VecWorkers::new(workers)))
     }
 
     fn build_thread_workers<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         num_envs: usize,
-    ) -> (ArrayHandle<E::Tensor>, NewWorkerPool<E>) {
+    ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
         let (command_tx, command_rx) = crossbeam::channel::unbounded();
         let (result_tx, result_rx) = crossbeam::channel::unbounded();
         let factories = (0..num_envs)
             .map(|idx| {
                 let env_builder = env_builder.clone();
                 let env_builder = move || env_builder.build_idx(idx);
-                NewThreadWorkerFactory::new(
-                    command_rx.clone(),
-                    result_tx.clone(),
-                    env_builder.clone(),
-                )
+                ThreadWorkerFactory::new(command_rx.clone(), result_tx.clone(), env_builder.clone())
             })
             .collect();
         let last_states = bimodal_array_with_factory(factories);
-        let workers = NewThreadWorkers {
-            worker_count: num_envs,
-            command_tx,
-            result_rx,
-        };
-        (last_states, NewWorkerPool::Thread(workers))
+        let workers = ThreadWorkers::new(num_envs, command_tx, result_rx);
+        (last_states, WorkerPool::Thread(workers))
     }
 
     fn step(&mut self) {
