@@ -58,7 +58,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         EnvBuilderType::homogenous(GymEnvBuilder::new(config.env_name), config.n_envs),
         config.n_steps,
         SamplerExecutionMode::Vec,
-        false,
+        Some(10.),
         false,
     );
     let runtime = OnPolicyRuntime {
@@ -77,6 +77,27 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
     > = OnPolicyAlgorithm { runtime, hooks };
 
     ppo.train().unwrap();
+}
+
+#[test]
+fn mountain_car_candle_normalized_sampler() {
+    // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
+    // https://huggingface.co/sb3/ppo-MountainCar-v0
+    configure_candle_ppo_test(PPOTestConfig {
+        env_name: "MountainCar-v0",
+        n_envs: 16,
+        clip_range: None,
+        entropy_coeff: 0.0,
+        gae_lambda: 0.98,
+        gamma: 0.99,
+        learning_rate: None,
+        sample_size: None,
+        total_epochs: 4,
+        n_steps: 16,
+        n_timesteps: 1_000_000,
+        vf_coeff: None,
+        gradient_clipping: None,
+    });
 }
 
 #[test]

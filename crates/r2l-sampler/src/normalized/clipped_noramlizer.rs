@@ -10,10 +10,16 @@ pub struct ClippedNormalizer<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> ClippedNormalizer<T> {
+    pub fn new(clip: f32, shape: Vec<usize>) -> Self {
+        let rm = RunningMeanStd::new(shape);
+        Self { clip, rm }
+    }
+
     pub fn update(&mut self, obs: &[T]) {
         self.rm.update(obs);
     }
 
+    // TODO: I guess this should work in place
     pub fn normalize(&self, obs: &[T]) -> Vec<T> {
         let mean = self.rm.mean.to_vec();
         let var = self.rm.var.to_vec();
@@ -34,5 +40,13 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     pub fn update_and_normalize(&mut self, obs: &[T]) -> Vec<T> {
         self.update(obs);
         self.normalize(obs)
+    }
+
+    pub fn update_and_normalize_in_place(&mut self, obs: &mut [T]) {
+        self.update(obs);
+        let normalized = self.normalize(obs);
+        for (idx, new_t) in normalized.into_iter().enumerate() {
+            obs[idx] = new_t;
+        }
     }
 }

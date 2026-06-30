@@ -42,20 +42,29 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
         env_builder: EnvBuilderType<EB>,
         n_steps: usize,
         execution_mode: SamplerExecutionMode,
-        _with_obs_normalizer: bool,
+        with_obs_normalizer: Option<f32>,
         _with_reward_normalizer: bool,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
-        let (last_states, pool) = match execution_mode {
+        let mut obs_normalizer = with_obs_normalizer.map(|clip| {
+            let obs_space = env_builder.env_description().unwrap();
+            let obs_size = obs_space.observation_space.size();
+            ClippedNormalizer::new(clip, vec![obs_size])
+        });
+        let (mut last_states, pool) = match execution_mode {
             SamplerExecutionMode::Vec => Self::build_vec_workers(env_builder, num_envs),
             SamplerExecutionMode::Thread => Self::build_thread_workers(env_builder, num_envs),
         };
+        if let Some(obs_normalizer) = obs_normalizer.as_mut() {
+            let mut last_states = last_states.lock().unwrap();
+            obs_normalizer.update_and_normalize_in_place(&mut last_states);
+        }
         Self {
             buffers,
             pool,
             last_states,
-            obs_normalizer: None,
+            obs_normalizer,
             reward_normalizer: None,
             n_steps,
         }
@@ -105,23 +114,11 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
     }
 
     fn step(&mut self) {
-        let mut multi_memory = self.pool.step();
-        multi_memory.next_states = if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
-            let next_states = std::mem::take(&mut multi_memory.next_states);
-            let normalized_next_states = obs_normalizer.update_and_normalize(&next_states);
-            for (last_state, normalized_next_state) in self
-                .last_states
-                .lock()
-                .unwrap()
-                .iter_mut()
-                .zip(normalized_next_states.iter())
-            {
-                *last_state = normalized_next_state.clone();
-            }
-            normalized_next_states
-        } else {
-            std::mem::take(&mut multi_memory.next_states)
-        };
+        let multi_memory = self.pool.step();
+        if let Some(obs_normalizer) = self.obs_normalizer.as_mut() {
+            let mut last_states = self.last_states.lock().unwrap();
+            obs_normalizer.update_and_normalize_in_place(&mut last_states);
+        }
 
         // TODO: add this once the normalizer is working as intended
         // multi_memory.rewards = if let Some(rew_normalizer) = self.reward_normalizer.as_mut() {
@@ -129,7 +126,8 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
         // } else {
         //     std::mem::take(&mut multi_memory.rewards)
         // };
-        let memories = multi_memory.into_memories();
+        let last_states = self.last_states.lock().unwrap();
+        let memories = multi_memory.into_memories(&last_states);
         for (idx, memory) in memories.into_iter().enumerate() {
             self.buffers[idx].push(memory);
         }

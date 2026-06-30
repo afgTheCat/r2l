@@ -29,20 +29,20 @@ impl<T> Memory<T> {
 }
 
 #[derive(Debug)]
-pub struct MultiMemory<T> {
-    pub states: Vec<T>,
-    pub next_states: Vec<T>,
+pub struct MultiMemory<T: R2lTensor> {
+    // TODO: questionable if we even need this
+    pub last_states: Vec<T>,
+    // pub next_states: Vec<T>,
     pub actions: Vec<T>,
     pub rewards: Vec<f32>,
     pub terminateds: Vec<bool>,
     pub truncateds: Vec<bool>,
 }
 
-impl<T> MultiMemory<T> {
+impl<T: R2lTensor> MultiMemory<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            states: Vec::with_capacity(capacity),
-            next_states: Vec::with_capacity(capacity),
+            last_states: Vec::with_capacity(capacity),
             actions: Vec::with_capacity(capacity),
             rewards: Vec::with_capacity(capacity),
             terminateds: Vec::with_capacity(capacity),
@@ -59,8 +59,7 @@ impl<T> MultiMemory<T> {
             terminated,
             truncated,
         } = memory;
-        self.states.push(state);
-        self.next_states.push(next_state);
+        self.last_states.push(state);
         self.actions.push(action);
         self.rewards.push(reward);
         self.terminateds.push(terminated);
@@ -68,11 +67,10 @@ impl<T> MultiMemory<T> {
     }
 
     // TODO: maybe an iterator would be better
-    pub fn into_memories(self) -> Vec<Memory<T>> {
-        let mut memories = Vec::with_capacity(self.states.len());
+    pub fn into_memories(self, next_states: &[T]) -> Vec<Memory<T>> {
+        let mut memories = Vec::with_capacity(self.last_states.len());
         let Self {
-            states,
-            next_states,
+            last_states: states,
             actions,
             rewards,
             terminateds,
@@ -88,7 +86,7 @@ impl<T> MultiMemory<T> {
         ) {
             memories.push(Memory {
                 state,
-                next_state,
+                next_state: next_state.clone(),
                 action,
                 reward,
                 terminated,
