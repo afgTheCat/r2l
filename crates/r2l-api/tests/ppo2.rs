@@ -95,8 +95,8 @@ fn mountain_car_candle_normalized_sampler() {
         total_epochs: 4,
         n_steps: 16,
         n_timesteps: 1_000_000,
-        vf_coeff: None,
-        gradient_clipping: None,
+        vf_coeff: Some(0.5),
+        gradient_clipping: Some(0.5),
     });
 }
 

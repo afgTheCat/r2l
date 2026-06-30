@@ -1,4 +1,4 @@
-use burn::nn::LinearConfig;
+use burn::nn::{LinearConfig, Relu, Tanh};
 use burn::tensor::activation::relu;
 use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
 use burn_store::{ModuleStore, SafetensorsStore};
@@ -8,7 +8,8 @@ pub struct ReluAct;
 
 #[derive(Debug, Module)]
 pub enum Layer<B: Backend> {
-    Activation(ReluAct),
+    ReluAct(Relu),
+    Tanh(Tanh),
     LinearLayer(Linear<B>),
 }
 
@@ -16,12 +17,13 @@ impl<B: Backend> Layer<B> {
     fn forward(&self, t: Tensor<B, 2>) -> Tensor<B, 2> {
         match &self {
             Self::LinearLayer(linear) => linear.forward(t),
-            Self::Activation(ReluAct) => relu(t),
+            Self::ReluAct(relu) => relu.forward(t),
+            Self::Tanh(tanh) => tanh.forward(t),
         }
     }
 
     fn relu_act() -> Self {
-        Self::Activation(ReluAct)
+        Self::ReluAct(Relu)
     }
 
     fn linear(input: usize, output: usize) -> Self {
