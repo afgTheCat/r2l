@@ -29,8 +29,7 @@ either = "1.15.0"
 crossbeam = "0.8.4"
 rand = "0.10.0"
 anyhow = { version = "1.0.102" }
-bimodal-array = { path = "/home/g/git/bimodal-array" }
-# bimodal-array = { version = "0.1.3" }
+bimodal-array = { version = "0.1.4" }
 
 [workspace.package]
 version = "0.0.2-rc2"
