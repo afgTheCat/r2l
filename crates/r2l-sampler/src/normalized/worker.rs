@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use bimodal_array::{ElementHandle, ElementWorker, ElementWorkerFactory};
 use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
@@ -12,7 +10,7 @@ use r2l_core::{
 use rand::RngExt;
 
 pub enum WorkerCommand<T: R2lTensor> {
-    Step(PhantomData<T>),
+    Step,
     SetPolicy(Box<dyn Actor<Tensor = T>>),
     Stop,
 }
@@ -139,7 +137,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
     fn work(&mut self, mut handle: ElementHandle<Self::T>) {
         while let Ok(command) = self.rx.recv() {
             match command {
-                WorkerCommand::Step(_) => {
+                WorkerCommand::Step => {
                     let memory = self.worker.step(&mut handle);
                     self.tx.send(WorkerResult::Stepped(memory)).unwrap();
                 }
@@ -187,34 +185,44 @@ impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ElementWorkerFactory
     }
 }
 
-pub struct ThreadWorkers<T: R2lTensor> {
-    worker_count: usize,
+pub struct ThreadHandle<T: R2lTensor> {
     command_tx: Sender<WorkerCommand<T>>,
     result_rx: Receiver<WorkerResult<T>>,
 }
 
-impl<T: R2lTensor> ThreadWorkers<T> {
-    pub fn new(
-        worker_count: usize,
-        command_tx: Sender<WorkerCommand<T>>,
-        result_rx: Receiver<WorkerResult<T>>,
-    ) -> Self {
+impl<T: R2lTensor> ThreadHandle<T> {
+    pub fn new(command_tx: Sender<WorkerCommand<T>>, result_rx: Receiver<WorkerResult<T>>) -> Self {
         Self {
-            worker_count,
             command_tx,
             result_rx,
         }
     }
 
+    fn send(&self, command: WorkerCommand<T>) {
+        self.command_tx.send(command).unwrap();
+    }
+
+    fn recv(&self) -> WorkerResult<T> {
+        self.result_rx.recv().unwrap()
+    }
+}
+
+pub struct ThreadWorkers<T: R2lTensor> {
+    worker_handles: Vec<ThreadHandle<T>>,
+}
+
+impl<T: R2lTensor> ThreadWorkers<T> {
+    pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
+        Self { worker_handles }
+    }
+
     fn step(&self) -> MultiMemory<T> {
-        for _ in 0..self.worker_count {
-            self.command_tx
-                .send(WorkerCommand::Step(PhantomData))
-                .unwrap();
+        for worker_handle in &self.worker_handles {
+            worker_handle.send(WorkerCommand::Step);
         }
-        let mut multi_memory = MultiMemory::with_capacity(self.worker_count);
-        for _ in 0..self.worker_count {
-            let WorkerResult::Stepped(memory) = self.result_rx.recv().unwrap() else {
+        let mut multi_memory = MultiMemory::with_capacity(self.worker_handles.len());
+        for worker_handle in &self.worker_handles {
+            let WorkerResult::Stepped(memory) = worker_handle.recv() else {
                 unreachable!()
             };
             multi_memory.push_memory(memory);
@@ -223,24 +231,22 @@ impl<T: R2lTensor> ThreadWorkers<T> {
     }
 
     fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
-        for _ in 0..self.worker_count {
-            self.command_tx
-                .send(WorkerCommand::SetPolicy(Box::new(policy.clone())))
-                .unwrap();
+        for worker_handle in &self.worker_handles {
+            worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
         }
-        for _ in 0..self.worker_count {
-            let WorkerResult::PolicySet = self.result_rx.recv().unwrap() else {
+        for worker_handle in &self.worker_handles {
+            let WorkerResult::PolicySet = worker_handle.recv() else {
                 unreachable!()
             };
         }
     }
 
     fn shutdown(&self) {
-        for _ in 0..self.worker_count {
-            self.command_tx.send(WorkerCommand::Stop).unwrap();
+        for worker_handle in &self.worker_handles {
+            worker_handle.send(WorkerCommand::Stop);
         }
-        for _ in 0..self.worker_count {
-            let WorkerResult::Stopped = self.result_rx.recv().unwrap() else {
+        for worker_handle in &self.worker_handles {
+            let WorkerResult::Stopped = worker_handle.recv() else {
                 unreachable!()
             };
         }
@@ -269,7 +275,7 @@ impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
 
     pub fn shutdown(&mut self) {
         match self {
-            Self::Vec(vec) => {}
+            Self::Vec(_) => {}
             Self::Thread(threads) => threads.shutdown(),
         }
     }
