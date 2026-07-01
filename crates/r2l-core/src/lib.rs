@@ -15,7 +15,7 @@
 //! The main extension points are:
 //!
 //! - [`Env`] and [`EnvBuilder`] for environment integrations.
-//! - [`R2lTensor`] and [`R2lTensorMath`] for tensor types used by environments
+//! - [`R2lTensor`] for tensor types used by environments
 //!   and learning code.
 //! - [`Actor`], [`Policy`], [`ValueFunction`], and [`LearningModule`] for model
 //!   and optimizer components.
@@ -33,7 +33,6 @@
 //! [`OnPolicyAlgorithm`]: crate::on_policy::algorithm::OnPolicyAlgorithm
 //! [`Policy`]: crate::models::Policy
 //! [`R2lTensor`]: crate::tensor::R2lTensor
-//! [`R2lTensorMath`]: crate::tensor::R2lTensorMath
 //! [`Sampler`]: crate::on_policy::algorithm::Sampler
 //! [`TrajectoryContainer`]: crate::buffers::TrajectoryContainer
 //! [`ValueFunction`]: crate::models::ValueFunction
@@ -44,6 +43,7 @@ pub mod error;
 pub mod models;
 pub mod on_policy;
 pub mod rng;
+pub mod running_mean;
 pub mod tensor;
 mod utils;
 
@@ -83,15 +83,19 @@ macro_rules! return_on_hook_result {
 pub mod prelude {
     pub use crate::HookResult;
     pub use crate::buffers::{
-        EditableTrajectoryContainer, ExpandableTrajectoryContainer, Memory, TrajectoryContainer,
-        fix_sized::FixedSizeStateBuffer, variable_sized::VariableSizedStateBuffer,
+        // EditableTrajectoryContainer, ExpandableTrajectoryContainer,
+        Memory,
+        // TrajectoryContainer,
+        // fix_sized::FixedSizeStateBuffer,
+        // variable_sized::VariableSizedStateBuffer,
     };
     pub use crate::env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Space};
     pub use crate::models::{Actor, LearningModule, Policy, ValueFunction};
-    pub use crate::on_policy::algorithm::{
-        Agent, OnPolicyAlgorithm, OnPolicyAlgorithmHooks, Sampler,
-    };
+    // pub use crate::on_policy::algorithm::{
+    //     Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyAlgorithmHooks,
+    //     OnPolicyRuntime, Sampler,
+    // };
     pub use crate::on_policy::learning_module::OnPolicyLearningModule;
     pub use crate::on_policy::losses::FromPolicyValueLosses;
-    pub use crate::tensor::{R2lTensor, R2lTensorMath, TensorData};
+    pub use crate::tensor::{R2lTensor, TensorData};
 }

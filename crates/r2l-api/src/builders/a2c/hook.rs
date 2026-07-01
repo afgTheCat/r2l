@@ -4,12 +4,13 @@ use crate::hooks::a2c::{A2CStats, DefaultA2CHook, DefaultA2CHookReporter};
 
 /// Builder for the default A2C training hook.
 ///
-/// This builder controls the hook behavior used by
-/// [`A2CAgentBuilder`](crate::A2CAgentBuilder), including advantage
-/// normalization, loss coefficients, gradient clipping, and optional reporting.
+/// This builder configures the hook behavior used by the A2C agent and
+/// algorithm builders, including advantage normalization, loss coefficients,
+/// gradient clipping, and optional reporting.
 #[derive(Debug, Clone)]
 pub struct DefaultA2CHookBuilder {
     normalize_advantage: bool,
+    log_progress: bool,
     entropy_coeff: f32,
     vf_coeff: Option<f32>,
     gradient_clipping: Option<f32>,
@@ -19,17 +20,22 @@ pub struct DefaultA2CHookBuilder {
 
 impl DefaultA2CHookBuilder {
     /// Creates a default A2C hook builder.
-    ///
-    /// `n_envs` is used when reporting rollout statistics.
     pub fn new(n_envs: usize) -> Self {
         Self {
             n_envs,
             normalize_advantage: false,
+            log_progress: true,
             entropy_coeff: 0.,
             vf_coeff: None,
             gradient_clipping: None,
             tx: None,
         }
+    }
+
+    /// Sets whether to log training progress during learning.
+    pub fn with_log_progress(mut self, log_progress: bool) -> Self {
+        self.log_progress = log_progress;
+        self
     }
 
     /// Enables or disables advantage normalization before learning.
@@ -57,7 +63,7 @@ impl DefaultA2CHookBuilder {
     }
 
     /// Installs a channel used to emit [`A2CStats`](crate::A2CStats).
-    pub fn with_tx(mut self, tx: Option<Sender<A2CStats>>) -> Self {
+    pub fn with_reporter(mut self, tx: Option<Sender<A2CStats>>) -> Self {
         self.tx = tx;
         self
     }
@@ -69,9 +75,7 @@ impl DefaultA2CHookBuilder {
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
             gradient_clipping: self.gradient_clipping,
-            reporter: self
-                .tx
-                .map(|tx| DefaultA2CHookReporter::new(tx, self.n_envs)),
+            reporter: DefaultA2CHookReporter::new(self.tx, self.log_progress, self.n_envs),
             _lm: PhantomData,
         }
     }

@@ -1,36 +1,47 @@
 // ANCHOR: ppo
-use std::{
-    sync::mpsc::{self, Receiver, Sender},
-    thread,
-};
+use std::path::PathBuf;
 
-use candle_core::Device;
+use burn::backend::NdArray;
+use burn_store::SafetensorsStore;
 use r2l_api::{
-    LearningSchedule, PPOAlgorithmBuilder, PPOStats, SamplerExecutionMode, StepTrajectoryBound,
+    Evaluator, LearningSchedule, PPOAlgorithmBuilder, SamplerExecutionMode, StepHookBound,
 };
+use r2l_burn::distributions::diagonal_distribution::DiagGaussianDistribution;
+
+const ENV_NAME: &str = "Pendulum-v1";
 
 fn main() {
-    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
-    let ppo_builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 10)
-        .with_normalize_advantage(true)
-        .with_candle(Device::Cpu)
+    let best_model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
+    let hidden_layers = vec![64, 64];
+    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
-        .with_entropy_coeff(0.2)
-        .with_gradient_clipping(Some(0.5))
-        .with_target_kl(Some(0.01))
-        .with_bound(StepTrajectoryBound::new(2048))
-        .with_execution_mode(SamplerExecutionMode::Vec)
+        .with_policy_hidden_layers(hidden_layers.clone())
         .with_clip_range(0.2)
-        .with_learning_schedule(LearningSchedule::rollout_bound(300))
-        .with_reporter(Some(update_tx));
+        .with_entropy_coeff(0.)
+        .with_lambda(0.95)
+        .with_gamma(0.9)
+        .with_learning_rate(0.001)
+        .with_rollout_bound(StepHookBound::new(1024))
+        .with_total_epochs(10)
+        .with_learning_schedule(LearningSchedule::rollout_bound(30))
+        .with_evaluator_best_actor_path(best_model_path.clone());
     let mut ppo = ppo_builder.build().unwrap();
-    let t = thread::spawn(move || {
-        while let Ok(stats) = update_rx.recv() {
-            println!("avg reward: {}", stats.average_reward);
-        }
-    });
     ppo.train().unwrap();
-    drop(ppo);
-    t.join().unwrap();
+
+    // If we later decide to use the learned model, we can do so by importing it.
+    let mut store = SafetensorsStore::from_file(best_model_path);
+    let distribution = DiagGaussianDistribution::<NdArray>::from_store(&mut store);
+    let (episodes, environments) = (10, 10);
+    let mut evaluator = Evaluator::gym(ENV_NAME, episodes, environments, SamplerExecutionMode::Vec);
+    let results = evaluator.eval(distribution);
+    let total_rewards = results
+        .as_ref()
+        .iter()
+        .map(|tr| tr.rewards.iter().sum::<f32>())
+        .sum::<f32>();
+    println!(
+        "Average rewards recieved: {}",
+        total_rewards / (episodes * environments) as f32
+    );
 }
 // ANCHOR_END: ppo

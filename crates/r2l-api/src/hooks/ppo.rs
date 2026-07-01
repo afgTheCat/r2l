@@ -14,9 +14,11 @@ use r2l_candle::learning_module::{
     PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{
-    HookResult, buffers::TrajectoryContainer, models::Policy,
+    HookResult, buffers::TrajectoryBatch, models::Policy,
     on_policy::learning_module::OnPolicyLearningModule,
 };
+
+use crate::utils::{fmt_stat, mean};
 
 /// Per-batch training statistics emitted by the default PPO hook.
 ///
@@ -36,12 +38,15 @@ pub struct PPOBatchStats {
     pub value_loss: f32,
 }
 
-/// Aggregated statistics emitted by the default PPO hook after a learning pass.
+/// Aggregated statistics emitted by the default PPO hook after a learning
+/// pass.
 ///
 /// A report contains all collected [`PPOBatchStats`] for the rollout together
 /// with rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct PPOStats {
+    /// Rollout index to which the stats belong.
+    pub rollout_idx: usize,
     /// Batch-level statistics collected across PPO epochs for the rollout.
     pub batch_stats: Vec<PPOBatchStats>,
     /// Current action-distribution standard deviation when available.
@@ -50,12 +55,86 @@ pub struct PPOStats {
     pub average_reward: f32,
     /// Current policy optimizer learning rate.
     pub learning_rate: f64,
+    /// PPO clip range used during the rollout.
+    pub clip_range: f32,
 }
 
 impl PPOStats {
+    /// Returns the mean entropy loss across all collected batch stats.
+    pub fn entropy_loss(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.entropy_loss)
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    /// Returns the mean value loss across all collected batch stats.
+    pub fn value_loss(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.value_loss)
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    /// Returns the mean policy loss across all collected batch stats.
+    pub fn policy_loss(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.policy_loss)
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    /// Returns the mean clip fraction across all collected batch stats.
+    pub fn clip_fraction(&self) -> f32 {
+        mean(
+            &self
+                .batch_stats
+                .iter()
+                .map(|s| s.clip_fraction)
+                .collect::<Vec<_>>(),
+        )
+    }
+
     /// Appends one batch report to this rollout report.
     pub fn collect_batch_data(&mut self, batch_stats: PPOBatchStats) {
         self.batch_stats.push(batch_stats);
+    }
+}
+
+impl std::fmt::Display for PPOStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rows = [
+            ("Average reward", fmt_stat(self.average_reward)),
+            ("Clip fraction", fmt_stat(self.clip_fraction())),
+            ("Policy gradient loss", fmt_stat(self.policy_loss())),
+            ("Entropy loss", fmt_stat(self.entropy_loss())),
+            ("Value loss", fmt_stat(self.value_loss())),
+            ("Learning rate", fmt_stat(self.learning_rate as f32)),
+            (
+                "Standard deviation",
+                self.std.map(|std| std.to_string()).unwrap_or("n/a".into()),
+            ),
+        ];
+
+        let key_width = rows.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
+
+        writeln!(f, "PPO stats (rollout {})", self.rollout_idx)?;
+        writeln!(f, "{:-<1$}", "", key_width + 15)?;
+
+        for (key, value) in rows {
+            writeln!(f, "{key:<key_width$} | {value}")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -72,31 +151,44 @@ impl TargetKl {
 
 pub(crate) struct DefaultPPOHookReporter {
     report: PPOStats,
-    tx: Sender<PPOStats>,
+    tx: Option<Sender<PPOStats>>,
+    log_progress: bool,
     unfinished_episode_rewards: Vec<f32>,
     latest_average_reward: f32,
 }
 
 impl DefaultPPOHookReporter {
-    pub fn new(tx: Sender<PPOStats>, n_envs: usize) -> Self {
-        Self {
-            report: PPOStats::default(),
-            tx,
-            unfinished_episode_rewards: vec![0.; n_envs],
-            latest_average_reward: 0.,
+    pub fn new(tx: Option<Sender<PPOStats>>, log_progress: bool, n_envs: usize) -> Option<Self> {
+        if tx.is_some() || log_progress {
+            Some(Self {
+                report: PPOStats::default(),
+                tx,
+                log_progress,
+                unfinished_episode_rewards: vec![0.; n_envs],
+                latest_average_reward: 0.,
+            })
+        } else {
+            None
         }
     }
-}
 
-impl DefaultPPOHookReporter {
-    fn update_average_reward<T: TrajectoryContainer>(&mut self, buffers: &[T]) {
+    fn update_average_reward<T: r2l_core::tensor::R2lTensor, B: TrajectoryBatch<T>>(
+        &mut self,
+        batches: &[B],
+    ) {
         let mut completed_episode_rewards = vec![];
-        for (running_reward, buffer) in self
+        for (running_reward, batch) in self
             .unfinished_episode_rewards
             .iter_mut()
-            .zip(buffers.iter())
+            .zip(batches.iter())
         {
-            for (reward, done) in buffer.rewards().zip(buffer.dones()) {
+            for (reward, done) in batch.rewards().iter().copied().zip(
+                batch
+                    .terminated()
+                    .iter()
+                    .zip(batch.truncated().iter())
+                    .map(|(terminated, truncated)| *terminated || *truncated),
+            ) {
                 *running_reward += reward;
                 if done {
                     completed_episode_rewards.push(*running_reward);
@@ -112,8 +204,20 @@ impl DefaultPPOHookReporter {
         self.report.average_reward = self.latest_average_reward;
     }
 
-    fn send_report(&mut self) {
-        self.tx.send(std::mem::take(&mut self.report)).unwrap();
+    fn send_report(&mut self, rollout_idx: usize) {
+        let progress = std::mem::replace(
+            &mut self.report,
+            PPOStats {
+                rollout_idx,
+                ..Default::default()
+            },
+        );
+        if self.log_progress {
+            println!("{progress}");
+        }
+        if let Some(tx) = &self.tx {
+            tx.send(progress).unwrap();
+        }
         self.report.average_reward = self.latest_average_reward;
     }
 }
@@ -137,6 +241,7 @@ pub struct DefaultPPOHook<T = ()> {
     pub(crate) gradient_clipping: Option<f32>,
     pub(crate) current_epoch: usize,
     pub(crate) reporter: Option<DefaultPPOHookReporter>,
+    pub(crate) rollout_idx: usize,
     pub(crate) _lm: PhantomData<T>,
 }
 
@@ -144,16 +249,17 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
     for DefaultPPOHook<BurnPolicyValueModule<B, D>>
 {
     fn before_learning_hook<
-        T: TrajectoryContainer<Tensor = burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
+        BT: TrajectoryBatch<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
     >(
         &mut self,
         _params: &mut PPOParams,
         module: &mut BurnPolicyValueModule<B, D>,
-        _buffers: &[T],
+        _batches: &[BT],
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
         self.current_epoch = 0;
+        self.rollout_idx += 1;
         if self.normalize_advantage {
             advantages.normalize();
         }
@@ -163,13 +269,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<
-        T: TrajectoryContainer<Tensor = burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
-    >(
+    fn rollout_hook<BT: TrajectoryBatch<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>>(
         &mut self,
-        _params: &mut PPOParams,
+        params: &mut PPOParams,
         module: &mut BurnPolicyValueModule<B, D>,
-        buffers: &[T],
+        batches: &[BT],
     ) -> anyhow::Result<HookResult> {
         self.current_epoch += 1;
         let target_kl_exceeded = if let Some(target_kl) = &mut self.target_kl {
@@ -180,10 +284,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
             if let Some(reporter) = &mut self.reporter {
-                reporter.update_average_reward(buffers);
+                reporter.update_average_reward(batches);
                 reporter.report.std = module.policy().std().ok();
                 reporter.report.learning_rate = module.policy_learning_rate();
-                reporter.send_report();
+                reporter.report.clip_range = params.clip_range;
+                reporter.send_report(self.rollout_idx);
             }
             Ok(HookResult::Break)
         } else {
@@ -244,14 +349,15 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
 }
 
 impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule> {
-    fn before_learning_hook<B: TrajectoryContainer<Tensor = candle_core::Tensor>>(
+    fn before_learning_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
         module: &mut CandlePolicyValueModule,
-        _buffers: &[B],
+        _batches: &[BT],
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
+        self.rollout_idx += 1;
         self.current_epoch = 0;
         if self.normalize_advantage {
             advantages.normalize();
@@ -260,11 +366,11 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<B: TrajectoryContainer<Tensor = candle_core::Tensor>>(
+    fn rollout_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
-        _params: &mut PPOParams,
+        params: &mut PPOParams,
         module: &mut CandlePolicyValueModule,
-        buffers: &[B],
+        batches: &[BT],
     ) -> anyhow::Result<HookResult> {
         self.current_epoch += 1;
         let target_kl_exceeded = if let Some(target_kl) = &mut self.target_kl {
@@ -275,10 +381,11 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
         let should_stop = self.current_epoch == self.total_epochs || target_kl_exceeded;
         if should_stop {
             if let Some(reporter) = &mut self.reporter {
-                reporter.update_average_reward(buffers);
+                reporter.update_average_reward(batches);
                 reporter.report.std = module.policy().std().ok();
                 reporter.report.learning_rate = module.policy_learning_rate();
-                reporter.send_report();
+                reporter.report.clip_range = params.clip_range;
+                reporter.send_report(self.rollout_idx);
             }
             Ok(HookResult::Break)
         } else {

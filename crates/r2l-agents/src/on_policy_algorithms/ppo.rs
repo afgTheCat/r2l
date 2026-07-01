@@ -1,19 +1,19 @@
-//! Proximal Policy Optimization implementation and hook interface.
+//! Prototype PPO training path that consumes trajectory batches directly.
 
 use anyhow::Result;
 use r2l_core::{
-    buffers::TrajectoryContainer,
+    buffers::TrajectoryBatch,
     models::{LearningModule, Policy},
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
     },
-    tensor::{R2lTensor, R2lTensorMath},
+    tensor::R2lTensor,
 };
 
 use crate::{
     HookResult,
     on_policy_algorithms::{
-        Advantages, BatchIndexIterator, Logps, Returns, buffers_advantages_and_returns, logps,
+        Advantages, BatchIndexIterator, Logps, Returns, batches_advantages_and_returns, logps,
         sample,
     },
 };
@@ -57,28 +57,24 @@ pub struct PPOBatchData<T: R2lTensor> {
     pub ratio: T,
 }
 
-/// Hook interface for customizing PPO training.
-///
-/// Hooks can inspect or modify rollout-derived data before learning, control
-/// the outer PPO epoch loop through [`rollout_hook`](Self::rollout_hook), and
-/// inspect or modify each minibatch loss before the optimizer step.
+/// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
 pub trait PPOHook<M: OnPolicyLearningModule> {
-    fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
+    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
-        _buffers: &[B],
+        _batches: &[B],
         _advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
+    fn rollout_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
-        _buffers: &[B],
+        _batches: &[B],
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Break)
     }
@@ -94,12 +90,7 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
     }
 }
 
-/// Proximal Policy Optimization algorithm over an
-/// [`OnPolicyLearningModule`].
-///
-/// `PPO` computes rollout advantages, returns, and old log-probabilities, then
-/// repeatedly iterates minibatch updates until the hook layer signals that the
-/// current rollout is finished.
+/// Prototype PPO variant over finalized trajectory batches.
 pub struct PPO<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
     /// PPO hyperparameters.
     pub params: PPOParams,
@@ -110,23 +101,23 @@ pub struct PPO<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
 }
 
 impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
-    fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
-        buffers: &[B],
+        batches: &[B],
         advantages: &Advantages,
         logps: &Logps,
         returns: &Returns,
     ) -> anyhow::Result<()> {
-        let mut index_iterator = BatchIndexIterator::new(buffers, self.params.sample_size);
+        let mut index_iterator = BatchIndexIterator::new(batches, self.params.sample_size);
         let lm = &mut self.lm;
         loop {
-            let Some(indicies) = index_iterator.iter() else {
+            let Some(indices) = index_iterator.iter() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(buffers, &indicies, Module::lifter);
-            let advantages = lm.tensor_from_slice(&advantages.sample(&indicies));
-            let logp_old = lm.tensor_from_slice(&logps.sample(&indicies));
-            let returns = lm.tensor_from_slice(&returns.sample(&indicies));
+            let (observations, actions) = sample(batches, &indices, Module::lifter);
+            let advantages = lm.tensor_from_slice(&advantages.sample(&indices));
+            let logp_old = lm.tensor_from_slice(&logps.sample(&indices));
+            let returns = lm.tensor_from_slice(&returns.sample(&indices));
             let logp = lm.policy().log_probs(&observations, &actions)?;
             let values_pred = lm.values(&observations)?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
@@ -156,20 +147,45 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
         }
     }
 
-    fn learning_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
+    fn learning_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
-        buffers: &[B],
+        batches: &[B],
         advantages: Advantages,
         returns: Returns,
         logps: Logps,
     ) -> anyhow::Result<()> {
         loop {
-            self.batch_loop(buffers, &advantages, &logps, &returns)?;
+            self.batch_loop(batches, &advantages, &logps, &returns)?;
             let rollout_hook_res = self
                 .hooks
-                .rollout_hook(&mut self.params, &mut self.lm, buffers);
+                .rollout_hook(&mut self.params, &mut self.lm, batches);
             r2l_core::return_on_hook_result!(rollout_hook_res?);
         }
+    }
+
+    /// Prototype learning entrypoint over finalized trajectory batches.
+    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
+        &mut self,
+        batches: &[B],
+    ) -> Result<()> {
+        let (mut advantages, mut returns) = batches_advantages_and_returns(
+            batches,
+            &self.lm,
+            self.params.gamma,
+            self.params.lambda,
+            Module::lifter,
+        )?;
+        r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
+            &mut self.params,
+            &mut self.lm,
+            batches,
+            &mut advantages,
+            &mut returns
+        )?);
+        let actor = self.lm.inference_policy();
+        let logps = logps(batches, &actor)?;
+        self.learning_loop(batches, advantages, returns, logps)?;
+        Ok(())
     }
 }
 
@@ -181,26 +197,7 @@ impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
         self.lm.inference_policy()
     }
 
-    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
-        &mut self,
-        buffers: &[C],
-    ) -> Result<()> {
-        let (mut advantages, mut returns) = buffers_advantages_and_returns(
-            buffers,
-            &self.lm,
-            self.params.gamma,
-            self.params.lambda,
-            M::lifter,
-        )?;
-        r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
-            &mut self.params,
-            &mut self.lm,
-            buffers,
-            &mut advantages,
-            &mut returns
-        )?);
-        let logps = logps(buffers, &self.actor());
-        self.learning_loop(buffers, advantages, returns, logps)?;
-        Ok(())
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
+        PPO::learn(self, buffers)
     }
 }

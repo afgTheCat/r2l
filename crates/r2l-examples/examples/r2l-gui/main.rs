@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
+use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats, StepHookBound};
 use r2l_examples::EventBox;
-use r2l_sampler::{SamplerExecutionMode, StepTrajectoryBound};
+use r2l_sampler::SamplerExecutionMode;
 
 use crate::table::UpdateTable;
 
@@ -122,13 +122,10 @@ pub fn train_ppo(
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
-        .with_bound(StepTrajectoryBound::new(2048))
+        .with_rollout_bound(StepHookBound::new(2048))
         .with_execution_mode(SamplerExecutionMode::Vec)
         .with_clip_range(clip_range)
-        .with_learning_schedule(LearningSchedule::RolloutBound {
-            total_rollouts,
-            current_rollout: 0,
-        })
+        .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
         .with_reporter(Some(tx));
     let mut ppo = ppo_builder.build()?;
     ppo.train()

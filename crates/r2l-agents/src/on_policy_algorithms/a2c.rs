@@ -1,19 +1,19 @@
-//! Advantage Actor-Critic implementation and hook interface.
+//! Prototype A2C training path that consumes trajectory batches directly.
 
 use anyhow::Result;
 use r2l_core::{
-    buffers::TrajectoryContainer,
+    buffers::TrajectoryBatch,
     models::{LearningModule, Policy},
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
     },
-    tensor::{R2lTensor, R2lTensorMath},
+    tensor::R2lTensor,
 };
 
 use crate::{
     HookResult,
     on_policy_algorithms::{
-        Advantages, BatchIndexIterator, Returns, buffers_advantages_and_returns, sample,
+        Advantages, BatchIndexIterator, Returns, batches_advantages_and_returns, sample,
     },
 };
 
@@ -21,7 +21,7 @@ use crate::{
 pub struct A2CParams {
     /// Discount factor used for return and advantage estimation.
     pub gamma: f32,
-    /// GAE lambda used for advantage estimation.
+    /// GAE lambda used for return and advantage estimation.
     pub lambda: f32,
     /// Minibatch size used during the learning pass.
     pub sample_size: usize,
@@ -37,17 +37,25 @@ impl Default for A2CParams {
     }
 }
 
-/// Hook interface for customizing A2C training.
-///
-/// Hooks can inspect or modify rollout-derived data before learning, inspect or
-/// modify each minibatch loss before the optimizer step, and run cleanup or
-/// reporting logic after the learning pass.
+/// Per-minibatch data exposed to [`A2CHook::batch_hook`].
+pub struct A2CBatchData<T: R2lTensor> {
+    /// Sampled observations in the minibatch.
+    pub observations: Vec<T>,
+    /// Sampled actions in the minibatch.
+    pub actions: Vec<T>,
+    /// Policy log-probabilities for the sampled actions.
+    pub logp: T,
+    /// Value-function predictions for the sampled observations.
+    pub values_pred: T,
+}
+
+/// Hook interface for customizing A2C training over trajectory batches.
 pub trait A2CHook<M: OnPolicyLearningModule> {
-    fn before_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
+    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut A2CParams,
         _module: &mut M,
-        _buffers: &[B],
+        _batches: &[B],
         _advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> anyhow::Result<HookResult> {
@@ -64,32 +72,17 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Continue)
     }
 
-    fn after_learning_hook<B: TrajectoryContainer<Tensor = M::InferenceTensor>>(
+    fn after_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut A2CParams,
         _module: &mut M,
-        _buffers: &[B],
+        _batches: &[B],
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
     }
 }
 
-/// Per-minibatch data exposed to [`A2CHook::batch_hook`].
-pub struct A2CBatchData<T: R2lTensor> {
-    /// Sampled observations in the minibatch.
-    pub observations: Vec<T>,
-    /// Sampled actions in the minibatch.
-    pub actions: Vec<T>,
-    /// Policy log-probabilities for the sampled actions.
-    pub logp: T,
-    /// Value-function predictions for the sampled observations.
-    pub values_pred: T,
-}
-
-/// Advantage Actor-Critic algorithm over an [`OnPolicyLearningModule`].
-///
-/// `A2C` computes rollout advantages and returns, then performs one learning
-/// pass over minibatches sampled from the collected trajectories.
+/// Prototype Advantage Actor-Critic algorithm over finalized trajectory batches.
 pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
     /// A2C hyperparameters.
     pub params: A2CParams,
@@ -100,19 +93,19 @@ pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
 }
 
 impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
-    fn batch_loop<B: TrajectoryContainer<Tensor = Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
-        buffers: &[B],
+        batches: &[B],
         advantages: &Advantages,
         returns: &Returns,
     ) -> anyhow::Result<()> {
-        let mut index_iterator = BatchIndexIterator::new(buffers, self.params.sample_size);
+        let mut index_iterator = BatchIndexIterator::new(batches, self.params.sample_size);
         let lm = &mut self.lm;
         loop {
             let Some(indices) = index_iterator.iter() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(buffers, &indices, Module::lifter);
+            let (observations, actions) = sample(batches, &indices, Module::lifter);
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices));
             let returns = lm.tensor_from_slice(&returns.sample(&indices));
             let logp = lm.policy().log_probs(&observations, &actions)?;
@@ -135,6 +128,34 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
             lm.update(losses)?;
         }
     }
+
+    /// Prototype learning entrypoint over finalized trajectory batches.
+    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
+        &mut self,
+        batches: &[B],
+    ) -> Result<()> {
+        let (mut advantages, mut returns) = batches_advantages_and_returns(
+            batches,
+            &self.lm,
+            self.params.gamma,
+            self.params.lambda,
+            Module::lifter,
+        )?;
+        r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
+            &mut self.params,
+            &mut self.lm,
+            batches,
+            &mut advantages,
+            &mut returns
+        )?);
+        self.batch_loop(batches, &advantages, &returns)?;
+        r2l_core::return_on_hook_result!(self.hooks.after_learning_hook(
+            &mut self.params,
+            &mut self.lm,
+            batches
+        )?);
+        Ok(())
+    }
 }
 
 impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
@@ -145,30 +166,7 @@ impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
         self.lm.inference_policy()
     }
 
-    fn learn<C: TrajectoryContainer<Tensor = Self::Tensor>>(
-        &mut self,
-        buffers: &[C],
-    ) -> Result<()> {
-        let (mut advantages, mut returns) = buffers_advantages_and_returns(
-            buffers,
-            &self.lm,
-            self.params.gamma,
-            self.params.lambda,
-            M::lifter,
-        )?;
-        r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
-            &mut self.params,
-            &mut self.lm,
-            buffers,
-            &mut advantages,
-            &mut returns
-        )?);
-        self.batch_loop(buffers, &advantages, &returns)?;
-        r2l_core::return_on_hook_result!(self.hooks.after_learning_hook(
-            &mut self.params,
-            &mut self.lm,
-            buffers
-        )?);
-        Ok(())
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
+        A2C::learn(self, buffers)
     }
 }

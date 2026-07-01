@@ -154,7 +154,7 @@ with
 [`SamplerBuilder`](https://docs.rs/r2l-api/0.0.2-rc2/r2l_api/struct.SamplerBuilder.html).
 To build a sampler, provide an environment builder and the number of
 environments to spawn. For each worker, an `Actor` derived from the current
-policy steps the environment until a trajectory bound is reached.
+policy steps the environment until a rollout bound is reached.
 
 You can also choose the execution mode. By default, environments are stepped
 sequentially on the current thread. To run them on worker threads, switch the
@@ -165,8 +165,8 @@ let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
 let sampler_builder = SamplerBuilder::<GymEnvBuilder>::new(gym_env_builder, 10)
     .with_execution_mode(SamplerExecutionMode::Vec)
     .with_execution_mode(SamplerExecutionMode::Thread)
-    .with_bound(EpisodeTrajectoryBound::new(10))
-    .with_bound(StepTrajectoryBound::new(1000));
+    .with_rollout_bound(EpisodeTrajectoryBound::new(10))
+    .with_rollout_bound(StepTrajectoryBound::new(1000));
 let sampler = sampler_builder.build();
 ```
 

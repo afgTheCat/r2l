@@ -1,12 +1,4 @@
-// Testing the capabilities according to model garden
-
-use std::{
-    sync::mpsc::{self, Receiver, Sender},
-    thread,
-};
-
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
-use r2l_sampler::StepTrajectoryBound;
+use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
 
 #[allow(dead_code)]
 struct PPOTestConfig {
@@ -31,17 +23,19 @@ struct PPOTestConfig {
 }
 
 fn configure_candle_ppo_test(config: PPOTestConfig) {
-    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
-
     let mut ppo_builder = PPOAlgorithmBuilder::gym(config.env_name, config.n_envs)
         .with_candle(candle_core::Device::Cpu)
         .with_entropy_coeff(config.entropy_coeff)
         .with_lambda(config.gae_lambda)
         .with_gamma(config.gamma)
         .with_total_epochs(config.total_epochs)
-        .with_bound(StepTrajectoryBound::new(config.n_steps))
-        .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps))
-        .with_reporter(Some(update_tx));
+        .with_rollout_bound(StepHookBound::new(config.n_steps))
+        .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps));
+
+    if let Some(norm_obs) = config.norm_obs {
+        // TODO: readd this once we have new sampler
+        // ppo_builder = ppo_builder.with_observation_normalizer();
+    }
 
     if let Some(clip_range) = config.clip_range {
         ppo_builder = ppo_builder.with_clip_range(clip_range);
@@ -64,14 +58,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
     }
 
     let mut ppo = ppo_builder.build().unwrap();
-    let t = thread::spawn(move || {
-        while let Ok(stats) = update_rx.recv() {
-            println!("avg reward: {}", stats.average_reward);
-        }
-    });
     ppo.train().unwrap();
-    drop(ppo);
-    t.join().unwrap();
 }
 
 #[test]
@@ -100,7 +87,7 @@ fn cartpole_candle() {
 }
 
 #[test]
-fn pendulum_candle() {
+fn pendulum_candle_builder() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
     // https://huggingface.co/sb3/ppo-Pendulum-v1
     configure_candle_ppo_test(PPOTestConfig {
@@ -122,6 +109,20 @@ fn pendulum_candle() {
         use_sde: Some(true),
         sde_sample_freq: Some(4),
     });
+}
+
+#[test]
+fn pendulum_candle() {
+    let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
+        .with_clip_range(0.2)
+        .with_lambda(0.95)
+        .with_gamma(0.9)
+        .with_learning_rate(0.001)
+        .with_total_epochs(10)
+        .with_rollout_bound(StepHookBound::new(1024))
+        .with_learning_schedule(LearningSchedule::total_step_bound(100000));
+    let mut algo = builder.build().unwrap();
+    algo.train().unwrap();
 }
 
 #[test]

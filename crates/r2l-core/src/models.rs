@@ -12,6 +12,11 @@ pub trait Actor: Send + 'static {
 
     /// Selects an action for a single observation.
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
+
+    /// Tries to serialize the Actor
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        None
+    }
 }
 
 /// Trainable action distribution interface used by on-policy algorithms.

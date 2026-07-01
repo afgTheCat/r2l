@@ -5,10 +5,17 @@ use r2l_core::{env::ActionSpaceType, on_policy::algorithm::Agent};
 use crate::builders::learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType};
 
 // TODO: we might not need this trait in the future
+/// Trait implemented by concrete `Agent` builders.
+///
+/// This trait turns high-level agent configuration into a backend-specific
+/// [`Agent`](r2l_core::on_policy::algorithm::Agent) instance once the
+/// environment dimensions and action-space kind are known.
 pub trait AgentBuilder {
+    /// Agent type produced by this builder.
     type Agent: Agent;
 
     // TODO: This API is heavily in progress
+    /// Builds the configured agent for the provided environment dimensions.
     fn build(
         self,
         observation_size: usize,
@@ -17,11 +24,12 @@ pub trait AgentBuilder {
     ) -> anyhow::Result<Self::Agent>;
 }
 
-/// Shared builder for on-policy agents.
+/// Shared builder for on-policy `Agent` implementations.
 ///
 /// This type provides the common configuration surface used by the concrete
+/// `*2` agent builder aliases such as
 /// [`PPOAgentBuilder`](crate::PPOAgentBuilder) and
-/// [`A2CAgentBuilder`](crate::A2CAgentBuilder) aliases.
+/// [`A2CAgentBuilder`](crate::A2CAgentBuilder).
 ///
 /// Most users should construct one of those aliases directly instead of naming
 /// this generic type.
@@ -32,9 +40,11 @@ pub struct OnPolicyAgentBuilder<Params, HookBuilder, Backend> {
     pub(crate) backend: Backend,
 }
 
+/// Marker type representing the Burn backend in `Agent` builders.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BurnBackend;
 
+/// Candle backend configuration used by `Agent` builders.
 #[derive(Debug, Clone)]
 pub struct CandleBackend {
     pub(crate) device: Device,

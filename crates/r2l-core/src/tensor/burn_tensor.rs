@@ -1,33 +1,29 @@
 use burn::{
     prelude::Backend,
-    tensor::{Tensor, TensorData as BurnTensorData, backend::AutodiffBackend},
+    tensor::{Tensor, TensorData as BurnTensorData},
 };
 
-use crate::tensor::{R2lTensor, R2lTensorMath, TensorData};
+use crate::tensor::R2lTensor;
 
-impl<B: Backend> From<TensorData> for Tensor<B, 1> {
-    fn from(value: TensorData) -> Self {
-        let device = Default::default();
-        let tensor_data = BurnTensorData::new(value.data, value.shape.clone());
-        Tensor::from_data(tensor_data, &device)
-    }
-}
-
-impl<B: Backend> From<Tensor<B, 1>> for TensorData {
-    fn from(value: Tensor<B, 1>) -> Self {
-        let data = value.to_data().to_vec().unwrap();
-        let shape = vec![data.len()];
-        Self { data, shape }
-    }
-}
-
-impl<B: Backend, const D: usize> R2lTensor for Tensor<B, D> {
+impl<B: Backend> R2lTensor for Tensor<B, 1> {
     fn to_vec(&self) -> Vec<f32> {
         self.to_data().to_vec().unwrap()
     }
-}
 
-impl<B: AutodiffBackend> R2lTensorMath for Tensor<B, 1> {
+    fn to_shape(&self) -> Vec<usize> {
+        self.shape().into()
+    }
+
+    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self {
+        let data = BurnTensorData::new(data.to_vec(), shape);
+        Tensor::from_data(data, &Default::default())
+    }
+
+    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
+        let data = BurnTensorData::new(data, shape);
+        Tensor::from_data(data, &Default::default())
+    }
+
     fn add(&self, other: &Self) -> anyhow::Result<Self> {
         Ok(self.clone() + other.clone())
     }
@@ -62,5 +58,14 @@ impl<B: AutodiffBackend> R2lTensorMath for Tensor<B, 1> {
 
     fn sqr(&self) -> anyhow::Result<Self> {
         Ok(self.clone().powf_scalar(2.0))
+    }
+
+    fn zeros(shape: Vec<usize>) -> Self {
+        let data = BurnTensorData::new(vec![0.0; shape.iter().product()], shape);
+        Tensor::from_data(data, &Default::default())
+    }
+
+    fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self> {
+        Ok(self.clone().mul_scalar(scalar))
     }
 }

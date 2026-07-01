@@ -19,6 +19,8 @@ use crate::distributions::{
 pub mod categorical_distribution;
 /// Diagonal-Gaussian policy distribution for continuous action spaces.
 pub mod diagonal_distribution;
+/// Recurrent categorical policy distribution for discrete action spaces.
+pub mod recurrent_categorical_distribution;
 
 /// Erased Burn policy type covering the supported action-space variants.
 ///
@@ -58,6 +60,13 @@ impl<B: Backend> Actor for PolicyKind<B> {
         match self {
             Self::Categorical(cat) => cat.action(observation),
             Self::Diag(diag) => diag.action(observation),
+        }
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Categorical(cat) => cat.try_serialize(),
+            Self::Diag(diag) => diag.try_serialize(),
         }
     }
 }

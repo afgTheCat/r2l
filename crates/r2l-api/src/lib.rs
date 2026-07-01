@@ -22,6 +22,7 @@ pub use builders::ppo::algorithm::{
     PPOAlgorithmBuilder, PPOBurnAlgorithmBuilder, PPOCandleAlgorithmBuilder,
 };
 pub use builders::sampler::SamplerBuilder;
+pub use builders::sampler::{EpisodeHookBound, StepHookBound};
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
 pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule};
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
@@ -30,6 +31,5 @@ pub use r2l_core::{
     on_policy::algorithm::OnPolicyAlgorithm,
     tensor::TensorData,
 };
-pub use r2l_sampler::{
-    EpisodeTrajectoryBound, R2lSampler, SamplerExecutionMode, StepTrajectoryBound,
-};
+pub use r2l_sampler::{R2lSampler, SamplerExecutionMode};
+pub use utils::evaluator::{BestActorEvaluator, BestActorEvaluatorBuilder, Evaluator};

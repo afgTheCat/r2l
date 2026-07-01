@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::thread::JoinHandle;
 
 use bimodal_array::ElementHandle;
 use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
-    buffers::{ExpandableTrajectoryContainer, Memory},
+    buffers::{Memory, buffer::TrajectoryBuffer},
     env::{Env, EnvDescription, Snapshot},
     models::Actor,
     rng::RNG,
@@ -13,19 +13,11 @@ use rand::RngExt;
 
 use crate::RolloutMode;
 
-type CommandSender<T> = Sender<WorkerCommand<T>>;
-type CommandReceiver<T> = Receiver<WorkerCommand<T>>;
+pub(crate) type CommandSender<T> = Sender<WorkerCommand<T>>;
+pub(crate) type CommandReceiver<T> = Receiver<WorkerCommand<T>>;
 
-type ResultSender<T> = Sender<WorkerResult<T>>;
-type ResultReceiver<T> = Receiver<WorkerResult<T>>;
-
-pub struct Worker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
-    pub env: E,
-    pub buffer: ElementHandle<D>,
-    // TODO: this is a bit archaic, we might want somethings else here
-    pub policy: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
-    pub last_state: Option<E::Tensor>,
-}
+pub(crate) type ResultSender<T> = Sender<WorkerResult<T>>;
+pub(crate) type ResultReceiver<T> = Receiver<WorkerResult<T>>;
 
 pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
@@ -38,7 +30,6 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
         let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
         env.reset(seed).unwrap()
     };
-
     let action = policy.action(state.clone()).unwrap();
     let Snapshot {
         state: mut next_state,
@@ -61,8 +52,135 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     }
 }
 
-impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> {
-    pub fn new(env: E, buffer: ElementHandle<D>) -> Self {
+pub enum WorkerCommand<T: R2lTensor> {
+    SetPolicy(Box<dyn Actor<Tensor = T>>),
+    Collect(RolloutMode),
+    ResetEnv(u64),
+    ClearBuffer,
+    GetEnvDescription,
+    Shutdown,
+    GetLastState,
+    SetLastState(T),
+    ResetEnvUninserted(u64),
+    ReplaceLastNextState(T),
+}
+
+pub enum WorkerResult<T: R2lTensor> {
+    PolicySet,
+    Collected,
+    EnvReset,
+    BufferCleared,
+    EnvDescription(EnvDescription<T>),
+    Shutdown,
+    LastState(Option<T>),
+    LastStateSet,
+    ResetEnvUninsertedResult(T),
+    LastNextStateReplaced,
+}
+
+pub struct ThreadHandle<T: R2lTensor> {
+    handle: JoinHandle<()>,
+    command_tx: CommandSender<T>,
+    worker_rx: ResultReceiver<T>,
+}
+
+impl<T: R2lTensor> ThreadHandle<T> {
+    pub fn new(
+        handle: JoinHandle<()>,
+        command_tx: CommandSender<T>,
+        worker_rx: ResultReceiver<T>,
+    ) -> Self {
+        Self {
+            handle,
+            command_tx,
+            worker_rx,
+        }
+    }
+
+    pub fn env_description(&self) -> EnvDescription<T> {
+        self.command_tx
+            .send(WorkerCommand::GetEnvDescription)
+            .unwrap();
+        let WorkerResult::EnvDescription(env_description) = self.worker_rx.recv().unwrap() else {
+            todo!()
+        };
+        env_description
+    }
+
+    pub fn send(&self, command: WorkerCommand<T>) {
+        self.command_tx.send(command).unwrap();
+    }
+
+    pub fn recv(&self) -> WorkerResult<T> {
+        self.worker_rx.recv().unwrap()
+    }
+
+    pub fn shutdown(self) {
+        self.command_tx.send(WorkerCommand::Shutdown).unwrap();
+        self.worker_rx.recv().unwrap();
+        self.handle.join().unwrap();
+    }
+}
+
+pub struct LegacyThreadWorkers<T: R2lTensor> {
+    worker_handles: Vec<ThreadHandle<T>>,
+}
+
+impl<T: R2lTensor> LegacyThreadWorkers<T> {
+    pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
+        Self { worker_handles }
+    }
+
+    // TODO: this can fail. We need to mark this as failible once we figured the right Error types out
+    pub fn env_description(&self) -> EnvDescription<T> {
+        self.worker_handles[0].env_description()
+    }
+
+    pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
+        }
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
+        }
+    }
+
+    pub fn collect_rollout(&self, bound: RolloutMode) {
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.send(WorkerCommand::Collect(bound));
+        }
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
+        }
+    }
+
+    pub fn reset_all(&self) {
+        for worker_handle in self.worker_handles.iter() {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            worker_handle.send(WorkerCommand::ResetEnv(seed));
+        }
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
+        }
+    }
+
+    pub fn shutdown(&mut self) {
+        // shutdown one by one.
+        while let Some(worker) = self.worker_handles.pop() {
+            worker.shutdown();
+        }
+    }
+}
+
+pub struct Worker<E: Env> {
+    pub env: E,
+    pub buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>,
+    pub policy: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
+    pub last_state: Option<E::Tensor>,
+}
+
+impl<E: Env> Worker<E> {
+    pub fn new(env: E, buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>) -> Self {
         Self {
             env,
             buffer,
@@ -71,24 +189,30 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
         }
     }
 
-    pub fn collect_rollout(&mut self, bound: RolloutMode) {
+    pub fn set_last_state(&mut self, last_state: E::Tensor) {
+        self.last_state = Some(last_state);
+    }
+
+    pub fn replace_last_next_state(&mut self, next_state: E::Tensor) {
+        self.buffer
+            .lock()
+            .unwrap()
+            .replace_last_next_state(next_state);
+    }
+
+    pub fn clear(&mut self) {
+        self.buffer.lock().unwrap().clear();
+    }
+
+    pub fn collect(&mut self, bound: RolloutMode) {
         let Some(policy) = &mut self.policy else {
             todo!()
         };
         let mut buffer = self.buffer.lock().unwrap();
         match bound {
-            RolloutMode::StepBound { n_steps: steps } => {
-                for _ in 0..steps {
-                    let last_state = self.last_state.take();
-                    let memory = step_env(&mut self.env, policy, last_state);
-                    self.last_state = Some(memory.next_state.clone());
-                    buffer.push(memory);
-                }
-            }
             RolloutMode::EpisodeBound { n_episodes } => {
                 let mut episodes = 0;
                 loop {
-                    // TODO: this is a bit awkward.
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, policy, last_state);
                     let terminates = memory.is_done();
@@ -102,33 +226,38 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> Worker<E, D> 
                     }
                 }
             }
+            RolloutMode::StepBound { n_steps } => {
+                for _ in 0..n_steps {
+                    let last_state = self.last_state.take();
+                    let memory = step_env(&mut self.env, policy, last_state);
+                    self.last_state = Some(memory.next_state.clone());
+                    buffer.push(memory);
+                }
+            }
         }
+    }
+
+    // resets the initial state and clears the buffer. Used by the Evaluator hook
+    pub fn reset(&mut self, seed: u64) {
+        let state = self.env.reset(seed).unwrap();
+        self.last_state = Some(state);
+        self.buffer.lock().unwrap().clear();
+    }
+
+    pub fn reset_env_uninserted(&mut self, seed: u64) -> E::Tensor {
+        self.env.reset(seed).unwrap()
     }
 }
 
-pub enum WorkerCommand<T: R2lTensor> {
-    SetPolicy(Box<dyn Actor<Tensor = T>>),
-    Collect(RolloutMode),
-    GetEnvDescription,
-    Shutdown,
-}
-
-pub enum WorkerResult<T: R2lTensor> {
-    PolicySet,
-    Collected,
-    EnvDescription(EnvDescription<T>),
-    Shutdown,
-}
-
-pub struct ThreadWorker<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> {
-    worker: Worker<E, D>,
+pub struct ThreadWorker<E: Env> {
+    worker: Worker<E>,
     rx: CommandReceiver<E::Tensor>,
     tx: ResultSender<E::Tensor>,
 }
 
-impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<E, D> {
+impl<E: Env> ThreadWorker<E> {
     pub fn new(
-        worker: Worker<E, D>,
+        worker: Worker<E>,
         rx: CommandReceiver<E::Tensor>,
         tx: ResultSender<E::Tensor>,
     ) -> Self {
@@ -144,7 +273,7 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
                     self.tx.send(WorkerResult::PolicySet).unwrap();
                 }
                 WorkerCommand::Collect(bound) => {
-                    self.worker.collect_rollout(bound);
+                    self.worker.collect(bound);
                     self.tx.send(WorkerResult::Collected).unwrap();
                 }
                 WorkerCommand::GetEnvDescription => {
@@ -157,71 +286,162 @@ impl<E: Env, D: ExpandableTrajectoryContainer<Tensor = E::Tensor>> ThreadWorker<
                     self.tx.send(WorkerResult::Shutdown).unwrap();
                     break;
                 }
+                WorkerCommand::ResetEnv(seed) => {
+                    self.worker.reset(seed);
+                    self.tx.send(WorkerResult::EnvReset).unwrap();
+                }
+                WorkerCommand::ClearBuffer => {
+                    self.worker.clear();
+                    self.tx.send(WorkerResult::BufferCleared).unwrap();
+                }
+                WorkerCommand::GetLastState => {
+                    let last_state = self.worker.last_state.clone();
+                    self.tx.send(WorkerResult::LastState(last_state)).unwrap();
+                }
+                WorkerCommand::SetLastState(state) => {
+                    self.worker.set_last_state(state);
+                    self.tx.send(WorkerResult::LastStateSet).unwrap();
+                }
+                WorkerCommand::ResetEnvUninserted(seed) => {
+                    let state = self.worker.reset_env_uninserted(seed);
+                    self.tx
+                        .send(WorkerResult::ResetEnvUninsertedResult(state))
+                        .unwrap();
+                }
+                WorkerCommand::ReplaceLastNextState(state) => {
+                    self.worker.replace_last_next_state(state);
+                    self.tx.send(WorkerResult::LastNextStateReplaced).unwrap();
+                }
             }
         }
     }
 }
 
-pub struct ThreadWorkers<T: R2lTensor>(pub HashMap<usize, (CommandSender<T>, ResultReceiver<T>)>);
+pub struct ThreadWorkers<T: R2lTensor> {
+    worker_handles: Vec<ThreadHandle<T>>,
+}
 
 impl<T: R2lTensor> ThreadWorkers<T> {
+    pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
+        Self { worker_handles }
+    }
+
+    // TODO: this can fail. We need to mark this as failible once we figured the right Error types out
     pub fn env_description(&self) -> EnvDescription<T> {
-        let channels = &self.0;
-        let (command_tx, worker_rx) = channels.get(&0).unwrap();
-        command_tx.send(WorkerCommand::GetEnvDescription).unwrap();
-        let WorkerResult::EnvDescription(env_description) = worker_rx.recv().unwrap() else {
-            todo!()
-        };
-        env_description
+        self.worker_handles[0].env_description()
     }
 
     pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
-        let channels = &self.0;
-        let num_envs = channels.len();
-        for idx in 0..num_envs {
-            let tx = &channels.get(&idx).unwrap().0;
-            tx.send(WorkerCommand::SetPolicy(Box::new(policy.clone())))
-                .unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
         }
-        for idx in 0..num_envs {
-            let rx = &channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
         }
     }
 
     pub fn collect_rollout(&self, bound: RolloutMode) {
-        let channels = &self.0;
-        let num_envs = channels.len();
-        for idx in 0..num_envs {
-            let tx = &channels.get(&idx).unwrap().0;
-            tx.send(WorkerCommand::Collect(bound)).unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.send(WorkerCommand::Collect(bound));
         }
-        for idx in 0..num_envs {
-            let rx = &channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
         }
     }
 
-    pub fn shutdown(&self) {
-        let channels = &self.0;
-        let num_envs = channels.len();
-        for idx in 0..num_envs {
-            let tx = &channels.get(&idx).unwrap().0;
-            tx.send(WorkerCommand::Shutdown).unwrap();
+    pub fn reset_all(&self) {
+        for worker_handle in self.worker_handles.iter() {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            worker_handle.send(WorkerCommand::ResetEnv(seed));
         }
-        for idx in 0..num_envs {
-            let rx = &channels.get(&idx).unwrap().1;
-            rx.recv().unwrap();
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
+        }
+    }
+
+    pub fn get_last_states(&self) -> Option<Vec<T>> {
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.send(WorkerCommand::GetLastState);
+        }
+        self.worker_handles
+            .iter()
+            .map(|h| {
+                let WorkerResult::LastState(last_state) = h.recv() else {
+                    unreachable!()
+                };
+                last_state
+            })
+            .collect()
+    }
+
+    pub fn set_last_states(&self, states: Vec<T>) {
+        for (worker_handle, state) in self.worker_handles.iter().zip(states) {
+            worker_handle.send(WorkerCommand::SetLastState(state));
+        }
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
+        }
+    }
+
+    pub fn reset_envs_uninserted(&self) -> Vec<T> {
+        for worker_handle in self.worker_handles.iter() {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            worker_handle.send(WorkerCommand::ResetEnvUninserted(seed));
+        }
+        self.worker_handles
+            .iter()
+            .map(|wh| {
+                let WorkerResult::ResetEnvUninsertedResult(state) = wh.recv() else {
+                    unreachable!()
+                };
+                state
+            })
+            .collect()
+    }
+
+    pub fn replace_last_next_states(&self, states: Vec<T>) {
+        for (worker_handle, state) in self.worker_handles.iter().zip(states) {
+            worker_handle.send(WorkerCommand::ReplaceLastNextState(state));
+        }
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
+        }
+    }
+
+    pub fn shutdown(&mut self) {
+        // shutdown one by one.
+        while let Some(worker) = self.worker_handles.pop() {
+            worker.shutdown();
+        }
+    }
+
+    pub fn clear_buffers(&mut self) {
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.send(WorkerCommand::ClearBuffer);
+        }
+        for worker_handle in self.worker_handles.iter() {
+            worker_handle.recv();
         }
     }
 }
 
-pub enum WorkerPool<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> {
-    Vec(Vec<Worker<E, B>>),
+pub enum WorkerPool<E: Env> {
+    Vec(Vec<Worker<E>>),
     Thread(ThreadWorkers<E::Tensor>),
 }
 
-impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> WorkerPool<E, B> {
+impl<E: Env> WorkerPool<E> {
+    pub fn clear_buffers(&mut self) {
+        match self {
+            Self::Vec(workers) => {
+                workers.iter_mut().for_each(|w| w.clear());
+            }
+            Self::Thread(thread) => {
+                thread.clear_buffers();
+            }
+        }
+    }
+
     pub fn env_description(&self) -> EnvDescription<E::Tensor> {
         match self {
             Self::Vec(workers) => workers[0].env.env_description(),
@@ -231,12 +451,12 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
 
     pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
         match self {
-            WorkerPool::Vec(workers) => {
+            Self::Vec(workers) => {
                 for worker in workers.iter_mut() {
                     worker.policy = Some(Box::new(policy.clone()))
                 }
             }
-            WorkerPool::Thread(thread_workers) => {
+            Self::Thread(thread_workers) => {
                 thread_workers.set_policy(policy);
             }
         }
@@ -244,12 +464,12 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
 
     pub fn collect(&mut self, bound: RolloutMode) {
         match self {
-            WorkerPool::Vec(workers) => {
+            Self::Vec(workers) => {
                 for worker in workers {
-                    worker.collect_rollout(bound);
+                    worker.collect(bound);
                 }
             }
-            WorkerPool::Thread(thread_workers) => {
+            Self::Thread(thread_workers) => {
                 thread_workers.collect_rollout(bound);
             }
         }
@@ -259,14 +479,87 @@ impl<E: Env, B: ExpandableTrajectoryContainer<Tensor = <E as Env>::Tensor>> Work
         self.collect(RolloutMode::StepBound { n_steps: 1 });
     }
 
-    pub fn shutdown(&self) {
+    pub fn shutdown(&mut self) {
         match self {
-            WorkerPool::Vec(_) => {
+            Self::Vec(_) => {
                 // No need to explicitly shut down
             }
-            WorkerPool::Thread(workers) => {
+            Self::Thread(workers) => {
                 workers.shutdown();
             }
         }
+    }
+
+    pub fn reset_all_envs(&mut self) {
+        match self {
+            Self::Vec(workers) => {
+                for worker in workers {
+                    let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+                    worker.reset(seed);
+                }
+            }
+            Self::Thread(workers) => {
+                workers.reset_all();
+            }
+        }
+    }
+
+    pub fn get_last_states(&mut self) -> Option<Vec<E::Tensor>> {
+        match self {
+            Self::Vec(workers) => {
+                // in the order of the workers
+                workers.iter().map(|w| w.last_state.clone()).collect()
+            }
+            Self::Thread(workers) => {
+                // worker pools ensures the order
+                workers.get_last_states()
+            }
+        }
+    }
+
+    pub fn set_last_states(&mut self, states: Vec<E::Tensor>) {
+        match self {
+            Self::Vec(workers) => {
+                for (worker, state) in workers.iter_mut().zip(states) {
+                    worker.set_last_state(state)
+                }
+            }
+            Self::Thread(workers) => {
+                workers.set_last_states(states);
+            }
+        }
+    }
+
+    pub fn replace_last_next_states(&mut self, states: Vec<E::Tensor>) {
+        match self {
+            Self::Vec(workers) => {
+                for (worker, state) in workers.iter_mut().zip(states) {
+                    worker.replace_last_next_state(state);
+                }
+            }
+            Self::Thread(workers) => workers.replace_last_next_states(states),
+        }
+    }
+
+    pub fn reset_envs_uninserted(&mut self) -> Vec<E::Tensor> {
+        match self {
+            Self::Vec(workers) => {
+                // resets all the envs but does not set it as a last state
+                workers
+                    .iter_mut()
+                    .map(|w| {
+                        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+                        w.reset_env_uninserted(seed)
+                    })
+                    .collect()
+            }
+            Self::Thread(workers) => workers.reset_envs_uninserted(),
+        }
+    }
+}
+
+impl<E: Env> Drop for WorkerPool<E> {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }

@@ -6,7 +6,13 @@ mod candle_tensor;
 
 use std::fmt::Debug;
 
-/// Minimal tensor contract shared by environments, policies, buffers, and agents.
+use candle_core::shape;
+
+// NOTE: we might want to add int_vec_and_shape method for less allocations, since to_vec_and_shape
+// usually clones the inner vector. Would be useful in ActorWrapper.
+//
+/// Tensor contract shared by environments, policies, buffers, agents, and
+/// built-in algorithm utilities.
 ///
 /// Implementors should be cheap enough to clone for rollout storage and safe to
 /// move across worker threads. `to_vec` is mainly for inspection, logging, and
@@ -16,24 +22,39 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns the tensor values as a flat vector.
     fn to_vec(&self) -> Vec<f32>;
 
-    /// Returns the length of the tensor
-    fn len(&self) -> usize {
-        self.to_vec().len()
+    /// Returns the tensor shape.
+    fn to_shape(&self) -> Vec<usize>;
+
+    /// Returns the tensors vec and shape
+    fn to_vec_and_shape(&self) -> (Vec<f32>, Vec<usize>) {
+        let vec = self.to_vec();
+        let shape = self.to_shape();
+        (vec, shape)
+    }
+
+    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self;
+
+    /// Constructs a new tensor based on the a vector and shape
+    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
+        Self::from_slice_and_shape(&data, shape)
+    }
+
+    /// Convert between tensors of different types
+    fn convert<S: R2lTensor>(s: &S) -> Self {
+        let (data, shape) = s.to_vec_and_shape();
+        Self::from_vec_and_shape(data, shape)
+    }
+
+    /// Returns the size of the tensor
+    fn size(&self) -> usize {
+        self.to_shape().iter().product()
     }
 
     /// Returns true if the tensor is empty
     fn is_empty(&self) -> bool {
-        self.to_vec().is_empty()
+        self.size() == 0
     }
-}
 
-/// Elementwise and reduction operations required by the built-in on-policy
-/// algorithms.
-///
-/// Backends implement this trait for the tensor type used during learning. The
-/// methods return `Result` so backend-specific shape or device errors can be
-/// propagated without constraining the core crate to one tensor library.
-pub trait R2lTensorMath: R2lTensor {
     /// Elementwise addition.
     fn add(&self, other: &Self) -> anyhow::Result<Self>;
 
@@ -60,6 +81,41 @@ pub trait R2lTensorMath: R2lTensor {
 
     /// Elementwise square.
     fn sqr(&self) -> anyhow::Result<Self>;
+
+    fn zeros(shape: Vec<usize>) -> Self {
+        let data = vec![0f32; shape.iter().product()];
+        Self::from_vec_and_shape(data, shape)
+    }
+
+    fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self>;
+
+    fn add_multiple(tensors: &[Self]) -> Self {
+        assert!(tensors.len() > 0);
+        let shape = tensors[0].to_shape();
+        let init = Self::zeros(shape);
+        tensors
+            .iter()
+            .fold(init, |acc, elem| acc.add(elem).unwrap())
+    }
+
+    /// Calculates the mean of the tensors.
+    fn mean_tensors(tensors: &[Self]) -> Self {
+        assert!(tensors.len() > 0);
+        let sum = Self::add_multiple(tensors);
+        sum.mul_scalar(1f32 / tensors.len() as f32).unwrap()
+    }
+
+    fn var_tensors(tensors: &[Self]) -> Self {
+        let mean = Self::mean_tensors(tensors);
+        let diffs_sqr = tensors
+            .iter()
+            .map(|t| t.sub(&mean).unwrap().sqr().unwrap())
+            .collect::<Vec<_>>();
+        let diffs_sqr_sum = Self::add_multiple(&diffs_sqr);
+        diffs_sqr_sum
+            .mul_scalar(1f32 / tensors.len() as f32)
+            .unwrap()
+    }
 }
 
 /// Backend-neutral owned tensor payload.
@@ -99,5 +155,115 @@ impl TensorData {
 impl R2lTensor for TensorData {
     fn to_vec(&self) -> Vec<f32> {
         self.data.clone()
+    }
+
+    fn to_shape(&self) -> Vec<usize> {
+        self.shape.clone()
+    }
+
+    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self {
+        Self {
+            data: data.to_vec(),
+            shape,
+        }
+    }
+
+    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
+        Self { data, shape }
+    }
+
+    fn add(&self, other: &Self) -> anyhow::Result<Self> {
+        anyhow::ensure!(self.shape == other.shape, "shape mismatch");
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a + b)
+            .collect();
+        Ok(Self::new(data, self.shape.clone()))
+    }
+
+    fn sub(&self, other: &Self) -> anyhow::Result<Self> {
+        anyhow::ensure!(self.shape == other.shape, "shape mismatch");
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a - b)
+            .collect();
+        Ok(Self::new(data, self.shape.clone()))
+    }
+
+    fn mul(&self, other: &Self) -> anyhow::Result<Self> {
+        anyhow::ensure!(self.shape == other.shape, "shape mismatch");
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a * b)
+            .collect();
+        Ok(Self::new(data, self.shape.clone()))
+    }
+
+    fn exp(&self) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data.iter().map(|value| value.exp()).collect(),
+            self.shape.clone(),
+        ))
+    }
+
+    fn clamp(&self, min: f32, max: f32) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data
+                .iter()
+                .map(|value| value.clamp(min, max))
+                .collect(),
+            self.shape.clone(),
+        ))
+    }
+
+    fn minimum(&self, other: &Self) -> anyhow::Result<Self> {
+        anyhow::ensure!(self.shape == other.shape, "shape mismatch");
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a.min(*b))
+            .collect();
+        Ok(Self::new(data, self.shape.clone()))
+    }
+
+    fn neg(&self) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data.iter().map(|value| -value).collect(),
+            self.shape.clone(),
+        ))
+    }
+
+    fn mean(&self) -> anyhow::Result<Self> {
+        let mean = self.data.iter().sum::<f32>() / self.data.len() as f32;
+        Ok(Self::from_vec(vec![mean]))
+    }
+
+    fn sqr(&self) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data.iter().map(|value| value * value).collect(),
+            self.shape.clone(),
+        ))
+    }
+
+    fn zeros(shape: Vec<usize>) -> Self {
+        let len = shape.iter().product();
+        Self {
+            data: vec![0.0; len],
+            shape,
+        }
+    }
+
+    fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            self.data.iter().map(|value| value * scalar).collect(),
+            self.shape.clone(),
+        ))
     }
 }

@@ -1,9 +1,8 @@
-pub mod fix_sized;
-pub mod variable_sized;
-
 use itertools::izip;
 
 use crate::tensor::R2lTensor;
+
+pub mod buffer;
 
 /// One transition collected from an environment.
 #[derive(Debug)]
@@ -29,91 +28,90 @@ impl<T> Memory<T> {
     }
 }
 
-/// Read-only access to a trajectory or rollout buffer.
-///
-/// All iterators should yield items in the same order and length. Algorithms
-/// assume that the `n`th state, action, reward, and done flags describe one
-/// transition.
-pub trait TrajectoryContainer: Sync {
-    /// Tensor type stored in this trajectory.
-    type Tensor: R2lTensor;
+#[derive(Debug)]
+pub struct MultiMemory<T: R2lTensor> {
+    // TODO: questionable if we even need this
+    pub last_states: Vec<T>,
+    // pub next_states: Vec<T>,
+    pub actions: Vec<T>,
+    pub rewards: Vec<f32>,
+    pub terminateds: Vec<bool>,
+    pub truncateds: Vec<bool>,
+}
 
-    /// Number of transitions in the trajectory.
-    fn len(&self) -> usize;
-
-    /// Returns whether the trajectory contains no transitions.
-    fn is_empty(&self) -> bool {
-        self.len() == 0
+impl<T: R2lTensor> MultiMemory<T> {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            last_states: Vec::with_capacity(capacity),
+            actions: Vec::with_capacity(capacity),
+            rewards: Vec::with_capacity(capacity),
+            terminateds: Vec::with_capacity(capacity),
+            truncateds: Vec::with_capacity(capacity),
+        }
     }
 
-    /// Iterates over observations before each action.
-    fn states(&self) -> impl Iterator<Item = &Self::Tensor>;
-
-    /// Iterates over observations after each action.
-    fn next_states(&self) -> impl Iterator<Item = &Self::Tensor>;
-
-    /// Iterates over actions.
-    fn actions(&self) -> impl Iterator<Item = &Self::Tensor>;
-
-    /// Iterates over rewards.
-    fn rewards(&self) -> impl Iterator<Item = f32>;
-
-    /// Iterates over terminal-state flags.
-    fn terminated(&self) -> impl Iterator<Item = bool>;
-
-    /// Iterates over time-limit or external-cutoff flags.
-    fn truncated(&self) -> impl Iterator<Item = bool>;
-
-    /// Iterates over combined done flags.
-    fn dones(&self) -> impl Iterator<Item = bool> {
-        self.terminated()
-            .zip(self.truncated())
-            .map(|(terminated, truncated)| terminated || truncated)
+    pub fn push_memory(&mut self, memory: Memory<T>) {
+        let Memory {
+            state,
+            next_state,
+            action,
+            reward,
+            terminated,
+            truncated,
+        } = memory;
+        self.last_states.push(state);
+        self.actions.push(action);
+        self.rewards.push(reward);
+        self.terminateds.push(terminated);
+        self.truncateds.push(truncated);
     }
 
-    /// Iterates over cloned transitions.
-    ///
-    /// This is convenient for conversion code but may be expensive for large
-    /// tensor payloads.
-    fn memories(&self) -> impl Iterator<Item = Memory<Self::Tensor>> {
-        izip!(
-            self.states(),
-            self.next_states(),
-            self.actions(),
-            self.rewards(),
-            self.terminated(),
-            self.truncated()
-        )
-        .map(
-            |(state, next_state, action, reward, terminated, truncated)| Memory {
-                state: state.clone(),
+    // TODO: maybe an iterator would be better
+    pub fn into_memories(self, next_states: &[T]) -> Vec<Memory<T>> {
+        let mut memories = Vec::with_capacity(self.last_states.len());
+        let Self {
+            last_states: states,
+            actions,
+            rewards,
+            terminateds,
+            truncateds,
+        } = self;
+        for (state, next_state, action, reward, terminated, truncated) in izip!(
+            states,
+            next_states,
+            actions,
+            rewards,
+            terminateds,
+            truncateds
+        ) {
+            memories.push(Memory {
+                state,
                 next_state: next_state.clone(),
-                action: action.clone(),
+                action,
                 reward,
                 terminated,
                 truncated,
-            },
-        )
+            });
+        }
+        memories
     }
 }
 
-/// Mutable trajectory buffer that can receive newly collected transitions.
-pub trait ExpandableTrajectoryContainer: TrajectoryContainer + Send + 'static {
-    /// Appends one transition to the buffer.
-    fn push(&mut self, memory: Memory<Self::Tensor>);
-}
+// TODO: do we need this trait?
+pub trait TrajectoryBatch<T: R2lTensor> {
+    fn len(&self) -> usize;
 
-/// Mutable access for correcting the most recent state or reward.
-pub trait EditableTrajectoryContainer: TrajectoryContainer {
-    /// Removes and returns the last stored state.
-    fn pop_last_state(&mut self) -> Self::Tensor;
+    fn is_empty(&self) -> bool;
 
-    /// Removes and returns the last stored reward.
-    fn pop_last_reward(&mut self) -> f32;
+    fn states(&self) -> &[T];
 
-    /// Replaces the last stored state.
-    fn set_last_state(&mut self, t: Self::Tensor);
+    fn next_states(&self) -> &[T];
 
-    /// Replaces the last stored reward.
-    fn set_last_reward(&mut self, r: f32);
+    fn actions(&self) -> &[T];
+
+    fn rewards(&self) -> &[f32];
+
+    fn terminated(&self) -> &[bool];
+
+    fn truncated(&self) -> &[bool];
 }

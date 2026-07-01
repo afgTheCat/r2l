@@ -34,10 +34,10 @@ impl<T: R2lTensor> Space<T> {
 
     pub fn continuous(size: usize, min: Option<T>, max: Option<T>) -> Self {
         if let Some(min) = min.as_ref() {
-            debug_assert_eq!(min.len(), size);
+            debug_assert_eq!(min.size(), size);
         }
         if let Some(max) = max.as_ref() {
-            debug_assert_eq!(max.len(), size);
+            debug_assert_eq!(max.size(), size);
         }
         Self::Continuous { min, max, size }
     }
@@ -110,6 +110,10 @@ impl<T: R2lTensor> Snapshot<T> {
             truncated,
         }
     }
+
+    pub fn done(&self) -> bool {
+        self.terminated || self.truncated
+    }
 }
 
 /// Tensor type used by an [`Env`] implementation.
@@ -166,6 +170,20 @@ pub enum EnvBuilderType<EB: EnvBuilder> {
     Homogenous { builder: Arc<EB>, n_envs: usize },
     /// Uses one builder per worker.
     Heterogenous { builders: Vec<Arc<EB>> },
+}
+
+impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Homogenous { builder, n_envs } => Self::Homogenous {
+                builder: builder.clone(),
+                n_envs: *n_envs,
+            },
+            Self::Heterogenous { builders } => Self::Heterogenous {
+                builders: builders.clone(),
+            },
+        }
+    }
 }
 
 impl<EB: EnvBuilder> EnvBuilderType<EB> {

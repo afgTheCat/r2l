@@ -1,217 +1,132 @@
-use std::marker::PhantomData;
+use std::any::TypeId;
 
 use crate::{
-    buffers::{
-        ExpandableTrajectoryContainer, Memory, TrajectoryContainer, fix_sized::FixedSizeStateBuffer,
-    },
+    buffers::{TrajectoryBatch, buffer::TrajectoryView},
     tensor::R2lTensor,
 };
 
-struct F32Iter<'a> {
-    iter: Box<dyn Iterator<Item = f32> + 'a>,
+pub struct OwnedView<T: R2lTensor> {
+    states: Vec<T>,
+    next_states: Vec<T>,
+    actions: Vec<T>,
+    rewards: Vec<f32>,
+    terminated: Vec<bool>,
+    truncated: Vec<bool>,
 }
 
-impl<'a> F32Iter<'a> {
-    fn new<I>(iterator: I) -> Self
-    where
-        I: Iterator<Item = f32> + 'a,
-    {
+impl<T: R2lTensor> OwnedView<T> {
+    fn new(
+        states: Vec<T>,
+        next_states: Vec<T>,
+        actions: Vec<T>,
+        rewards: Vec<f32>,
+        terminated: Vec<bool>,
+        truncated: Vec<bool>,
+    ) -> Self {
         Self {
-            iter: Box::new(iterator),
+            states,
+            next_states,
+            actions,
+            rewards,
+            terminated,
+            truncated,
         }
     }
 }
 
-impl<'a> Iterator for F32Iter<'a> {
-    type Item = f32;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
-    }
+pub enum TrajectoryViewsWrapper<'a, T: R2lTensor> {
+    Borrowed(TrajectoryView<'a, T>),
+    Owned(OwnedView<T>),
 }
 
-struct BoolIter<'a> {
-    iter: Box<dyn Iterator<Item = bool> + 'a>,
-}
-
-impl<'a> BoolIter<'a> {
-    fn new<I>(iterator: I) -> Self
-    where
-        I: Iterator<Item = bool> + 'a,
-    {
-        Self {
-            iter: Box::new(iterator),
+impl<'a, T: R2lTensor> TrajectoryViewsWrapper<'a, T> {
+    pub fn from_view<'b, S: R2lTensor>(
+        view: &'b TrajectoryView<'b, S>,
+    ) -> TrajectoryViewsWrapper<'b, T> {
+        if TypeId::of::<S>() == TypeId::of::<T>() {
+            let states = unsafe { std::mem::transmute(view.states()) };
+            let next_states = unsafe { std::mem::transmute(view.next_states()) };
+            let actions = unsafe { std::mem::transmute(view.actions()) };
+            return TrajectoryViewsWrapper::Borrowed(TrajectoryView {
+                states,
+                next_states,
+                actions,
+                rewards: view.rewards(),
+                terminated: view.terminated(),
+                truncated: view.truncated(),
+            });
         }
+        let states = view.states().iter().map(|v| T::convert(v)).collect();
+        let next_states = view.next_states().iter().map(|v| T::convert(v)).collect();
+        let actions = view.actions().iter().map(|v| T::convert(v)).collect();
+        let rewards = view.rewards().to_vec();
+        let terminated = view.terminated().to_vec();
+        let truncated = view.truncated().to_vec();
+        TrajectoryViewsWrapper::Owned(OwnedView::new(
+            states,
+            next_states,
+            actions,
+            rewards,
+            terminated,
+            truncated,
+        ))
     }
 }
 
-impl<'a> Iterator for BoolIter<'a> {
-    type Item = bool;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
-    }
-}
-
-struct TensorIter<'a, T: R2lTensor> {
-    iterator: Box<dyn Iterator<Item = &'a T> + 'a>,
-}
-
-impl<'a, T: R2lTensor> TensorIter<'a, T> {
-    fn new<I>(iterator: I) -> Self
-    where
-        I: Iterator<Item = &'a T> + 'a,
-    {
-        Self {
-            iterator: Box::new(iterator),
-        }
-    }
-}
-
-impl<'a, T: R2lTensor> Iterator for TensorIter<'a, T> {
-    type Item = &'a T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iterator.next()
-    }
-}
-
-pub struct BorrowedWrapper<
-    'a,
-    S: R2lTensor,
-    T: R2lTensor + From<T>,
-    B: TrajectoryContainer<Tensor = S>,
-> {
-    data: &'a B,
-    _phantom: PhantomData<(S, T)>,
-}
-
-fn cast_ref<Src, Dst>(x: &Src) -> &Dst {
-    unsafe { &*(x as *const Src as *const Dst) }
-}
-
-impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S>>
-    BorrowedWrapper<'a, S, T, B>
-{
-    fn try_new(data: &'a B) -> Option<Self> {
-        if std::any::TypeId::of::<S>() == std::any::TypeId::of::<T>() {
-            Some(Self {
-                data,
-                _phantom: PhantomData,
-            })
-        } else {
-            None
-        }
-    }
-
-    fn states(&self) -> TensorIter<'_, T> {
-        TensorIter::new(self.data.states().map(cast_ref))
-    }
-
-    fn next_states(&self) -> TensorIter<'_, T> {
-        TensorIter::new(self.data.next_states().map(cast_ref))
-    }
-
-    fn actions(&self) -> TensorIter<'_, T> {
-        TensorIter::new(self.data.actions().map(cast_ref))
-    }
-
-    fn rewards(&self) -> F32Iter<'_> {
-        F32Iter::new(self.data.rewards())
-    }
-
-    fn terminated(&self) -> BoolIter<'_> {
-        BoolIter::new(self.data.terminated())
-    }
-
-    fn truncated(&self) -> BoolIter<'_> {
-        BoolIter::new(self.data.truncated())
-    }
-}
-
-pub enum BufferWrapper<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S>>
-{
-    Borrowed(BorrowedWrapper<'a, S, T, B>),
-    Cloned(Box<FixedSizeStateBuffer<T>>),
-}
-
-impl<'a, S: R2lTensor, T: R2lTensor + From<S>, B: TrajectoryContainer<Tensor = S>>
-    BufferWrapper<'a, S, T, B>
-{
-    pub fn new(buffer: &'a B) -> Self {
-        let len = buffer.len();
-        if std::any::TypeId::of::<S>() == std::any::TypeId::of::<T>() {
-            let borrowed = BorrowedWrapper::try_new(buffer).unwrap();
-            Self::Borrowed(borrowed)
-        } else {
-            let mut out = FixedSizeStateBuffer::new(len);
-            // let state = T::from(buffer.states().next().unwrap().clone());
-            for memory in buffer.memories() {
-                out.push(Memory {
-                    state: T::from(memory.state),
-                    next_state: T::from(memory.next_state),
-                    action: T::from(memory.action),
-                    reward: memory.reward,
-                    terminated: memory.terminated,
-                    truncated: memory.truncated,
-                });
-            }
-            BufferWrapper::Cloned(Box::new(out))
-        }
-    }
-}
-
-impl<'a, S: R2lTensor, T: R2lTensor + From<T>, B: TrajectoryContainer<Tensor = S>>
-    TrajectoryContainer for BufferWrapper<'a, S, T, B>
-{
-    type Tensor = T;
-
+impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryViewsWrapper<'a, T> {
     fn len(&self) -> usize {
         match self {
-            Self::Borrowed(b) => b.data.len(),
-            Self::Cloned(b) => b.len(),
+            Self::Borrowed(t) => t.len(),
+            Self::Owned(o) => o.states.len(),
         }
     }
 
-    fn states(&self) -> impl Iterator<Item = &Self::Tensor> {
+    fn is_empty(&self) -> bool {
         match self {
-            Self::Borrowed(b) => b.states(),
-            Self::Cloned(b) => TensorIter::new(b.states()),
+            Self::Borrowed(t) => t.is_empty(),
+            Self::Owned(o) => o.states.is_empty(),
         }
     }
 
-    fn next_states(&self) -> impl Iterator<Item = &Self::Tensor> {
+    fn states(&self) -> &[T] {
         match self {
-            Self::Borrowed(b) => b.next_states(),
-            Self::Cloned(b) => TensorIter::new(b.next_states()),
+            Self::Borrowed(t) => t.states(),
+            Self::Owned(o) => &o.states,
         }
     }
 
-    fn actions(&self) -> impl Iterator<Item = &Self::Tensor> {
+    fn next_states(&self) -> &[T] {
         match self {
-            Self::Borrowed(b) => b.actions(),
-            Self::Cloned(b) => TensorIter::new(b.actions()),
+            Self::Borrowed(t) => t.next_states(),
+            Self::Owned(o) => &o.next_states,
         }
     }
 
-    fn rewards(&self) -> impl Iterator<Item = f32> {
+    fn actions(&self) -> &[T] {
         match self {
-            Self::Borrowed(b) => b.rewards(),
-            Self::Cloned(b) => F32Iter::new(b.rewards()),
+            Self::Borrowed(t) => t.actions(),
+            Self::Owned(o) => &o.actions,
         }
     }
 
-    fn terminated(&self) -> impl Iterator<Item = bool> {
+    fn rewards(&self) -> &[f32] {
         match self {
-            Self::Borrowed(b) => b.terminated(),
-            Self::Cloned(b) => BoolIter::new(b.terminated()),
+            Self::Borrowed(t) => t.rewards(),
+            Self::Owned(o) => &o.rewards,
         }
     }
 
-    fn truncated(&self) -> impl Iterator<Item = bool> {
+    fn terminated(&self) -> &[bool] {
         match self {
-            Self::Borrowed(b) => b.truncated(),
-            Self::Cloned(b) => BoolIter::new(b.truncated()),
+            Self::Borrowed(t) => t.terminated(),
+            Self::Owned(o) => &o.terminated,
+        }
+    }
+
+    fn truncated(&self) -> &[bool] {
+        match self {
+            Self::Borrowed(t) => t.truncated(),
+            Self::Owned(o) => &o.truncated,
         }
     }
 }

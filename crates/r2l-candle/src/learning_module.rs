@@ -17,7 +17,7 @@ use r2l_core::{
 use crate::{
     distributions::CandlePolicyKind,
     optimizer::OptimizerWithMaxGrad,
-    thread_safe_sequential::{ThreadSafeSequential, build_sequential},
+    sequential::{ThreadSafeSequential, build_sequential},
 };
 
 /// Loss container used by Candle on-policy learning modules.
