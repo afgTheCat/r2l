@@ -19,34 +19,22 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
         self.rm.update(obs);
     }
 
-    // TODO: I guess this should work in place
-    pub fn normalize(&self, obs: &[T]) -> Vec<T> {
+    pub fn normalize_in_place(&self, obs: &mut [T]) {
         let mean = self.rm.mean.to_vec();
         let var = self.rm.var.to_vec();
-        obs.into_iter()
-            .map(|obs| {
-                let (data, shape) = obs.to_vec_and_shape();
-                let normalized = izip!(data, &mean, &var)
-                    .map(|(val, mean, var)| {
-                        ((val - *mean) / (*var + EPS).sqrt()).clamp(-self.clip, self.clip)
-                    })
-                    .collect();
-                T::from_vec_and_shape(normalized, shape)
-            })
-            .collect()
-    }
-
-    // updates the rms + returns the noremalized observation
-    pub fn update_and_normalize(&mut self, obs: &[T]) -> Vec<T> {
-        self.update(obs);
-        self.normalize(obs)
+        for obs in obs {
+            let (data, shape) = obs.to_vec_and_shape();
+            let normalized = izip!(data, &mean, &var)
+                .map(|(val, mean, var)| {
+                    ((val - mean) / (var + EPS).sqrt()).clamp(-self.clip, self.clip)
+                })
+                .collect();
+            *obs = T::from_vec_and_shape(normalized, shape);
+        }
     }
 
     pub fn update_and_normalize_in_place(&mut self, obs: &mut [T]) {
         self.update(obs);
-        let normalized = self.normalize(obs);
-        for (idx, new_t) in normalized.into_iter().enumerate() {
-            obs[idx] = new_t;
-        }
+        self.normalize_in_place(obs);
     }
 }
