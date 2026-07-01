@@ -47,7 +47,22 @@ impl Module for LinearLayer {
 }
 
 #[derive(Debug, Clone)]
-struct ActivationLayer(Activation);
+pub enum R2lActivation {
+    CandleAct(Activation),
+    Tanh,
+}
+
+impl Module for R2lActivation {
+    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+        match self {
+            Self::CandleAct(act) => act.forward(xs),
+            Self::Tanh => xs.tanh(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ActivationLayer(R2lActivation);
 
 impl Module for ActivationLayer {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
@@ -110,6 +125,7 @@ pub(crate) fn build_sequential(
     layers: &[usize],
     vb: &VarBuilder,
     prefix: &str,
+    act: R2lActivation,
 ) -> Result<ThreadSafeSequential> {
     let mut last_dim = input_dim;
     let mut nn = ThreadSafeSequential::default();
@@ -121,9 +137,9 @@ pub(crate) fn build_sequential(
             nn = nn.add_layer(ThreadSafeLayer::linear(layer))
         } else {
             let lin_layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
-            nn = nn.add_layer(ThreadSafeLayer::linear(lin_layer)).add_layer(
-                ThreadSafeLayer::activation(ActivationLayer(Activation::Relu)),
-            );
+            nn = nn
+                .add_layer(ThreadSafeLayer::linear(lin_layer))
+                .add_layer(ThreadSafeLayer::activation(ActivationLayer(act.clone())));
         }
         last_dim = *layer_size;
     }

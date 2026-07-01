@@ -8,7 +8,7 @@
 
 use anyhow::{Ok, Result};
 use candle_core::{DType, Device, Tensor};
-use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
+use candle_nn::{Activation, AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
     models::{LearningModule, ValueFunction},
     on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
@@ -17,7 +17,7 @@ use r2l_core::{
 use crate::{
     distributions::CandlePolicyKind,
     optimizer::OptimizerWithMaxGrad,
-    sequential::{ThreadSafeSequential, build_sequential},
+    sequential::{R2lActivation, ThreadSafeSequential, build_sequential},
 };
 
 /// Loss container used by Candle on-policy learning modules.
@@ -157,7 +157,13 @@ impl SequentialValueFunction {
         vb: &VarBuilder,
         prefix: &str,
     ) -> candle_core::Result<Self> {
-        let value_net = build_sequential(input_dim, layers, vb, prefix)?;
+        let value_net = build_sequential(
+            input_dim,
+            layers,
+            vb,
+            prefix,
+            R2lActivation::CandleAct(Activation::Relu),
+        )?;
         candle_core::Result::Ok(Self { value_net })
     }
 }

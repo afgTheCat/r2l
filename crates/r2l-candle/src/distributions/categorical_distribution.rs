@@ -1,13 +1,13 @@
 use anyhow::{Result, bail};
 use candle_core::{Device, Error, Tensor};
-use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
+use candle_nn::{Activation, VarBuilder};
 use candle_nn::{Module, ops::softmax};
 use r2l_core::models::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 
-use crate::sequential::{ThreadSafeSequential, build_sequential};
+use crate::sequential::{R2lActivation, ThreadSafeSequential, build_sequential};
 
 /// Categorical Candle policy for discrete action spaces.
 ///
@@ -31,7 +31,13 @@ impl CategoricalDistribution {
         device: Device,
         prefix: &str,
     ) -> Result<Self> {
-        let logits = build_sequential(observation_size, layers, vb, prefix)?;
+        let logits = build_sequential(
+            observation_size,
+            layers,
+            vb,
+            prefix,
+            R2lActivation::CandleAct(Activation::Relu),
+        )?;
         Ok(Self {
             action_size,
             logits,

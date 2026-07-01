@@ -2,10 +2,10 @@ use std::f32;
 
 use anyhow::Result;
 use candle_core::{Device, Tensor};
-use candle_nn::{Module, VarBuilder};
+use candle_nn::{Activation, Module, VarBuilder};
 use r2l_core::models::{Actor, Policy};
 
-use crate::sequential::{ThreadSafeSequential, build_sequential};
+use crate::sequential::{R2lActivation, ThreadSafeSequential, build_sequential};
 
 // TODO: we may want to resample the noise better than it is now
 /// Diagonal-Gaussian Candle policy for continuous action spaces.
@@ -30,7 +30,13 @@ impl DiagGaussianDistribution {
         log_std: Tensor,
         prefix: &str,
     ) -> Result<Self> {
-        let mu_net = build_sequential(obseravtion_size, layers, vb, prefix)?;
+        let mu_net = build_sequential(
+            obseravtion_size,
+            layers,
+            vb,
+            prefix,
+            R2lActivation::CandleAct(Activation::Relu),
+        )?;
         let noise = Tensor::randn(0f32, 1., log_std.shape(), log_std.device()).unwrap();
         let device = vb.device().clone();
         Ok(Self {
