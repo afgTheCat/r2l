@@ -4,7 +4,7 @@
 // buffer, instead they return the observation and the reward directly. Normalizaiton happens
 // afterwards.
 
-mod clipped_noramlizer;
+mod clipped_normalizer;
 mod worker;
 
 use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
@@ -21,7 +21,7 @@ use rand::RngExt;
 use crate::{
     SamplerExecutionMode,
     normalized::{
-        clipped_noramlizer::ClippedNormalizer,
+        clipped_normalizer::ClippedNormalizer,
         worker::{ThreadWorkerFactory, ThreadWorkers, VecWorkers, WorkerPool},
     },
 };
@@ -154,5 +154,7 @@ impl<E: Env<Tensor: R2lTensor>> Sampler for R2lNormalizedSampler<E> {
             .collect::<Vec<_>>()
     }
 
-    fn shutdown(&mut self) {}
+    fn shutdown(&mut self) {
+        self.pool.shutdown();
+    }
 }

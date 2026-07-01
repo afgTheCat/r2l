@@ -14,11 +14,13 @@ use rand::RngExt;
 pub enum WorkerCommand<T: R2lTensor> {
     Step(PhantomData<T>),
     SetPolicy(Box<dyn Actor<Tensor = T>>),
+    Stop,
 }
 
 pub enum WorkerResult<T: R2lTensor> {
     Stepped(Memory<T>),
     PolicySet,
+    Stopped,
 }
 
 struct Worker<T: R2lTensor, E: Env<Tensor = T>> {
@@ -145,6 +147,10 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
                     self.worker.actor = Some(policy);
                     self.tx.send(WorkerResult::PolicySet).unwrap();
                 }
+                WorkerCommand::Stop => {
+                    self.tx.send(WorkerResult::Stopped).unwrap();
+                    break;
+                }
             }
         }
     }
@@ -228,6 +234,17 @@ impl<T: R2lTensor> ThreadWorkers<T> {
             };
         }
     }
+
+    fn shutdown(&self) {
+        for _ in 0..self.worker_count {
+            self.command_tx.send(WorkerCommand::Stop).unwrap();
+        }
+        for _ in 0..self.worker_count {
+            let WorkerResult::Stopped = self.result_rx.recv().unwrap() else {
+                unreachable!()
+            };
+        }
+    }
 }
 
 pub enum WorkerPool<E: Env<Tensor: R2lTensor>> {
@@ -247,6 +264,13 @@ impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
         match self {
             Self::Vec(workers) => workers.set_policy(policy),
             Self::Thread(workers) => workers.set_policy(policy),
+        }
+    }
+
+    pub fn shutdown(&mut self) {
+        match self {
+            Self::Vec(vec) => {}
+            Self::Thread(threads) => threads.shutdown(),
         }
     }
 }
