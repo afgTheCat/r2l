@@ -7,7 +7,7 @@ use r2l_core::models::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 
-use crate::thread_safe_sequential::{ThreadSafeSequential, build_sequential};
+use crate::sequential::{ThreadSafeSequential, build_sequential};
 
 /// Categorical Candle policy for discrete action spaces.
 ///
