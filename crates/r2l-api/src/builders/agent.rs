@@ -1,6 +1,6 @@
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
-use r2l_core::{env::ActionSpaceType, on_policy::algorithm::Agent};
+use r2l_core::{env::ActionSpaceType, models::ActivationFunction, on_policy::algorithm::Agent};
 
 use crate::builders::learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType};
 
@@ -89,6 +89,12 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
     /// Sets the hidden layer sizes used by the policy network.
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
         self.learning_module_builder.policy_hidden_layers = policy_hidden_layers;
+        self
+    }
+
+    /// Sets the hidden-layer activation function used by policy and value networks.
+    pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
+        self.learning_module_builder.activation_function = activation_function;
         self
     }
 

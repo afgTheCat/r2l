@@ -8,7 +8,7 @@
 use burn::{Tensor, module::Module, prelude::Backend};
 use r2l_core::{
     env::ActionSpaceType,
-    models::{Actor, Policy},
+    models::{ActivationFunction, Actor, Policy},
 };
 
 use crate::distributions::{
@@ -36,19 +36,26 @@ pub enum PolicyKind<B: Backend> {
 }
 
 impl<B: Backend> PolicyKind<B> {
-    fn categorical(policy_layers: &[usize]) -> Self {
-        PolicyKind::Categorical(CategoricalDistribution::<B>::build(policy_layers))
+    fn categorical(policy_layers: &[usize], activation: ActivationFunction) -> Self {
+        PolicyKind::Categorical(CategoricalDistribution::<B>::build(
+            policy_layers,
+            activation,
+        ))
     }
 
-    fn continuous(policy_layers: &[usize]) -> Self {
-        PolicyKind::Diag(DiagGaussianDistribution::build(policy_layers))
+    fn continuous(policy_layers: &[usize], activation: ActivationFunction) -> Self {
+        PolicyKind::Diag(DiagGaussianDistribution::build(policy_layers, activation))
     }
 
     /// Builds the appropriate Burn policy for the given action-space type.
-    pub fn build(action_space_type: ActionSpaceType, policy_layers: &[usize]) -> Self {
+    pub fn build(
+        action_space_type: ActionSpaceType,
+        policy_layers: &[usize],
+        activation: ActivationFunction,
+    ) -> Self {
         match action_space_type {
-            ActionSpaceType::Discrete => Self::categorical(policy_layers),
-            ActionSpaceType::Continuous => Self::continuous(policy_layers),
+            ActionSpaceType::Discrete => Self::categorical(policy_layers, activation),
+            ActionSpaceType::Continuous => Self::continuous(policy_layers, activation),
         }
     }
 }

@@ -1,15 +1,12 @@
-use burn::nn::{LinearConfig, Relu, Tanh};
-use burn::tensor::activation::relu;
+use burn::nn::activation::{Activation, ActivationConfig};
+use burn::nn::{EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig};
 use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
 use burn_store::{ModuleStore, SafetensorsStore};
-
-#[derive(Debug, Clone, Module)]
-pub struct ReluAct;
+use r2l_core::models::ActivationFunction;
 
 #[derive(Debug, Module)]
 pub enum Layer<B: Backend> {
-    ReluAct(Relu),
-    Tanh(Tanh),
+    Activation(Activation<B>),
     LinearLayer(Linear<B>),
 }
 
@@ -17,13 +14,26 @@ impl<B: Backend> Layer<B> {
     fn forward(&self, t: Tensor<B, 2>) -> Tensor<B, 2> {
         match &self {
             Self::LinearLayer(linear) => linear.forward(t),
-            Self::ReluAct(relu) => relu.forward(t),
-            Self::Tanh(tanh) => tanh.forward(t),
+            Self::Activation(activation) => activation.forward(t),
         }
     }
 
-    fn relu_act() -> Self {
-        Self::ReluAct(Relu)
+    fn activation(activation: ActivationFunction) -> Self {
+        let device = Default::default();
+        let config = match activation {
+            ActivationFunction::Elu => ActivationConfig::Elu(EluConfig::new()),
+            ActivationFunction::Gelu => ActivationConfig::Gelu,
+            ActivationFunction::GeluApproximate => ActivationConfig::GeluApproximate,
+            ActivationFunction::HardSigmoid => {
+                ActivationConfig::HardSigmoid(HardSigmoidConfig::new())
+            }
+            ActivationFunction::HardSwish => ActivationConfig::HardSwish,
+            ActivationFunction::LeakyRelu => ActivationConfig::LeakyRelu(LeakyReluConfig::new()),
+            ActivationFunction::Relu => ActivationConfig::Relu,
+            ActivationFunction::Sigmoid => ActivationConfig::Sigmoid,
+            ActivationFunction::Tanh => ActivationConfig::Tanh,
+        };
+        Self::Activation(config.init::<B>(&device))
     }
 
     fn linear(input: usize, output: usize) -> Self {
@@ -47,7 +57,7 @@ impl<B: Backend> Sequential<B> {
         t
     }
 
-    pub fn build(layer_sizes: &[usize]) -> Self {
+    pub fn build(layer_sizes: &[usize], activation: ActivationFunction) -> Self {
         let mut last_dim = layer_sizes[0];
         let mut layers = vec![];
         let num_layers = layer_sizes.len();
@@ -56,7 +66,7 @@ impl<B: Backend> Sequential<B> {
                 layers.push(Layer::linear(last_dim, *layer_size));
             } else {
                 layers.push(Layer::linear(last_dim, *layer_size));
-                layers.push(Layer::relu_act());
+                layers.push(Layer::activation(activation));
             }
             last_dim = *layer_size;
         }

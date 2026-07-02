@@ -3,7 +3,7 @@ use candle_core::{Device, Error, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
-use r2l_core::models::{Actor, Policy};
+use r2l_core::models::{ActivationFunction, Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 
@@ -30,8 +30,9 @@ impl CategoricalDistribution {
         vb: &VarBuilder,
         device: Device,
         prefix: &str,
+        activation: ActivationFunction,
     ) -> Result<Self> {
-        let logits = build_sequential(observation_size, layers, vb, prefix)?;
+        let logits = build_sequential(observation_size, layers, vb, prefix, activation)?;
         Ok(Self {
             action_size,
             logits,

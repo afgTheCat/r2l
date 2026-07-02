@@ -13,7 +13,7 @@ use burn::{
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_core::{
-    models::{LearningModule, Policy, ValueFunction},
+    models::{ActivationFunction, LearningModule, Policy, ValueFunction},
     on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
 
@@ -291,10 +291,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
     pub fn joint(
         policy: D,
         value_layers: &[usize],
+        activation: ActivationFunction,
         optimizer_config: AdamWConfig,
         lr: f64,
     ) -> Self {
-        let value_net: Sequential<B> = Sequential::build(value_layers);
+        let value_net: Sequential<B> = Sequential::build(value_layers, activation);
         let model = JointActorModel::new(policy, value_net);
         let model = JointPolicyValueModule::new(model, optimizer_config.init(), lr);
         Self::Joint(model)
@@ -304,12 +305,13 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
     pub fn split(
         policy: D,
         value_layers: &[usize],
+        activation: ActivationFunction,
         policy_optimizer_config: AdamWConfig,
         policy_lr: f64,
         value_optimizer_config: AdamWConfig,
         value_lr: f64,
     ) -> Self {
-        let value_net: Sequential<B> = Sequential::build(value_layers);
+        let value_net: Sequential<B> = Sequential::build(value_layers, activation);
         let model = SplitPolicyValueModule::new(
             policy,
             value_net,

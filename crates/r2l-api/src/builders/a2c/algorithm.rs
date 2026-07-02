@@ -6,6 +6,7 @@ use r2l_agents::on_policy_algorithms::a2c::A2CParams;
 use r2l_core::on_policy::algorithm::Agent;
 use r2l_core::{
     env::{Env, EnvBuilder},
+    models::ActivationFunction,
     tensor::R2lTensor,
 };
 use r2l_gym::GymEnvBuilder;
@@ -92,6 +93,14 @@ where
         self.agent_builder = self
             .agent_builder
             .with_policy_hidden_layers(policy_hidden_layers);
+        self
+    }
+
+    /// Sets the hidden-layer activation function used by policy and value networks.
+    pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
+        self.agent_builder = self
+            .agent_builder
+            .with_activation_function(activation_function);
         self
     }
 

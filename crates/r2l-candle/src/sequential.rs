@@ -2,6 +2,7 @@ use candle_core::{Result, Tensor};
 use candle_nn::init::{FanInOut, NonLinearity, NormalOrUniform};
 use candle_nn::{Activation, Init, Linear, Module, VarBuilder};
 use either::Either;
+use r2l_core::models::ActivationFunction;
 
 #[derive(Debug, Clone)]
 struct LinearLayer {
@@ -47,11 +48,27 @@ impl Module for LinearLayer {
 }
 
 #[derive(Debug, Clone)]
-struct ActivationLayer(Activation);
+struct ActivationLayer(ActivationFunction);
+
+impl ActivationLayer {
+    fn new(activation: ActivationFunction) -> Self {
+        Self(activation)
+    }
+}
 
 impl Module for ActivationLayer {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        self.0.forward(xs)
+        match self.0 {
+            ActivationFunction::Elu => Activation::Elu(1.0).forward(xs),
+            ActivationFunction::Gelu => Activation::Gelu.forward(xs),
+            ActivationFunction::GeluApproximate => Activation::GeluPytorchTanh.forward(xs),
+            ActivationFunction::HardSigmoid => Activation::HardSigmoid.forward(xs),
+            ActivationFunction::HardSwish => Activation::HardSwish.forward(xs),
+            ActivationFunction::LeakyRelu => Activation::LeakyRelu(0.01).forward(xs),
+            ActivationFunction::Relu => xs.relu(),
+            ActivationFunction::Sigmoid => Activation::Sigmoid.forward(xs),
+            ActivationFunction::Tanh => xs.tanh(),
+        }
     }
 }
 
@@ -110,6 +127,7 @@ pub(crate) fn build_sequential(
     layers: &[usize],
     vb: &VarBuilder,
     prefix: &str,
+    activation: ActivationFunction,
 ) -> Result<ThreadSafeSequential> {
     let mut last_dim = input_dim;
     let mut nn = ThreadSafeSequential::default();
@@ -122,7 +140,7 @@ pub(crate) fn build_sequential(
         } else {
             let lin_layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
             nn = nn.add_layer(ThreadSafeLayer::linear(lin_layer)).add_layer(
-                ThreadSafeLayer::activation(ActivationLayer(Activation::Relu)),
+                ThreadSafeLayer::activation(ActivationLayer::new(activation)),
             );
         }
         last_dim = *layer_size;
