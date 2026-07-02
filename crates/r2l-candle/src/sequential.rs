@@ -3,6 +3,8 @@ use candle_nn::init::{FanInOut, NonLinearity, NormalOrUniform};
 use candle_nn::{Activation, Init, Linear, Module, VarBuilder};
 use either::Either;
 use r2l_core::models::ActivationFunction;
+use safetensors::serialize as st_serialize;
+use serde::Serialize;
 
 #[derive(Debug, Clone)]
 struct LinearLayer {
@@ -39,6 +41,16 @@ impl LinearLayer {
         debug_assert!(shape.rank() == 2);
         shape.dims()[1]
     }
+
+    fn serialize(&self, name: &str) -> Vec<u8> {
+        let weight_name = format!("weight_{name}");
+        let bias_name = format!("bias_{name}");
+        let mut tensors = vec![(weight_name, self.layer.weight())];
+        if let Some(bias) = self.layer.bias() {
+            tensors.push((bias_name, bias));
+        }
+        st_serialize(tensors, None).expect("failed to serialize linear layer")
+    }
 }
 
 impl Module for LinearLayer {
@@ -47,7 +59,7 @@ impl Module for LinearLayer {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 struct ActivationLayer(ActivationFunction);
 
 impl ActivationLayer {
@@ -73,9 +85,9 @@ impl Module for ActivationLayer {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ThreadSafeLayer(Either<LinearLayer, ActivationLayer>);
+pub(crate) struct Layer(Either<LinearLayer, ActivationLayer>);
 
-impl ThreadSafeLayer {
+impl Layer {
     fn linear(linear: LinearLayer) -> Self {
         Self(Either::Left(linear))
     }
@@ -90,9 +102,33 @@ impl ThreadSafeLayer {
             Either::Right(_) => None,
         }
     }
+
+    fn serialize(&self, name: &str) -> Vec<u8> {
+        match &self.0 {
+            Either::Left(linear) => {
+                let mut bytes = vec![0];
+                bytes.extend(linear.serialize(name));
+                bytes
+            }
+            Either::Right(activation) => {
+                let activation_id = match activation.0 {
+                    ActivationFunction::Elu => 0,
+                    ActivationFunction::Gelu => 1,
+                    ActivationFunction::GeluApproximate => 2,
+                    ActivationFunction::HardSigmoid => 3,
+                    ActivationFunction::HardSwish => 4,
+                    ActivationFunction::LeakyRelu => 5,
+                    ActivationFunction::Relu => 6,
+                    ActivationFunction::Sigmoid => 7,
+                    ActivationFunction::Tanh => 8,
+                };
+                vec![1, activation_id]
+            }
+        }
+    }
 }
 
-impl Module for ThreadSafeLayer {
+impl Module for Layer {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         match &self.0 {
             Either::Left(linear) => linear.forward(xs),
@@ -102,17 +138,36 @@ impl Module for ThreadSafeLayer {
 }
 
 #[derive(Default, Debug, Clone)]
-pub(crate) struct ThreadSafeSequential {
-    layers: Vec<ThreadSafeLayer>,
+pub(crate) struct Sequential {
+    layers: Vec<Layer>,
 }
 
-impl ThreadSafeSequential {
-    pub(crate) fn layer(&self, idx: usize) -> Option<&ThreadSafeLayer> {
+impl Serialize for Sequential {
+    fn serialize<S>(&self, serializer: S) -> std::prelude::v1::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        todo!()
+    }
+}
+
+impl Sequential {
+    fn serialize(&self) -> Vec<u8> {
+        let mut serialized = vec![];
+        for (idx, layer) in self.layers.iter().enumerate() {
+            let layer_name = format!("layer_{idx}");
+            let layer_serialized = layer.serialize(&layer_name);
+            serialized.extend(layer_serialized);
+        }
+        serialized
+    }
+
+    pub(crate) fn layer(&self, idx: usize) -> Option<&Layer> {
         self.layers.get(idx)
     }
 }
 
-impl Module for ThreadSafeSequential {
+impl Module for Sequential {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         let mut xs = xs.clone();
         for layer in self.layers.iter() {
@@ -128,28 +183,28 @@ pub(crate) fn build_sequential(
     vb: &VarBuilder,
     prefix: &str,
     activation: ActivationFunction,
-) -> Result<ThreadSafeSequential> {
+) -> Result<Sequential> {
     let mut last_dim = input_dim;
-    let mut nn = ThreadSafeSequential::default();
+    let mut nn = Sequential::default();
     let num_layers = layers.len();
     for (layer_idx, layer_size) in layers.iter().enumerate() {
         let layer_pp = format!("{prefix}{layer_idx}");
         if layer_idx == num_layers - 1 {
             let layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
-            nn = nn.add_layer(ThreadSafeLayer::linear(layer))
+            nn = nn.add_layer(Layer::linear(layer))
         } else {
             let lin_layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
-            nn = nn.add_layer(ThreadSafeLayer::linear(lin_layer)).add_layer(
-                ThreadSafeLayer::activation(ActivationLayer::new(activation)),
-            );
+            nn = nn
+                .add_layer(Layer::linear(lin_layer))
+                .add_layer(Layer::activation(ActivationLayer::new(activation)));
         }
         last_dim = *layer_size;
     }
     Ok(nn)
 }
 
-impl ThreadSafeSequential {
-    fn add_layer(mut self, layer: ThreadSafeLayer) -> Self {
+impl Sequential {
+    fn add_layer(mut self, layer: Layer) -> Self {
         self.layers.push(layer);
         self
     }

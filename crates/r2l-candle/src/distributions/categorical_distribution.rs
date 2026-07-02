@@ -7,7 +7,7 @@ use r2l_core::models::{ActivationFunction, Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 
-use crate::sequential::{ThreadSafeSequential, build_sequential};
+use crate::sequential::{Sequential, build_sequential};
 
 /// Categorical Candle policy for discrete action spaces.
 ///
@@ -17,7 +17,7 @@ use crate::sequential::{ThreadSafeSequential, build_sequential};
 #[derive(Clone, Debug)]
 pub struct CategoricalDistribution {
     action_size: usize,
-    logits: ThreadSafeSequential,
+    logits: Sequential,
     device: Device,
 }
 

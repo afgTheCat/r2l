@@ -5,7 +5,7 @@ use candle_core::{Device, Tensor};
 use candle_nn::{Module, VarBuilder};
 use r2l_core::models::{ActivationFunction, Actor, Policy};
 
-use crate::sequential::{ThreadSafeSequential, build_sequential};
+use crate::sequential::{Sequential, build_sequential};
 
 // TODO: we may want to resample the noise better than it is now
 /// Diagonal-Gaussian Candle policy for continuous action spaces.
@@ -16,7 +16,7 @@ use crate::sequential::{ThreadSafeSequential, build_sequential};
 #[derive(Debug, Clone)]
 pub struct DiagGaussianDistribution {
     noise: Tensor,
-    mu_net: ThreadSafeSequential,
+    mu_net: Sequential,
     log_std: Tensor,
     device: Device,
 }

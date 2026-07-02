@@ -1,9 +1,10 @@
 use anyhow::Result;
+use serde::Serialize;
 
 use crate::tensor::R2lTensor;
 
 /// Activation function used between hidden layers in feed-forward networks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 pub enum ActivationFunction {
     /// Exponential linear unit activation with the backend default alpha.
     Elu,
