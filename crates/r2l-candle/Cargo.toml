@@ -17,6 +17,7 @@ cuda = [
 r2l-core = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
+safetensors = { version = "0.8.0" }
 either = { workspace = true }
 rand = { workspace = true }
 derive_more = { version = "2.0.1", features = ["full"] }

@@ -1,4 +1,6 @@
-use candle_core::{Result, Tensor};
+use std::collections::HashMap;
+
+use candle_core::{Device, Result, Tensor};
 use candle_nn::init::{FanInOut, NonLinearity, NormalOrUniform};
 use candle_nn::{Activation, Init, Linear, Module, VarBuilder};
 use either::Either;
@@ -68,8 +70,12 @@ impl ThreadSafeLayer {
     }
 
     pub(crate) fn input_size(&self) -> Option<usize> {
+        self.as_linear().map(LinearLayer::input_size)
+    }
+
+    fn as_linear(&self) -> Option<&LinearLayer> {
         match &self.0 {
-            Either::Left(linear) => Some(linear.input_size()),
+            Either::Left(linear) => Some(linear),
             Either::Right(_) => None,
         }
     }
@@ -93,6 +99,69 @@ impl ThreadSafeSequential {
     pub(crate) fn layer(&self, idx: usize) -> Option<&ThreadSafeLayer> {
         self.layers.get(idx)
     }
+
+    pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        self.linear_layers()
+            .enumerate()
+            .flat_map(|(idx, linear)| {
+                let layer_prefix = format!("{prefix}{idx}");
+                let mut tensors = vec![(
+                    format!("{layer_prefix}.weight"),
+                    linear.layer.weight().clone(),
+                )];
+                if let Some(bias) = linear.layer.bias() {
+                    tensors.push((format!("{layer_prefix}.bias"), bias.clone()));
+                }
+                tensors
+            })
+            .collect()
+    }
+
+    fn linear_layers(&self) -> impl Iterator<Item = &LinearLayer> {
+        self.layers.iter().filter_map(ThreadSafeLayer::as_linear)
+    }
+}
+
+pub(crate) fn layer_sizes_from_tensors(
+    tensors: &HashMap<String, Tensor>,
+    prefix: &str,
+) -> (usize, Vec<usize>) {
+    let weight_shapes = saved_weight_shapes(tensors, prefix);
+    let (_, first_shape) = weight_shapes
+        .first()
+        .unwrap_or_else(|| panic!("no linear layers found for prefix {prefix}"));
+    let observation_size = first_shape[1];
+    let layers = weight_shapes.iter().map(|(_, shape)| shape[0]).collect();
+    (observation_size, layers)
+}
+
+fn saved_weight_shapes<'a>(
+    tensors: &'a HashMap<String, Tensor>,
+    prefix: &str,
+) -> Vec<(String, &'a [usize])> {
+    (0..)
+        .map(|idx| format!("{prefix}{idx}.weight"))
+        .map_while(|name| {
+            tensors.get(&name).map(|weight| {
+                let shape = weight.dims();
+                assert!(
+                    shape.len() == 2,
+                    "expected {name} to be rank 2, got shape {shape:?}"
+                );
+                (name, shape)
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn load_tensors_with_layer_sizes(
+    bytes: &[u8],
+    device: &Device,
+    prefix: &str,
+) -> (HashMap<String, Tensor>, usize, Vec<usize>) {
+    let tensors = candle_core::safetensors::load_buffer(bytes, device).unwrap();
+    let (observation_size, layers) = layer_sizes_from_tensors(&tensors, prefix);
+    (tensors, observation_size, layers)
 }
 
 impl Module for ThreadSafeSequential {

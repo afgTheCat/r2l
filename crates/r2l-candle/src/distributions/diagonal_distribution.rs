@@ -1,11 +1,11 @@
 use std::f32;
 
 use anyhow::Result;
-use candle_core::{Device, Tensor};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::{Module, VarBuilder};
 use r2l_core::models::{Actor, Policy};
 
-use crate::sequential::{ThreadSafeSequential, build_sequential};
+use crate::sequential::{ThreadSafeSequential, build_sequential, load_tensors_with_layer_sizes};
 
 // TODO: we may want to resample the noise better than it is now
 /// Diagonal-Gaussian Candle policy for continuous action spaces.
@@ -19,9 +19,14 @@ pub struct DiagGaussianDistribution {
     mu_net: ThreadSafeSequential,
     log_std: Tensor,
     device: Device,
+    prefix: String,
 }
 
 impl DiagGaussianDistribution {
+    fn log_std_key(prefix: &str) -> String {
+        format!("{prefix}.log_std")
+    }
+
     /// Builds a diagonal-Gaussian policy network.
     pub fn build(
         obseravtion_size: usize,
@@ -38,7 +43,19 @@ impl DiagGaussianDistribution {
             mu_net,
             noise,
             device,
+            prefix: prefix.to_string(),
         })
+    }
+
+    /// Builds a diagonal-Gaussian policy from safetensors bytes using a custom tensor prefix.
+    pub fn from_bytes_with_prefix(bytes: &[u8], device: Device, prefix: &str) -> Self {
+        let (tensors, observation_size, layers) =
+            load_tensors_with_layer_sizes(bytes, &device, prefix);
+        let action_size = *layers.last().unwrap();
+        let log_std = tensors.get(&Self::log_std_key(prefix)).unwrap().clone();
+        let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
+        assert_eq!(log_std.dims(), &[action_size]);
+        Self::build(observation_size, &layers, &vb, log_std, prefix).unwrap()
     }
 
     /// Returns the Candle device used by this policy.
@@ -73,6 +90,12 @@ impl Actor for DiagGaussianDistribution {
         let noise = Tensor::randn(0f32, 1., self.log_std.shape(), self.log_std.device())?;
         let action = (mu + std.mul(&noise.unsqueeze(0)?)?)?.squeeze(0)?.detach();
         Ok(action)
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        let mut tensors = self.mu_net.named_tensors(&self.prefix);
+        tensors.push((Self::log_std_key(&self.prefix), self.log_std.clone()));
+        safetensors::serialize(tensors, None).ok()
     }
 }
 

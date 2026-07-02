@@ -113,6 +113,23 @@ impl CandlePolicyKind {
             ),
         }
     }
+
+    /// Builds the appropriate Candle policy from safetensors bytes using a custom tensor prefix.
+    pub fn from_bytes_with_prefix(
+        action_space: ActionSpaceType,
+        bytes: &[u8],
+        device: Device,
+        prefix: &str,
+    ) -> Self {
+        match action_space {
+            ActionSpaceType::Discrete => Self::Categorical(
+                CategoricalDistribution::from_bytes_with_prefix(bytes, device, prefix),
+            ),
+            ActionSpaceType::Continuous => Self::DiagGaussian(
+                DiagGaussianDistribution::from_bytes_with_prefix(bytes, device, prefix),
+            ),
+        }
+    }
 }
 
 impl Actor for CandlePolicyKind {
@@ -122,6 +139,13 @@ impl Actor for CandlePolicyKind {
         match self {
             Self::Categorical(cat) => cat.action(observation),
             Self::DiagGaussian(diag) => diag.action(observation),
+        }
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Categorical(cat) => cat.try_serialize(),
+            Self::DiagGaussian(diag) => diag.try_serialize(),
         }
     }
 }

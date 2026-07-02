@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use candle_core::{Device, Error, Tensor};
+use candle_core::{DType, Device, Error, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
@@ -7,7 +7,7 @@ use r2l_core::models::{Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 
-use crate::sequential::{ThreadSafeSequential, build_sequential};
+use crate::sequential::{ThreadSafeSequential, build_sequential, load_tensors_with_layer_sizes};
 
 /// Categorical Candle policy for discrete action spaces.
 ///
@@ -19,6 +19,7 @@ pub struct CategoricalDistribution {
     action_size: usize,
     logits: ThreadSafeSequential,
     device: Device,
+    prefix: String,
 }
 
 impl CategoricalDistribution {
@@ -36,7 +37,17 @@ impl CategoricalDistribution {
             action_size,
             logits,
             device,
+            prefix: prefix.to_string(),
         })
+    }
+
+    /// Builds a categorical policy from safetensors bytes using a custom tensor prefix.
+    pub fn from_bytes_with_prefix(bytes: &[u8], device: Device, prefix: &str) -> Self {
+        let (tensors, observation_size, layers) =
+            load_tensors_with_layer_sizes(bytes, &device, prefix);
+        let action_size = *layers.last().unwrap();
+        let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
+        Self::build(observation_size, action_size, &layers, &vb, device, prefix).unwrap()
     }
 
     /// Returns the Candle device used by this policy.
@@ -72,6 +83,10 @@ impl Actor for CategoricalDistribution {
         action_mask[action] = 1.;
         let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
         Ok(action)
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        safetensors::serialize(self.logits.named_tensors(&self.prefix), None).ok()
     }
 }
 
