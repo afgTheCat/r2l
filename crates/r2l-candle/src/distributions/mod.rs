@@ -19,7 +19,7 @@ use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
 use r2l_core::{
     env::ActionSpaceType,
-    models::{Actor, Policy},
+    models::{ActivationFunction, Actor, Policy},
 };
 
 /// Erased Candle policy type covering the supported action-space variants.
@@ -58,6 +58,7 @@ impl CandlePolicyKind {
         hidden_layers: &[usize],
         action_size: usize,
         observation_size: usize,
+        activation: ActivationFunction,
     ) -> Result<Self> {
         let layers = &[hidden_layers, &[action_size]].concat();
         let distr = CategoricalDistribution::build(
@@ -67,6 +68,7 @@ impl CandlePolicyKind {
             policy_varbuilder,
             policy_varbuilder.device().clone(),
             "policy",
+            activation,
         )?;
         Ok(Self::Categorical(distr))
     }
@@ -77,6 +79,7 @@ impl CandlePolicyKind {
         hidden_layers: &[usize],
         action_size: usize,
         observation_size: usize,
+        activation: ActivationFunction,
     ) -> Result<Self> {
         let layers = &[hidden_layers, &[action_size]].concat();
         let log_std = policy_varbuilder.get(action_size, "log_std")?;
@@ -86,6 +89,7 @@ impl CandlePolicyKind {
             policy_varbuilder,
             log_std,
             "policy",
+            activation,
         )?;
         Ok(Self::DiagGaussian(distr))
     }
@@ -97,6 +101,7 @@ impl CandlePolicyKind {
         hidden_layers: &[usize],
         action_size: usize,
         observation_size: usize,
+        activation: ActivationFunction,
     ) -> Result<Self> {
         match action_space {
             ActionSpaceType::Discrete => Self::categorical(
@@ -104,12 +109,14 @@ impl CandlePolicyKind {
                 hidden_layers,
                 action_size,
                 observation_size,
+                activation,
             ),
             ActionSpaceType::Continuous => Self::diag_gaussian(
                 policy_varbuilder,
                 hidden_layers,
                 action_size,
                 observation_size,
+                activation,
             ),
         }
     }

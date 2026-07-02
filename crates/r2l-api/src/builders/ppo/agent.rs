@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
-use r2l_core::env::ActionSpaceType;
+use r2l_core::{env::ActionSpaceType, models::ActivationFunction};
 
 use crate::{
     BurnBackend,
@@ -40,6 +40,7 @@ impl PPOAgentBuilder {
             learning_module_builder: OnPolicyLearningModuleBuilder {
                 policy_hidden_layers: vec![64, 64],
                 value_hidden_layers: vec![64, 64],
+                activation_function: ActivationFunction::default(),
                 learning_module_type: OnPolicyLearningModuleType::Joint {
                     params: ParamsAdamW {
                         lr: 3e-4,

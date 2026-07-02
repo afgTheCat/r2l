@@ -9,7 +9,7 @@ use r2l_burn::{
 use r2l_candle::{
     distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
 };
-use r2l_core::env::ActionSpaceType;
+use r2l_core::{env::ActionSpaceType, models::ActivationFunction};
 
 /// Optimizer layout for on-policy policy/value learning modules.
 ///
@@ -94,6 +94,7 @@ impl OnPolicyLearningModuleType {
 pub(crate) struct OnPolicyLearningModuleBuilder {
     pub(crate) policy_hidden_layers: Vec<usize>,
     pub(crate) value_hidden_layers: Vec<usize>,
+    pub(crate) activation_function: ActivationFunction,
     pub(crate) learning_module_type: OnPolicyLearningModuleType,
 }
 
@@ -113,6 +114,7 @@ impl OnPolicyLearningModuleBuilder {
             &self.policy_hidden_layers,
             action_size,
             observation_size,
+            self.activation_function,
         )?;
         match self.learning_module_type {
             OnPolicyLearningModuleType::Joint {
@@ -124,6 +126,7 @@ impl OnPolicyLearningModuleBuilder {
                 policy_varmap,
                 max_grad_norm,
                 params,
+                self.activation_function,
             ),
             OnPolicyLearningModuleType::Split {
                 policy_max_grad_norm,
@@ -138,6 +141,7 @@ impl OnPolicyLearningModuleBuilder {
                 value_max_grad_norm,
                 policy_params,
                 value_params,
+                self.activation_function,
             ),
         }
     }
@@ -154,7 +158,7 @@ impl OnPolicyLearningModuleBuilder {
             &[action_size],
         ]
         .concat();
-        let policy = PolicyKind::build(action_space, policy_layers);
+        let policy = PolicyKind::build(action_space, policy_layers, self.activation_function);
         let learning_module = match self.learning_module_type {
             OnPolicyLearningModuleType::Joint {
                 max_grad_norm,
@@ -171,7 +175,13 @@ impl OnPolicyLearningModuleBuilder {
                     optimizer_config = optimizer_config
                         .with_grad_clipping(Some(GradientClippingConfig::Norm(max_grad_norm)));
                 }
-                BurnPolicyValueModule::joint(policy, value_layers, optimizer_config, params.lr)
+                BurnPolicyValueModule::joint(
+                    policy,
+                    value_layers,
+                    self.activation_function,
+                    optimizer_config,
+                    params.lr,
+                )
             }
             OnPolicyLearningModuleType::Split {
                 policy_max_grad_norm,
@@ -204,6 +214,7 @@ impl OnPolicyLearningModuleBuilder {
                 BurnPolicyValueModule::split(
                     policy,
                     value_layers,
+                    self.activation_function,
                     policy_optimizer,
                     policy_params.lr,
                     value_optimizer,

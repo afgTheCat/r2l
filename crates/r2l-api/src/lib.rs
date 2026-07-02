@@ -28,6 +28,7 @@ pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule};
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
 pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
+    models::ActivationFunction,
     on_policy::algorithm::OnPolicyAlgorithm,
     tensor::TensorData,
 };

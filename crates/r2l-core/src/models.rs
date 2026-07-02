@@ -2,6 +2,30 @@ use anyhow::Result;
 
 use crate::tensor::R2lTensor;
 
+/// Activation function used between hidden layers in feed-forward networks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActivationFunction {
+    /// Exponential linear unit activation with the backend default alpha.
+    Elu,
+    /// Gaussian error linear unit activation.
+    Gelu,
+    /// Gaussian error linear unit activation using the backend tanh approximation.
+    GeluApproximate,
+    /// Hard sigmoid activation with backend default parameters.
+    HardSigmoid,
+    /// Hard swish activation.
+    HardSwish,
+    /// Leaky rectified linear unit activation with the backend default slope.
+    LeakyRelu,
+    /// Rectified linear unit activation.
+    Relu,
+    /// Sigmoid activation.
+    Sigmoid,
+    /// Hyperbolic tangent activation.
+    #[default]
+    Tanh,
+}
+
 /// A policy-like object that can choose an action for one observation.
 ///
 /// Actors are the inference-time surface used by samplers. They must be

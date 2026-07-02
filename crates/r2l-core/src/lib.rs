@@ -90,7 +90,7 @@ pub mod prelude {
         // variable_sized::VariableSizedStateBuffer,
     };
     pub use crate::env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Space};
-    pub use crate::models::{Actor, LearningModule, Policy, ValueFunction};
+    pub use crate::models::{ActivationFunction, Actor, LearningModule, Policy, ValueFunction};
     // pub use crate::on_policy::algorithm::{
     //     Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyAlgorithmHooks,
     //     OnPolicyRuntime, Sampler,

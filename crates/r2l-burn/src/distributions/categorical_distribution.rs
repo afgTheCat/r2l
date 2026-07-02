@@ -8,7 +8,7 @@ use burn::{
     },
 };
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
-use r2l_core::models::{Actor, Policy};
+use r2l_core::models::{ActivationFunction, Actor, Policy};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 
@@ -27,9 +27,9 @@ pub struct CategoricalDistribution<B: Backend> {
 
 impl<B: Backend> CategoricalDistribution<B> {
     /// Builds a categorical policy network.
-    pub fn build(logits_layers: &[usize]) -> Self {
+    pub fn build(logits_layers: &[usize], activation: ActivationFunction) -> Self {
         let action_size = *logits_layers.last().unwrap();
-        let logits: Sequential<B> = Sequential::build(logits_layers);
+        let logits: Sequential<B> = Sequential::build(logits_layers, activation);
         Self {
             logits,
             action_size,
@@ -40,7 +40,7 @@ impl<B: Backend> CategoricalDistribution<B> {
     /// Builds a categoriacal policy using a safetensor store
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let logits_layers = Sequential::<B>::dims_from_store("logits", store);
-        let mut distribution = Self::build(&logits_layers);
+        let mut distribution = Self::build(&logits_layers, ActivationFunction::default());
         distribution
             .load_from(store)
             .expect("failed to load CategoricalDistribution from store");

@@ -6,7 +6,7 @@ use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor};
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
-use r2l_core::models::{Actor, Policy};
+use r2l_core::models::{ActivationFunction, Actor, Policy};
 
 use crate::sequential::Sequential;
 
@@ -23,10 +23,10 @@ pub struct DiagGaussianDistribution<B: Backend> {
 
 impl<B: Backend> DiagGaussianDistribution<B> {
     /// Builds a diagonal-Gaussian policy network.
-    pub fn build(mu_layers: &[usize]) -> Self {
+    pub fn build(mu_layers: &[usize], activation: ActivationFunction) -> Self {
         let device = Default::default();
         let action_size = *mu_layers.last().unwrap();
-        let mu_net: Sequential<B> = Sequential::build(mu_layers);
+        let mu_net: Sequential<B> = Sequential::build(mu_layers, activation);
         let log_std = Param::from_data(
             TensorData::zeros::<f32, _>(Shape::new([1, action_size])),
             &device,
@@ -38,7 +38,7 @@ impl<B: Backend> DiagGaussianDistribution<B> {
     /// Builds a diagonal-Guassian policy using a safetensor store
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let mu_layers = Sequential::<B>::dims_from_store("mu_net", store);
-        let mut distribution = Self::build(&mu_layers);
+        let mut distribution = Self::build(&mu_layers, ActivationFunction::default());
         distribution
             .load_from(store)
             .expect("failed to load DiagGaussianDistribution from store");

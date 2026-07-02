@@ -9,7 +9,7 @@ use burn::{
     },
 };
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
-use r2l_core::models::{Actor, Policy};
+use r2l_core::models::{ActivationFunction, Actor, Policy};
 use rand::distr::Distribution as RandDistribution;
 use rand::distr::weighted::WeightedIndex;
 
@@ -54,7 +54,7 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
             vec![observation_size]
         };
 
-        let encoder = Sequential::build(&encoder_layers);
+        let encoder = Sequential::build(&encoder_layers, ActivationFunction::default());
         let recurrent = RnnConfig::new(recurrent_size, recurrent_size, true).init::<B>(&device);
         let logits = LinearConfig::new(recurrent_size, action_size)
             .with_bias(true)

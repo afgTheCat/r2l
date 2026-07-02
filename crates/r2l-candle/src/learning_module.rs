@@ -8,16 +8,16 @@
 
 use anyhow::{Ok, Result};
 use candle_core::{DType, Device, Tensor};
-use candle_nn::{Activation, AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
+use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
-    models::{LearningModule, ValueFunction},
+    models::{ActivationFunction, LearningModule, ValueFunction},
     on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
 
 use crate::{
     distributions::CandlePolicyKind,
     optimizer::OptimizerWithMaxGrad,
-    sequential::{R2lActivation, ThreadSafeSequential, build_sequential},
+    sequential::{ThreadSafeSequential, build_sequential},
 };
 
 /// Loss container used by Candle on-policy learning modules.
@@ -156,14 +156,9 @@ impl SequentialValueFunction {
         layers: &[usize],
         vb: &VarBuilder,
         prefix: &str,
+        activation: ActivationFunction,
     ) -> candle_core::Result<Self> {
-        let value_net = build_sequential(
-            input_dim,
-            layers,
-            vb,
-            prefix,
-            R2lActivation::CandleAct(Activation::Relu),
-        )?;
+        let value_net = build_sequential(input_dim, layers, vb, prefix, activation)?;
         candle_core::Result::Ok(Self { value_net })
     }
 }
@@ -272,13 +267,19 @@ impl PolicyValueModule {
         policy_varmap: VarMap,
         max_grad_norm: Option<f32>,
         params: ParamsAdamW,
+        activation: ActivationFunction,
     ) -> Result<Self> {
         let device = policy.device();
         let policy_vb = VarBuilder::from_varmap(&policy_varmap, DType::F32, &device);
         let observation_size = policy.observation_size();
         let value_layers = &[value_hidden_layers, &[1]].concat();
-        let value_function =
-            SequentialValueFunction::new(observation_size, value_layers, &policy_vb, "value")?;
+        let value_function = SequentialValueFunction::new(
+            observation_size,
+            value_layers,
+            &policy_vb,
+            "value",
+            activation,
+        )?;
         let optimizer = PolicyValueOptimizer::joint(policy_varmap, params, max_grad_norm)?;
         Ok(Self {
             policy,
@@ -297,14 +298,20 @@ impl PolicyValueModule {
         value_max_grad_norm: Option<f32>,
         policy_params: ParamsAdamW,
         value_params: ParamsAdamW,
+        activation: ActivationFunction,
     ) -> Result<Self> {
         let device = policy.device();
         let observation_size = policy.observation_size();
         let critic_varmap = VarMap::new();
         let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, &device);
         let value_layers = &[value_hidden_layers, &[1]].concat();
-        let value_function =
-            SequentialValueFunction::new(observation_size, value_layers, &critic_vb, "value")?;
+        let value_function = SequentialValueFunction::new(
+            observation_size,
+            value_layers,
+            &critic_vb,
+            "value",
+            activation,
+        )?;
         let optimizer = PolicyValueOptimizer::split(
             policy_varmap,
             critic_varmap,
