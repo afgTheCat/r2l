@@ -21,3 +21,4 @@ either = { workspace = true }
 rand = { workspace = true }
 derive_more = { version = "2.0.1", features = ["full"] }
 anyhow = { workspace = true }
+serde = { workspace = true }
