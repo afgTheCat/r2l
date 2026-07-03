@@ -37,14 +37,20 @@ impl Advantages {
             .collect()
     }
 
-    /// Normalizes each buffer's advantages to zero mean and unit variance.
+    /// Normalizes advantages across all rollout buffers to zero mean and unit variance.
     pub fn normalize(&mut self) {
-        for advantage in self.0.iter_mut() {
-            let mean = advantage.iter().sum::<f32>() / advantage.len() as f32;
-            let variance =
-                advantage.iter().map(|x| (*x - mean).powi(2)).sum::<f32>() / advantage.len() as f32;
-            let std = variance.sqrt() + 1e-8;
-            for x in advantage.iter_mut() {
+        let len = self.0.iter().map(Vec::len).sum::<usize>();
+        let mean = self.0.iter().flatten().sum::<f32>() / len as f32;
+        let variance = self
+            .0
+            .iter()
+            .flatten()
+            .map(|x| (*x - mean).powi(2))
+            .sum::<f32>()
+            / len as f32;
+        let std = variance.sqrt() + 1e-8;
+        for advantages in self.0.iter_mut() {
+            for x in advantages.iter_mut() {
                 *x = (*x - mean) / std;
             }
         }
