@@ -58,7 +58,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         EnvBuilderType::homogenous(GymEnvBuilder::new(config.env_name), config.n_envs),
         config.n_steps,
         SamplerExecutionMode::Vec,
-        Some(10.),
+        Some(None),
         false,
     );
     let runtime = OnPolicyRuntime {

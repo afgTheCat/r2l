@@ -21,7 +21,7 @@ use rand::RngExt;
 use crate::{
     SamplerExecutionMode,
     normalized::{
-        clipped_normalizer::ClippedNormalizer,
+        clipped_normalizer::{ClippedNormalizer, ClippedNormalizerVec},
         worker::ThreadHandle,
         worker::{ThreadWorkerFactory, ThreadWorkers, VecWorkers, WorkerPool},
     },
@@ -30,7 +30,8 @@ use crate::{
 pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>> {
     pool: WorkerPool<E>,
     obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    // TODO: only aggregates for now, will be removed in the future
+    reward_normalizer: Option<ClippedNormalizerVec>,
     last_states: ArrayHandle<E::Tensor>,
     // Here there is no need to have each thread own the buffer
     buffers: Vec<TrajectoryBuffer<E::Tensor>>,
@@ -43,8 +44,8 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
         env_builder: EnvBuilderType<EB>,
         n_steps: usize,
         execution_mode: SamplerExecutionMode,
-        with_obs_normalizer: Option<f32>,
-        _with_reward_normalizer: bool,
+        with_obs_normalizer: Option<Option<f32>>,
+        with_reward_normalizer: bool,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
@@ -66,7 +67,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
             pool,
             last_states,
             obs_normalizer,
-            reward_normalizer: None,
+            reward_normalizer: with_reward_normalizer.then(|| ClippedNormalizerVec::new(vec![1])),
             n_steps,
         }
     }
@@ -122,18 +123,20 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
             let mut last_states = self.last_states.lock().unwrap();
             obs_normalizer.update_and_normalize_in_place(&mut last_states);
         }
-
-        // TODO: add this once the normalizer is working as intended
-        // multi_memory.rewards = if let Some(rew_normalizer) = self.reward_normalizer.as_mut() {
-        //     rew_normalizer.normalize(std::mem::take(&mut multi_memory.rewards))
-        // } else {
-        //     std::mem::take(&mut multi_memory.rewards)
-        // };
+        if let Some(reward_normalizer) = self.reward_normalizer.as_mut() {
+            reward_normalizer.update_scalars(&multi_memory.rewards);
+        }
         let last_states = self.last_states.lock().unwrap();
         let memories = multi_memory.into_memories(&last_states);
         for (idx, memory) in memories.into_iter().enumerate() {
             self.buffers[idx].push(memory);
         }
+    }
+
+    pub fn reward_scalar_mean_var(&self) -> Option<(f32, f32)> {
+        self.reward_normalizer
+            .as_ref()
+            .map(ClippedNormalizerVec::scalar_mean_var)
     }
 }
 

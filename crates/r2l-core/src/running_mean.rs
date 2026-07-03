@@ -1,4 +1,4 @@
-use crate::tensor::R2lTensor;
+use crate::tensor::{R2lTensor, TensorData};
 
 // super simplified running mean, only for vectors
 pub struct RunningMeanStd<T: R2lTensor> {
@@ -55,17 +55,48 @@ impl<T: R2lTensor> RunningMeanStd<T> {
     pub fn update(&mut self, t: &[T]) {
         let mean = T::mean_tensors(t);
         let var = T::var_tensors(t);
-        self.update_from_moments(mean, var, t.len() as f32);
+        self.update_from_moments(mean, var, t.len() as f32).unwrap();
+    }
+}
+
+pub struct RunningMeanStdVec(RunningMeanStd<TensorData>);
+
+impl RunningMeanStdVec {
+    pub fn new(shape: Vec<usize>) -> Self {
+        Self(RunningMeanStd::new(shape))
     }
 
     pub fn update_from_vec(&mut self, t: &[Vec<f32>]) {
-        let mean_size = self.mean.size();
+        let mean_size = self.0.mean.size();
         assert!(t.iter().all(|t| t.len() == mean_size));
         let t = t
-            .into_iter()
-            .map(|t| T::from_slice_and_shape(&t, self.mean.to_shape()))
+            .iter()
+            .map(|t| TensorData::from_slice_and_shape(t, self.0.mean.to_shape()))
             .collect::<Vec<_>>();
-        self.update(&t);
+        self.0.update(&t);
+    }
+
+    pub fn update_from_scalars(&mut self, values: &[f32]) {
+        assert_eq!(self.0.mean.size(), 1);
+        let batch_count = values.len() as f32;
+        let mean = values.iter().sum::<f32>() / batch_count;
+        let var = values
+            .iter()
+            .map(|value| (*value - mean).powi(2))
+            .sum::<f32>()
+            / batch_count;
+        self.0
+            .update_from_moments(
+                TensorData::from_slice_and_shape(&[mean], vec![1]),
+                TensorData::from_slice_and_shape(&[var], vec![1]),
+                batch_count,
+            )
+            .unwrap();
+    }
+
+    pub fn scalar_mean_var(&self) -> (f32, f32) {
+        assert_eq!(self.0.mean.size(), 1);
+        (self.0.mean.data[0], self.0.var.data[0])
     }
 }
 
