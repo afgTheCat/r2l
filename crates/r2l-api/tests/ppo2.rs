@@ -21,6 +21,8 @@ struct PPOTestConfig {
     n_timesteps: usize,
     vf_coeff: Option<f32>,
     gradient_clipping: Option<f32>,
+    norm_obs: Option<bool>,
+    norm_reward: Option<bool>,
 }
 
 fn configure_candle_ppo_test(config: PPOTestConfig) {
@@ -54,11 +56,12 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
     }
 
     let ppo = ppo_builder.build().unwrap();
+    let obs_normalizer_clip = config.norm_obs.and_then(|norm_obs| norm_obs.then_some(10.));
     let sampler = R2lNormalizedSampler::build(
         EnvBuilderType::homogenous(GymEnvBuilder::new(config.env_name), config.n_envs),
         config.n_steps,
         SamplerExecutionMode::Vec,
-        Some(10.),
+        obs_normalizer_clip,
         false,
     );
     let runtime = OnPolicyRuntime {
@@ -97,6 +100,8 @@ fn mountain_car_candle_normalized_sampler() {
         n_timesteps: 1_000_000,
         vf_coeff: Some(0.5),
         gradient_clipping: Some(0.5),
+        norm_obs: Some(true),
+        norm_reward: Some(false),
     });
 }
 
@@ -116,6 +121,8 @@ fn mountain_car_continuous_candle_normalized_sampler() {
         n_timesteps: 20000,
         vf_coeff: Some(0.19),
         gradient_clipping: Some(5.0),
+        norm_obs: Some(true),
+        norm_reward: Some(true),
     });
 }
 
@@ -135,5 +142,7 @@ fn pendulum_candle_normalized_sampler() {
         n_timesteps: 100000,
         vf_coeff: None,
         gradient_clipping: None,
+        norm_obs: Some(false),
+        norm_reward: None,
     });
 }
