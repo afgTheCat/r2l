@@ -178,6 +178,20 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
         self
     }
 
+    /// Sets the frequency with which the evaluator runs
+    pub fn with_evaluator_frequency(mut self, evauator_frequency: usize) -> Self {
+        assert!(evauator_frequency > 0);
+        let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
+            evaluator_builder.with_evaluator_frequency(evauator_frequency)
+        } else {
+            let env_builder = self.sampler_builder.env_builder.clone();
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+                .with_evaluator_frequency(evauator_frequency)
+        };
+        self.evaluator_builder = Some(evaluator_builder);
+        self
+    }
+
     /// Sets how training environments are executed.
     pub fn with_execution_mode(mut self, location: SamplerExecutionMode) -> Self {
         self.sampler_builder = self.sampler_builder.with_execution_mode(location);
