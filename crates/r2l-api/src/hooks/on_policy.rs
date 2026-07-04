@@ -65,6 +65,8 @@ pub struct DefaultOnPolicyAlgorithmHooks<
 > {
     learning_schedule: LearningSchedule,
     evaluator: Option<BestActorEvaluator<E, A::Actor>>,
+    evaluator_frequency: usize,
+    current_evaluator_step: usize,
     should_stop: bool,
     _phantom: PhantomData<(A, S, C)>,
 }
@@ -80,10 +82,13 @@ impl<
     pub fn new<EB: EnvBuilder<Env = E>>(
         learning_schedule: LearningSchedule,
         evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
+        evaluator_frequency: usize,
     ) -> Self {
         Self {
             learning_schedule,
             evaluator: evaluator_builder.map(BestActorEvaluatorBuilder::build),
+            evaluator_frequency,
+            current_evaluator_step: 0,
             should_stop: false,
             _phantom: PhantomData,
         }
@@ -139,7 +144,9 @@ impl<
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
-        if let Some(evaluator) = &mut self.evaluator {
+        self.current_evaluator_step += 1;
+        let should_evaluate = self.current_evaluator_step % self.evaluator_frequency == 0;
+        if should_evaluate && let Some(evaluator) = &mut self.evaluator {
             let actor = runtime.actor();
             let adapted_actor = runtime.adapted_actor();
             evaluator.eval(adapted_actor, actor);
