@@ -1,10 +1,10 @@
+use std::collections::HashMap;
+
 use candle_core::{Result, Tensor};
 use candle_nn::init::{FanInOut, NonLinearity, NormalOrUniform};
 use candle_nn::{Activation, Init, Linear, Module, VarBuilder};
 use either::Either;
 use r2l_core::models::ActivationFunction;
-use safetensors::serialize as st_serialize;
-use serde::Serialize;
 
 #[derive(Debug, Clone)]
 struct LinearLayer {
@@ -36,20 +36,12 @@ impl LinearLayer {
         Ok(Self { layer })
     }
 
-    fn input_size(&self) -> usize {
-        let shape = self.layer.weight().shape();
-        debug_assert!(shape.rank() == 2);
-        shape.dims()[1]
-    }
-
-    fn serialize(&self, name: &str) -> Vec<u8> {
-        let weight_name = format!("weight_{name}");
-        let bias_name = format!("bias_{name}");
-        let mut tensors = vec![(weight_name, self.layer.weight())];
+    fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        let mut tensors = vec![(format!("{prefix}.weight"), self.layer.weight().clone())];
         if let Some(bias) = self.layer.bias() {
-            tensors.push((bias_name, bias));
+            tensors.push((format!("{prefix}.bias"), bias.clone()));
         }
-        st_serialize(tensors, None).expect("failed to serialize linear layer")
+        tensors
     }
 }
 
@@ -59,7 +51,7 @@ impl Module for LinearLayer {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 struct ActivationLayer(ActivationFunction);
 
 impl ActivationLayer {
@@ -95,37 +87,6 @@ impl Layer {
     fn activation(activation: ActivationLayer) -> Self {
         Self(Either::Right(activation))
     }
-
-    pub(crate) fn input_size(&self) -> Option<usize> {
-        match &self.0 {
-            Either::Left(linear) => Some(linear.input_size()),
-            Either::Right(_) => None,
-        }
-    }
-
-    fn serialize(&self, name: &str) -> Vec<u8> {
-        match &self.0 {
-            Either::Left(linear) => {
-                let mut bytes = vec![0];
-                bytes.extend(linear.serialize(name));
-                bytes
-            }
-            Either::Right(activation) => {
-                let activation_id = match activation.0 {
-                    ActivationFunction::Elu => 0,
-                    ActivationFunction::Gelu => 1,
-                    ActivationFunction::GeluApproximate => 2,
-                    ActivationFunction::HardSigmoid => 3,
-                    ActivationFunction::HardSwish => 4,
-                    ActivationFunction::LeakyRelu => 5,
-                    ActivationFunction::Relu => 6,
-                    ActivationFunction::Sigmoid => 7,
-                    ActivationFunction::Tanh => 8,
-                };
-                vec![1, activation_id]
-            }
-        }
-    }
 }
 
 impl Module for Layer {
@@ -142,28 +103,17 @@ pub(crate) struct Sequential {
     layers: Vec<Layer>,
 }
 
-impl Serialize for Sequential {
-    fn serialize<S>(&self, serializer: S) -> std::prelude::v1::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        todo!()
-    }
-}
-
 impl Sequential {
-    fn serialize(&self) -> Vec<u8> {
-        let mut serialized = vec![];
-        for (idx, layer) in self.layers.iter().enumerate() {
-            let layer_name = format!("layer_{idx}");
-            let layer_serialized = layer.serialize(&layer_name);
-            serialized.extend(layer_serialized);
-        }
-        serialized
-    }
-
-    pub(crate) fn layer(&self, idx: usize) -> Option<&Layer> {
-        self.layers.get(idx)
+    pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        self.layers
+            .iter()
+            .filter_map(|layer| match &layer.0 {
+                Either::Left(linear) => Some(linear),
+                Either::Right(_) => None,
+            })
+            .enumerate()
+            .flat_map(|(idx, linear)| linear.named_tensors(&format!("{prefix}{idx}")))
+            .collect()
     }
 }
 
@@ -201,6 +151,27 @@ pub(crate) fn build_sequential(
         last_dim = *layer_size;
     }
     Ok(nn)
+}
+
+pub(crate) fn network_shape(
+    tensors: &HashMap<String, Tensor>,
+    prefix: &str,
+) -> (usize, Vec<usize>) {
+    let first_weight = tensors.get(&format!("{prefix}0.weight")).unwrap();
+    let first_dims = first_weight.dims();
+
+    let observation_size = first_dims[1];
+    let mut layers = Vec::new();
+
+    for layer_idx in 0.. {
+        let Some(weight) = tensors.get(&format!("{prefix}{layer_idx}.weight")) else {
+            break;
+        };
+        let dims = weight.dims();
+        layers.push(dims[0]);
+    }
+
+    (observation_size, layers)
 }
 
 impl Sequential {

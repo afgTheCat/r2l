@@ -1,10 +1,12 @@
+use std::{collections::HashMap, fmt, str::FromStr};
+
 use anyhow::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::tensor::R2lTensor;
 
 /// Activation function used between hidden layers in feed-forward networks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 pub enum ActivationFunction {
     /// Exponential linear unit activation with the backend default alpha.
     Elu,
@@ -25,6 +27,63 @@ pub enum ActivationFunction {
     /// Hyperbolic tangent activation.
     #[default]
     Tanh,
+}
+
+impl fmt::Display for ActivationFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::Elu => "elu",
+            Self::Gelu => "gelu",
+            Self::GeluApproximate => "gelu_approximate",
+            Self::HardSigmoid => "hard_sigmoid",
+            Self::HardSwish => "hard_swish",
+            Self::LeakyRelu => "leaky_relu",
+            Self::Relu => "relu",
+            Self::Sigmoid => "sigmoid",
+            Self::Tanh => "tanh",
+        };
+        f.write_str(name)
+    }
+}
+
+impl FromStr for ActivationFunction {
+    type Err = String;
+
+    fn from_str(name: &str) -> std::result::Result<Self, Self::Err> {
+        match name {
+            "elu" => Ok(Self::Elu),
+            "gelu" => Ok(Self::Gelu),
+            "gelu_approximate" => Ok(Self::GeluApproximate),
+            "hard_sigmoid" => Ok(Self::HardSigmoid),
+            "hard_swish" => Ok(Self::HardSwish),
+            "leaky_relu" => Ok(Self::LeakyRelu),
+            "relu" => Ok(Self::Relu),
+            "sigmoid" => Ok(Self::Sigmoid),
+            "tanh" => Ok(Self::Tanh),
+            _ => Err(format!("unknown activation function: {name}")),
+        }
+    }
+}
+
+/// Metadata stored next to policy tensors in a safetensors archive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyMetadata {
+    /// Hidden-layer activation function.
+    pub activation: ActivationFunction,
+}
+
+impl PolicyMetadata {
+    /// Converts the metadata into the string map accepted by safetensors.
+    pub fn to_safetensors_metadata(&self) -> HashMap<String, String> {
+        HashMap::from([("activation".to_string(), self.activation.to_string())])
+    }
+
+    /// Builds policy metadata from the string map stored by safetensors.
+    pub fn from_safetensors_metadata(metadata: &HashMap<String, String>) -> Self {
+        Self {
+            activation: metadata.get("activation").unwrap().parse().unwrap(),
+        }
+    }
 }
 
 /// A policy-like object that can choose an action for one observation.

@@ -19,8 +19,9 @@ use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
 use r2l_core::{
     env::ActionSpaceType,
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
 };
+use safetensors::SafeTensors;
 
 /// Erased Candle policy type covering the supported action-space variants.
 ///
@@ -49,6 +50,25 @@ impl CandlePolicyKind {
         match self {
             Self::Categorical(c) => c.observation_size(),
             Self::DiagGaussian(d) => d.observation_size(),
+        }
+    }
+
+    /// Builds a Candle policy from serialized safetensors bytes.
+    pub fn from_bytes(bytes: &[u8], device: Device) -> Self {
+        let (_, safe_tensors_metadata) = SafeTensors::read_metadata(bytes).unwrap();
+        let metadata = PolicyMetadata::from_safetensors_metadata(
+            safe_tensors_metadata.metadata().as_ref().unwrap(),
+        );
+        let tensors = candle_core::safetensors::load_buffer(bytes, &device).unwrap();
+
+        if tensors.contains_key("log_std") {
+            Self::DiagGaussian(DiagGaussianDistribution::from_parts(
+                tensors, device, metadata,
+            ))
+        } else {
+            Self::Categorical(CategoricalDistribution::from_parts(
+                tensors, device, metadata,
+            ))
         }
     }
 
@@ -129,6 +149,13 @@ impl Actor for CandlePolicyKind {
         match self {
             Self::Categorical(cat) => cat.action(observation),
             Self::DiagGaussian(diag) => diag.action(observation),
+        }
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Categorical(cat) => cat.try_serialize(),
+            Self::DiagGaussian(diag) => diag.try_serialize(),
         }
     }
 }
