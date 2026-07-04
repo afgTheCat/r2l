@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use candle_core::{Result, Tensor};
 use candle_nn::init::{FanInOut, NonLinearity, NormalOrUniform};
 use candle_nn::{Activation, Init, Linear, Module, VarBuilder};
@@ -34,10 +36,12 @@ impl LinearLayer {
         Ok(Self { layer })
     }
 
-    fn input_size(&self) -> usize {
-        let shape = self.layer.weight().shape();
-        debug_assert!(shape.rank() == 2);
-        shape.dims()[1]
+    fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        let mut tensors = vec![(format!("{prefix}.weight"), self.layer.weight().clone())];
+        if let Some(bias) = self.layer.bias() {
+            tensors.push((format!("{prefix}.bias"), bias.clone()));
+        }
+        tensors
     }
 }
 
@@ -73,9 +77,9 @@ impl Module for ActivationLayer {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ThreadSafeLayer(Either<LinearLayer, ActivationLayer>);
+pub(crate) struct Layer(Either<LinearLayer, ActivationLayer>);
 
-impl ThreadSafeLayer {
+impl Layer {
     fn linear(linear: LinearLayer) -> Self {
         Self(Either::Left(linear))
     }
@@ -83,16 +87,9 @@ impl ThreadSafeLayer {
     fn activation(activation: ActivationLayer) -> Self {
         Self(Either::Right(activation))
     }
-
-    pub(crate) fn input_size(&self) -> Option<usize> {
-        match &self.0 {
-            Either::Left(linear) => Some(linear.input_size()),
-            Either::Right(_) => None,
-        }
-    }
 }
 
-impl Module for ThreadSafeLayer {
+impl Module for Layer {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         match &self.0 {
             Either::Left(linear) => linear.forward(xs),
@@ -102,17 +99,45 @@ impl Module for ThreadSafeLayer {
 }
 
 #[derive(Default, Debug, Clone)]
-pub(crate) struct ThreadSafeSequential {
-    layers: Vec<ThreadSafeLayer>,
+pub(crate) struct Sequential {
+    layers: Vec<Layer>,
 }
 
-impl ThreadSafeSequential {
-    pub(crate) fn layer(&self, idx: usize) -> Option<&ThreadSafeLayer> {
-        self.layers.get(idx)
+impl Sequential {
+    pub(crate) fn input_size(&self) -> usize {
+        self.layers
+            .iter()
+            .find_map(|layer| match &layer.0 {
+                Either::Left(linear) => Some(linear.layer.weight().dims()[1]),
+                Either::Right(_) => None,
+            })
+            .unwrap()
+    }
+
+    pub(crate) fn activation(&self) -> ActivationFunction {
+        self.layers
+            .iter()
+            .find_map(|layer| match &layer.0 {
+                Either::Left(_) => None,
+                Either::Right(activation) => Some(activation.0),
+            })
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        self.layers
+            .iter()
+            .filter_map(|layer| match &layer.0 {
+                Either::Left(linear) => Some(linear),
+                Either::Right(_) => None,
+            })
+            .enumerate()
+            .flat_map(|(idx, linear)| linear.named_tensors(&format!("{prefix}{idx}")))
+            .collect()
     }
 }
 
-impl Module for ThreadSafeSequential {
+impl Module for Sequential {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         let mut xs = xs.clone();
         for layer in self.layers.iter() {
@@ -128,28 +153,49 @@ pub(crate) fn build_sequential(
     vb: &VarBuilder,
     prefix: &str,
     activation: ActivationFunction,
-) -> Result<ThreadSafeSequential> {
+) -> Result<Sequential> {
     let mut last_dim = input_dim;
-    let mut nn = ThreadSafeSequential::default();
+    let mut nn = Sequential::default();
     let num_layers = layers.len();
     for (layer_idx, layer_size) in layers.iter().enumerate() {
         let layer_pp = format!("{prefix}{layer_idx}");
         if layer_idx == num_layers - 1 {
             let layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
-            nn = nn.add_layer(ThreadSafeLayer::linear(layer))
+            nn = nn.add_layer(Layer::linear(layer))
         } else {
             let lin_layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
-            nn = nn.add_layer(ThreadSafeLayer::linear(lin_layer)).add_layer(
-                ThreadSafeLayer::activation(ActivationLayer::new(activation)),
-            );
+            nn = nn
+                .add_layer(Layer::linear(lin_layer))
+                .add_layer(Layer::activation(ActivationLayer::new(activation)));
         }
         last_dim = *layer_size;
     }
     Ok(nn)
 }
 
-impl ThreadSafeSequential {
-    fn add_layer(mut self, layer: ThreadSafeLayer) -> Self {
+pub(crate) fn network_shape(
+    tensors: &HashMap<String, Tensor>,
+    prefix: &str,
+) -> (usize, Vec<usize>) {
+    let first_weight = tensors.get(&format!("{prefix}0.weight")).unwrap();
+    let first_dims = first_weight.dims();
+
+    let observation_size = first_dims[1];
+    let mut layers = Vec::new();
+
+    for layer_idx in 0.. {
+        let Some(weight) = tensors.get(&format!("{prefix}{layer_idx}.weight")) else {
+            break;
+        };
+        let dims = weight.dims();
+        layers.push(dims[0]);
+    }
+
+    (observation_size, layers)
+}
+
+impl Sequential {
+    fn add_layer(mut self, layer: Layer) -> Self {
         self.layers.push(layer);
         self
     }

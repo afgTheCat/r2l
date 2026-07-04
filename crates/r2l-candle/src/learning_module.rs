@@ -17,7 +17,7 @@ use r2l_core::{
 use crate::{
     distributions::CandlePolicyKind,
     optimizer::OptimizerWithMaxGrad,
-    sequential::{ThreadSafeSequential, build_sequential},
+    sequential::{Sequential, build_sequential},
 };
 
 /// Loss container used by Candle on-policy learning modules.
@@ -147,7 +147,7 @@ impl LearningModule for JointPolicyValueOptimizer {
 }
 
 pub(crate) struct SequentialValueFunction {
-    value_net: ThreadSafeSequential,
+    value_net: Sequential,
 }
 
 impl SequentialValueFunction {

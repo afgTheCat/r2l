@@ -1,13 +1,16 @@
+use std::collections::HashMap;
+
 use anyhow::{Result, bail};
-use candle_core::{Device, Error, Tensor};
+use candle_core::{DType, Device, Error, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
-use r2l_core::models::{ActivationFunction, Actor, Policy};
+use r2l_core::models::{ActivationFunction, Actor, Policy, PolicyMetadata};
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
+use safetensors::serialize as st_serialize;
 
-use crate::sequential::{ThreadSafeSequential, build_sequential};
+use crate::sequential::{Sequential, build_sequential, network_shape};
 
 /// Categorical Candle policy for discrete action spaces.
 ///
@@ -17,7 +20,7 @@ use crate::sequential::{ThreadSafeSequential, build_sequential};
 #[derive(Clone, Debug)]
 pub struct CategoricalDistribution {
     action_size: usize,
-    logits: ThreadSafeSequential,
+    logits: Sequential,
     device: Device,
 }
 
@@ -40,6 +43,26 @@ impl CategoricalDistribution {
         })
     }
 
+    pub(crate) fn from_parts(
+        tensors: HashMap<String, Tensor>,
+        device: Device,
+        metadata: PolicyMetadata,
+    ) -> Self {
+        let (observation_size, layers) = network_shape(&tensors, "policy");
+        let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
+        let action_size = *layers.last().unwrap();
+        Self::build(
+            observation_size,
+            action_size,
+            &layers,
+            &vb,
+            device,
+            "policy",
+            metadata.activation,
+        )
+        .unwrap()
+    }
+
     /// Returns the Candle device used by this policy.
     pub fn device(&self) -> Device {
         self.device.clone()
@@ -47,11 +70,7 @@ impl CategoricalDistribution {
 
     /// Returns the flattened observation size expected by this policy.
     pub fn observation_size(&self) -> usize {
-        let observation_size = self.logits.layer(0).and_then(|s| s.input_size());
-        match observation_size {
-            Some(observation_size) => observation_size,
-            None => panic!("Invalid observation_size"),
-        }
+        self.logits.input_size()
     }
 }
 
@@ -73,6 +92,14 @@ impl Actor for CategoricalDistribution {
         action_mask[action] = 1.;
         let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
         Ok(action)
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        let metadata = PolicyMetadata {
+            activation: self.logits.activation(),
+        }
+        .to_safetensors_metadata();
+        st_serialize(self.logits.named_tensors("policy"), Some(metadata)).ok()
     }
 }
 

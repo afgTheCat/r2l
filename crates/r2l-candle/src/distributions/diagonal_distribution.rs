@@ -1,11 +1,13 @@
+use std::collections::HashMap;
 use std::f32;
 
 use anyhow::Result;
-use candle_core::{Device, Tensor};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::{Module, VarBuilder};
-use r2l_core::models::{ActivationFunction, Actor, Policy};
+use r2l_core::models::{ActivationFunction, Actor, Policy, PolicyMetadata};
+use safetensors::serialize as st_serialize;
 
-use crate::sequential::{ThreadSafeSequential, build_sequential};
+use crate::sequential::{Sequential, build_sequential, network_shape};
 
 // TODO: we may want to resample the noise better than it is now
 /// Diagonal-Gaussian Candle policy for continuous action spaces.
@@ -16,7 +18,7 @@ use crate::sequential::{ThreadSafeSequential, build_sequential};
 #[derive(Debug, Clone)]
 pub struct DiagGaussianDistribution {
     noise: Tensor,
-    mu_net: ThreadSafeSequential,
+    mu_net: Sequential,
     log_std: Tensor,
     device: Device,
 }
@@ -24,14 +26,14 @@ pub struct DiagGaussianDistribution {
 impl DiagGaussianDistribution {
     /// Builds a diagonal-Gaussian policy network.
     pub fn build(
-        obseravtion_size: usize,
+        observation_size: usize,
         layers: &[usize],
         vb: &VarBuilder,
         log_std: Tensor,
         prefix: &str,
         activation: ActivationFunction,
     ) -> Result<Self> {
-        let mu_net = build_sequential(obseravtion_size, layers, vb, prefix, activation)?;
+        let mu_net = build_sequential(observation_size, layers, vb, prefix, activation)?;
         let noise = Tensor::randn(0f32, 1., log_std.shape(), log_std.device()).unwrap();
         let device = vb.device().clone();
         Ok(Self {
@@ -42,6 +44,26 @@ impl DiagGaussianDistribution {
         })
     }
 
+    pub(crate) fn from_parts(
+        tensors: HashMap<String, Tensor>,
+        device: Device,
+        metadata: PolicyMetadata,
+    ) -> Self {
+        let (observation_size, layers) = network_shape(&tensors, "policy");
+        let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
+        let action_size = *layers.last().unwrap();
+        let log_std = vb.get(action_size, "log_std").unwrap();
+        Self::build(
+            observation_size,
+            &layers,
+            &vb,
+            log_std,
+            "policy",
+            metadata.activation,
+        )
+        .unwrap()
+    }
+
     /// Returns the Candle device used by this policy.
     pub fn device(&self) -> Device {
         self.device.clone()
@@ -49,11 +71,7 @@ impl DiagGaussianDistribution {
 
     /// Returns the flattened observation size expected by this policy.
     pub fn observation_size(&self) -> usize {
-        let observation_size = self.mu_net.layer(0).and_then(|s| s.input_size());
-        match observation_size {
-            Some(observation_size) => observation_size,
-            None => panic!("Invalid observation_size"),
-        }
+        self.mu_net.input_size()
     }
 }
 
@@ -74,6 +92,16 @@ impl Actor for DiagGaussianDistribution {
         let noise = Tensor::randn(0f32, 1., self.log_std.shape(), self.log_std.device())?;
         let action = (mu + std.mul(&noise.unsqueeze(0)?)?)?.squeeze(0)?.detach();
         Ok(action)
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        let metadata = PolicyMetadata {
+            activation: self.mu_net.activation(),
+        }
+        .to_safetensors_metadata();
+        let mut tensors = self.mu_net.named_tensors("policy");
+        tensors.push(("log_std".to_string(), self.log_std.clone()));
+        st_serialize(tensors, Some(metadata)).ok()
     }
 }
 
