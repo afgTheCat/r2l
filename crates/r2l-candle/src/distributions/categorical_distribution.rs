@@ -20,8 +20,6 @@ use crate::sequential::{Sequential, build_sequential, network_shape};
 #[derive(Clone, Debug)]
 pub struct CategoricalDistribution {
     action_size: usize,
-    observation_size: usize,
-    activation: ActivationFunction,
     logits: Sequential,
     device: Device,
 }
@@ -40,8 +38,6 @@ impl CategoricalDistribution {
         let logits = build_sequential(observation_size, layers, vb, prefix, activation)?;
         Ok(Self {
             action_size,
-            observation_size,
-            activation,
             logits,
             device,
         })
@@ -74,7 +70,7 @@ impl CategoricalDistribution {
 
     /// Returns the flattened observation size expected by this policy.
     pub fn observation_size(&self) -> usize {
-        self.observation_size
+        self.logits.input_size()
     }
 }
 
@@ -100,7 +96,7 @@ impl Actor for CategoricalDistribution {
 
     fn try_serialize(&self) -> Option<Vec<u8>> {
         let metadata = PolicyMetadata {
-            activation: self.activation,
+            activation: self.logits.activation(),
         }
         .to_safetensors_metadata();
         st_serialize(self.logits.named_tensors("policy"), Some(metadata)).ok()

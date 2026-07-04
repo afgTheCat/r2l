@@ -6813,7 +6813,6 @@ dependencies = [
  "r2l-core",
  "rand 0.10.1",
  "safetensors 0.8.0",
- "serde",
 ]
 
 [[package]]
@@ -6828,7 +6827,6 @@ dependencies = [
  "itertools 0.14.0",
  "rand 0.10.1",
  "rayon",
- "serde",
 ]
 
 [[package]]

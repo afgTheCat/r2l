@@ -30,7 +30,6 @@ crossbeam = "0.8.4"
 rand = "0.10.0"
 anyhow = { version = "1.0.102" }
 bimodal-array = { version = "0.1.4" }
-serde = { version = "1.0.228", features = ["derive"] }
 safetensors = { version = "0.8.0" }
 
 [workspace.package]

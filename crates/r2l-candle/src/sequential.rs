@@ -104,6 +104,26 @@ pub(crate) struct Sequential {
 }
 
 impl Sequential {
+    pub(crate) fn input_size(&self) -> usize {
+        self.layers
+            .iter()
+            .find_map(|layer| match &layer.0 {
+                Either::Left(linear) => Some(linear.layer.weight().dims()[1]),
+                Either::Right(_) => None,
+            })
+            .unwrap()
+    }
+
+    pub(crate) fn activation(&self) -> ActivationFunction {
+        self.layers
+            .iter()
+            .find_map(|layer| match &layer.0 {
+                Either::Left(_) => None,
+                Either::Right(activation) => Some(activation.0),
+            })
+            .unwrap_or_default()
+    }
+
     pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
         self.layers
             .iter()

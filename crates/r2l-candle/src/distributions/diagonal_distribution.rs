@@ -20,8 +20,6 @@ pub struct DiagGaussianDistribution {
     noise: Tensor,
     mu_net: Sequential,
     log_std: Tensor,
-    observation_size: usize,
-    activation: ActivationFunction,
     device: Device,
 }
 
@@ -42,8 +40,6 @@ impl DiagGaussianDistribution {
             log_std,
             mu_net,
             noise,
-            observation_size,
-            activation,
             device,
         })
     }
@@ -75,7 +71,7 @@ impl DiagGaussianDistribution {
 
     /// Returns the flattened observation size expected by this policy.
     pub fn observation_size(&self) -> usize {
-        self.observation_size
+        self.mu_net.input_size()
     }
 }
 
@@ -100,7 +96,7 @@ impl Actor for DiagGaussianDistribution {
 
     fn try_serialize(&self) -> Option<Vec<u8>> {
         let metadata = PolicyMetadata {
-            activation: self.activation,
+            activation: self.mu_net.activation(),
         }
         .to_safetensors_metadata();
         let mut tensors = self.mu_net.named_tensors("policy");
