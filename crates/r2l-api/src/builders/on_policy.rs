@@ -47,7 +47,6 @@ pub struct OnPolicyAlgorithmBuilder<
     pub(crate) sampler_builder: SamplerBuilder<EB, SH>,
     pub(crate) learning_schedule: LearningSchedule,
     pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
-    pub(crate) evaluator_frequency: usize,
     pub(crate) agent_builder: AB,
 }
 
@@ -64,7 +63,6 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
             sampler_builder,
             agent_builder,
             evaluator_builder: None,
-            evaluator_frequency: 1,
             learning_schedule: LearningSchedule::rollout_bound(300),
         }
     }
@@ -79,13 +77,11 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
             agent_builder,
             learning_schedule,
             evaluator_builder,
-            evaluator_frequency,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_hook(hook_builder),
             agent_builder,
             evaluator_builder,
-            evaluator_frequency,
             learning_schedule,
         }
     }
@@ -101,13 +97,11 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
             agent_builder,
             learning_schedule,
             evaluator_builder,
-            evaluator_frequency,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_hook(rollout_bound),
             agent_builder,
             evaluator_builder,
-            evaluator_frequency,
             learning_schedule,
         }
     }
@@ -124,12 +118,6 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
     /// Replaces the learning schedule that controls training termination.
     pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
         self.learning_schedule = learning_schedule;
-        self
-    }
-
-    /// Sets how many completed training iterations pass between evaluations.
-    pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
-        self.evaluator_frequency = evaluator_frequency;
         self
     }
 
@@ -190,6 +178,20 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
         self
     }
 
+    /// Sets the frequency with which the evaluator runs
+    pub fn with_evaluator_frequency(mut self, evauator_frequency: usize) -> Self {
+        assert!(evauator_frequency > 0);
+        let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
+            evaluator_builder.with_evaluator_frequency(evauator_frequency)
+        } else {
+            let env_builder = self.sampler_builder.env_builder.clone();
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+                .with_evaluator_frequency(evauator_frequency)
+        };
+        self.evaluator_builder = Some(evaluator_builder);
+        self
+    }
+
     /// Sets how training environments are executed.
     pub fn with_execution_mode(mut self, location: SamplerExecutionMode) -> Self {
         self.sampler_builder = self.sampler_builder.with_execution_mode(location);
@@ -213,11 +215,8 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
-        let hooks = DefaultOnPolicyAlgorithmHooks::new(
-            self.learning_schedule,
-            self.evaluator_builder,
-            self.evaluator_frequency,
-        );
+        let hooks =
+            DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, self.evaluator_builder);
         Ok(OnPolicyAlgorithm {
             runtime: OnPolicyRuntime {
                 sampler,

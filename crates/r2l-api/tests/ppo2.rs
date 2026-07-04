@@ -72,7 +72,6 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
     let hooks = r2l_api::DefaultOnPolicyAlgorithmHooks::new::<GymEnvBuilder>(
         LearningSchedule::total_step_bound(config.n_timesteps),
         None,
-        1,
     );
     let mut ppo: OnPolicyAlgorithm<
         _,

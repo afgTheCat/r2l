@@ -213,13 +213,11 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> A2CBurnAlgorithmBuil
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            evaluator_frequency,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
-            evaluator_frequency,
             agent_builder: agent_builder.with_candle(device),
         }
     }
@@ -231,13 +229,11 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> A2CBurnAlgorithmBuil
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            evaluator_frequency,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
-            evaluator_frequency,
             agent_builder: agent_builder.with_burn(),
         }
     }
@@ -257,13 +253,11 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> A2CCandleAlgorithmBu
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            evaluator_frequency,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
-            evaluator_frequency,
             agent_builder: agent_builder.with_candle(device),
         }
     }
@@ -275,13 +269,11 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> A2CCandleAlgorithmBu
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            evaluator_frequency,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
-            evaluator_frequency,
             agent_builder: agent_builder.with_burn(),
         }
     }

@@ -19,6 +19,7 @@ pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     n_episodes: usize,
     execution_mode: SamplerExecutionMode,
     eval_path: Option<PathBuf>,
+    evaluator_frequency: usize,
 }
 
 impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
@@ -26,6 +27,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     pub fn from_env_builder_type(env_builder: EnvBuilderType<EB>) -> Self {
         Self {
             env_builder,
+            evaluator_frequency: 1,
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
@@ -35,11 +37,18 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     /// Creates an evaluator builder from a homogeneous environment builder.
     pub fn new(env_builder: EB) -> Self {
         Self {
+            evaluator_frequency: 1,
             env_builder: EnvBuilderType::homogenous(env_builder.into(), 10),
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
         }
+    }
+
+    /// Sets the frequency with which the evaluator runs
+    pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
+        self.evaluator_frequency = evaluator_frequency;
+        self
     }
 
     /// Replaces the environment builder used for evaluation.
@@ -77,6 +86,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             self.execution_mode,
         );
         BestActorEvaluator {
+            current_evaluator_step: 0,
+            evaluator_frequency: self.evaluator_frequency,
             sampler,
             best_actor_path: self.eval_path,
             best_rewards: f32::MIN,
@@ -95,28 +106,33 @@ pub struct BestActorEvaluator<E: Env<Tensor: R2lTensor>, A: Actor> {
     best_actor_path: Option<PathBuf>,
     best_actor: Option<A>,
     best_rewards: f32,
+    current_evaluator_step: usize,
+    evaluator_frequency: usize,
 }
 
 impl<E: Env<Tensor: R2lTensor>, A: Actor> BestActorEvaluator<E, A> {
     /// Evaluates the actor and stores it if it outperforms the current best actor.
     pub fn eval(&mut self, adapted_actor: impl Actor<Tensor = E::Tensor> + Clone, actor: A) {
-        self.sampler.reset_all_envs();
-        self.sampler.collect_rollouts(adapted_actor);
-        let trajectories = self.sampler.trajectory_views();
-        let total_reward: f32 = trajectories
-            .as_ref()
-            .iter()
-            .map(|x| x.rewards().iter().sum::<f32>())
-            .sum();
-        let total_episodes: f32 = trajectories
-            .as_ref()
-            .iter()
-            .map(|b| b.episode_terminations() as f32)
-            .sum();
-        let avg_reward = total_reward / total_episodes;
-        if avg_reward > self.best_rewards {
-            self.best_rewards = avg_reward;
-            self.best_actor = Some(actor);
+        self.current_evaluator_step += 1;
+        if self.current_evaluator_step % self.evaluator_frequency == 0 {
+            self.sampler.reset_all_envs();
+            self.sampler.collect_rollouts(adapted_actor);
+            let trajectories = self.sampler.trajectory_views();
+            let total_reward: f32 = trajectories
+                .as_ref()
+                .iter()
+                .map(|x| x.rewards().iter().sum::<f32>())
+                .sum();
+            let total_episodes: f32 = trajectories
+                .as_ref()
+                .iter()
+                .map(|b| b.episode_terminations() as f32)
+                .sum();
+            let avg_reward = total_reward / total_episodes;
+            if avg_reward > self.best_rewards {
+                self.best_rewards = avg_reward;
+                self.best_actor = Some(actor);
+            }
         }
     }
 
