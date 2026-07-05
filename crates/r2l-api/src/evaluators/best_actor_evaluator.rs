@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{marker::PhantomData, path::PathBuf};
 
 use anyhow::Result;
 use r2l_core::{
@@ -11,13 +11,16 @@ use r2l_sampler::{R2lSampler, SamplerExecutionMode};
 
 use crate::hooks::sampler::EpisodeBoundHook;
 
+pub struct DirectSamplerType;
+
 /// Builder for [`BestActorEvaluator`] instances.
-pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
+pub struct BestActorEvaluatorBuilder<EB: EnvBuilder, S = DirectSamplerType> {
     env_builder: EnvBuilderType<EB>,
     n_episodes: usize,
     execution_mode: SamplerExecutionMode,
     eval_path: Option<PathBuf>,
     evaluator_frequency: usize,
+    sampler_type: PhantomData<S>,
 }
 
 impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
@@ -29,6 +32,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
+            sampler_type: PhantomData,
         }
     }
 
@@ -40,6 +44,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
+            sampler_type: PhantomData,
         }
     }
 
