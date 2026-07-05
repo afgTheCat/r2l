@@ -30,9 +30,7 @@ impl<T> Memory<T> {
 
 #[derive(Debug)]
 pub struct MultiMemory<T: R2lTensor> {
-    // TODO: questionable if we even need this
     pub last_states: Vec<T>,
-    // pub next_states: Vec<T>,
     pub actions: Vec<T>,
     pub rewards: Vec<f32>,
     pub terminateds: Vec<bool>,
