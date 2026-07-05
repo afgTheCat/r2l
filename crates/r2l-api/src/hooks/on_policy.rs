@@ -10,8 +10,9 @@ use r2l_core::{
     },
     tensor::R2lTensor,
 };
+use r2l_sampler::R2lSampler;
 
-use crate::{BestActorEvaluator, BestActorEvaluatorBuilder};
+use crate::{BestActorEvaluator, BestActorEvaluatorBuilder, hooks::sampler::EpisodeBoundHook};
 
 /// Training-stop policy for [`DefaultOnPolicyAlgorithmHooks`].
 ///
@@ -50,9 +51,6 @@ impl LearningSchedule {
     }
 }
 
-// An evaluator that can be plugged in here
-trait DefaultOnPolicyAlgorithmHookEvaluator<A: Agent, S: Sampler> {}
-
 /// Default outer-loop hooks used by high-level on-policy algorithm builders.
 ///
 /// This hook is responsible for lifecycle behavior around training rather than
@@ -65,11 +63,12 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     S: Sampler,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
+    S2: Sampler<Tensor = S::Tensor>,
 > {
     learning_schedule: LearningSchedule,
-    evaluator: Option<BestActorEvaluator<E, A::Actor>>,
+    evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
     should_stop: bool,
-    _phantom: PhantomData<(A, S, C)>,
+    _phantom: PhantomData<(A, S, C, E)>,
 }
 
 impl<
@@ -77,7 +76,7 @@ impl<
     S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
-> DefaultOnPolicyAlgorithmHooks<A, S, C, E>
+> DefaultOnPolicyAlgorithmHooks<A, S, C, E, R2lSampler<E, EpisodeBoundHook<E>>>
 {
     /// Creates the default outer-loop hooks for the given learning schedule.
     pub fn new<EB: EnvBuilder<Env = E>>(
@@ -98,7 +97,8 @@ impl<
     S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
-> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E>
+    S2: Sampler<Tensor = S::Tensor>,
+> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
 {
     type A = A;
     type S = S;

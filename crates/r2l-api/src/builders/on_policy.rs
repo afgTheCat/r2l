@@ -13,7 +13,10 @@ use crate::{
         agent::AgentBuilder,
         sampler::{SamplerBuilder, SamplerHookBuilder},
     },
-    hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule},
+    hooks::{
+        on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule},
+        sampler::EpisodeBoundHook,
+    },
 };
 
 type DefaultOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
@@ -24,6 +27,7 @@ type DefaultOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
         R2lSampler<<EB as EnvBuilder>::Env, <SH as SamplerHookBuilder>::Target>,
         DefaultAdapter,
         <EB as EnvBuilder>::Env,
+        R2lSampler<<EB as EnvBuilder>::Env, EpisodeBoundHook<<EB as EnvBuilder>::Env>>,
     >,
 >;
 

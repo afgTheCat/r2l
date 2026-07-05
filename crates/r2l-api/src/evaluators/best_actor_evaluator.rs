@@ -1,16 +1,13 @@
-use std::{cell::RefCell, marker::PhantomData, path::PathBuf, rc::Rc};
+use std::path::PathBuf;
 
 use anyhow::Result;
-use candle_core::Tensor;
 use r2l_core::{
-    buffers::{TrajectoryBatch, buffer::TrajectoryView},
-    env::{Env, EnvBuilder, EnvBuilderType},
+    buffers::TrajectoryBatch,
+    env::{EnvBuilder, EnvBuilderType},
     models::Actor,
-    on_policy::algorithm::{Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyRuntime, Sampler},
-    tensor::R2lTensor,
+    on_policy::algorithm::{Agent, OnPolicyAdapters, OnPolicyRuntime, Sampler},
 };
-use r2l_gym::{GymEnv, GymEnvBuilder};
-use r2l_sampler::{ClippedNormalizer, R2lSampler, SamplerExecutionMode};
+use r2l_sampler::{R2lSampler, SamplerExecutionMode};
 
 use crate::hooks::sampler::EpisodeBoundHook;
 
@@ -77,10 +74,9 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     }
 
     /// Builds a best-actor evaluator for the requested actor type.
-    pub fn build<A: Actor>(self) -> BestActorEvaluator<EB::Env, A>
-    where
-        EB::Env: Env<Tensor: R2lTensor>,
-    {
+    pub fn build<A: Actor>(
+        self,
+    ) -> BestActorEvaluator<A, R2lSampler<EB::Env, EpisodeBoundHook<EB::Env>>> {
         let sampler = R2lSampler::build(
             self.env_builder,
             EpisodeBoundHook::new(self.n_episodes),
@@ -102,8 +98,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
 /// This evaluator collects episode-bounded rollouts with [`R2lSampler`],
 /// computes the average completed-episode reward, and retains the best actor
 /// observed so far.
-pub struct BestActorEvaluator<E: Env<Tensor: R2lTensor>, A: Actor> {
-    sampler: R2lSampler<E, EpisodeBoundHook<E>>,
+pub struct BestActorEvaluator<A: Actor, S: Sampler> {
+    sampler: S,
     best_actor_path: Option<PathBuf>,
     best_actor: Option<A>,
     best_rewards: f32,
@@ -111,14 +107,30 @@ pub struct BestActorEvaluator<E: Env<Tensor: R2lTensor>, A: Actor> {
     evaluator_frequency: usize,
 }
 
-impl<E: Env<Tensor: R2lTensor>, A: Actor> BestActorEvaluator<E, A> {
+impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
+    /// Creates a best-actor evaluator from an already-built sampler.
+    pub fn from_sampler(
+        sampler: ES,
+        evaluator_frequency: usize,
+        best_actor_path: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            sampler,
+            best_actor_path,
+            best_actor: None,
+            best_rewards: f32::MIN,
+            current_evaluator_step: 0,
+            evaluator_frequency,
+        }
+    }
+
     pub fn eval<
         AG: Agent<Actor = A>,
-        S: Sampler<Tensor = E::Tensor>,
-        C: OnPolicyAdapters<AG::Actor, S>,
+        TS: Sampler<Tensor = ES::Tensor>,
+        C: OnPolicyAdapters<AG::Actor, TS>,
     >(
         &mut self,
-        rt: &mut OnPolicyRuntime<AG, S, C>,
+        rt: &mut OnPolicyRuntime<AG, TS, C>,
     ) {
         self.current_evaluator_step += 1;
         if self.current_evaluator_step % self.evaluator_frequency == 0 {
@@ -131,7 +143,7 @@ impl<E: Env<Tensor: R2lTensor>, A: Actor> BestActorEvaluator<E, A> {
     /// Evaluates the actor and stores it if it outperforms the current best actor.
     pub fn eval_adapted(
         &mut self,
-        adapted_actor: impl Actor<Tensor = E::Tensor> + Clone,
+        adapted_actor: impl Actor<Tensor = ES::Tensor> + Clone,
         actor: A,
     ) {
         self.sampler.reset_all_envs();

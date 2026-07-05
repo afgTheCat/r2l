@@ -29,6 +29,9 @@ pub trait Agent {
 pub trait Sampler {
     type Tensor: R2lTensor;
 
+    /// Resets all environments managed by the sampler.
+    fn reset_all_envs(&mut self) {}
+
     /// Collects rollout data using the provided actor.
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A);
 

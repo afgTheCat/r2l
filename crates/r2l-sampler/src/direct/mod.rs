@@ -108,6 +108,10 @@ impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
 impl<E: Env, H: SamplerHook<E = E>> Sampler for R2lSampler<E, H> {
     type Tensor = E::Tensor;
 
+    fn reset_all_envs(&mut self) {
+        R2lSampler::reset_all_envs(self);
+    }
+
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
         self.worker_pool.clear_buffers();
         self.worker_pool.set_actor(actor.clone());

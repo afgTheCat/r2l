@@ -86,6 +86,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             self.execution_mode,
         );
         BestActorEvaluator {
+            _phantom: PhantomData,
             current_evaluator_step: 0,
             evaluator_frequency: self.evaluator_frequency,
             sampler,
@@ -101,16 +102,43 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
 /// This evaluator collects episode-bounded rollouts with [`R2lSampler`],
 /// computes the average completed-episode reward, and retains the best actor
 /// observed so far.
-pub struct BestActorEvaluator<E: Env<Tensor: R2lTensor>, A: Actor> {
-    sampler: R2lSampler<E, EpisodeBoundHook<E>>,
+pub struct BestActorEvaluator<
+    E: Env<Tensor: R2lTensor>,
+    A: Actor,
+    S: Sampler<Tensor = E::Tensor> = R2lSampler<E, EpisodeBoundHook<E>>,
+> {
+    sampler: S,
     best_actor_path: Option<PathBuf>,
     best_actor: Option<A>,
     best_rewards: f32,
     current_evaluator_step: usize,
     evaluator_frequency: usize,
+    _phantom: PhantomData<E>,
 }
 
-impl<E: Env<Tensor: R2lTensor>, A: Actor> BestActorEvaluator<E, A> {
+impl<E, A, S> BestActorEvaluator<E, A, S>
+where
+    E: Env<Tensor: R2lTensor>,
+    A: Actor,
+    S: Sampler<Tensor = E::Tensor>,
+{
+    /// Creates a best-actor evaluator from an already-built sampler.
+    pub fn from_sampler(
+        sampler: S,
+        evaluator_frequency: usize,
+        best_actor_path: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            sampler,
+            best_actor_path,
+            best_actor: None,
+            best_rewards: f32::MIN,
+            current_evaluator_step: 0,
+            evaluator_frequency,
+            _phantom: PhantomData,
+        }
+    }
+
     /// Evaluates the actor and stores it if it outperforms the current best actor.
     pub fn eval(&mut self, adapted_actor: impl Actor<Tensor = E::Tensor> + Clone, actor: A) {
         self.current_evaluator_step += 1;
