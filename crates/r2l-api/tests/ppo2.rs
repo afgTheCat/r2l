@@ -4,7 +4,7 @@ use r2l_core::{
     on_policy::algorithm::{DefaultAdapter, OnPolicyAlgorithm, OnPolicyRuntime},
 };
 use r2l_gym::{GymEnv, GymEnvBuilder};
-use r2l_sampler::{R2lNormalizedSampler, SamplerExecutionMode};
+use r2l_sampler::{NormalizerMode, R2lNormalizedSampler, SamplerExecutionMode};
 
 #[allow(dead_code)]
 struct PPOTestConfig {
@@ -62,6 +62,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         config.n_steps,
         SamplerExecutionMode::Vec,
         obs_normalizer_clip,
+        NormalizerMode::Update,
         false,
     );
     let runtime = OnPolicyRuntime {
