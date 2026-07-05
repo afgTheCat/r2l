@@ -29,6 +29,7 @@ pub use evaluators::simple_evaluator::Evaluator;
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
 pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule};
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
+pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
 pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     models::ActivationFunction,

@@ -3,7 +3,10 @@ mod normalized;
 
 pub use direct::worker::WorkerPool;
 pub use direct::{R2lSampler, R2lSamplerCore, SamplerHook, SamplerHookResult};
-pub use normalized::{NormalizerMode, R2lNormalizedSampler, clipped_normalizer::ClippedNormalizer};
+pub use normalized::{
+    NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lNormalizedSamplerCore,
+    clipped_normalizer::ClippedNormalizer,
+};
 
 /// Execution strategy used by the sampler.
 ///

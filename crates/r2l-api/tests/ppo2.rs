@@ -1,4 +1,4 @@
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
+use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepBoundHook, StepHookBound};
 use r2l_core::{
     env::EnvBuilderType,
     on_policy::algorithm::{DefaultAdapter, OnPolicyRuntime},
@@ -59,7 +59,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
     let obs_normalizer_clip = config.norm_obs.and_then(|norm_obs| norm_obs.then_some(10.));
     let sampler = R2lNormalizedSampler::build(
         EnvBuilderType::homogenous(GymEnvBuilder::new(config.env_name), config.n_envs),
-        config.n_steps,
+        StepBoundHook::new(config.n_steps),
         SamplerExecutionMode::Vec,
         obs_normalizer_clip,
         NormalizerMode::Update,
