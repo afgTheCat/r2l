@@ -38,7 +38,6 @@ pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>> {
     pool: WorkerPool<E>,
     pub obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    obs_normalizer_mode: NormalizerMode,
     last_states: ArrayHandle<E::Tensor>,
     // Here there is no need to have each thread own the buffer
     buffers: Vec<TrajectoryBuffer<E::Tensor>>,
@@ -57,32 +56,24 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
-        let obs_normalizer = with_obs_normalizer.map(|clip| {
-            let obs_space = env_builder.env_description().unwrap();
-            let obs_size = obs_space.observation_space.size();
-            ClippedNormalizer::new(clip, vec![obs_size])
-        });
-
+        let env_description = env_builder.env_description().unwrap();
         let (mut last_states, pool) = match execution_mode {
             SamplerExecutionMode::Vec => Self::build_vec_workers(env_builder, num_envs),
             SamplerExecutionMode::Thread => Self::build_thread_workers(env_builder, num_envs),
         };
-        if let Some(obs_normalizer) = &obs_normalizer {
+        let obs_normalizer = with_obs_normalizer.map(|clip| {
+            let obs_size = env_description.observation_space.size();
+            let obs_normalizer = ClippedNormalizer::new(obs_normalizer_mode, clip, vec![obs_size]);
             let mut last_states = last_states.lock().unwrap();
-            match obs_normalizer_mode {
-                NormalizerMode::Update => {
-                    obs_normalizer.update_and_normalize_in_place(&mut last_states)
-                }
-                NormalizerMode::ReadOnly => obs_normalizer.normalize_in_place(&mut last_states),
-            }
-        }
+            obs_normalizer.apply_in_place(&mut last_states);
+            obs_normalizer
+        });
         Self {
             buffers,
             pool,
             last_states,
             obs_normalizer,
             reward_normalizer: None,
-            obs_normalizer_mode,
             n_steps,
         }
     }
@@ -136,12 +127,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSampler<E> {
         let multi_memory = self.pool.step();
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
-            match self.obs_normalizer_mode {
-                NormalizerMode::Update => {
-                    obs_normalizer.update_and_normalize_in_place(&mut last_states)
-                }
-                NormalizerMode::ReadOnly => obs_normalizer.normalize_in_place(&mut last_states),
-            }
+            obs_normalizer.apply_in_place(&mut last_states)
         }
 
         // TODO: add this once the normalizer is working as intended
