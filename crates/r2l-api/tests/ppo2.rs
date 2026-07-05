@@ -1,9 +1,9 @@
 use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
 use r2l_core::{
     env::EnvBuilderType,
-    on_policy::algorithm::{DefaultAdapter, OnPolicyAlgorithm, OnPolicyRuntime},
+    on_policy::algorithm::{DefaultAdapter, OnPolicyRuntime},
 };
-use r2l_gym::{GymEnv, GymEnvBuilder};
+use r2l_gym::GymEnvBuilder;
 use r2l_sampler::{NormalizerMode, R2lNormalizedSampler, SamplerExecutionMode};
 
 #[allow(dead_code)]
@@ -74,11 +74,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         LearningSchedule::total_step_bound(config.n_timesteps),
         None,
     );
-    let mut ppo: OnPolicyAlgorithm<
-        _,
-        R2lNormalizedSampler<GymEnv>,
-        r2l_api::DefaultOnPolicyAlgorithmHooks<_, R2lNormalizedSampler<GymEnv>, _, GymEnv>,
-    > = OnPolicyAlgorithm { runtime, hooks };
+    let mut ppo = r2l_core::on_policy::algorithm::OnPolicyAlgorithm { runtime, hooks };
 
     ppo.train().unwrap();
 }
