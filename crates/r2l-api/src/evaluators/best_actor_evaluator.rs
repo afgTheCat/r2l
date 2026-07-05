@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use r2l_core::{
@@ -90,6 +90,30 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             best_rewards: f32::MIN,
             best_actor: None,
         }
+    }
+
+    /// Builds a best-actor evaluator around an already-constructed sampler.
+    pub fn build_with_sampler<A: Actor, S: Sampler>(self, sampler: S) -> BestActorEvaluator<A, S> {
+        BestActorEvaluator {
+            current_evaluator_step: 0,
+            evaluator_frequency: self.evaluator_frequency,
+            sampler,
+            best_actor_path: self.eval_path,
+            best_rewards: f32::MIN,
+            best_actor: None,
+        }
+    }
+
+    pub(crate) fn n_episodes(&self) -> usize {
+        self.n_episodes
+    }
+
+    pub(crate) fn execution_mode(&self) -> SamplerExecutionMode {
+        self.execution_mode
+    }
+
+    pub(crate) fn env_builder(&self) -> &EnvBuilderType<EB> {
+        &self.env_builder
     }
 }
 

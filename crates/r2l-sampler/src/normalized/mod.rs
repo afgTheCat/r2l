@@ -212,6 +212,24 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
             hook,
         }
     }
+
+    pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
+        env_builder: EnvBuilderType<EB>,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        with_reward_normalizer: bool,
+    ) -> Self {
+        Self {
+            core: R2lNormalizedSamplerCore::build(
+                env_builder,
+                execution_mode,
+                obs_normalizer,
+                with_reward_normalizer,
+            ),
+            hook,
+        }
+    }
 }
 
 impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler

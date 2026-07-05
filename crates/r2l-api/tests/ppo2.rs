@@ -80,6 +80,17 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
 }
 
 #[test]
+#[ignore]
+fn normalized_sampler_builder_path_compiles() {
+    let _ppo = PPOAlgorithmBuilder::gym("CartPole-v1", 2)
+        .with_rollout_bound(StepHookBound::new(8))
+        .with_obs_normalizer(10.0)
+        .with_learning_schedule(LearningSchedule::rollout_bound(1))
+        .build()
+        .unwrap();
+}
+
+#[test]
 fn mountain_car_candle_normalized_sampler() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
     // https://huggingface.co/sb3/ppo-MountainCar-v0

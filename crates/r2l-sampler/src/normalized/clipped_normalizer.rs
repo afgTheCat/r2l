@@ -50,6 +50,13 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
         }
     }
 
+    pub fn with_mode(&self, normalizer_mode: NormalizerMode) -> Self {
+        Self {
+            normalizer_mode,
+            inner: self.inner.clone(),
+        }
+    }
+
     fn update(&self, obs: &[T]) {
         let mut inner = self.inner.lock().unwrap();
         inner.rm.update(obs);

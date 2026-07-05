@@ -98,6 +98,28 @@ impl<
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
     S2: Sampler<Tensor = S::Tensor>,
+> DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
+{
+    /// Creates hooks with an already-built evaluator sampler.
+    pub fn with_evaluator(
+        learning_schedule: LearningSchedule,
+        evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
+    ) -> Self {
+        Self {
+            learning_schedule,
+            evaluator,
+            should_stop: false,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<
+    A: Agent,
+    S: Sampler<Tensor: R2lTensor>,
+    C: OnPolicyAdapters<A::Actor, S>,
+    E: Env<Tensor = S::Tensor>,
+    S2: Sampler<Tensor = S::Tensor>,
 > OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
 {
     type A = A;

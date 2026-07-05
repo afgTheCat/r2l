@@ -12,6 +12,7 @@ pub use normalized::{
 ///
 /// This controls whether environment workers run inline in the current thread
 /// or in dedicated background threads.
+#[derive(Debug, Clone, Copy)]
 pub enum SamplerExecutionMode {
     /// Run sampler workers inline in a local vector on the current thread.
     Vec,
