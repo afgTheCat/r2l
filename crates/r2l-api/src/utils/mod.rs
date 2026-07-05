@@ -1,5 +1,4 @@
 pub mod evaluator;
-pub mod running_mean;
 
 pub fn mean(numbers: &[f32]) -> f32 {
     let sum: f32 = numbers.iter().sum();

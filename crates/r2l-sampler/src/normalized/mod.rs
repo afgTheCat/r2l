@@ -4,7 +4,7 @@
 // buffer, instead they return the observation and the reward directly. Normalizaiton happens
 // afterwards.
 
-mod clipped_normalizer;
+pub mod clipped_normalizer;
 mod worker;
 
 use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
