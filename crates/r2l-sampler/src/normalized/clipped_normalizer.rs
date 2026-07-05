@@ -4,6 +4,7 @@ use r2l_core::{running_mean::RunningMeanStd, tensor::R2lTensor};
 
 const EPS: f32 = 1e-8;
 
+#[derive(Clone)]
 pub struct ClippedNormalizer<T: R2lTensor> {
     rm: RunningMeanStd<T>,
     clip: f32,

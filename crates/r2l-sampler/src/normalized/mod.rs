@@ -29,7 +29,7 @@ use crate::{
 
 pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>> {
     pool: WorkerPool<E>,
-    obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    pub obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     last_states: ArrayHandle<E::Tensor>,
     // Here there is no need to have each thread own the buffer

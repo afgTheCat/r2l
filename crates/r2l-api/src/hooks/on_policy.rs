@@ -50,6 +50,9 @@ impl LearningSchedule {
     }
 }
 
+// An evaluator that can be plugged in here
+trait DefaultOnPolicyAlgorithmHookEvaluator<A: Agent, S: Sampler> {}
+
 /// Default outer-loop hooks used by high-level on-policy algorithm builders.
 ///
 /// This hook is responsible for lifecycle behavior around training rather than
@@ -59,7 +62,7 @@ impl LearningSchedule {
 /// algorithm exits.
 pub struct DefaultOnPolicyAlgorithmHooks<
     A: Agent,
-    S: Sampler<Tensor: R2lTensor>,
+    S: Sampler,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
 > {
@@ -140,9 +143,7 @@ impl<
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
         if let Some(evaluator) = &mut self.evaluator {
-            let actor = runtime.actor();
-            let adapted_actor = runtime.adapted_actor();
-            evaluator.eval(adapted_actor, actor);
+            evaluator.eval(runtime);
         }
         if self.should_stop {
             HookResult::Break

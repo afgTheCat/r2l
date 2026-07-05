@@ -1,6 +1,6 @@
 use crate::tensor::R2lTensor;
 
-// super simplified running mean, only for vectors
+#[derive(Clone)]
 pub struct RunningMeanStd<T: R2lTensor> {
     pub mean: T,
     pub var: T,

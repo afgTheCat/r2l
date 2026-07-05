@@ -1,15 +1,16 @@
-use std::{marker::PhantomData, path::PathBuf};
+use std::{cell::RefCell, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use anyhow::Result;
+use candle_core::Tensor;
 use r2l_core::{
     buffers::{TrajectoryBatch, buffer::TrajectoryView},
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
-    on_policy::algorithm::{DefaultAdapter, OnPolicyAdapters, Sampler},
+    on_policy::algorithm::{Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
 use r2l_gym::{GymEnv, GymEnvBuilder};
-use r2l_sampler::{R2lSampler, SamplerExecutionMode};
+use r2l_sampler::{ClippedNormalizer, R2lSampler, SamplerExecutionMode};
 
 use crate::hooks::sampler::EpisodeBoundHook;
 
@@ -111,28 +112,45 @@ pub struct BestActorEvaluator<E: Env<Tensor: R2lTensor>, A: Actor> {
 }
 
 impl<E: Env<Tensor: R2lTensor>, A: Actor> BestActorEvaluator<E, A> {
-    /// Evaluates the actor and stores it if it outperforms the current best actor.
-    pub fn eval(&mut self, adapted_actor: impl Actor<Tensor = E::Tensor> + Clone, actor: A) {
+    pub fn eval<
+        AG: Agent<Actor = A>,
+        S: Sampler<Tensor = E::Tensor>,
+        C: OnPolicyAdapters<AG::Actor, S>,
+    >(
+        &mut self,
+        rt: &mut OnPolicyRuntime<AG, S, C>,
+    ) {
         self.current_evaluator_step += 1;
         if self.current_evaluator_step % self.evaluator_frequency == 0 {
-            self.sampler.reset_all_envs();
-            self.sampler.collect_rollouts(adapted_actor);
-            let trajectories = self.sampler.trajectory_views();
-            let total_reward: f32 = trajectories
-                .as_ref()
-                .iter()
-                .map(|x| x.rewards().iter().sum::<f32>())
-                .sum();
-            let total_episodes: f32 = trajectories
-                .as_ref()
-                .iter()
-                .map(|b| b.episode_terminations() as f32)
-                .sum();
-            let avg_reward = total_reward / total_episodes;
-            if avg_reward > self.best_rewards {
-                self.best_rewards = avg_reward;
-                self.best_actor = Some(actor);
-            }
+            let actor = rt.actor();
+            let adapted_actor = rt.adapted_actor();
+            self.eval_adapted(adapted_actor, actor);
+        }
+    }
+
+    /// Evaluates the actor and stores it if it outperforms the current best actor.
+    pub fn eval_adapted(
+        &mut self,
+        adapted_actor: impl Actor<Tensor = E::Tensor> + Clone,
+        actor: A,
+    ) {
+        self.sampler.reset_all_envs();
+        self.sampler.collect_rollouts(adapted_actor);
+        let trajectories = self.sampler.trajectory_views();
+        let total_reward: f32 = trajectories
+            .as_ref()
+            .iter()
+            .map(|x| x.rewards().iter().sum::<f32>())
+            .sum();
+        let total_episodes: f32 = trajectories
+            .as_ref()
+            .iter()
+            .map(|b| b.episode_terminations() as f32)
+            .sum();
+        let avg_reward = total_reward / total_episodes;
+        if avg_reward > self.best_rewards {
+            self.best_rewards = avg_reward;
+            self.best_actor = Some(actor);
         }
     }
 
