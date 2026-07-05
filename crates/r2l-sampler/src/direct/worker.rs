@@ -122,56 +122,6 @@ impl<T: R2lTensor> ThreadHandle<T> {
     }
 }
 
-pub struct LegacyThreadWorkers<T: R2lTensor> {
-    worker_handles: Vec<ThreadHandle<T>>,
-}
-
-impl<T: R2lTensor> LegacyThreadWorkers<T> {
-    pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
-        Self { worker_handles }
-    }
-
-    // TODO: this can fail. We need to mark this as failible once we figured the right Error types out
-    pub fn env_description(&self) -> EnvDescription<T> {
-        self.worker_handles[0].env_description()
-    }
-
-    pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
-        for worker_handle in self.worker_handles.iter() {
-            worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
-        }
-        for worker_handle in self.worker_handles.iter() {
-            worker_handle.recv();
-        }
-    }
-
-    pub fn collect_rollout(&self, bound: RolloutMode) {
-        for worker_handle in self.worker_handles.iter() {
-            worker_handle.send(WorkerCommand::Collect(bound));
-        }
-        for worker_handle in self.worker_handles.iter() {
-            worker_handle.recv();
-        }
-    }
-
-    pub fn reset_all(&self) {
-        for worker_handle in self.worker_handles.iter() {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            worker_handle.send(WorkerCommand::ResetEnv(seed));
-        }
-        for worker_handle in self.worker_handles.iter() {
-            worker_handle.recv();
-        }
-    }
-
-    pub fn shutdown(&mut self) {
-        // shutdown one by one.
-        while let Some(worker) = self.worker_handles.pop() {
-            worker.shutdown();
-        }
-    }
-}
-
 pub struct Worker<E: Env> {
     pub env: E,
     pub buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>,
