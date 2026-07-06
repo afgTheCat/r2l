@@ -230,6 +230,13 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
             hook,
         }
     }
+
+    pub fn obs_normalizer(&self, mode: NormalizerMode) -> Option<ClippedNormalizer<E::Tensor>> {
+        self.core
+            .obs_normalizer
+            .as_ref()
+            .map(|normalizer| normalizer.with_mode(mode))
+    }
 }
 
 impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler

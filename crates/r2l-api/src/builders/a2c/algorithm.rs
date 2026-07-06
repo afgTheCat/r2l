@@ -187,7 +187,7 @@ where
 pub type A2CCandleAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
-    ST = crate::builders::on_policy::DirectSamplerSelection,
+    ST = crate::builders::sampler::DirectSamplerSelection,
 > = OnPolicyAlgorithmBuilder<A2CCandleAgent, A2CCandleAgentBuilder, EB, SH, ST>;
 
 impl A2CCandleAlgorithmBuilder<GymEnvBuilder> {
@@ -214,7 +214,7 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> A2CCandleAlgorithmBuilder<EB> 
 pub type A2CBurnAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
-    ST = crate::builders::on_policy::DirectSamplerSelection,
+    ST = crate::builders::sampler::DirectSamplerSelection,
 > = OnPolicyAlgorithmBuilder<A2CBurnAgent<BurnBackend>, A2CBurnAgentBuilder, EB, SH, ST>;
 
 impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
@@ -227,7 +227,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            sampler_type,
             _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -235,7 +234,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
-            sampler_type,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -247,7 +245,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            sampler_type,
             _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -255,7 +252,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
-            sampler_type,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -267,7 +263,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
 pub type A2CAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
-    ST = crate::builders::on_policy::DirectSamplerSelection,
+    ST = crate::builders::sampler::DirectSamplerSelection,
 > = A2CCandleAlgorithmBuilder<EB, SH, ST>;
 
 impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
@@ -280,7 +276,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            sampler_type,
             _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -288,7 +283,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
-            sampler_type,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -300,7 +294,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            sampler_type,
             _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -308,7 +301,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
-            sampler_type,
             _phantom: std::marker::PhantomData,
         }
     }

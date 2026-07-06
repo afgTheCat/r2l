@@ -4,7 +4,10 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     tensor::R2lTensor,
 };
-use r2l_sampler::{R2lSampler, SamplerExecutionMode, SamplerHook};
+use r2l_sampler::{
+    NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler, SamplerExecutionMode,
+    SamplerHook,
+};
 
 use crate::hooks::sampler::{EpisodeBoundHook, StepBoundHook};
 
@@ -91,10 +94,21 @@ impl<E: Env> SamplerHookBuilder for EpisodeHookBound<E> {
 /// By default, [`new`](Self::new) creates a homogeneous vectorized sampler
 /// using `n_envs` copies of the same environment builder, a
 /// [`StepHookBound`] of `1024`, and [`SamplerExecutionMode::Vec`].
-pub struct SamplerBuilder<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>> {
+pub struct DirectSamplerSelection;
+
+pub struct NormalizedSamplerSelection {
+    pub(crate) obs_clip: f32,
+}
+
+pub struct SamplerBuilder<
+    EB: EnvBuilder,
+    S: SamplerHookBuilder<Env = EB::Env>,
+    ST = DirectSamplerSelection,
+> {
     pub(crate) env_builder: EnvBuilderType<EB>,
     pub(crate) hook_builder: S,
     pub(crate) execution_mode: SamplerExecutionMode,
+    pub(crate) sampler_type: ST,
 }
 
 /// Default sampler builder using a step-bounded rollout policy.
@@ -111,11 +125,12 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> DefaultSamplerBuilder<EB> {
             env_builder,
             hook_builder: StepHookBound::new(1024),
             execution_mode: SamplerExecutionMode::Vec,
+            sampler_type: DirectSamplerSelection,
         }
     }
 }
 
-impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>> SamplerBuilder<EB, S> {
+impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>, ST> SamplerBuilder<EB, S, ST> {
     /// Replaces the rollout hook policy used by the sampler.
     ///
     /// This changes the hook-builder type carried by the builder, allowing
@@ -124,16 +139,18 @@ impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>> SamplerBuilder<EB, S>
     pub fn with_hook<S2: SamplerHookBuilder<Env = EB::Env>>(
         self,
         hook_builder: S2,
-    ) -> SamplerBuilder<EB, S2> {
+    ) -> SamplerBuilder<EB, S2, ST> {
         let SamplerBuilder {
             env_builder,
             execution_mode,
+            sampler_type,
             ..
         } = self;
         SamplerBuilder {
             env_builder,
             execution_mode,
             hook_builder,
+            sampler_type,
         }
     }
 
@@ -152,10 +169,33 @@ impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>> SamplerBuilder<EB, S>
         self.env_builder = env_builder;
         self
     }
+}
 
+impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>>
+    SamplerBuilder<EB, S, DirectSamplerSelection>
+{
     /// Builds the configured sampler instance.
     pub fn build(self) -> R2lSampler<EB::Env, S::Target> {
         let hook = self.hook_builder.build();
         R2lSampler::build(self.env_builder, hook, self.execution_mode)
+    }
+}
+
+impl<
+    EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>,
+    S: SamplerHookBuilder<Env = EB::Env, Target: NormalizedSamplerHook<E = <EB as EnvBuilder>::Env>>,
+> SamplerBuilder<EB, S, NormalizedSamplerSelection>
+{
+    /// Builds the configured normalized sampler instance.
+    pub fn build(self) -> R2lNormalizedSampler<EB::Env, S::Target> {
+        let hook = self.hook_builder.build();
+        R2lNormalizedSampler::build(
+            self.env_builder,
+            hook,
+            self.execution_mode,
+            Some(self.sampler_type.obs_clip),
+            NormalizerMode::Update,
+            false,
+        )
     }
 }

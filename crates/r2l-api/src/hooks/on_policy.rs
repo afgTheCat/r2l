@@ -10,7 +10,7 @@ use r2l_core::{
     },
     tensor::R2lTensor,
 };
-use r2l_sampler::R2lSampler;
+use r2l_sampler::{R2lNormalizedSampler, R2lSampler};
 
 use crate::{BestActorEvaluator, BestActorEvaluatorBuilder, hooks::sampler::EpisodeBoundHook};
 
@@ -76,32 +76,11 @@ impl<
     S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
-> DefaultOnPolicyAlgorithmHooks<A, S, C, E, R2lSampler<E, EpisodeBoundHook<E>>>
-{
-    /// Creates the default outer-loop hooks for the given learning schedule.
-    pub fn new<EB: EnvBuilder<Env = E>>(
-        learning_schedule: LearningSchedule,
-        evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
-    ) -> Self {
-        Self {
-            learning_schedule,
-            evaluator: evaluator_builder.map(BestActorEvaluatorBuilder::build),
-            should_stop: false,
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<
-    A: Agent,
-    S: Sampler<Tensor: R2lTensor>,
-    C: OnPolicyAdapters<A::Actor, S>,
-    E: Env<Tensor = S::Tensor>,
     S2: Sampler<Tensor = S::Tensor>,
 > DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
 {
-    /// Creates hooks with an already-built evaluator sampler.
-    pub fn with_evaluator(
+    /// Creates the default outer-loop hooks for the given learning schedule.
+    pub fn new(
         learning_schedule: LearningSchedule,
         evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
     ) -> Self {

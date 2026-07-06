@@ -211,7 +211,7 @@ where
 pub type PPOCandleAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
-    ST = crate::builders::on_policy::DirectSamplerSelection,
+    ST = crate::builders::sampler::DirectSamplerSelection,
 > = OnPolicyAlgorithmBuilder<PPOCandleAgent, PPOCandleAgentBuilder, EB, SH, ST>;
 
 impl PPOCandleAlgorithmBuilder<GymEnvBuilder> {
@@ -238,7 +238,7 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> PPOCandleAlgorithmBuilder<EB> 
 pub type PPOBurnAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
-    ST = crate::builders::on_policy::DirectSamplerSelection,
+    ST = crate::builders::sampler::DirectSamplerSelection,
 > = OnPolicyAlgorithmBuilder<PPOBurnAgent<BurnBackend>, PPOBurnAgentBuilder, EB, SH, ST>;
 
 impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
@@ -251,7 +251,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            sampler_type,
             _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -259,7 +258,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
-            sampler_type,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -271,7 +269,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            sampler_type,
             _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -279,7 +276,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
-            sampler_type,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -291,7 +287,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
 pub type PPOAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
-    ST = crate::builders::on_policy::DirectSamplerSelection,
+    ST = crate::builders::sampler::DirectSamplerSelection,
 > = PPOCandleAlgorithmBuilder<EB, SH, ST>;
 
 impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
@@ -304,7 +300,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            sampler_type,
             _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -312,7 +307,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
-            sampler_type,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -324,7 +318,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            sampler_type,
             _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -332,7 +325,6 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
-            sampler_type,
             _phantom: std::marker::PhantomData,
         }
     }

@@ -1,10 +1,22 @@
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepBoundHook, StepHookBound};
+use r2l_api::{
+    DefaultOnPolicyAlgorithmHooks, LearningSchedule, PPOAlgorithmBuilder, PPOCandleAgent,
+    StepBoundHook, StepHookBound,
+};
 use r2l_core::{
     env::EnvBuilderType,
     on_policy::algorithm::{DefaultAdapter, OnPolicyRuntime},
 };
-use r2l_gym::GymEnvBuilder;
+use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{NormalizerMode, R2lNormalizedSampler, SamplerExecutionMode};
+
+type NormalizedGymStepSampler = R2lNormalizedSampler<GymEnv, StepBoundHook<GymEnv>>;
+type PPOTestHooks = DefaultOnPolicyAlgorithmHooks<
+    PPOCandleAgent,
+    NormalizedGymStepSampler,
+    DefaultAdapter,
+    GymEnv,
+    NormalizedGymStepSampler,
+>;
 
 #[allow(dead_code)]
 struct PPOTestConfig {
@@ -70,24 +82,13 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         sampler,
         adapter: DefaultAdapter,
     };
-    let hooks = r2l_api::DefaultOnPolicyAlgorithmHooks::new::<GymEnvBuilder>(
+    let hooks: PPOTestHooks = DefaultOnPolicyAlgorithmHooks::new(
         LearningSchedule::total_step_bound(config.n_timesteps),
         None,
     );
     let mut ppo = r2l_core::on_policy::algorithm::OnPolicyAlgorithm { runtime, hooks };
 
     ppo.train().unwrap();
-}
-
-#[test]
-#[ignore]
-fn normalized_sampler_builder_path_compiles() {
-    let _ppo = PPOAlgorithmBuilder::gym("CartPole-v1", 2)
-        .with_rollout_bound(StepHookBound::new(8))
-        .with_obs_normalizer(10.0)
-        .with_learning_schedule(LearningSchedule::rollout_bound(1))
-        .build()
-        .unwrap();
 }
 
 #[test]

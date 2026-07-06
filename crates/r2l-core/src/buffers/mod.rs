@@ -51,11 +51,11 @@ impl<T: R2lTensor> MultiMemory<T> {
     pub fn push_memory(&mut self, memory: Memory<T>) {
         let Memory {
             state,
-            next_state,
             action,
             reward,
             terminated,
             truncated,
+            ..
         } = memory;
         self.last_states.push(state);
         self.actions.push(action);

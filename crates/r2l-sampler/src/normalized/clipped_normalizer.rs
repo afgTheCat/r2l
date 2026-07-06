@@ -57,26 +57,6 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
         }
     }
 
-    fn update(&self, obs: &[T]) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.rm.update(obs);
-    }
-
-    fn normalize_in_place(&self, obs: &mut [T]) {
-        let inner = self.inner.lock().unwrap();
-        let mean = inner.rm.mean.to_vec();
-        let var = inner.rm.var.to_vec();
-        for obs in obs {
-            let (data, shape) = obs.to_vec_and_shape();
-            let normalized = izip!(data, &mean, &var)
-                .map(|(val, mean, var)| {
-                    ((val - mean) / (var + EPS).sqrt()).clamp(-inner.clip, inner.clip)
-                })
-                .collect();
-            *obs = T::from_vec_and_shape(normalized, shape);
-        }
-    }
-
     pub fn apply_in_place(&self, obs: &mut [T]) {
         let mut inner = self.inner.lock().unwrap();
         match self.normalizer_mode {

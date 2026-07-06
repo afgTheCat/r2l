@@ -5,18 +5,18 @@ use r2l_core::{
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
-    tensor::R2lTensor,
 };
 use r2l_sampler::{
-    ClippedNormalizer, NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler,
-    SamplerExecutionMode,
+    NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler, SamplerExecutionMode,
 };
 
 use crate::{
     BestActorEvaluatorBuilder,
     builders::{
         agent::AgentBuilder,
-        sampler::{SamplerBuilder, SamplerHookBuilder},
+        sampler::{
+            DirectSamplerSelection, NormalizedSamplerSelection, SamplerBuilder, SamplerHookBuilder,
+        },
     },
     hooks::{
         on_policy::{DefaultOnPolicyAlgorithmHooks, LearningSchedule},
@@ -48,12 +48,6 @@ type NormalizedOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
     >,
 >;
 
-pub struct DirectSamplerSelection;
-
-pub struct NormalizedSamplerSelection {
-    obs_clip: f32,
-}
-
 /// Generic builder for on-policy algorithms on the new training stack.
 ///
 /// This builder combines:
@@ -72,11 +66,10 @@ pub struct OnPolicyAlgorithmBuilder<
     SH: SamplerHookBuilder<Env = EB::Env>,
     ST = DirectSamplerSelection,
 > {
-    pub(crate) sampler_builder: SamplerBuilder<EB, SH>,
+    pub(crate) sampler_builder: SamplerBuilder<EB, SH, ST>,
     pub(crate) learning_schedule: LearningSchedule,
     pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
     pub(crate) agent_builder: AB,
-    pub(crate) sampler_type: ST,
     pub(crate) _phantom: PhantomData<A>,
 }
 
@@ -90,17 +83,12 @@ impl<
 {
     /// Creates an on-policy algorithm builder from an explicit sampler builder
     /// and agent builder.
-    fn from_parts(
-        sampler_builder: SamplerBuilder<EB, SH>,
-        agent_builder: AB,
-        sampler_type: ST,
-    ) -> Self {
+    fn from_parts(sampler_builder: SamplerBuilder<EB, SH, ST>, agent_builder: AB) -> Self {
         Self {
             sampler_builder,
             agent_builder,
             evaluator_builder: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
-            sampler_type,
             _phantom: PhantomData,
         }
     }
@@ -115,7 +103,6 @@ impl<
             agent_builder,
             learning_schedule,
             evaluator_builder,
-            sampler_type,
             _phantom,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -123,7 +110,6 @@ impl<
             agent_builder,
             evaluator_builder,
             learning_schedule,
-            sampler_type,
             _phantom: PhantomData,
         }
     }
@@ -139,7 +125,6 @@ impl<
             agent_builder,
             learning_schedule,
             evaluator_builder,
-            sampler_type,
             _phantom,
         } = self;
         OnPolicyAlgorithmBuilder {
@@ -147,7 +132,6 @@ impl<
             agent_builder,
             evaluator_builder,
             learning_schedule,
-            sampler_type,
             _phantom: PhantomData,
         }
     }
@@ -251,40 +235,10 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
     /// Creates an on-policy algorithm builder from an explicit sampler builder
     /// and agent builder.
     pub fn from_sampler_and_agent_builder(
-        sampler_builder: SamplerBuilder<EB, SH>,
+        sampler_builder: SamplerBuilder<EB, SH, DirectSamplerSelection>,
         agent_builder: AB,
     ) -> Self {
-        Self::from_parts(sampler_builder, agent_builder, DirectSamplerSelection)
-    }
-}
-
-impl<
-    A: Agent,
-    AB: AgentBuilder<Agent = A>,
-    EB: EnvBuilder,
-    SH: SamplerHookBuilder<Env = EB::Env>,
-    ST,
-> OnPolicyAlgorithmBuilder<A, AB, EB, SH, ST>
-{
-    /// Switches training and evaluation rollout collection to normalized sampling.
-    pub fn with_obs_normalizer(
-        self,
-        obs_clip: f32,
-    ) -> OnPolicyAlgorithmBuilder<A, AB, EB, SH, NormalizedSamplerSelection> {
-        let OnPolicyAlgorithmBuilder {
-            sampler_builder,
-            learning_schedule,
-            evaluator_builder,
-            agent_builder,
-            ..
-        } = self;
-        OnPolicyAlgorithmBuilder::from_parts(
-            sampler_builder,
-            agent_builder,
-            NormalizedSamplerSelection { obs_clip },
-        )
-        .with_learning_schedule(learning_schedule)
-        .with_evaluator(evaluator_builder)
+        Self::from_parts(sampler_builder, agent_builder)
     }
 }
 
@@ -295,7 +249,6 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
     pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm<A, EB, SH>>
     where
         DefaultAdapter: OnPolicyAdapters<A::Actor, R2lSampler<<EB as EnvBuilder>::Env, SH::Target>>,
-        <<EB as EnvBuilder>::Env as r2l_core::env::Env>::Tensor: R2lTensor,
     {
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
@@ -308,8 +261,8 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
-        let hooks =
-            DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, self.evaluator_builder);
+        let evaluator = self.evaluator_builder.map(|eb| eb.build());
+        let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator);
         Ok(OnPolicyAlgorithm {
             runtime: OnPolicyRuntime {
                 sampler,
@@ -321,16 +274,18 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
     }
 }
 
-impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
-    OnPolicyAlgorithmBuilder<A, AB, EB, SH, NormalizedSamplerSelection>
+impl<
+    A: Agent,
+    AB: AgentBuilder<Agent = A>,
+    EB: EnvBuilder,
+    SH: SamplerHookBuilder<Env = EB::Env, Target: NormalizedSamplerHook<E = <EB as EnvBuilder>::Env>>,
+> OnPolicyAlgorithmBuilder<A, AB, EB, SH, NormalizedSamplerSelection>
 {
     /// Builds the configured on-policy algorithm runtime using normalized sampling.
     pub fn build(self) -> anyhow::Result<NormalizedOnPolicyAlgorithm<A, EB, SH>>
     where
-        SH::Target: NormalizedSamplerHook<E = <EB as EnvBuilder>::Env>,
         DefaultAdapter:
             OnPolicyAdapters<A::Actor, R2lNormalizedSampler<<EB as EnvBuilder>::Env, SH::Target>>,
-        <<EB as EnvBuilder>::Env as r2l_core::env::Env>::Tensor: R2lTensor,
     {
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let observation_size = env_description.observation_size();
@@ -339,25 +294,8 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
             Space::Discrete(_) => ActionSpaceType::Discrete,
             Space::Continuous { .. } => ActionSpaceType::Continuous,
         };
-        let obs_size = env_description.observation_space.size();
-        let obs_normalizer = ClippedNormalizer::new(
-            NormalizerMode::Update,
-            self.sampler_type.obs_clip,
-            vec![obs_size],
-        );
-        let eval_obs_normalizer = obs_normalizer.with_mode(NormalizerMode::ReadOnly);
-        let SamplerBuilder {
-            env_builder,
-            hook_builder,
-            execution_mode,
-        } = self.sampler_builder;
-        let sampler = R2lNormalizedSampler::build_with_obs_normalizer(
-            env_builder,
-            hook_builder.build(),
-            execution_mode,
-            Some(obs_normalizer),
-            false,
-        );
+        let sampler = self.sampler_builder.build();
+        let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);
         let agent = self
             .agent_builder
             .build(observation_size, action_size, action_space)?;
@@ -366,13 +304,12 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
                 evaluator_builder.env_builder().clone(),
                 EpisodeBoundHook::new(evaluator_builder.n_episodes()),
                 evaluator_builder.execution_mode(),
-                Some(eval_obs_normalizer),
+                eval_obs_normalizer,
                 false,
             );
             evaluator_builder.build_with_sampler(eval_sampler)
         });
-        let hooks =
-            DefaultOnPolicyAlgorithmHooks::with_evaluator(self.learning_schedule, evaluator);
+        let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator);
         Ok(OnPolicyAlgorithm {
             runtime: OnPolicyRuntime {
                 sampler,

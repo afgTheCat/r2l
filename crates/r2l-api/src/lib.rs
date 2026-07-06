@@ -22,7 +22,7 @@ pub use builders::ppo::agent::{PPOAgentBuilder, PPOBurnAgentBuilder, PPOCandleAg
 pub use builders::ppo::algorithm::{
     PPOAlgorithmBuilder, PPOBurnAlgorithmBuilder, PPOCandleAlgorithmBuilder,
 };
-pub use builders::sampler::SamplerBuilder;
+pub use builders::sampler::{DirectSamplerSelection, NormalizedSamplerSelection, SamplerBuilder};
 pub use builders::sampler::{EpisodeHookBound, StepHookBound};
 pub use evaluators::best_actor_evaluator::{BestActorEvaluator, BestActorEvaluatorBuilder};
 pub use evaluators::simple_evaluator::Evaluator;

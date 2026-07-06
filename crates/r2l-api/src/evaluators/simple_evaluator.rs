@@ -1,12 +1,10 @@
-use std::{marker::PhantomData, path::PathBuf};
+use std::marker::PhantomData;
 
-use anyhow::Result;
 use r2l_core::{
-    buffers::{TrajectoryBatch, buffer::TrajectoryView},
+    buffers::buffer::TrajectoryView,
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::{DefaultAdapter, OnPolicyAdapters, Sampler},
-    tensor::R2lTensor,
 };
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{R2lSampler, SamplerExecutionMode};
