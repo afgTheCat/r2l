@@ -32,11 +32,6 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         .with_rollout_bound(StepHookBound::new(config.n_steps))
         .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps));
 
-    if let Some(norm_obs) = config.norm_obs {
-        // TODO: readd this once we have new sampler
-        // ppo_builder = ppo_builder.with_observation_normalizer();
-    }
-
     if let Some(clip_range) = config.clip_range {
         ppo_builder = ppo_builder.with_clip_range(clip_range);
     }
@@ -57,8 +52,14 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         ppo_builder = ppo_builder.with_gradient_clipping(Some(gradient_clipping));
     }
 
-    let mut ppo = ppo_builder.build().unwrap();
-    ppo.train().unwrap();
+    if config.norm_obs == Some(true) {
+        let ppo_builder = ppo_builder.with_observation_normalizer(10.);
+        let mut ppo = ppo_builder.build().unwrap();
+        ppo.train().unwrap();
+    } else {
+        let mut ppo = ppo_builder.build().unwrap();
+        ppo.train().unwrap();
+    }
 }
 
 #[test]
@@ -166,8 +167,8 @@ fn mountain_car_candle() {
         total_epochs: 4,
         n_steps: 16,
         n_timesteps: 1_000_000,
-        vf_coeff: None,
-        gradient_clipping: None,
+        vf_coeff: Some(0.5),
+        gradient_clipping: Some(0.5),
         norm_obs: Some(true),
         norm_reward: Some(false),
         use_sde: None,

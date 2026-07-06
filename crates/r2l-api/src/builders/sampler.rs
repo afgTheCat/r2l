@@ -169,6 +169,25 @@ impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>, ST> SamplerBuilder<EB
         self.env_builder = env_builder;
         self
     }
+
+    /// Switches this builder to construct normalized samplers.
+    pub fn with_obs_normalizer(
+        self,
+        obs_clip: f32,
+    ) -> SamplerBuilder<EB, S, NormalizedSamplerSelection> {
+        let SamplerBuilder {
+            env_builder,
+            hook_builder,
+            execution_mode,
+            ..
+        } = self;
+        SamplerBuilder {
+            env_builder,
+            hook_builder,
+            execution_mode,
+            sampler_type: NormalizedSamplerSelection { obs_clip },
+        }
+    }
 }
 
 impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>>

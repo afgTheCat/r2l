@@ -219,6 +219,25 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
         self.sampler_builder = self.sampler_builder.with_execution_mode(location);
         self
     }
+
+    /// Switches training and evaluation rollout collection to normalized observations.
+    pub fn with_observation_normalizer(
+        self,
+        obs_clip: f32,
+    ) -> OnPolicyAlgorithmBuilder<AB, EB, SH, NormalizedSamplerSelection> {
+        let OnPolicyAlgorithmBuilder {
+            sampler_builder,
+            learning_schedule,
+            evaluator_builder,
+            agent_builder,
+        } = self;
+        OnPolicyAlgorithmBuilder {
+            sampler_builder: sampler_builder.with_obs_normalizer(obs_clip),
+            learning_schedule,
+            evaluator_builder,
+            agent_builder,
+        }
+    }
 }
 
 impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
