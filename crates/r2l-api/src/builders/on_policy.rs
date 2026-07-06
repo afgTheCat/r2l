@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use r2l_core::{
     env::{ActionSpaceType, EnvBuilder, Space},
     on_policy::algorithm::{
@@ -36,6 +34,9 @@ type DefaultOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
     >,
 >;
 
+type DefaultOnPolicyAlgorithmFor<AB, EB, SH> =
+    DefaultOnPolicyAlgorithm<<AB as AgentBuilder>::Agent, EB, SH>;
+
 type NormalizedOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
     A,
     R2lNormalizedSampler<<EB as EnvBuilder>::Env, <SH as SamplerHookBuilder>::Target>,
@@ -47,6 +48,9 @@ type NormalizedOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
         R2lNormalizedSampler<<EB as EnvBuilder>::Env, EpisodeBoundHook<<EB as EnvBuilder>::Env>>,
     >,
 >;
+
+type NormalizedOnPolicyAlgorithmFor<AB, EB, SH> =
+    NormalizedOnPolicyAlgorithm<<AB as AgentBuilder>::Agent, EB, SH>;
 
 /// Generic builder for on-policy algorithms on the new training stack.
 ///
@@ -60,8 +64,7 @@ type NormalizedOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
 /// Algorithm-specific builders such as `PPOAlgorithmBuilder` and
 /// `A2CAlgorithmBuilder` build on top of this type.
 pub struct OnPolicyAlgorithmBuilder<
-    A: Agent,
-    AB: AgentBuilder<Agent = A>,
+    AB: AgentBuilder,
     EB: EnvBuilder,
     SH: SamplerHookBuilder<Env = EB::Env>,
     ST = DirectSamplerSelection,
@@ -70,16 +73,10 @@ pub struct OnPolicyAlgorithmBuilder<
     pub(crate) learning_schedule: LearningSchedule,
     pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
     pub(crate) agent_builder: AB,
-    pub(crate) _phantom: PhantomData<A>,
 }
 
-impl<
-    A: Agent,
-    AB: AgentBuilder<Agent = A>,
-    EB: EnvBuilder,
-    SH: SamplerHookBuilder<Env = EB::Env>,
-    ST,
-> OnPolicyAlgorithmBuilder<A, AB, EB, SH, ST>
+impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
+    OnPolicyAlgorithmBuilder<AB, EB, SH, ST>
 {
     /// Creates an on-policy algorithm builder from an explicit sampler builder
     /// and agent builder.
@@ -89,7 +86,6 @@ impl<
             agent_builder,
             evaluator_builder: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
-            _phantom: PhantomData,
         }
     }
 
@@ -97,20 +93,18 @@ impl<
     pub fn with_hook<SH2: SamplerHookBuilder<Env = EB::Env>>(
         self,
         hook_builder: SH2,
-    ) -> OnPolicyAlgorithmBuilder<A, AB, EB, SH2, ST> {
+    ) -> OnPolicyAlgorithmBuilder<AB, EB, SH2, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             agent_builder,
             learning_schedule,
             evaluator_builder,
-            _phantom,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_hook(hook_builder),
             agent_builder,
             evaluator_builder,
             learning_schedule,
-            _phantom: PhantomData,
         }
     }
 
@@ -119,20 +113,18 @@ impl<
     pub fn with_rollout_bound<SH2: SamplerHookBuilder<Env = EB::Env>>(
         self,
         rollout_bound: SH2,
-    ) -> OnPolicyAlgorithmBuilder<A, AB, EB, SH2, ST> {
+    ) -> OnPolicyAlgorithmBuilder<AB, EB, SH2, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             agent_builder,
             learning_schedule,
             evaluator_builder,
-            _phantom,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_hook(rollout_bound),
             agent_builder,
             evaluator_builder,
             learning_schedule,
-            _phantom: PhantomData,
         }
     }
 
@@ -229,8 +221,8 @@ impl<
     }
 }
 
-impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
-    OnPolicyAlgorithmBuilder<A, AB, EB, SH, DirectSamplerSelection>
+impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
+    OnPolicyAlgorithmBuilder<AB, EB, SH, DirectSamplerSelection>
 {
     /// Creates an on-policy algorithm builder from an explicit sampler builder
     /// and agent builder.
@@ -242,13 +234,16 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
     }
 }
 
-impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
-    OnPolicyAlgorithmBuilder<A, AB, EB, SH, DirectSamplerSelection>
+impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
+    OnPolicyAlgorithmBuilder<AB, EB, SH, DirectSamplerSelection>
 {
     /// Builds the configured on-policy algorithm runtime.
-    pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithm<A, EB, SH>>
+    pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithmFor<AB, EB, SH>>
     where
-        DefaultAdapter: OnPolicyAdapters<A::Actor, R2lSampler<<EB as EnvBuilder>::Env, SH::Target>>,
+        DefaultAdapter: OnPolicyAdapters<
+                <<AB as AgentBuilder>::Agent as Agent>::Actor,
+                R2lSampler<<EB as EnvBuilder>::Env, SH::Target>,
+            >,
     {
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
@@ -275,17 +270,18 @@ impl<A: Agent, AB: AgentBuilder<Agent = A>, EB: EnvBuilder, SH: SamplerHookBuild
 }
 
 impl<
-    A: Agent,
-    AB: AgentBuilder<Agent = A>,
+    AB: AgentBuilder,
     EB: EnvBuilder,
     SH: SamplerHookBuilder<Env = EB::Env, Target: NormalizedSamplerHook<E = <EB as EnvBuilder>::Env>>,
-> OnPolicyAlgorithmBuilder<A, AB, EB, SH, NormalizedSamplerSelection>
+> OnPolicyAlgorithmBuilder<AB, EB, SH, NormalizedSamplerSelection>
 {
     /// Builds the configured on-policy algorithm runtime using normalized sampling.
-    pub fn build(self) -> anyhow::Result<NormalizedOnPolicyAlgorithm<A, EB, SH>>
+    pub fn build(self) -> anyhow::Result<NormalizedOnPolicyAlgorithmFor<AB, EB, SH>>
     where
-        DefaultAdapter:
-            OnPolicyAdapters<A::Actor, R2lNormalizedSampler<<EB as EnvBuilder>::Env, SH::Target>>,
+        DefaultAdapter: OnPolicyAdapters<
+                <<AB as AgentBuilder>::Agent as Agent>::Actor,
+                R2lNormalizedSampler<<EB as EnvBuilder>::Env, SH::Target>,
+            >,
     {
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let observation_size = env_description.observation_size();

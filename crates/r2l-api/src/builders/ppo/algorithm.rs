@@ -3,7 +3,6 @@ use std::sync::mpsc::Sender;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::PPOParams;
-use r2l_core::on_policy::algorithm::Agent;
 use r2l_core::{
     env::{Env, EnvBuilder},
     models::ActivationFunction,
@@ -11,9 +10,7 @@ use r2l_core::{
 };
 use r2l_gym::GymEnvBuilder;
 
-use crate::agents::ppo::{PPOBurnAgent, PPOCandleAgent};
 use crate::{
-    BurnBackend,
     builders::{
         agent::{AgentBuilder, OnPolicyAgentBuilder},
         learning_module::OnPolicyLearningModuleType,
@@ -27,16 +24,10 @@ use crate::{
     hooks::ppo::PPOStats,
 };
 
-impl<A: Agent, B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
-    OnPolicyAlgorithmBuilder<
-        A,
-        OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>,
-        EB,
-        SH,
-        ST,
-    >
+impl<B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
+    OnPolicyAlgorithmBuilder<OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>, EB, SH, ST>
 where
-    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>: AgentBuilder<Agent = A>,
+    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>: AgentBuilder,
 {
     /// Enables or disables advantage normalization in the underlying PPO hook.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
@@ -212,7 +203,7 @@ pub type PPOCandleAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
     ST = crate::builders::sampler::DirectSamplerSelection,
-> = OnPolicyAlgorithmBuilder<PPOCandleAgent, PPOCandleAgentBuilder, EB, SH, ST>;
+> = OnPolicyAlgorithmBuilder<PPOCandleAgentBuilder, EB, SH, ST>;
 
 impl PPOCandleAlgorithmBuilder<GymEnvBuilder> {
     /// Creates a PPO algorithm builder for a Gym environment.
@@ -239,7 +230,7 @@ pub type PPOBurnAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
     ST = crate::builders::sampler::DirectSamplerSelection,
-> = OnPolicyAlgorithmBuilder<PPOBurnAgent<BurnBackend>, PPOBurnAgentBuilder, EB, SH, ST>;
+> = OnPolicyAlgorithmBuilder<PPOBurnAgentBuilder, EB, SH, ST>;
 
 impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     PPOBurnAlgorithmBuilder<EB, SH, ST>
@@ -251,14 +242,12 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
-            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -269,14 +258,12 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
-            _phantom: std::marker::PhantomData,
         }
     }
 }
@@ -300,14 +287,12 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
-            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -318,14 +303,12 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
-            _phantom: std::marker::PhantomData,
         }
     }
 }

@@ -3,7 +3,6 @@ use std::sync::mpsc::Sender;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::a2c::A2CParams;
-use r2l_core::on_policy::algorithm::Agent;
 use r2l_core::{
     env::{Env, EnvBuilder},
     models::ActivationFunction,
@@ -11,32 +10,22 @@ use r2l_core::{
 };
 use r2l_gym::GymEnvBuilder;
 
-use crate::agents::a2c::{A2CBurnAgent, A2CCandleAgent};
-use crate::hooks::a2c::A2CStats;
-use crate::{
-    BurnBackend,
-    builders::{
-        a2c::{
-            agent::{A2CBurnAgentBuilder, A2CCandleAgentBuilder},
-            hook::DefaultA2CHookBuilder,
-        },
-        agent::{AgentBuilder, OnPolicyAgentBuilder},
-        learning_module::OnPolicyLearningModuleType,
-        on_policy::OnPolicyAlgorithmBuilder,
-        sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
+use crate::builders::{
+    a2c::{
+        agent::{A2CBurnAgentBuilder, A2CCandleAgentBuilder},
+        hook::DefaultA2CHookBuilder,
     },
+    agent::{AgentBuilder, OnPolicyAgentBuilder},
+    learning_module::OnPolicyLearningModuleType,
+    on_policy::OnPolicyAlgorithmBuilder,
+    sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
 };
+use crate::hooks::a2c::A2CStats;
 
-impl<A: Agent, B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
-    OnPolicyAlgorithmBuilder<
-        A,
-        OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>,
-        EB,
-        SH,
-        ST,
-    >
+impl<B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
+    OnPolicyAlgorithmBuilder<OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>, EB, SH, ST>
 where
-    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>: AgentBuilder<Agent = A>,
+    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>: AgentBuilder,
 {
     /// Sets whether to log the training progress during learning.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
@@ -188,7 +177,7 @@ pub type A2CCandleAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
     ST = crate::builders::sampler::DirectSamplerSelection,
-> = OnPolicyAlgorithmBuilder<A2CCandleAgent, A2CCandleAgentBuilder, EB, SH, ST>;
+> = OnPolicyAlgorithmBuilder<A2CCandleAgentBuilder, EB, SH, ST>;
 
 impl A2CCandleAlgorithmBuilder<GymEnvBuilder> {
     /// Creates an A2C algorithm builder for a Gym environment.
@@ -215,7 +204,7 @@ pub type A2CBurnAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
     ST = crate::builders::sampler::DirectSamplerSelection,
-> = OnPolicyAlgorithmBuilder<A2CBurnAgent<BurnBackend>, A2CBurnAgentBuilder, EB, SH, ST>;
+> = OnPolicyAlgorithmBuilder<A2CBurnAgentBuilder, EB, SH, ST>;
 
 impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     A2CBurnAlgorithmBuilder<EB, SH, ST>
@@ -227,14 +216,12 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
-            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -245,14 +232,12 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
-            _phantom: std::marker::PhantomData,
         }
     }
 }
@@ -276,14 +261,12 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
-            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -294,14 +277,12 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
-            _phantom: _,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
-            _phantom: std::marker::PhantomData,
         }
     }
 }
