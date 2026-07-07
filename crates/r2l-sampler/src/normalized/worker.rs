@@ -4,10 +4,9 @@ use r2l_core::{
     buffers::{Memory, MultiMemory},
     env::{Env, EnvBuilder, Snapshot},
     models::Actor,
-    rng::RNG,
+    rng::{sample_u64, set_seed},
     tensor::R2lTensor,
 };
-use rand::RngExt;
 
 pub enum WorkerCommand<T: R2lTensor> {
     Step,
@@ -47,8 +46,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
         } = self.env.step(action.clone()).unwrap();
         let done = terminated || truncated;
         if done {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            next_state = self.env.reset(seed).unwrap();
+            next_state = self.env.reset(sample_u64()).unwrap();
         }
         *handle.lock().unwrap() = next_state.clone();
         Memory {
@@ -84,8 +82,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
     }
 
     fn reset(&mut self) {
-        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-        let state = self.worker.env.reset(seed).unwrap();
+        let state = self.worker.env.reset(sample_u64()).unwrap();
         *self.handle.lock().unwrap() = state;
     }
 }
@@ -152,8 +149,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
     type T = T;
 
     fn build(&mut self) -> Self::T {
-        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-        self.worker.env.reset(seed).unwrap()
+        self.worker.env.reset(sample_u64()).unwrap()
     }
 
     fn work(&mut self, mut handle: ElementHandle<Self::T>) {
@@ -185,6 +181,7 @@ pub struct ThreadWorkerFactory<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>
     rx: Receiver<WorkerCommand<T>>,
     tx: Sender<WorkerResult<T>>,
     env_builder: EB,
+    worker_seed: u64,
 }
 
 impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ThreadWorkerFactory<T, EB> {
@@ -192,11 +189,13 @@ impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ThreadWorkerFactory<T, 
         rx: Receiver<WorkerCommand<T>>,
         tx: Sender<WorkerResult<T>>,
         env_builder: EB,
+        worker_seed: u64,
     ) -> Self {
         Self {
             rx,
             tx,
             env_builder,
+            worker_seed,
         }
     }
 }
@@ -207,6 +206,7 @@ impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ElementWorkerFactory
     type Worker = ThreadWorker<T, <EB as EnvBuilder>::Env>;
 
     fn build(self) -> Self::Worker {
+        set_seed(self.worker_seed);
         let env = self.env_builder.build_env().unwrap();
         ThreadWorker::new(env, self.rx, self.tx)
     }
@@ -284,8 +284,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     fn reset_all(&self) {
         for worker_handle in &self.worker_handles {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            worker_handle.send(WorkerCommand::ResetEnv(seed));
+            worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
         }
         for worker_handle in &self.worker_handles {
             let WorkerResult::EnvReset = worker_handle.recv() else {

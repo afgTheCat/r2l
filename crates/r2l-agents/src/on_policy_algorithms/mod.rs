@@ -17,7 +17,7 @@ use derive_more::Deref;
 use r2l_core::{
     buffers::TrajectoryBatch,
     models::{Policy, ValueFunction},
-    rng::RNG,
+    rng::with_rng,
     tensor::R2lTensor,
 };
 use rand::seq::SliceRandom;
@@ -187,7 +187,7 @@ impl BatchIndexIterator {
                 (0..batch.len()).map(|j| (i, j)).collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        RNG.with_borrow_mut(|rng| indices.shuffle(rng));
+        with_rng(|rng| indices.shuffle(rng));
         Self {
             indices,
             sample_size,

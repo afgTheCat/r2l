@@ -52,8 +52,8 @@ impl<E: Env<Tensor: R2lTensor>> SamplerHookBuilder for StepHookBound<E> {
     type Target = StepBoundHook<Self::Env>;
 
     fn build(self) -> Self::Target {
-        let hook = StepBoundHook::new(self.n_step);
-        hook
+        
+        StepBoundHook::new(self.n_step)
     }
 }
 

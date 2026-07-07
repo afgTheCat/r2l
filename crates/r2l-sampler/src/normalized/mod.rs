@@ -14,10 +14,9 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::Sampler,
-    rng::RNG,
+    rng::sample_u64,
     tensor::R2lTensor,
 };
-use rand::RngExt;
 
 use crate::{
     RolloutMode, SamplerExecutionMode, SamplerHookResult,
@@ -84,8 +83,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
         let mut envs_and_states = Vec::with_capacity(num_envs);
         for env_idx in 0..num_envs {
             let mut env = env_builder.build_idx(env_idx).unwrap();
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            let state = env.reset(seed).unwrap();
+            let state = env.reset(sample_u64()).unwrap();
             envs_and_states.push((env, state));
         }
         let initial_states = envs_and_states
@@ -113,7 +111,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
                 worker_handles.push(ThreadHandle::new(command_tx, result_rx));
                 let env_builder = env_builder.clone();
                 let env_builder = move || env_builder.build_idx(idx);
-                ThreadWorkerFactory::new(command_rx, result_tx, env_builder.clone())
+                ThreadWorkerFactory::new(command_rx, result_tx, env_builder.clone(), sample_u64())
             })
             .collect();
         let last_states = bimodal_array_with_factory(factories);

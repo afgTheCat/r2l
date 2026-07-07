@@ -1,5 +1,6 @@
 use std::sync::mpsc::Sender;
 
+use burn::prelude::Backend;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
@@ -31,7 +32,21 @@ pub type PPOCandleAgentBuilder = PPOAgentBuilder;
 pub type PPOBurnAgentBuilder =
     OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, BuilderBurnBackend>;
 
+impl PPOBurnAgentBuilder {
+    fn seed(&self, seed: Option<u64>) {
+        if let Some(seed) = seed {
+            BurnBackend::seed(&Default::default(), seed);
+        }
+    }
+}
+
 impl PPOAgentBuilder {
+    fn seed(&self, seed: Option<u64>) {
+        if let Some(seed) = seed {
+            BurnBackend::seed(&Default::default(), seed);
+        }
+    }
+
     /// Creates a PPO agent builder with default hyperparameters.
     pub fn new(n_envs: usize) -> Self {
         Self {
@@ -137,7 +152,9 @@ impl AgentBuilder for PPOAgentBuilder {
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
+        seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
+        self.seed(seed);
         let device = self.backend.device.clone();
         let lm = self.learning_module_builder.build_candle(
             observation_size,
@@ -159,7 +176,9 @@ impl AgentBuilder for PPOBurnAgentBuilder {
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
+        seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
+        self.seed(seed);
         let lm = self.learning_module_builder.build_burn::<BurnBackend>(
             observation_size,
             action_size,

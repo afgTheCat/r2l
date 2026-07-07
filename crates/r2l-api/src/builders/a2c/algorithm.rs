@@ -216,12 +216,14 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
+            seed,
         }
     }
 
@@ -232,12 +234,14 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
+            seed,
         }
     }
 }
@@ -261,12 +265,14 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
+            seed,
         }
     }
 
@@ -277,12 +283,14 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             learning_schedule,
             evaluator_builder,
             agent_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
+            seed,
         }
     }
 }

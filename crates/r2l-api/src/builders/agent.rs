@@ -21,6 +21,7 @@ pub trait AgentBuilder {
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
+        seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent>;
 }
 
@@ -48,6 +49,14 @@ pub struct BurnBackend;
 #[derive(Debug, Clone)]
 pub struct CandleBackend {
     pub(crate) device: Device,
+}
+
+impl CandleBackend {
+    pub(crate) fn seed(&self, seed: u64) {
+        if !matches!(&self.device, Device::Cpu) {
+            self.device.set_seed(seed).unwrap();
+        }
+    }
 }
 
 impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Backend> {

@@ -119,6 +119,7 @@ pub fn train_ppo(
     // TODO: The generic here is ugly
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
+        .with_seed(0)
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))

@@ -14,6 +14,7 @@ use r2l_core::env::EnvBuilder;
 use r2l_core::env::EnvBuilderType;
 use r2l_core::models::Actor;
 use r2l_core::on_policy::algorithm::Sampler;
+use r2l_core::rng::{sample_u64, set_seed};
 
 use crate::RolloutMode;
 use crate::SamplerExecutionMode;
@@ -72,7 +73,9 @@ impl<E: Env> R2lSamplerCore<E> {
                         let (command_tx, command_rx) = crossbeam::channel::unbounded();
                         let (res_tx, res_rx) = crossbeam::channel::unbounded();
                         let env_builder = env_builder.clone();
+                        let worker_seed = sample_u64();
                         let handle = std::thread::spawn(move || {
+                            set_seed(worker_seed);
                             let env = env_builder.build_idx(idx).unwrap();
                             let worker = Worker::new(env, element_handle);
                             let mut thread_worker = ThreadWorker::new(worker, command_rx, res_tx);

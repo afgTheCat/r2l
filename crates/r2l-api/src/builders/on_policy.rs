@@ -3,6 +3,7 @@ use r2l_core::{
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
+    rng::set_seed,
 };
 use r2l_sampler::{
     NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler, SamplerExecutionMode,
@@ -73,6 +74,7 @@ pub struct OnPolicyAlgorithmBuilder<
     pub(crate) learning_schedule: LearningSchedule,
     pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
     pub(crate) agent_builder: AB,
+    pub(crate) seed: Option<u64>,
 }
 
 impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
@@ -86,6 +88,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             evaluator_builder: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
+            seed: None,
         }
     }
 
@@ -99,12 +102,14 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             learning_schedule,
             evaluator_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_hook(hook_builder),
             agent_builder,
             evaluator_builder,
             learning_schedule,
+            seed,
         }
     }
 
@@ -119,12 +124,14 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             learning_schedule,
             evaluator_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_hook(rollout_bound),
             agent_builder,
             evaluator_builder,
             learning_schedule,
+            seed,
         }
     }
 
@@ -140,6 +147,12 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
     /// Replaces the learning schedule that controls training termination.
     pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
         self.learning_schedule = learning_schedule;
+        self
+    }
+
+    /// Sets the seed used by r2l, Gym reset seeds, and backend-specific RNGs.
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = Some(seed);
         self
     }
 
@@ -230,12 +243,14 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             learning_schedule,
             evaluator_builder,
             agent_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_obs_normalizer(obs_clip),
             learning_schedule,
             evaluator_builder,
             agent_builder,
+            seed,
         }
     }
 }
@@ -264,6 +279,9 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
                 R2lSampler<<EB as EnvBuilder>::Env, SH::Target>,
             >,
     {
+        if let Some(seed) = self.seed {
+            set_seed(seed);
+        }
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
         let observation_size = env_description.observation_size();
@@ -272,9 +290,9 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
             Space::Discrete(_) => ActionSpaceType::Discrete,
             Space::Continuous { .. } => ActionSpaceType::Continuous,
         };
-        let agent = self
-            .agent_builder
-            .build(observation_size, action_size, action_space)?;
+        let agent =
+            self.agent_builder
+                .build(observation_size, action_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|eb| eb.build());
         let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator);
         Ok(OnPolicyAlgorithm {
@@ -302,6 +320,9 @@ impl<
                 R2lNormalizedSampler<<EB as EnvBuilder>::Env, SH::Target>,
             >,
     {
+        if let Some(seed) = self.seed {
+            set_seed(seed);
+        }
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let observation_size = env_description.observation_size();
         let action_size = env_description.action_size();
@@ -311,9 +332,9 @@ impl<
         };
         let sampler = self.sampler_builder.build();
         let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);
-        let agent = self
-            .agent_builder
-            .build(observation_size, action_size, action_space)?;
+        let agent =
+            self.agent_builder
+                .build(observation_size, action_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|evaluator_builder| {
             let eval_sampler = R2lNormalizedSampler::build_with_obs_normalizer(
                 evaluator_builder.env_builder().clone(),

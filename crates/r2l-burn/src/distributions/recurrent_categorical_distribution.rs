@@ -9,7 +9,10 @@ use burn::{
     },
 };
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
-use r2l_core::models::{ActivationFunction, Actor, Policy};
+use r2l_core::{
+    models::{ActivationFunction, Actor, Policy},
+    rng::with_rng,
+};
 use rand::distr::Distribution as RandDistribution;
 use rand::distr::weighted::WeightedIndex;
 
@@ -104,7 +107,7 @@ impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
         let logits = self.logits(observation);
         let action_probs: Vec<f32> = softmax(logits, 1).to_data().to_vec().unwrap();
         let distribution = WeightedIndex::new(&action_probs).unwrap();
-        let action = distribution.sample(&mut rand::rng());
+        let action = with_rng(|rng| distribution.sample(rng));
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
         Ok(Tensor::from_data(
