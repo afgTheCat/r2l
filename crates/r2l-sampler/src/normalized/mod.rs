@@ -287,6 +287,11 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler
     type Tensor = E::Tensor;
 
     fn reset_all_envs(&mut self) {
+        self.core.pool.reset_all();
+        if let Some(obs_normalizer) = &self.core.obs_normalizer {
+            let mut last_states = self.core.last_states.lock().unwrap();
+            obs_normalizer.apply_in_place(&mut last_states);
+        }
         self.core.clear_buffers();
     }
 

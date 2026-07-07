@@ -12,12 +12,14 @@ use rand::RngExt;
 pub enum WorkerCommand<T: R2lTensor> {
     Step,
     SetPolicy(Box<dyn Actor<Tensor = T>>),
+    ResetEnv(u64),
     Stop,
 }
 
 pub enum WorkerResult<T: R2lTensor> {
     Stepped(Memory<T>),
     PolicySet,
+    EnvReset,
     Stopped,
 }
 
@@ -80,6 +82,12 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
     fn set_policy(&mut self, policy: Box<dyn Actor<Tensor = T>>) {
         self.worker.actor = Some(policy);
     }
+
+    fn reset(&mut self) {
+        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+        let state = self.worker.env.reset(seed).unwrap();
+        *self.handle.lock().unwrap() = state;
+    }
 }
 
 pub struct VecWorkers<T: R2lTensor, E: Env<Tensor = T>> {
@@ -114,6 +122,12 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
     fn set_policy<A: Actor<Tensor = T> + Clone>(&mut self, policy: A) {
         for worker in &mut self.workers {
             worker.set_policy(Box::new(policy.clone()));
+        }
+    }
+
+    fn reset_all(&mut self) {
+        for worker in &mut self.workers {
+            worker.reset();
         }
     }
 }
@@ -152,6 +166,11 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
                 WorkerCommand::SetPolicy(policy) => {
                     self.worker.actor = Some(policy);
                     self.tx.send(WorkerResult::PolicySet).unwrap();
+                }
+                WorkerCommand::ResetEnv(seed) => {
+                    let state = self.worker.env.reset(seed).unwrap();
+                    *handle.lock().unwrap() = state;
+                    self.tx.send(WorkerResult::EnvReset).unwrap();
                 }
                 WorkerCommand::Stop => {
                     self.tx.send(WorkerResult::Stopped).unwrap();
@@ -263,6 +282,18 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         }
     }
 
+    fn reset_all(&self) {
+        for worker_handle in &self.worker_handles {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            worker_handle.send(WorkerCommand::ResetEnv(seed));
+        }
+        for worker_handle in &self.worker_handles {
+            let WorkerResult::EnvReset = worker_handle.recv() else {
+                unreachable!()
+            };
+        }
+    }
+
     fn shutdown(&self) {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::Stop);
@@ -299,6 +330,13 @@ impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
         match self {
             Self::Vec(workers) => workers.set_policy(policy),
             Self::Thread(workers) => workers.set_policy(policy),
+        }
+    }
+
+    pub fn reset_all(&mut self) {
+        match self {
+            Self::Vec(workers) => workers.reset_all(),
+            Self::Thread(workers) => workers.reset_all(),
         }
     }
 
