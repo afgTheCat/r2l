@@ -8,6 +8,7 @@ pub mod clipped_normalizer;
 mod worker;
 
 use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
+use itertools::Itertools;
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
     env::{Env, EnvBuilder, EnvBuilderType},
@@ -129,16 +130,57 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
             }
             RolloutMode::EpisodeBound { n_episodes } => {
                 let mut episode_counts = vec![0; self.buffers.len()];
-                while episode_counts.iter().any(|count| *count < n_episodes) {
-                    let terminations = self.step();
-                    for (count, terminated) in episode_counts.iter_mut().zip(terminations) {
+                loop {
+                    let worker_idxs = episode_counts
+                        .iter()
+                        .positions(|count| *count < n_episodes)
+                        .collect::<Vec<_>>();
+                    if worker_idxs.is_empty() {
+                        break;
+                    }
+                    let terminations = self.step_indexed(&worker_idxs);
+                    for (idx, terminated) in worker_idxs.into_iter().zip(terminations) {
                         if terminated {
-                            *count += 1;
+                            episode_counts[idx] += 1;
                         }
                     }
                 }
             }
         }
+    }
+
+    fn step_indexed(&mut self, indices: &[usize]) -> Vec<bool> {
+        let multi_memory = self.pool.step_indexed(indices);
+        // TODO: this is kinda ugly
+        if let Some(obs_normalizer) = &self.obs_normalizer {
+            let mut last_states = self.last_states.lock().unwrap();
+            let mut next_states = indices
+                .iter()
+                .map(|idx| last_states[*idx].clone())
+                .collect::<Vec<_>>();
+            obs_normalizer.apply_in_place(&mut next_states);
+            for (idx, next_state) in indices.iter().zip(next_states) {
+                last_states[*idx] = next_state;
+            }
+        }
+        // TODO: add this once the normalizer is working as intended
+        // multi_memory.rewards = if let Some(rew_normalizer) = self.reward_normalizer.as_mut() {
+        //     rew_normalizer.normalize(std::mem::take(&mut multi_memory.rewards))
+        // } else {
+        //     std::mem::take(&mut multi_memory.rewards)
+        // };
+
+        let last_states = self.last_states.lock().unwrap();
+        let next_states = indices
+            .iter()
+            .map(|idx| last_states[*idx].clone())
+            .collect::<Vec<_>>();
+        let memories = multi_memory.into_memories(&next_states);
+        let terminations = memories.iter().map(|memory| memory.is_done()).collect();
+        for (idx, memory) in indices.iter().zip(memories) {
+            self.buffers[*idx].push(memory)
+        }
+        terminations
     }
 
     fn step(&mut self) -> Vec<bool> {
@@ -243,6 +285,10 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler
     for R2lNormalizedSampler<E, H>
 {
     type Tensor = E::Tensor;
+
+    fn reset_all_envs(&mut self) {
+        self.core.clear_buffers();
+    }
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
         self.core.clear_buffers();

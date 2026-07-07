@@ -103,6 +103,14 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
         multi_memory
     }
 
+    fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<T> {
+        let mut multi_memory = MultiMemory::with_capacity(indices.len());
+        for idx in indices {
+            multi_memory.push_memory(self.workers[*idx].step());
+        }
+        multi_memory
+    }
+
     fn set_policy<A: Actor<Tensor = T> + Clone>(&mut self, policy: A) {
         for worker in &mut self.workers {
             worker.set_policy(Box::new(policy.clone()));
@@ -230,6 +238,20 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         multi_memory
     }
 
+    fn step_indexed(&self, indices: &[usize]) -> MultiMemory<T> {
+        for idx in indices {
+            self.worker_handles[*idx].send(WorkerCommand::Step);
+        }
+        let mut multi_memory = MultiMemory::with_capacity(indices.len());
+        for idx in indices {
+            let WorkerResult::Stepped(memory) = self.worker_handles[*idx].recv() else {
+                unreachable!()
+            };
+            multi_memory.push_memory(memory);
+        }
+        multi_memory
+    }
+
     fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
@@ -259,6 +281,13 @@ pub enum WorkerPool<E: Env<Tensor: R2lTensor>> {
 }
 
 impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
+    pub fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<E::Tensor> {
+        match self {
+            Self::Vec(workers) => workers.step_indexed(indices),
+            Self::Thread(workers) => workers.step_indexed(indices),
+        }
+    }
+
     pub fn step(&mut self) -> MultiMemory<E::Tensor> {
         match self {
             Self::Vec(workers) => workers.step(),
