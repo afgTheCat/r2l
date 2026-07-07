@@ -4,15 +4,14 @@ use anyhow::Result;
 use r2l_core::{
     HookResult,
     buffers::TrajectoryBatch,
-    env::{Env, EnvBuilder},
+    env::Env,
     on_policy::algorithm::{
         Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
     },
     tensor::R2lTensor,
 };
-use r2l_sampler::{R2lNormalizedSampler, R2lSampler};
 
-use crate::{BestActorEvaluator, BestActorEvaluatorBuilder, hooks::sampler::EpisodeBoundHook};
+use crate::BestActorEvaluator;
 
 /// Training-stop policy for [`DefaultOnPolicyAlgorithmHooks`].
 ///

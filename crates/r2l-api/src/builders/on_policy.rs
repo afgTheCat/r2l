@@ -3,8 +3,7 @@ use r2l_core::{
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
-    rng::{sample_u64, set_seed},
-    tensor::R2lTensor,
+    rng::set_seed,
 };
 use r2l_sampler::{
     NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler, SamplerExecutionMode,

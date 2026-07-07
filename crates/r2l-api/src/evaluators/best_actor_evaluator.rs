@@ -36,7 +36,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     pub fn new(env_builder: EB) -> Self {
         Self {
             evaluator_frequency: 1,
-            env_builder: EnvBuilderType::homogenous(env_builder.into(), 10),
+            env_builder: EnvBuilderType::homogenous(env_builder, 10),
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
@@ -157,7 +157,7 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
         rt: &mut OnPolicyRuntime<AG, TS, C>,
     ) {
         self.current_evaluator_step += 1;
-        if self.current_evaluator_step % self.evaluator_frequency == 0 {
+        if self.current_evaluator_step.is_multiple_of(self.evaluator_frequency) {
             let actor = rt.actor();
             let adapted_actor = rt.adapted_actor();
             self.eval_adapted(adapted_actor, actor);

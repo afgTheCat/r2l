@@ -88,7 +88,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self>;
 
     fn add_multiple(tensors: &[Self]) -> Self {
-        assert!(tensors.len() > 0);
+        assert!(!tensors.is_empty());
         let shape = tensors[0].to_shape();
         let init = Self::zeros(shape);
         tensors
@@ -98,7 +98,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
 
     /// Calculates the mean of the tensors.
     fn mean_tensors(tensors: &[Self]) -> Self {
-        assert!(tensors.len() > 0);
+        assert!(!tensors.is_empty());
         let sum = Self::add_multiple(tensors);
         sum.mul_scalar(1f32 / tensors.len() as f32).unwrap()
     }

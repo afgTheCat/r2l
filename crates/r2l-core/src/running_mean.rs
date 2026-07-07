@@ -62,8 +62,8 @@ impl<T: R2lTensor> RunningMeanStd<T> {
         let mean_size = self.mean.size();
         assert!(t.iter().all(|t| t.len() == mean_size));
         let t = t
-            .into_iter()
-            .map(|t| T::from_slice_and_shape(&t, self.mean.to_shape()))
+            .iter()
+            .map(|t| T::from_slice_and_shape(t, self.mean.to_shape()))
             .collect::<Vec<_>>();
         self.update(&t);
     }
