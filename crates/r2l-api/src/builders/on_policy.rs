@@ -244,12 +244,14 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             learning_schedule,
             evaluator_builder,
             agent_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_obs_normalizer(obs_clip),
             learning_schedule,
             evaluator_builder,
             agent_builder,
+            seed,
         }
     }
 }

@@ -4,7 +4,7 @@ use r2l_core::{
     buffers::{Memory, MultiMemory},
     env::{Env, EnvBuilder, Snapshot},
     models::Actor,
-    rng::env_worker_rng,
+    rng::{env_rng, env_seed},
     tensor::R2lTensor,
 };
 use rand::{RngExt, rngs::StdRng};
@@ -34,7 +34,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
         Self {
             actor: None,
             env,
-            env_rng: env_worker_rng(worker_idx),
+            env_rng: env_rng(worker_idx + 1),
         }
     }
 
@@ -88,8 +88,11 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
     }
 
     fn reset(&mut self) {
-        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-        let state = self.worker.env.reset(seed).unwrap();
+        let state = self
+            .worker
+            .env
+            .reset(self.worker.env_rng.random::<u64>())
+            .unwrap();
         *self.handle.lock().unwrap() = state;
     }
 }
@@ -299,8 +302,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     fn reset_all(&self) {
         for worker_handle in &self.worker_handles {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            worker_handle.send(WorkerCommand::ResetEnv(seed));
+            worker_handle.send(WorkerCommand::ResetEnv(env_seed()));
         }
         for worker_handle in &self.worker_handles {
             let WorkerResult::EnvReset = worker_handle.recv() else {

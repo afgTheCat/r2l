@@ -6,7 +6,7 @@ use r2l_core::{
     buffers::{Memory, buffer::TrajectoryBuffer},
     env::{Env, EnvDescription, Snapshot},
     models::Actor,
-    rng::{env_seed, env_worker_rng},
+    rng::{env_rng, env_seed},
     tensor::R2lTensor,
 };
 use rand::{RngExt, rngs::StdRng};
@@ -140,7 +140,7 @@ impl<E: Env> Worker<E> {
             buffer,
             actor: None,
             last_state: None,
-            env_rng: env_worker_rng(worker_idx),
+            env_rng: env_rng(worker_idx + 1),
         }
     }
 
