@@ -280,7 +280,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
     {
         if let Some(seed) = self.seed {
             set_seed(seed);
-            AB::seed(seed);
+            self.agent_builder.seed(seed);
         }
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();

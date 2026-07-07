@@ -121,6 +121,10 @@ impl<Backend> OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, Backend> {
 impl AgentBuilder for A2CAgentBuilder {
     type Agent = A2CCandleAgent;
 
+    fn seed(&self, seed: u64) {
+        self.backend.seed(seed);
+    }
+
     fn build(
         self,
         observation_size: usize,
@@ -143,7 +147,7 @@ impl AgentBuilder for A2CAgentBuilder {
 impl AgentBuilder for A2CBurnAgentBuilder {
     type Agent = A2CBurnAgent<BurnBackend>;
 
-    fn seed(seed: u64) {
+    fn seed(&self, seed: u64) {
         BurnBackend::seed(&Default::default(), seed);
     }
 

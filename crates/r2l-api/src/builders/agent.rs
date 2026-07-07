@@ -15,7 +15,7 @@ pub trait AgentBuilder {
     type Agent: Agent;
 
     /// Seeds backend-specific random generators before the agent is built.
-    fn seed(_seed: u64) {}
+    fn seed(&self, _seed: u64) {}
 
     // TODO: This API is heavily in progress
     /// Builds the configured agent for the provided environment dimensions.
@@ -51,6 +51,14 @@ pub struct BurnBackend;
 #[derive(Debug, Clone)]
 pub struct CandleBackend {
     pub(crate) device: Device,
+}
+
+impl CandleBackend {
+    pub(crate) fn seed(&self, seed: u64) {
+        if !matches!(&self.device, Device::Cpu) {
+            self.device.set_seed(seed).unwrap();
+        }
+    }
 }
 
 impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Backend> {

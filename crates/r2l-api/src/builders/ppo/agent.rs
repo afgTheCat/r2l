@@ -133,6 +133,10 @@ impl<Backend> OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, Backend> {
 impl AgentBuilder for PPOAgentBuilder {
     type Agent = PPOCandleAgent;
 
+    fn seed(&self, seed: u64) {
+        self.backend.seed(seed);
+    }
+
     fn build(
         self,
         observation_size: usize,
@@ -155,7 +159,7 @@ impl AgentBuilder for PPOAgentBuilder {
 impl AgentBuilder for PPOBurnAgentBuilder {
     type Agent = PPOBurnAgent<BurnBackend>;
 
-    fn seed(seed: u64) {
+    fn seed(&self, seed: u64) {
         BurnBackend::seed(&Default::default(), seed);
     }
 
