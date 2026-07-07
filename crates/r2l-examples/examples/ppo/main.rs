@@ -15,6 +15,7 @@ fn main() {
     let hidden_layers = vec![64, 64];
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
+        .with_seed(0)
         .with_policy_hidden_layers(hidden_layers.clone())
         .with_clip_range(0.2)
         .with_entropy_coeff(0.)

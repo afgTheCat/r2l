@@ -3,6 +3,8 @@ use r2l_core::{
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
+    rng::set_seed,
+    tensor::R2lTensor,
 };
 use r2l_sampler::{
     NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler, SamplerExecutionMode,
@@ -73,6 +75,7 @@ pub struct OnPolicyAlgorithmBuilder<
     pub(crate) learning_schedule: LearningSchedule,
     pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
     pub(crate) agent_builder: AB,
+    pub(crate) seed: Option<u64>,
 }
 
 impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
@@ -86,6 +89,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             evaluator_builder: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
+            seed: None,
         }
     }
 
@@ -99,12 +103,14 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             learning_schedule,
             evaluator_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_hook(hook_builder),
             agent_builder,
             evaluator_builder,
             learning_schedule,
+            seed,
         }
     }
 
@@ -119,12 +125,14 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             learning_schedule,
             evaluator_builder,
+            seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_hook(rollout_bound),
             agent_builder,
             evaluator_builder,
             learning_schedule,
+            seed,
         }
     }
 
@@ -140,6 +148,12 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
     /// Replaces the learning schedule that controls training termination.
     pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
         self.learning_schedule = learning_schedule;
+        self
+    }
+
+    /// Sets the seed used by r2l, Gym reset seeds, and backend-specific RNGs.
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = Some(seed);
         self
     }
 
@@ -264,6 +278,10 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
                 R2lSampler<<EB as EnvBuilder>::Env, SH::Target>,
             >,
     {
+        if let Some(seed) = self.seed {
+            set_seed(seed);
+            AB::seed(seed);
+        }
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
         let observation_size = env_description.observation_size();

@@ -15,6 +15,7 @@ fn main() {
     let a2c_builder = A2CAlgorithmBuilder::gym("Pendulum-v1", 10)
         .with_candle(Device::Cpu)
         .with_burn()
+        .with_seed(0)
         .with_entropy_coeff(0.2)
         .with_gradient_clipping(Some(0.5))
         .with_rollout_bound(StepHookBound::new(2048))

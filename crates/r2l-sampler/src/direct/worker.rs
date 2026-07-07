@@ -6,10 +6,10 @@ use r2l_core::{
     buffers::{Memory, buffer::TrajectoryBuffer},
     env::{Env, EnvDescription, Snapshot},
     models::Actor,
-    rng::RNG,
+    rng::{env_seed, env_worker_rng},
     tensor::R2lTensor,
 };
-use rand::RngExt;
+use rand::{RngExt, rngs::StdRng};
 
 use crate::direct::RolloutMode;
 
@@ -23,12 +23,12 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
     actor: &mut Box<dyn Actor<Tensor = T>>,
     last_state: Option<T>,
+    rng: &mut StdRng,
 ) -> Memory<T> {
     let state = if let Some(state) = last_state {
         state
     } else {
-        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-        env.reset(seed).unwrap()
+        env.reset(rng.random::<u64>()).unwrap()
     };
     let action = actor.action(state.clone()).unwrap();
     let Snapshot {
@@ -39,8 +39,7 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     } = env.step(action.clone()).unwrap();
     let done = terminated || truncated;
     if done {
-        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-        next_state = env.reset(seed).unwrap();
+        next_state = env.reset(rng.random::<u64>()).unwrap();
     }
     Memory {
         state,
@@ -127,15 +126,21 @@ pub struct Worker<E: Env> {
     pub buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>,
     pub actor: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
     pub last_state: Option<E::Tensor>,
+    env_rng: StdRng,
 }
 
 impl<E: Env> Worker<E> {
-    pub fn new(env: E, buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>) -> Self {
+    pub fn new(
+        env: E,
+        buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>,
+        worker_idx: usize,
+    ) -> Self {
         Self {
             env,
             buffer,
             actor: None,
             last_state: None,
+            env_rng: env_worker_rng(worker_idx),
         }
     }
 
@@ -164,7 +169,7 @@ impl<E: Env> Worker<E> {
                 let mut episodes = 0;
                 loop {
                     let last_state = self.last_state.take();
-                    let memory = step_env(&mut self.env, actor, last_state);
+                    let memory = step_env(&mut self.env, actor, last_state, &mut self.env_rng);
                     let terminates = memory.is_done();
                     self.last_state = Some(memory.next_state.clone());
                     buffer.push(memory);
@@ -179,7 +184,7 @@ impl<E: Env> Worker<E> {
             RolloutMode::StepBound { n_steps } => {
                 for _ in 0..n_steps {
                     let last_state = self.last_state.take();
-                    let memory = step_env(&mut self.env, actor, last_state);
+                    let memory = step_env(&mut self.env, actor, last_state, &mut self.env_rng);
                     self.last_state = Some(memory.next_state.clone());
                     buffer.push(memory);
                 }
@@ -301,8 +306,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     pub fn reset_all(&self) {
         for worker_handle in self.worker_handles.iter() {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            worker_handle.send(WorkerCommand::ResetEnv(seed));
+            worker_handle.send(WorkerCommand::ResetEnv(env_seed()));
         }
         for worker_handle in self.worker_handles.iter() {
             worker_handle.recv();
@@ -335,8 +339,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     pub fn reset_envs_uninserted(&self) -> Vec<T> {
         for worker_handle in self.worker_handles.iter() {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            worker_handle.send(WorkerCommand::ResetEnvUninserted(seed));
+            worker_handle.send(WorkerCommand::ResetEnvUninserted(env_seed()));
         }
         self.worker_handles
             .iter()
@@ -444,8 +447,7 @@ impl<E: Env> WorkerPool<E> {
         match self {
             Self::Vec(workers) => {
                 for worker in workers {
-                    let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-                    worker.reset(seed);
+                    worker.reset(env_seed());
                 }
             }
             Self::Thread(workers) => {
@@ -497,10 +499,7 @@ impl<E: Env> WorkerPool<E> {
                 // resets all the envs but does not set it as a last state
                 workers
                     .iter_mut()
-                    .map(|w| {
-                        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-                        w.reset_env_uninserted(seed)
-                    })
+                    .map(|w| w.reset_env_uninserted(env_seed()))
                     .collect()
             }
             Self::Thread(workers) => workers.reset_envs_uninserted(),

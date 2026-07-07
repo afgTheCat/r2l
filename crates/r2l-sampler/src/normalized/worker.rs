@@ -4,10 +4,10 @@ use r2l_core::{
     buffers::{Memory, MultiMemory},
     env::{Env, EnvBuilder, Snapshot},
     models::Actor,
-    rng::RNG,
+    rng::env_worker_rng,
     tensor::R2lTensor,
 };
-use rand::RngExt;
+use rand::{RngExt, rngs::StdRng};
 
 pub enum WorkerCommand<T: R2lTensor> {
     Step,
@@ -26,11 +26,16 @@ pub enum WorkerResult<T: R2lTensor> {
 struct Worker<T: R2lTensor, E: Env<Tensor = T>> {
     actor: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
     env: E,
+    env_rng: StdRng,
 }
 
 impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
-    fn new(env: E) -> Self {
-        Self { actor: None, env }
+    fn new(env: E, worker_idx: usize) -> Self {
+        Self {
+            actor: None,
+            env,
+            env_rng: env_worker_rng(worker_idx),
+        }
     }
 
     fn step(&mut self, handle: &mut ElementHandle<T>) -> Memory<T> {
@@ -47,8 +52,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
         } = self.env.step(action.clone()).unwrap();
         let done = terminated || truncated;
         if done {
-            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-            next_state = self.env.reset(seed).unwrap();
+            next_state = self.env.reset(self.env_rng.random::<u64>()).unwrap();
         }
         *handle.lock().unwrap() = next_state.clone();
         Memory {
@@ -68,9 +72,9 @@ struct VecWorker<T: R2lTensor, E: Env<Tensor = T>> {
 }
 
 impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
-    fn new(env: E, handle: ElementHandle<T>) -> Self {
+    fn new(env: E, handle: ElementHandle<T>, worker_idx: usize) -> Self {
         Self {
-            worker: Worker::new(env),
+            worker: Worker::new(env, worker_idx),
             handle,
         }
     }
@@ -98,7 +102,8 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
     pub fn new(workers: Vec<(E, ElementHandle<T>)>) -> Self {
         let workers = workers
             .into_iter()
-            .map(|(env, handle)| VecWorker::new(env, handle))
+            .enumerate()
+            .map(|(idx, (env, handle))| VecWorker::new(env, handle, idx))
             .collect();
         Self { workers }
     }
@@ -139,9 +144,14 @@ pub struct ThreadWorker<T: R2lTensor, E: Env<Tensor = T>> {
 }
 
 impl<T: R2lTensor, E: Env<Tensor = T>> ThreadWorker<T, E> {
-    fn new(env: E, rx: Receiver<WorkerCommand<T>>, tx: Sender<WorkerResult<T>>) -> Self {
+    fn new(
+        env: E,
+        rx: Receiver<WorkerCommand<T>>,
+        tx: Sender<WorkerResult<T>>,
+        worker_idx: usize,
+    ) -> Self {
         Self {
-            worker: Worker::new(env),
+            worker: Worker::new(env, worker_idx),
             rx,
             tx,
         }
@@ -152,8 +162,10 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
     type T = T;
 
     fn build(&mut self) -> Self::T {
-        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
-        self.worker.env.reset(seed).unwrap()
+        self.worker
+            .env
+            .reset(self.worker.env_rng.random::<u64>())
+            .unwrap()
     }
 
     fn work(&mut self, mut handle: ElementHandle<Self::T>) {
@@ -185,6 +197,7 @@ pub struct ThreadWorkerFactory<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>
     rx: Receiver<WorkerCommand<T>>,
     tx: Sender<WorkerResult<T>>,
     env_builder: EB,
+    worker_idx: usize,
 }
 
 impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ThreadWorkerFactory<T, EB> {
@@ -192,11 +205,13 @@ impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ThreadWorkerFactory<T, 
         rx: Receiver<WorkerCommand<T>>,
         tx: Sender<WorkerResult<T>>,
         env_builder: EB,
+        worker_idx: usize,
     ) -> Self {
         Self {
             rx,
             tx,
             env_builder,
+            worker_idx,
         }
     }
 }
@@ -208,7 +223,7 @@ impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ElementWorkerFactory
 
     fn build(self) -> Self::Worker {
         let env = self.env_builder.build_env().unwrap();
-        ThreadWorker::new(env, self.rx, self.tx)
+        ThreadWorker::new(env, self.rx, self.tx, self.worker_idx)
     }
 }
 

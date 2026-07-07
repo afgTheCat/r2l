@@ -1,5 +1,6 @@
 use std::sync::mpsc::Sender;
 
+use burn::prelude::Backend;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
@@ -153,6 +154,10 @@ impl AgentBuilder for PPOAgentBuilder {
 
 impl AgentBuilder for PPOBurnAgentBuilder {
     type Agent = PPOBurnAgent<BurnBackend>;
+
+    fn seed(seed: u64) {
+        BurnBackend::seed(&Default::default(), seed);
+    }
 
     fn build(
         self,

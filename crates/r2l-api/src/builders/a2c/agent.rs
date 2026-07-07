@@ -1,5 +1,6 @@
 use std::sync::mpsc::Sender;
 
+use burn::prelude::Backend;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::a2c::{A2C, A2CParams};
@@ -141,6 +142,10 @@ impl AgentBuilder for A2CAgentBuilder {
 
 impl AgentBuilder for A2CBurnAgentBuilder {
     type Agent = A2CBurnAgent<BurnBackend>;
+
+    fn seed(seed: u64) {
+        BurnBackend::seed(&Default::default(), seed);
+    }
 
     fn build(
         self,

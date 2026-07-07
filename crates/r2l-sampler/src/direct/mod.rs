@@ -58,7 +58,7 @@ impl<E: Env> R2lSamplerCore<E> {
                     .enumerate()
                     .map(|(idx, element_handle)| {
                         let env = env_builder.build_idx(idx).unwrap(); // TODO: for now
-                        Worker::new(env, element_handle)
+                        Worker::new(env, element_handle, idx)
                     })
                     .collect();
                 WorkerPool::Vec(workers)
@@ -74,7 +74,7 @@ impl<E: Env> R2lSamplerCore<E> {
                         let env_builder = env_builder.clone();
                         let handle = std::thread::spawn(move || {
                             let env = env_builder.build_idx(idx).unwrap();
-                            let worker = Worker::new(env, element_handle);
+                            let worker = Worker::new(env, element_handle, idx);
                             let mut thread_worker = ThreadWorker::new(worker, command_rx, res_tx);
                             thread_worker.work();
                         });
