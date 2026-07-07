@@ -12,12 +12,14 @@ use rand::RngExt;
 pub enum WorkerCommand<T: R2lTensor> {
     Step,
     SetPolicy(Box<dyn Actor<Tensor = T>>),
+    ResetEnv(u64),
     Stop,
 }
 
 pub enum WorkerResult<T: R2lTensor> {
     Stepped(Memory<T>),
     PolicySet,
+    EnvReset,
     Stopped,
 }
 
@@ -80,6 +82,12 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
     fn set_policy(&mut self, policy: Box<dyn Actor<Tensor = T>>) {
         self.worker.actor = Some(policy);
     }
+
+    fn reset(&mut self) {
+        let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+        let state = self.worker.env.reset(seed).unwrap();
+        *self.handle.lock().unwrap() = state;
+    }
 }
 
 pub struct VecWorkers<T: R2lTensor, E: Env<Tensor = T>> {
@@ -103,9 +111,23 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
         multi_memory
     }
 
+    fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<T> {
+        let mut multi_memory = MultiMemory::with_capacity(indices.len());
+        for idx in indices {
+            multi_memory.push_memory(self.workers[*idx].step());
+        }
+        multi_memory
+    }
+
     fn set_policy<A: Actor<Tensor = T> + Clone>(&mut self, policy: A) {
         for worker in &mut self.workers {
             worker.set_policy(Box::new(policy.clone()));
+        }
+    }
+
+    fn reset_all(&mut self) {
+        for worker in &mut self.workers {
+            worker.reset();
         }
     }
 }
@@ -144,6 +166,11 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
                 WorkerCommand::SetPolicy(policy) => {
                     self.worker.actor = Some(policy);
                     self.tx.send(WorkerResult::PolicySet).unwrap();
+                }
+                WorkerCommand::ResetEnv(seed) => {
+                    let state = self.worker.env.reset(seed).unwrap();
+                    *handle.lock().unwrap() = state;
+                    self.tx.send(WorkerResult::EnvReset).unwrap();
                 }
                 WorkerCommand::Stop => {
                     self.tx.send(WorkerResult::Stopped).unwrap();
@@ -230,12 +257,38 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         multi_memory
     }
 
+    fn step_indexed(&self, indices: &[usize]) -> MultiMemory<T> {
+        for idx in indices {
+            self.worker_handles[*idx].send(WorkerCommand::Step);
+        }
+        let mut multi_memory = MultiMemory::with_capacity(indices.len());
+        for idx in indices {
+            let WorkerResult::Stepped(memory) = self.worker_handles[*idx].recv() else {
+                unreachable!()
+            };
+            multi_memory.push_memory(memory);
+        }
+        multi_memory
+    }
+
     fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
         }
         for worker_handle in &self.worker_handles {
             let WorkerResult::PolicySet = worker_handle.recv() else {
+                unreachable!()
+            };
+        }
+    }
+
+    fn reset_all(&self) {
+        for worker_handle in &self.worker_handles {
+            let seed = RNG.with_borrow_mut(|rng| rng.random::<u64>());
+            worker_handle.send(WorkerCommand::ResetEnv(seed));
+        }
+        for worker_handle in &self.worker_handles {
+            let WorkerResult::EnvReset = worker_handle.recv() else {
                 unreachable!()
             };
         }
@@ -259,6 +312,13 @@ pub enum WorkerPool<E: Env<Tensor: R2lTensor>> {
 }
 
 impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
+    pub fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<E::Tensor> {
+        match self {
+            Self::Vec(workers) => workers.step_indexed(indices),
+            Self::Thread(workers) => workers.step_indexed(indices),
+        }
+    }
+
     pub fn step(&mut self) -> MultiMemory<E::Tensor> {
         match self {
             Self::Vec(workers) => workers.step(),
@@ -270,6 +330,13 @@ impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
         match self {
             Self::Vec(workers) => workers.set_policy(policy),
             Self::Thread(workers) => workers.set_policy(policy),
+        }
+    }
+
+    pub fn reset_all(&mut self) {
+        match self {
+            Self::Vec(workers) => workers.reset_all(),
+            Self::Thread(workers) => workers.reset_all(),
         }
     }
 

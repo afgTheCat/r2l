@@ -31,36 +31,23 @@ pub enum SamplerHookResult {
 pub trait SamplerHook {
     type E: Env;
 
-    fn hook(
-        &mut self,
-        buffer: &mut ArrayHandle<TrajectoryBuffer<<Self::E as Env>::Tensor>>,
-        worker_pool: &mut WorkerPool<Self::E>,
-    ) -> SamplerHookResult;
+    fn hook(&mut self, core: &mut R2lSamplerCore<Self::E>) -> SamplerHookResult;
 }
 
-pub struct R2lSampler<E: Env, H: SamplerHook<E = E>> {
+pub struct R2lSamplerCore<E: Env> {
     buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
     worker_pool: WorkerPool<E>,
-    hook: H,
 }
 
-impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
+impl<E: Env> R2lSamplerCore<E> {
     pub fn reset_all_envs(&mut self) {
         self.worker_pool.reset_all_envs();
     }
 
-    pub fn to_views(&mut self) -> impl AsRef<[TrajectoryView<'_, E::Tensor>]> {
-        self.buffers
-            .lock_map(|buffer| buffer.to_trajectory_view())
-            .unwrap()
-    }
-
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
-        hook: H,
         execution_mode: SamplerExecutionMode,
     ) -> Self {
-        // questionable if we want to do this, but whatever
         let num_envs = env_builder.num_envs();
         let buffers: Vec<TrajectoryBuffer<E::Tensor>> = vec![TrajectoryBuffer::default(); num_envs];
         let (buffers, buffer_handlers) = bimodal_array(buffers);
@@ -100,6 +87,23 @@ impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
         Self {
             buffers,
             worker_pool,
+        }
+    }
+}
+
+pub struct R2lSampler<E: Env, H: SamplerHook<E = E>> {
+    core: R2lSamplerCore<E>,
+    hook: H,
+}
+
+impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
+    pub fn build<EB: EnvBuilder<Env = E>>(
+        env_builder: EnvBuilderType<EB>,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+    ) -> Self {
+        Self {
+            core: R2lSamplerCore::build(env_builder, execution_mode),
             hook,
         }
     }
@@ -108,25 +112,30 @@ impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
 impl<E: Env, H: SamplerHook<E = E>> Sampler for R2lSampler<E, H> {
     type Tensor = E::Tensor;
 
+    fn reset_all_envs(&mut self) {
+        self.core.reset_all_envs();
+    }
+
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
-        self.worker_pool.clear_buffers();
-        self.worker_pool.set_actor(actor.clone());
+        self.core.worker_pool.clear_buffers();
+        self.core.worker_pool.set_actor(actor.clone());
         loop {
-            let result = self.hook.hook(&mut self.buffers, &mut self.worker_pool);
+            let result = self.hook.hook(&mut self.core);
             match result {
-                SamplerHookResult::Bound(bound) => self.worker_pool.collect(bound),
+                SamplerHookResult::Bound(bound) => self.core.worker_pool.collect(bound),
                 SamplerHookResult::Stop => break,
             }
         }
     }
 
     fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]> {
-        self.buffers
+        self.core
+            .buffers
             .lock_map(|buffer| buffer.to_trajectory_view())
             .unwrap()
     }
 
     fn shutdown(&mut self) {
-        self.worker_pool.shutdown();
+        self.core.worker_pool.shutdown();
     }
 }

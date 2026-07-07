@@ -6,8 +6,6 @@ mod candle_tensor;
 
 use std::fmt::Debug;
 
-use candle_core::shape;
-
 // NOTE: we might want to add int_vec_and_shape method for less allocations, since to_vec_and_shape
 // usually clones the inner vector. Would be useful in ActorWrapper.
 //

@@ -10,8 +10,9 @@ use r2l_core::{
     },
     tensor::R2lTensor,
 };
+use r2l_sampler::{R2lNormalizedSampler, R2lSampler};
 
-use crate::{BestActorEvaluator, BestActorEvaluatorBuilder};
+use crate::{BestActorEvaluator, BestActorEvaluatorBuilder, hooks::sampler::EpisodeBoundHook};
 
 /// Training-stop policy for [`DefaultOnPolicyAlgorithmHooks`].
 ///
@@ -59,14 +60,15 @@ impl LearningSchedule {
 /// algorithm exits.
 pub struct DefaultOnPolicyAlgorithmHooks<
     A: Agent,
-    S: Sampler<Tensor: R2lTensor>,
+    S: Sampler,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
+    S2: Sampler<Tensor = S::Tensor>,
 > {
     learning_schedule: LearningSchedule,
-    evaluator: Option<BestActorEvaluator<E, A::Actor>>,
+    evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
     should_stop: bool,
-    _phantom: PhantomData<(A, S, C)>,
+    _phantom: PhantomData<(A, S, C, E)>,
 }
 
 impl<
@@ -74,16 +76,17 @@ impl<
     S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
-> DefaultOnPolicyAlgorithmHooks<A, S, C, E>
+    S2: Sampler<Tensor = S::Tensor>,
+> DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
 {
     /// Creates the default outer-loop hooks for the given learning schedule.
-    pub fn new<EB: EnvBuilder<Env = E>>(
+    pub fn new(
         learning_schedule: LearningSchedule,
-        evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
+        evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
     ) -> Self {
         Self {
             learning_schedule,
-            evaluator: evaluator_builder.map(BestActorEvaluatorBuilder::build),
+            evaluator,
             should_stop: false,
             _phantom: PhantomData,
         }
@@ -95,7 +98,8 @@ impl<
     S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
-> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E>
+    S2: Sampler<Tensor = S::Tensor>,
+> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
 {
     type A = A;
     type S = S;
@@ -140,9 +144,7 @@ impl<
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
         if let Some(evaluator) = &mut self.evaluator {
-            let actor = runtime.actor();
-            let adapted_actor = runtime.adapted_actor();
-            evaluator.eval(adapted_actor, actor);
+            evaluator.eval(runtime);
         }
         if self.should_stop {
             HookResult::Break

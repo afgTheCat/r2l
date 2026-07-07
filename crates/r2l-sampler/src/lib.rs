@@ -2,13 +2,17 @@ mod direct;
 mod normalized;
 
 pub use direct::worker::WorkerPool;
-pub use direct::{R2lSampler, SamplerHook, SamplerHookResult};
-pub use normalized::R2lNormalizedSampler;
+pub use direct::{R2lSampler, R2lSamplerCore, SamplerHook, SamplerHookResult};
+pub use normalized::{
+    NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lNormalizedSamplerCore,
+    clipped_normalizer::ClippedNormalizer,
+};
 
 /// Execution strategy used by the sampler.
 ///
 /// This controls whether environment workers run inline in the current thread
 /// or in dedicated background threads.
+#[derive(Debug, Clone, Copy)]
 pub enum SamplerExecutionMode {
     /// Run sampler workers inline in a local vector on the current thread.
     Vec,

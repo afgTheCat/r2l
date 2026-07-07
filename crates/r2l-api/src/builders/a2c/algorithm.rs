@@ -3,7 +3,6 @@ use std::sync::mpsc::Sender;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::a2c::A2CParams;
-use r2l_core::on_policy::algorithm::Agent;
 use r2l_core::{
     env::{Env, EnvBuilder},
     models::ActivationFunction,
@@ -11,26 +10,22 @@ use r2l_core::{
 };
 use r2l_gym::GymEnvBuilder;
 
-use crate::agents::a2c::{A2CBurnAgent, A2CCandleAgent};
-use crate::hooks::a2c::A2CStats;
-use crate::{
-    BurnBackend,
-    builders::{
-        a2c::{
-            agent::{A2CBurnAgentBuilder, A2CCandleAgentBuilder},
-            hook::DefaultA2CHookBuilder,
-        },
-        agent::{AgentBuilder, OnPolicyAgentBuilder},
-        learning_module::OnPolicyLearningModuleType,
-        on_policy::OnPolicyAlgorithmBuilder,
-        sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
+use crate::builders::{
+    a2c::{
+        agent::{A2CBurnAgentBuilder, A2CCandleAgentBuilder},
+        hook::DefaultA2CHookBuilder,
     },
+    agent::{AgentBuilder, OnPolicyAgentBuilder},
+    learning_module::OnPolicyLearningModuleType,
+    on_policy::OnPolicyAlgorithmBuilder,
+    sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
 };
+use crate::hooks::a2c::A2CStats;
 
-impl<A: Agent, B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
-    OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>, EB, SH>
+impl<B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
+    OnPolicyAlgorithmBuilder<OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>, EB, SH, ST>
 where
-    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>: AgentBuilder<Agent = A>,
+    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>: AgentBuilder,
 {
     /// Sets whether to log the training progress during learning.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
@@ -178,8 +173,11 @@ where
 }
 
 /// High-level A2C algorithm builder specialized to the Candle backend.
-pub type A2CCandleAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
-    OnPolicyAlgorithmBuilder<A2CCandleAgent, A2CCandleAgentBuilder, EB, SH>;
+pub type A2CCandleAlgorithmBuilder<
+    EB,
+    SH = StepHookBound<<EB as EnvBuilder>::Env>,
+    ST = crate::builders::sampler::DirectSamplerSelection,
+> = OnPolicyAlgorithmBuilder<A2CCandleAgentBuilder, EB, SH, ST>;
 
 impl A2CCandleAlgorithmBuilder<GymEnvBuilder> {
     /// Creates an A2C algorithm builder for a Gym environment.
@@ -202,12 +200,17 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> A2CCandleAlgorithmBuilder<EB> 
 }
 
 /// High-level A2C algorithm builder specialized to the Burn backend.
-pub type A2CBurnAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
-    OnPolicyAlgorithmBuilder<A2CBurnAgent<BurnBackend>, A2CBurnAgentBuilder, EB, SH>;
+pub type A2CBurnAlgorithmBuilder<
+    EB,
+    SH = StepHookBound<<EB as EnvBuilder>::Env>,
+    ST = crate::builders::sampler::DirectSamplerSelection,
+> = OnPolicyAlgorithmBuilder<A2CBurnAgentBuilder, EB, SH, ST>;
 
-impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> A2CBurnAlgorithmBuilder<EB, SH> {
+impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
+    A2CBurnAlgorithmBuilder<EB, SH, ST>
+{
     /// Switches the algorithm builder to the Candle backend.
-    pub fn with_candle(self, device: candle_core::Device) -> A2CCandleAlgorithmBuilder<EB, SH> {
+    pub fn with_candle(self, device: candle_core::Device) -> A2CCandleAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
@@ -223,7 +226,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> A2CBurnAlgorithmBuil
     }
 
     /// Keeps the algorithm builder on the Burn backend.
-    pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB, SH> {
+    pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
@@ -242,12 +245,17 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> A2CBurnAlgorithmBuil
 /// Default high-level A2C algorithm builder.
 ///
 /// This alias uses the Candle backend by default.
-pub type A2CAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
-    A2CCandleAlgorithmBuilder<EB, SH>;
+pub type A2CAlgorithmBuilder<
+    EB,
+    SH = StepHookBound<<EB as EnvBuilder>::Env>,
+    ST = crate::builders::sampler::DirectSamplerSelection,
+> = A2CCandleAlgorithmBuilder<EB, SH, ST>;
 
-impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> A2CCandleAlgorithmBuilder<EB, SH> {
+impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
+    A2CCandleAlgorithmBuilder<EB, SH, ST>
+{
     /// Switches the algorithm builder to the Candle backend.
-    pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB, SH> {
+    pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
@@ -263,7 +271,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> A2CCandleAlgorithmBu
     }
 
     /// Switches the algorithm builder to the Burn backend.
-    pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB, SH> {
+    pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,

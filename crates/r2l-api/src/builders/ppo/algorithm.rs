@@ -3,7 +3,6 @@ use std::sync::mpsc::Sender;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::PPOParams;
-use r2l_core::on_policy::algorithm::Agent;
 use r2l_core::{
     env::{Env, EnvBuilder},
     models::ActivationFunction,
@@ -11,9 +10,7 @@ use r2l_core::{
 };
 use r2l_gym::GymEnvBuilder;
 
-use crate::agents::ppo::{PPOBurnAgent, PPOCandleAgent};
 use crate::{
-    BurnBackend,
     builders::{
         agent::{AgentBuilder, OnPolicyAgentBuilder},
         learning_module::OnPolicyLearningModuleType,
@@ -27,10 +24,10 @@ use crate::{
     hooks::ppo::PPOStats,
 };
 
-impl<A: Agent, B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
-    OnPolicyAlgorithmBuilder<A, OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>, EB, SH>
+impl<B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
+    OnPolicyAlgorithmBuilder<OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>, EB, SH, ST>
 where
-    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>: AgentBuilder<Agent = A>,
+    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, B>: AgentBuilder,
 {
     /// Enables or disables advantage normalization in the underlying PPO hook.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
@@ -202,8 +199,11 @@ where
 ///
 /// This builder combines environment setup, sampler construction, agent
 /// construction, and default on-policy training hooks.
-pub type PPOCandleAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
-    OnPolicyAlgorithmBuilder<PPOCandleAgent, PPOCandleAgentBuilder, EB, SH>;
+pub type PPOCandleAlgorithmBuilder<
+    EB,
+    SH = StepHookBound<<EB as EnvBuilder>::Env>,
+    ST = crate::builders::sampler::DirectSamplerSelection,
+> = OnPolicyAlgorithmBuilder<PPOCandleAgentBuilder, EB, SH, ST>;
 
 impl PPOCandleAlgorithmBuilder<GymEnvBuilder> {
     /// Creates a PPO algorithm builder for a Gym environment.
@@ -226,12 +226,17 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> PPOCandleAlgorithmBuilder<EB> 
 }
 
 /// High-level PPO algorithm builder specialized to the Burn backend.
-pub type PPOBurnAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
-    OnPolicyAlgorithmBuilder<PPOBurnAgent<BurnBackend>, PPOBurnAgentBuilder, EB, SH>;
+pub type PPOBurnAlgorithmBuilder<
+    EB,
+    SH = StepHookBound<<EB as EnvBuilder>::Env>,
+    ST = crate::builders::sampler::DirectSamplerSelection,
+> = OnPolicyAlgorithmBuilder<PPOBurnAgentBuilder, EB, SH, ST>;
 
-impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> PPOBurnAlgorithmBuilder<EB, SH> {
+impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
+    PPOBurnAlgorithmBuilder<EB, SH, ST>
+{
     /// Switches the algorithm builder to the Candle backend.
-    pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuilder<EB, SH> {
+    pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
@@ -247,7 +252,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> PPOBurnAlgorithmBuil
     }
 
     /// Keeps the algorithm builder on the Burn backend.
-    pub fn with_burn(self) -> PPOBurnAlgorithmBuilder<EB, SH> {
+    pub fn with_burn(self) -> PPOBurnAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
@@ -266,12 +271,17 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> PPOBurnAlgorithmBuil
 /// Default high-level PPO algorithm builder.
 ///
 /// This alias uses the Candle backend by default.
-pub type PPOAlgorithmBuilder<EB, SH = StepHookBound<<EB as EnvBuilder>::Env>> =
-    PPOCandleAlgorithmBuilder<EB, SH>;
+pub type PPOAlgorithmBuilder<
+    EB,
+    SH = StepHookBound<<EB as EnvBuilder>::Env>,
+    ST = crate::builders::sampler::DirectSamplerSelection,
+> = PPOCandleAlgorithmBuilder<EB, SH, ST>;
 
-impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> PPOCandleAlgorithmBuilder<EB, SH> {
+impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
+    PPOCandleAlgorithmBuilder<EB, SH, ST>
+{
     /// Switches the algorithm builder to the Candle backend.
-    pub fn with_candle(self, device: Device) -> PPOCandleAlgorithmBuilder<EB, SH> {
+    pub fn with_candle(self, device: Device) -> PPOCandleAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
@@ -287,7 +297,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>> PPOCandleAlgorithmBu
     }
 
     /// Switches the algorithm builder to the Burn backend.
-    pub fn with_burn(self) -> PPOBurnAlgorithmBuilder<EB, SH> {
+    pub fn with_burn(self) -> PPOBurnAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,

@@ -1,6 +1,6 @@
 use crate::tensor::R2lTensor;
 
-// super simplified running mean, only for vectors
+#[derive(Clone)]
 pub struct RunningMeanStd<T: R2lTensor> {
     pub mean: T,
     pub var: T,
@@ -55,7 +55,7 @@ impl<T: R2lTensor> RunningMeanStd<T> {
     pub fn update(&mut self, t: &[T]) {
         let mean = T::mean_tensors(t);
         let var = T::var_tensors(t);
-        self.update_from_moments(mean, var, t.len() as f32);
+        self.update_from_moments(mean, var, t.len() as f32).unwrap();
     }
 
     pub fn update_from_vec(&mut self, t: &[Vec<f32>]) {
