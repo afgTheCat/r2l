@@ -14,9 +14,6 @@ pub trait AgentBuilder {
     /// Agent type produced by this builder.
     type Agent: Agent;
 
-    /// Seeds backend-specific random generators before the agent is built.
-    fn seed(&self, _seed: u64) {}
-
     // TODO: This API is heavily in progress
     /// Builds the configured agent for the provided environment dimensions.
     fn build(
@@ -24,6 +21,7 @@ pub trait AgentBuilder {
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
+        seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent>;
 }
 

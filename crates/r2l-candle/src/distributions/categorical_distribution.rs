@@ -7,7 +7,7 @@ use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
 use r2l_core::{
     models::{ActivationFunction, Actor, Policy, PolicyMetadata},
-    rng::with_policy_rng,
+    rng::with_rng,
 };
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
@@ -89,7 +89,7 @@ impl Actor for CategoricalDistribution {
         let logits = self.logits.forward(&observation)?;
         let action_probs: Vec<f32> = softmax(&logits, 1)?.squeeze(0)?.to_vec1()?;
         let distribution = WeightedIndex::new(&action_probs).map_err(Error::wrap)?;
-        let action = with_policy_rng(|rng| distribution.sample(rng));
+        let action = with_rng(|rng| distribution.sample(rng));
         // TODO: there is a one_hot function in candle. Should we use it?
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;

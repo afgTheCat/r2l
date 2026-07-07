@@ -3,7 +3,7 @@ use r2l_core::{
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
-    rng::{next_seed, set_seed},
+    rng::{sample_u64, set_seed},
     tensor::R2lTensor,
 };
 use r2l_sampler::{
@@ -282,7 +282,6 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
     {
         if let Some(seed) = self.seed {
             set_seed(seed);
-            self.agent_builder.seed(next_seed());
         }
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
@@ -292,9 +291,9 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
             Space::Discrete(_) => ActionSpaceType::Discrete,
             Space::Continuous { .. } => ActionSpaceType::Continuous,
         };
-        let agent = self
-            .agent_builder
-            .build(observation_size, action_size, action_space)?;
+        let agent =
+            self.agent_builder
+                .build(observation_size, action_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|eb| eb.build());
         let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator);
         Ok(OnPolicyAlgorithm {
@@ -322,6 +321,9 @@ impl<
                 R2lNormalizedSampler<<EB as EnvBuilder>::Env, SH::Target>,
             >,
     {
+        if let Some(seed) = self.seed {
+            set_seed(seed);
+        }
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let observation_size = env_description.observation_size();
         let action_size = env_description.action_size();
@@ -331,9 +333,9 @@ impl<
         };
         let sampler = self.sampler_builder.build();
         let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);
-        let agent = self
-            .agent_builder
-            .build(observation_size, action_size, action_space)?;
+        let agent =
+            self.agent_builder
+                .build(observation_size, action_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|evaluator_builder| {
             let eval_sampler = R2lNormalizedSampler::build_with_obs_normalizer(
                 evaluator_builder.env_builder().clone(),

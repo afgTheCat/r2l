@@ -32,7 +32,21 @@ pub type PPOCandleAgentBuilder = PPOAgentBuilder;
 pub type PPOBurnAgentBuilder =
     OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, BuilderBurnBackend>;
 
+impl PPOBurnAgentBuilder {
+    fn seed(&self, seed: Option<u64>) {
+        if let Some(seed) = seed {
+            BurnBackend::seed(&Default::default(), seed);
+        }
+    }
+}
+
 impl PPOAgentBuilder {
+    fn seed(&self, seed: Option<u64>) {
+        if let Some(seed) = seed {
+            BurnBackend::seed(&Default::default(), seed);
+        }
+    }
+
     /// Creates a PPO agent builder with default hyperparameters.
     pub fn new(n_envs: usize) -> Self {
         Self {
@@ -133,16 +147,14 @@ impl<Backend> OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, Backend> {
 impl AgentBuilder for PPOAgentBuilder {
     type Agent = PPOCandleAgent;
 
-    fn seed(&self, seed: u64) {
-        self.backend.seed(seed);
-    }
-
     fn build(
         self,
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
+        seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
+        self.seed(seed);
         let device = self.backend.device.clone();
         let lm = self.learning_module_builder.build_candle(
             observation_size,
@@ -159,16 +171,14 @@ impl AgentBuilder for PPOAgentBuilder {
 impl AgentBuilder for PPOBurnAgentBuilder {
     type Agent = PPOBurnAgent<BurnBackend>;
 
-    fn seed(&self, seed: u64) {
-        BurnBackend::seed(&Default::default(), seed);
-    }
-
     fn build(
         self,
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
+        seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
+        self.seed(seed);
         let lm = self.learning_module_builder.build_burn::<BurnBackend>(
             observation_size,
             action_size,

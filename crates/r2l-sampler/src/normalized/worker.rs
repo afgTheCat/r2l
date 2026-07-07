@@ -4,7 +4,7 @@ use r2l_core::{
     buffers::{Memory, MultiMemory},
     env::{Env, EnvBuilder, Snapshot},
     models::Actor,
-    rng::{next_seed, set_seed},
+    rng::{sample_u64, set_seed},
     tensor::R2lTensor,
 };
 
@@ -46,7 +46,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
         } = self.env.step(action.clone()).unwrap();
         let done = terminated || truncated;
         if done {
-            next_state = self.env.reset(next_seed()).unwrap();
+            next_state = self.env.reset(sample_u64()).unwrap();
         }
         *handle.lock().unwrap() = next_state.clone();
         Memory {
@@ -82,7 +82,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
     }
 
     fn reset(&mut self) {
-        let state = self.worker.env.reset(next_seed()).unwrap();
+        let state = self.worker.env.reset(sample_u64()).unwrap();
         *self.handle.lock().unwrap() = state;
     }
 }
@@ -149,7 +149,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
     type T = T;
 
     fn build(&mut self) -> Self::T {
-        self.worker.env.reset(next_seed()).unwrap()
+        self.worker.env.reset(sample_u64()).unwrap()
     }
 
     fn work(&mut self, mut handle: ElementHandle<Self::T>) {
@@ -284,7 +284,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     fn reset_all(&self) {
         for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::ResetEnv(next_seed()));
+            worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
         }
         for worker_handle in &self.worker_handles {
             let WorkerResult::EnvReset = worker_handle.recv() else {

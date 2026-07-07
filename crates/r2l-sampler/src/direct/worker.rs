@@ -6,7 +6,7 @@ use r2l_core::{
     buffers::{Memory, buffer::TrajectoryBuffer},
     env::{Env, EnvDescription, Snapshot},
     models::Actor,
-    rng::next_seed,
+    rng::sample_u64,
     tensor::R2lTensor,
 };
 
@@ -26,7 +26,7 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     let state = if let Some(state) = last_state {
         state
     } else {
-        env.reset(next_seed()).unwrap()
+        env.reset(sample_u64()).unwrap()
     };
     let action = actor.action(state.clone()).unwrap();
     let Snapshot {
@@ -37,7 +37,7 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     } = env.step(action.clone()).unwrap();
     let done = terminated || truncated;
     if done {
-        next_state = env.reset(next_seed()).unwrap();
+        next_state = env.reset(sample_u64()).unwrap();
     }
     Memory {
         state,
@@ -298,7 +298,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     pub fn reset_all(&self) {
         for worker_handle in self.worker_handles.iter() {
-            worker_handle.send(WorkerCommand::ResetEnv(next_seed()));
+            worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
         }
         for worker_handle in self.worker_handles.iter() {
             worker_handle.recv();
@@ -331,7 +331,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     pub fn reset_envs_uninserted(&self) -> Vec<T> {
         for worker_handle in self.worker_handles.iter() {
-            worker_handle.send(WorkerCommand::ResetEnvUninserted(next_seed()));
+            worker_handle.send(WorkerCommand::ResetEnvUninserted(sample_u64()));
         }
         self.worker_handles
             .iter()
@@ -439,7 +439,7 @@ impl<E: Env> WorkerPool<E> {
         match self {
             Self::Vec(workers) => {
                 for worker in workers {
-                    worker.reset(next_seed());
+                    worker.reset(sample_u64());
                 }
             }
             Self::Thread(workers) => {
@@ -491,7 +491,7 @@ impl<E: Env> WorkerPool<E> {
                 // resets all the envs but does not set it as a last state
                 workers
                     .iter_mut()
-                    .map(|w| w.reset_env_uninserted(next_seed()))
+                    .map(|w| w.reset_env_uninserted(sample_u64()))
                     .collect()
             }
             Self::Thread(workers) => workers.reset_envs_uninserted(),

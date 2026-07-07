@@ -32,7 +32,21 @@ pub type A2CCandleAgentBuilder = A2CAgentBuilder;
 pub type A2CBurnAgentBuilder =
     OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, BuilderBurnBackend>;
 
+impl A2CBurnAgentBuilder {
+    fn seed(&self, seed: Option<u64>) {
+        if let Some(seed) = seed {
+            BurnBackend::seed(&Default::default(), seed);
+        }
+    }
+}
+
 impl A2CAgentBuilder {
+    fn seed(&self, seed: Option<u64>) {
+        if let Some(seed) = seed {
+            self.backend.seed(seed);
+        }
+    }
+
     /// Creates an A2C agent builder with default hyperparameters.
     pub fn new(n_envs: usize) -> Self {
         Self {
@@ -121,16 +135,14 @@ impl<Backend> OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, Backend> {
 impl AgentBuilder for A2CAgentBuilder {
     type Agent = A2CCandleAgent;
 
-    fn seed(&self, seed: u64) {
-        self.backend.seed(seed);
-    }
-
     fn build(
         self,
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
+        seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
+        self.seed(seed);
         let device = self.backend.device.clone();
         let lm = self.learning_module_builder.build_candle(
             observation_size,
@@ -147,16 +159,14 @@ impl AgentBuilder for A2CAgentBuilder {
 impl AgentBuilder for A2CBurnAgentBuilder {
     type Agent = A2CBurnAgent<BurnBackend>;
 
-    fn seed(&self, seed: u64) {
-        BurnBackend::seed(&Default::default(), seed);
-    }
-
     fn build(
         self,
         observation_size: usize,
         action_size: usize,
         action_space: ActionSpaceType,
+        seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
+        self.seed(seed);
         let lm = self.learning_module_builder.build_burn::<BurnBackend>(
             observation_size,
             action_size,
