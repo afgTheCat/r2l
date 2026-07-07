@@ -14,7 +14,7 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::Sampler,
-    rng::env_seed,
+    rng::next_seed,
     tensor::R2lTensor,
 };
 
@@ -83,7 +83,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
         let mut envs_and_states = Vec::with_capacity(num_envs);
         for env_idx in 0..num_envs {
             let mut env = env_builder.build_idx(env_idx).unwrap();
-            let state = env.reset(env_seed()).unwrap();
+            let state = env.reset(next_seed()).unwrap();
             envs_and_states.push((env, state));
         }
         let initial_states = envs_and_states
@@ -111,7 +111,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
                 worker_handles.push(ThreadHandle::new(command_tx, result_rx));
                 let env_builder = env_builder.clone();
                 let env_builder = move || env_builder.build_idx(idx);
-                ThreadWorkerFactory::new(command_rx, result_tx, env_builder.clone(), idx)
+                ThreadWorkerFactory::new(command_rx, result_tx, env_builder.clone(), next_seed())
             })
             .collect();
         let last_states = bimodal_array_with_factory(factories);

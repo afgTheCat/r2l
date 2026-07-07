@@ -3,7 +3,7 @@ use r2l_core::{
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
-    rng::set_seed,
+    rng::{next_seed, set_seed},
     tensor::R2lTensor,
 };
 use r2l_sampler::{
@@ -282,7 +282,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
     {
         if let Some(seed) = self.seed {
             set_seed(seed);
-            self.agent_builder.seed(seed);
+            self.agent_builder.seed(next_seed());
         }
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
