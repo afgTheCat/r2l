@@ -150,24 +150,6 @@ pub struct BestActorEvaluator<A: Actor, S: Sampler> {
 }
 
 impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
-    /// Creates a best-actor evaluator from an already-built sampler.
-    pub fn from_sampler(
-        sampler: ES,
-        evaluator_frequency: usize,
-        best_actor_path: Option<PathBuf>,
-    ) -> Self {
-        Self {
-            sampler,
-            best_actor_path,
-            best_actor: None,
-            best_rewards: f32::MIN,
-            current_evaluator_step: 0,
-            evaluator_frequency,
-            csv_states_path: None,
-            eval_states: vec![],
-        }
-    }
-
     pub fn eval<
         AG: Agent<Actor = A>,
         TS: Sampler<Tensor = ES::Tensor>,
