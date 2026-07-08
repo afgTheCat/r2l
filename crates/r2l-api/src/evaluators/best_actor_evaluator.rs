@@ -11,6 +11,11 @@ use r2l_sampler::{R2lSampler, SamplerExecutionMode};
 
 use crate::hooks::sampler::EpisodeBoundHook;
 
+struct EvalState {
+    avg_reward: f32,
+    total_episodes: f32,
+}
+
 /// Builder for [`BestActorEvaluator`] instances.
 pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     env_builder: EnvBuilderType<EB>,
@@ -18,6 +23,8 @@ pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     execution_mode: SamplerExecutionMode,
     eval_path: Option<PathBuf>,
     evaluator_frequency: usize,
+    csv_states_path: Option<PathBuf>,
+    eval_states: Vec<EvalState>,
 }
 
 impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
@@ -29,6 +36,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
+            csv_states_path: None,
+            eval_states: vec![],
         }
     }
 
@@ -40,6 +49,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
+            csv_states_path: None,
+            eval_states: vec![],
         }
     }
 
@@ -69,7 +80,15 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
 
     /// Sets the optional file path used to persist the best actor.
     pub fn with_best_actor_path<P: Into<PathBuf>>(mut self, eval_path: P) -> Self {
-        self.eval_path = Some(eval_path.into());
+        let eval_path = assert_file_path_is_valid(eval_path.into());
+        self.eval_path = Some(eval_path);
+        self
+    }
+
+    /// Sets the optional CSV path used to persist evaluation states.
+    pub fn with_csv_states<P: Into<PathBuf>>(mut self, csv_states_path: P) -> Self {
+        let csv_states_path = assert_file_path_is_valid(csv_states_path.into());
+        self.csv_states_path = Some(csv_states_path);
         self
     }
 
@@ -89,6 +108,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             best_actor_path: self.eval_path,
             best_rewards: f32::MIN,
             best_actor: None,
+            csv_states_path: self.csv_states_path,
+            eval_states: self.eval_states,
         }
     }
 
@@ -101,6 +122,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             best_actor_path: self.eval_path,
             best_rewards: f32::MIN,
             best_actor: None,
+            csv_states_path: self.csv_states_path,
+            eval_states: self.eval_states,
         }
     }
 
@@ -117,6 +140,20 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     }
 }
 
+fn assert_file_path_is_valid(path: PathBuf) -> PathBuf {
+    let path = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir().unwrap().join(path)
+    };
+    let Some(parent) = path.parent() else {
+        panic!("Path has to have a parent existing");
+    };
+    assert!(parent.is_dir());
+    assert!(!path.is_dir());
+    path
+}
+
 /// Evaluates an actor through the sampler path and keeps the best one seen.
 ///
 /// This evaluator collects episode-bounded rollouts with [`R2lSampler`],
@@ -129,25 +166,11 @@ pub struct BestActorEvaluator<A: Actor, S: Sampler> {
     best_rewards: f32,
     current_evaluator_step: usize,
     evaluator_frequency: usize,
+    csv_states_path: Option<PathBuf>,
+    eval_states: Vec<EvalState>,
 }
 
 impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
-    /// Creates a best-actor evaluator from an already-built sampler.
-    pub fn from_sampler(
-        sampler: ES,
-        evaluator_frequency: usize,
-        best_actor_path: Option<PathBuf>,
-    ) -> Self {
-        Self {
-            sampler,
-            best_actor_path,
-            best_actor: None,
-            best_rewards: f32::MIN,
-            current_evaluator_step: 0,
-            evaluator_frequency,
-        }
-    }
-
     pub fn eval<
         AG: Agent<Actor = A>,
         TS: Sampler<Tensor = ES::Tensor>,
@@ -157,7 +180,10 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
         rt: &mut OnPolicyRuntime<AG, TS, C>,
     ) {
         self.current_evaluator_step += 1;
-        if self.current_evaluator_step.is_multiple_of(self.evaluator_frequency) {
+        if self
+            .current_evaluator_step
+            .is_multiple_of(self.evaluator_frequency)
+        {
             let actor = rt.actor();
             let adapted_actor = rt.adapted_actor();
             self.eval_adapted(adapted_actor, actor);
@@ -188,9 +214,15 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
             self.best_rewards = avg_reward;
             self.best_actor = Some(actor);
         }
+        if self.csv_states_path.is_some() {
+            self.eval_states.push(EvalState {
+                avg_reward,
+                total_episodes,
+            });
+        }
     }
 
-    /// Serializes and writes the current best actor to disk when supported.
+    /// Serializes the current best actor and writes eval stats next to it.
     pub fn try_write_to_file(&self) -> Result<()> {
         let Some(actor) = self.best_actor.as_ref() else {
             return Ok(());
@@ -202,6 +234,17 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
             return Ok(());
         };
         std::fs::write(path, bytes)?;
+        let Some(path) = self.csv_states_path.as_ref() else {
+            return Ok(());
+        };
+        let mut csv = String::from("average_reward,total_episodes\n");
+        for eval_state in &self.eval_states {
+            csv.push_str(&format!(
+                "{},{}\n",
+                eval_state.avg_reward, eval_state.total_episodes
+            ));
+        }
+        std::fs::write(path, csv)?;
         Ok(())
     }
 
