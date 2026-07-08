@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use r2l_core::{
@@ -11,6 +11,11 @@ use r2l_sampler::{R2lSampler, SamplerExecutionMode};
 
 use crate::hooks::sampler::EpisodeBoundHook;
 
+struct EvalState {
+    avg_reward: f32,
+    total_episodes: f32,
+}
+
 /// Builder for [`BestActorEvaluator`] instances.
 pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     env_builder: EnvBuilderType<EB>,
@@ -19,7 +24,7 @@ pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     eval_path: Option<PathBuf>,
     evaluator_frequency: usize,
     csv_states_path: Option<PathBuf>,
-    eval_states: Vec<[f32; 2]>,
+    eval_states: Vec<EvalState>,
 }
 
 impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
@@ -75,13 +80,17 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
 
     /// Sets the optional file path used to persist the best actor.
     pub fn with_best_actor_path<P: Into<PathBuf>>(mut self, eval_path: P) -> Self {
-        self.eval_path = Some(eval_path.into());
+        let eval_path = eval_path.into();
+        assert_parent_exists(&eval_path);
+        self.eval_path = Some(eval_path);
         self
     }
 
     /// Sets the optional CSV path used to persist evaluation states.
     pub fn with_csv_states<P: Into<PathBuf>>(mut self, csv_states_path: P) -> Self {
-        self.csv_states_path = Some(csv_states_path.into());
+        let csv_states_path = csv_states_path.into();
+        assert_parent_exists(&csv_states_path);
+        self.csv_states_path = Some(csv_states_path);
         self
     }
 
@@ -133,6 +142,15 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     }
 }
 
+fn assert_parent_exists(path: &Path) {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        assert!(parent.exists());
+    }
+}
+
 /// Evaluates an actor through the sampler path and keeps the best one seen.
 ///
 /// This evaluator collects episode-bounded rollouts with [`R2lSampler`],
@@ -146,7 +164,7 @@ pub struct BestActorEvaluator<A: Actor, S: Sampler> {
     current_evaluator_step: usize,
     evaluator_frequency: usize,
     csv_states_path: Option<PathBuf>,
-    eval_states: Vec<[f32; 2]>,
+    eval_states: Vec<EvalState>,
 }
 
 impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
@@ -194,7 +212,10 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
             self.best_actor = Some(actor);
         }
         if self.csv_states_path.is_some() {
-            self.eval_states.push([avg_reward, total_episodes]);
+            self.eval_states.push(EvalState {
+                avg_reward,
+                total_episodes,
+            });
         }
     }
 
@@ -214,8 +235,11 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
             return Ok(());
         };
         let mut csv = String::from("average_reward,total_episodes\n");
-        for [average_reward, total_episodes] in &self.eval_states {
-            csv.push_str(&format!("{average_reward},{total_episodes}\n"));
+        for eval_state in &self.eval_states {
+            csv.push_str(&format!(
+                "{},{}\n",
+                eval_state.avg_reward, eval_state.total_episodes
+            ));
         }
         std::fs::write(path, csv)?;
         Ok(())
