@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use r2l_core::{
@@ -80,16 +80,14 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
 
     /// Sets the optional file path used to persist the best actor.
     pub fn with_best_actor_path<P: Into<PathBuf>>(mut self, eval_path: P) -> Self {
-        let eval_path = eval_path.into();
-        assert_parent_exists(&eval_path);
+        let eval_path = assert_file_path_is_valid(eval_path.into());
         self.eval_path = Some(eval_path);
         self
     }
 
     /// Sets the optional CSV path used to persist evaluation states.
     pub fn with_csv_states<P: Into<PathBuf>>(mut self, csv_states_path: P) -> Self {
-        let csv_states_path = csv_states_path.into();
-        assert_parent_exists(&csv_states_path);
+        let csv_states_path = assert_file_path_is_valid(csv_states_path.into());
         self.csv_states_path = Some(csv_states_path);
         self
     }
@@ -142,13 +140,18 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     }
 }
 
-fn assert_parent_exists(path: &Path) {
-    if let Some(parent) = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        assert!(parent.exists());
-    }
+fn assert_file_path_is_valid(path: PathBuf) -> PathBuf {
+    let path = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir().unwrap().join(path)
+    };
+    let Some(parent) = path.parent() else {
+        panic!("Path has to have a parent existing");
+    };
+    assert!(parent.is_dir());
+    assert!(!path.is_dir());
+    path
 }
 
 /// Evaluates an actor through the sampler path and keeps the best one seen.
