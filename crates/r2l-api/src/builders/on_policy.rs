@@ -213,6 +213,19 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
         self
     }
 
+    /// Sets the filesystem path used to persist evaluation states as CSV.
+    pub fn with_csv_states<P: Into<std::path::PathBuf>>(mut self, csv_states_path: P) -> Self {
+        let evaluator_builder = if let Some(evaluator_builder) = self.evaluator_builder.take() {
+            evaluator_builder.with_csv_states(csv_states_path)
+        } else {
+            let env_builder = self.sampler_builder.env_builder.clone();
+            BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
+                .with_csv_states(csv_states_path)
+        };
+        self.evaluator_builder = Some(evaluator_builder);
+        self
+    }
+
     /// Sets the frequency with which the evaluator runs
     pub fn with_evaluator_frequency(mut self, evauator_frequency: usize) -> Self {
         assert!(evauator_frequency > 0);

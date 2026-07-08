@@ -18,6 +18,8 @@ pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     execution_mode: SamplerExecutionMode,
     eval_path: Option<PathBuf>,
     evaluator_frequency: usize,
+    csv_states_path: Option<PathBuf>,
+    eval_states: Vec<[f32; 2]>,
 }
 
 impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
@@ -29,6 +31,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
+            csv_states_path: None,
+            eval_states: vec![],
         }
     }
 
@@ -40,6 +44,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
+            csv_states_path: None,
+            eval_states: vec![],
         }
     }
 
@@ -73,6 +79,12 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
         self
     }
 
+    /// Sets the optional CSV path used to persist evaluation states.
+    pub fn with_csv_states<P: Into<PathBuf>>(mut self, csv_states_path: P) -> Self {
+        self.csv_states_path = Some(csv_states_path.into());
+        self
+    }
+
     /// Builds a best-actor evaluator for the requested actor type.
     pub fn build<A: Actor>(
         self,
@@ -89,6 +101,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             best_actor_path: self.eval_path,
             best_rewards: f32::MIN,
             best_actor: None,
+            csv_states_path: self.csv_states_path,
+            eval_states: self.eval_states,
         }
     }
 
@@ -101,6 +115,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             best_actor_path: self.eval_path,
             best_rewards: f32::MIN,
             best_actor: None,
+            csv_states_path: self.csv_states_path,
+            eval_states: self.eval_states,
         }
     }
 
@@ -129,6 +145,8 @@ pub struct BestActorEvaluator<A: Actor, S: Sampler> {
     best_rewards: f32,
     current_evaluator_step: usize,
     evaluator_frequency: usize,
+    csv_states_path: Option<PathBuf>,
+    eval_states: Vec<[f32; 2]>,
 }
 
 impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
@@ -145,6 +163,8 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
             best_rewards: f32::MIN,
             current_evaluator_step: 0,
             evaluator_frequency,
+            csv_states_path: None,
+            eval_states: vec![],
         }
     }
 
@@ -157,7 +177,10 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
         rt: &mut OnPolicyRuntime<AG, TS, C>,
     ) {
         self.current_evaluator_step += 1;
-        if self.current_evaluator_step.is_multiple_of(self.evaluator_frequency) {
+        if self
+            .current_evaluator_step
+            .is_multiple_of(self.evaluator_frequency)
+        {
             let actor = rt.actor();
             let adapted_actor = rt.adapted_actor();
             self.eval_adapted(adapted_actor, actor);
@@ -188,9 +211,12 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
             self.best_rewards = avg_reward;
             self.best_actor = Some(actor);
         }
+        if self.csv_states_path.is_some() {
+            self.eval_states.push([avg_reward, total_episodes]);
+        }
     }
 
-    /// Serializes and writes the current best actor to disk when supported.
+    /// Serializes the current best actor and writes eval stats next to it.
     pub fn try_write_to_file(&self) -> Result<()> {
         let Some(actor) = self.best_actor.as_ref() else {
             return Ok(());
@@ -202,6 +228,14 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
             return Ok(());
         };
         std::fs::write(path, bytes)?;
+        let Some(path) = self.csv_states_path.as_ref() else {
+            return Ok(());
+        };
+        let mut csv = String::from("average_reward,total_episodes\n");
+        for [average_reward, total_episodes] in &self.eval_states {
+            csv.push_str(&format!("{average_reward},{total_episodes}\n"));
+        }
+        std::fs::write(path, csv)?;
         Ok(())
     }
 
