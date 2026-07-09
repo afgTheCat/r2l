@@ -28,6 +28,10 @@ use r2l_core::{
     tensor::TensorData,
 };
 
+mod parse;
+
+use parse::parse_gym_space;
+
 /// Python-backed Gymnasium environment implementing `r2l`'s [`Env`] trait.
 ///
 /// `GymEnv` wraps a Gymnasium environment created through `gymnasium.make` and
@@ -59,28 +63,11 @@ impl GymEnv {
             }
             let make = gym.getattr("make")?;
             let env = make.call((name,), Some(&kwargs))?;
-            let action_space = env.getattr("action_space")?;
             let gym_spaces = py.import("gymnasium.spaces")?;
-            let action_space = if action_space.is_instance(&gym_spaces.getattr("Discrete")?)? {
-                let val = action_space.getattr("n")?.extract()?;
-                Space::Discrete(val)
-            } else if action_space.is_instance(&gym_spaces.getattr("Box")?)? {
-                let shape: Vec<usize> = action_space.getattr("shape")?.extract()?;
-                let low: Vec<f32> = action_space.getattr("low")?.extract()?;
-                let low = TensorData::new(low, shape.clone());
-                let high: Vec<f32> = action_space.getattr("high")?.extract()?;
-                let high = TensorData::new(high, shape.clone());
-                Space::Continuous {
-                    min: Some(low),
-                    max: Some(high),
-                    shape,
-                }
-            } else {
-                todo!("Other actions spaces are not yet supported");
-            };
+            let action_space = env.getattr("action_space")?;
+            let action_space = parse_gym_space(&action_space, &gym_spaces)?;
             let observation_space = env.getattr("observation_space")?;
-            let observation_space: Vec<usize> = observation_space.getattr("shape")?.extract()?;
-            let observation_space = Space::continuous_from_dims(observation_space);
+            let observation_space = parse_gym_space(&observation_space, &gym_spaces)?;
             PyResult::Ok(GymEnv {
                 env: env.into(),
                 action_space,
@@ -143,11 +130,27 @@ impl Env for GymEnv {
                     let action_vec: Vec<f32> = clipped_action.into_vec();
                     self.env.call_method(py, "step", (action_vec,), None)?
                 }
-                _ => {
+                Space::Continuous { .. } => {
+                    let action_vec: Vec<f32> = action.into_vec();
+                    self.env.call_method(py, "step", (action_vec,), None)?
+                }
+                Space::Discrete(_) => {
                     let action: Vec<f32> = action.into_vec();
                     // TODO: remove unwrap
                     let action = action.iter().position(|i| *i > 0.).unwrap();
                     self.env.call_method(py, "step", (action,), None)?
+                }
+                Space::MultiDiscrete { .. } => {
+                    todo!();
+                }
+                Space::MultiBinary { .. } => {
+                    todo!();
+                }
+                Space::Tuple(_) => {
+                    todo!();
+                }
+                Space::Dict(_) => {
+                    todo!();
                 }
             };
             let step = step.bind(py);

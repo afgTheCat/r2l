@@ -302,6 +302,18 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
         let action_space = match env_description.action_space {
             Space::Discrete(_) => ActionSpaceType::Discrete,
             Space::Continuous { .. } => ActionSpaceType::Continuous,
+            Space::MultiDiscrete { .. } => {
+                todo!();
+            }
+            Space::MultiBinary { .. } => {
+                todo!();
+            }
+            Space::Tuple(_) => {
+                todo!();
+            }
+            Space::Dict(_) => {
+                todo!();
+            }
         };
         let agent =
             self.agent_builder
@@ -342,6 +354,18 @@ impl<
         let action_space = match env_description.action_space {
             Space::Discrete(_) => ActionSpaceType::Discrete,
             Space::Continuous { .. } => ActionSpaceType::Continuous,
+            Space::MultiDiscrete { .. } => {
+                todo!();
+            }
+            Space::MultiBinary { .. } => {
+                todo!();
+            }
+            Space::Tuple(_) => {
+                todo!();
+            }
+            Space::Dict(_) => {
+                todo!();
+            }
         };
         let sampler = self.sampler_builder.build();
         let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);

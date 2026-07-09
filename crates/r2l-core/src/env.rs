@@ -1,4 +1,4 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use anyhow::Result;
 
@@ -25,6 +25,22 @@ pub enum Space<T: R2lTensor> {
         /// Tensor shape of the space.
         shape: Vec<usize>,
     },
+    /// Multiple discrete spaces packed into one tensor.
+    MultiDiscrete {
+        /// Number of categories for each discrete dimension.
+        nvec: T,
+        /// Tensor shape of the discrete dimensions.
+        shape: Vec<usize>,
+    },
+    /// Binary tensor space.
+    MultiBinary {
+        /// Tensor shape of the binary dimensions.
+        shape: Vec<usize>,
+    },
+    /// Ordered collection of spaces.
+    Tuple(Vec<Space<T>>),
+    /// Named collection of spaces.
+    Dict(BTreeMap<String, Space<T>>),
 }
 
 impl<T: R2lTensor> Space<T> {
@@ -52,11 +68,31 @@ impl<T: R2lTensor> Space<T> {
         }
     }
 
+    pub fn multi_discrete(nvec: T, shape: Vec<usize>) -> Self {
+        Self::MultiDiscrete { nvec, shape }
+    }
+
+    pub fn multi_binary(shape: Vec<usize>) -> Self {
+        Self::MultiBinary { shape }
+    }
+
+    pub fn tuple(spaces: Vec<Space<T>>) -> Self {
+        Self::Tuple(spaces)
+    }
+
+    pub fn dict(spaces: BTreeMap<String, Space<T>>) -> Self {
+        Self::Dict(spaces)
+    }
+
     /// Returns the flattened size of the space.
     pub fn size(&self) -> usize {
         match &self {
             Self::Discrete(size) => *size,
             Self::Continuous { shape, .. } => shape.iter().product(),
+            Self::MultiDiscrete { shape, .. } => shape.iter().product(),
+            Self::MultiBinary { shape } => shape.iter().product(),
+            Self::Tuple(spaces) => spaces.iter().map(Self::size).sum(),
+            Self::Dict(spaces) => spaces.values().map(Self::size).sum(),
         }
     }
 }
