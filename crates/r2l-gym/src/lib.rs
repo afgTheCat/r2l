@@ -30,7 +30,7 @@ use r2l_core::{
 
 mod parse;
 
-use parse::parse_gym_space;
+use parse::{parse_action, parse_gym_space, parse_observation};
 
 /// Python-backed Gymnasium environment implementing `r2l`'s [`Env`] trait.
 ///
@@ -112,50 +112,17 @@ impl Env for GymEnv {
             kwargs.set_item("seed", seed)?;
             let state = self.env.call_method(py, "reset", (), Some(&kwargs))?;
             let step = state.bind(py);
-            let state = step.get_item(0)?.extract()?;
-            PyResult::Ok(TensorData::from_vec(state))
+            parse_observation(&step.get_item(0)?, &self.observation_space)
         })?;
         Ok(state)
     }
 
     fn step(&mut self, action: TensorData) -> Result<Snapshot<TensorData>> {
         let snapshot = Python::with_gil(|py| {
-            let step = match &self.action_space {
-                Space::Continuous {
-                    min: Some(min),
-                    max: Some(max),
-                    ..
-                } => {
-                    let clipped_action = action.clamp(min, max);
-                    let action_vec: Vec<f32> = clipped_action.into_vec();
-                    self.env.call_method(py, "step", (action_vec,), None)?
-                }
-                Space::Continuous { .. } => {
-                    let action_vec: Vec<f32> = action.into_vec();
-                    self.env.call_method(py, "step", (action_vec,), None)?
-                }
-                Space::Discrete(_) => {
-                    let action: Vec<f32> = action.into_vec();
-                    // TODO: remove unwrap
-                    let action = action.iter().position(|i| *i > 0.).unwrap();
-                    self.env.call_method(py, "step", (action,), None)?
-                }
-                Space::MultiDiscrete { .. } => {
-                    todo!();
-                }
-                Space::MultiBinary { .. } => {
-                    todo!();
-                }
-                Space::Tuple(_) => {
-                    todo!();
-                }
-                Space::Dict(_) => {
-                    todo!();
-                }
-            };
+            let action = parse_action(py, action, &self.action_space)?;
+            let step = self.env.call_method(py, "step", (action,), None)?;
             let step = step.bind(py);
-            let next_state: Vec<f32> = step.get_item(0)?.extract()?;
-            let next_state = TensorData::from_vec(next_state);
+            let next_state = parse_observation(&step.get_item(0)?, &self.observation_space)?;
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
             let truncated: bool = step.get_item(3)?.extract()?;
