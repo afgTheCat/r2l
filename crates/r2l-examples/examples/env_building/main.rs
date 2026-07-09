@@ -23,7 +23,7 @@ impl Env for MyEnv {
     }
 
     fn env_description(&self) -> EnvDescription<Self::Tensor> {
-        let observation_space = Space::continuous(2, None, None);
+        let observation_space = Space::continuous(vec![2], None, None);
         let action_space = Space::Discrete(2);
         EnvDescription::new(observation_space, action_space)
     }

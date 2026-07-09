@@ -16,14 +16,14 @@ pub enum ActionSpaceType {
 pub enum Space<T: R2lTensor> {
     /// Discrete space with `usize` possible values.
     Discrete(usize),
-    /// Continuous vector space with optional elementwise bounds.
+    /// Continuous tensor space with optional elementwise bounds.
     Continuous {
         /// Optional minimum values.
         min: Option<T>,
         /// Optional maximum values.
         max: Option<T>,
-        /// Number of scalar elements in the flattened space.
-        size: usize,
+        /// Tensor shape of the space.
+        shape: Vec<usize>,
     },
 }
 
@@ -32,14 +32,15 @@ impl<T: R2lTensor> Space<T> {
         Self::Discrete(size)
     }
 
-    pub fn continuous(size: usize, min: Option<T>, max: Option<T>) -> Self {
+    pub fn continuous(shape: Vec<usize>, min: Option<T>, max: Option<T>) -> Self {
+        let size: usize = shape.iter().product();
         if let Some(min) = min.as_ref() {
             debug_assert_eq!(min.size(), size);
         }
         if let Some(max) = max.as_ref() {
             debug_assert_eq!(max.size(), size);
         }
-        Self::Continuous { min, max, size }
+        Self::Continuous { min, max, shape }
     }
 
     /// Creates an unbounded continuous space from tensor dimensions.
@@ -47,7 +48,7 @@ impl<T: R2lTensor> Space<T> {
         Self::Continuous {
             min: None,
             max: None,
-            size: dims.iter().product(),
+            shape: dims,
         }
     }
 
@@ -55,7 +56,7 @@ impl<T: R2lTensor> Space<T> {
     pub fn size(&self) -> usize {
         match &self {
             Self::Discrete(size) => *size,
-            Self::Continuous { size, .. } => *size,
+            Self::Continuous { shape, .. } => shape.iter().product(),
         }
     }
 }

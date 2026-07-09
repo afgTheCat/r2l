@@ -65,15 +65,15 @@ impl GymEnv {
                 let val = action_space.getattr("n")?.extract()?;
                 Space::Discrete(val)
             } else if action_space.is_instance(&gym_spaces.getattr("Box")?)? {
+                let shape: Vec<usize> = action_space.getattr("shape")?.extract()?;
                 let low: Vec<f32> = action_space.getattr("low")?.extract()?;
-                let action_size = low.len();
-                let low = TensorData::new(low, vec![action_size]);
+                let low = TensorData::new(low, shape.clone());
                 let high: Vec<f32> = action_space.getattr("high")?.extract()?;
-                let high = TensorData::new(high, vec![action_size]);
+                let high = TensorData::new(high, shape.clone());
                 Space::Continuous {
                     min: Some(low),
                     max: Some(high),
-                    size: action_size,
+                    shape,
                 }
             } else {
                 todo!("Other actions spaces are not yet supported");
