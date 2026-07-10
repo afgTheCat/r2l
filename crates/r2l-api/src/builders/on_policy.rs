@@ -372,9 +372,9 @@ fn action_space_type<T: R2lTensor>(space: Space<T>) -> ActionSpaceType {
         Space::MultiDiscrete { nvec, .. } => ActionSpaceType::MultiDiscrete {
             nvec: nvec.to_vec().into_iter().map(|n| n as usize).collect(),
         },
-        Space::MultiBinary { .. } => {
-            todo!();
-        }
+        Space::MultiBinary { shape } => ActionSpaceType::MultiBinary {
+            size: shape.iter().product(),
+        },
         Space::Tuple(_) => {
             todo!();
         }

@@ -10,6 +10,7 @@ pub enum ActionSpaceType {
     Discrete,
     Continuous,
     MultiDiscrete { nvec: Vec<usize> },
+    MultiBinary { size: usize },
 }
 
 /// Description of an observation or action space.

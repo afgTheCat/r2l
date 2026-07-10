@@ -5,6 +5,8 @@
 //! an enum that erases the concrete policy type behind one Candle-facing policy
 //! interface.
 
+/// Bernoulli policy distribution for multi-binary action spaces.
+pub mod bernoulli_distribution;
 /// Categorical policy distribution for discrete action spaces.
 pub mod categorical_distribution;
 /// Diagonal-Gaussian policy distribution for continuous action spaces.
@@ -15,6 +17,7 @@ pub mod multi_categorical_distribution;
 use std::{f32, fmt::Debug};
 
 use anyhow::Result;
+use bernoulli_distribution::BernoulliDistribution;
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use categorical_distribution::CategoricalDistribution;
@@ -39,6 +42,8 @@ pub enum CandlePolicyKind {
     DiagGaussian(DiagGaussianDistribution),
     /// Policy for multi-discrete action spaces.
     MultiCategorical(MultiCategoricalDistribution),
+    /// Policy for multi-binary action spaces.
+    Bernoulli(BernoulliDistribution),
 }
 
 impl CandlePolicyKind {
@@ -48,6 +53,7 @@ impl CandlePolicyKind {
             Self::Categorical(c) => c.device(),
             Self::DiagGaussian(d) => d.device(),
             Self::MultiCategorical(m) => m.device(),
+            Self::Bernoulli(b) => b.device(),
         }
     }
 
@@ -57,6 +63,7 @@ impl CandlePolicyKind {
             Self::Categorical(c) => c.observation_size(),
             Self::DiagGaussian(d) => d.observation_size(),
             Self::MultiCategorical(m) => m.observation_size(),
+            Self::Bernoulli(b) => b.observation_size(),
         }
     }
 
@@ -141,6 +148,26 @@ impl CandlePolicyKind {
         Ok(Self::MultiCategorical(distr))
     }
 
+    /// Builds a Bernoulli Candle policy.
+    pub fn bernoulli(
+        policy_varbuilder: &VarBuilder,
+        hidden_layers: &[usize],
+        action_size: usize,
+        observation_size: usize,
+        activation: ActivationFunction,
+    ) -> Result<Self> {
+        let distr = BernoulliDistribution::build(
+            observation_size,
+            action_size,
+            hidden_layers,
+            policy_varbuilder,
+            policy_varbuilder.device().clone(),
+            "policy",
+            activation,
+        )?;
+        Ok(Self::Bernoulli(distr))
+    }
+
     /// Builds the appropriate Candle policy for the given action-space type.
     pub fn build(
         action_space: ActionSpaceType,
@@ -172,6 +199,13 @@ impl CandlePolicyKind {
                 observation_size,
                 activation,
             ),
+            ActionSpaceType::MultiBinary { size } => Self::bernoulli(
+                policy_varbuilder,
+                hidden_layers,
+                size,
+                observation_size,
+                activation,
+            ),
         }
     }
 }
@@ -184,6 +218,7 @@ impl Actor for CandlePolicyKind {
             Self::Categorical(cat) => cat.action(observation),
             Self::DiagGaussian(diag) => diag.action(observation),
             Self::MultiCategorical(multi) => multi.action(observation),
+            Self::Bernoulli(bernoulli) => bernoulli.action(observation),
         }
     }
 
@@ -192,6 +227,7 @@ impl Actor for CandlePolicyKind {
             Self::Categorical(cat) => cat.try_serialize(),
             Self::DiagGaussian(diag) => diag.try_serialize(),
             Self::MultiCategorical(multi) => multi.try_serialize(),
+            Self::Bernoulli(bernoulli) => bernoulli.try_serialize(),
         }
     }
 }
@@ -202,6 +238,7 @@ impl Policy for CandlePolicyKind {
             Self::Categorical(cat) => cat.log_probs(states, actions),
             Self::DiagGaussian(diag) => diag.log_probs(states, actions),
             Self::MultiCategorical(multi) => multi.log_probs(states, actions),
+            Self::Bernoulli(bernoulli) => bernoulli.log_probs(states, actions),
         }
     }
 
@@ -210,6 +247,7 @@ impl Policy for CandlePolicyKind {
             Self::Categorical(cat) => cat.entropy(states),
             Self::DiagGaussian(diag) => diag.entropy(states),
             Self::MultiCategorical(multi) => multi.entropy(states),
+            Self::Bernoulli(bernoulli) => bernoulli.entropy(states),
         }
     }
 
@@ -218,6 +256,7 @@ impl Policy for CandlePolicyKind {
             Self::Categorical(cat) => cat.std(),
             Self::DiagGaussian(diag) => diag.std(),
             Self::MultiCategorical(multi) => multi.std(),
+            Self::Bernoulli(bernoulli) => bernoulli.std(),
         }
     }
 
@@ -226,6 +265,7 @@ impl Policy for CandlePolicyKind {
             Self::Categorical(cat) => cat.resample_noise(),
             Self::DiagGaussian(diag) => diag.resample_noise(),
             Self::MultiCategorical(multi) => multi.resample_noise(),
+            Self::Bernoulli(bernoulli) => bernoulli.resample_noise(),
         }
     }
 }
