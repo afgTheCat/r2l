@@ -30,7 +30,7 @@ use r2l_core::{
 
 mod parse;
 
-use parse::{parse_action, parse_gym_space, parse_observation};
+use parse::{parse_action, parse_gym_space, parse_obs};
 
 /// Python-backed Gymnasium environment implementing `r2l`'s [`Env`] trait.
 ///
@@ -112,7 +112,7 @@ impl Env for GymEnv {
             kwargs.set_item("seed", seed)?;
             let state = self.env.call_method(py, "reset", (), Some(&kwargs))?;
             let step = state.bind(py);
-            parse_observation(&step.get_item(0)?, &self.observation_space)
+            parse_obs(&step.get_item(0)?, &self.observation_space)
         })?;
         Ok(state)
     }
@@ -122,7 +122,7 @@ impl Env for GymEnv {
             let action = parse_action(py, &action.into_vec(), &self.action_space)?;
             let step = self.env.call_method(py, "step", (action,), None)?;
             let step = step.bind(py);
-            let next_state = parse_observation(&step.get_item(0)?, &self.observation_space)?;
+            let next_state = parse_obs(&step.get_item(0)?, &self.observation_space)?;
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
             let truncated: bool = step.get_item(3)?.extract()?;

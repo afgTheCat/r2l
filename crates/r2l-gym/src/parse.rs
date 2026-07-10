@@ -1,5 +1,5 @@
 use pyo3::{
-    Bound, IntoPyObjectExt, PyResult, Python,
+    Bound, FromPyObject, IntoPyObjectExt, PyResult, Python,
     types::{PyAny, PyAnyMethods, PyDict, PyDictMethods, PyModule, PyTuple},
 };
 use r2l_core::{env::Space, tensor::TensorData};
@@ -14,8 +14,8 @@ pub(crate) fn parse_gym_space(
         Ok(Space::Discrete(size))
     } else if is_space("Box")? {
         let shape: Vec<usize> = space.getattr("shape")?.extract()?;
-        let low: Vec<f32> = space.getattr("low")?.extract()?;
-        let high: Vec<f32> = space.getattr("high")?.extract()?;
+        let low = flatten_extract(&space.getattr("low")?)?;
+        let high = flatten_extract(&space.getattr("high")?)?;
         Ok(Space::Continuous {
             min: Some(TensorData::new(low, shape.clone())),
             max: Some(TensorData::new(high, shape.clone())),
@@ -24,10 +24,7 @@ pub(crate) fn parse_gym_space(
     } else if is_space("MultiDiscrete")? {
         let nvec = space.getattr("nvec")?;
         let shape: Vec<usize> = nvec.getattr("shape")?.extract()?;
-        let nvec: Vec<usize> = nvec
-            .call_method0("flatten")?
-            .call_method0("tolist")?
-            .extract()?;
+        let nvec: Vec<usize> = flatten_extract(&nvec)?;
         let nvec = nvec.into_iter().map(|n| n as f32).collect();
         Ok(Space::multi_discrete(
             TensorData::new(nvec, shape.clone()),
@@ -120,7 +117,14 @@ fn parse_child_actions<'py, 'space>(
     Ok(actions)
 }
 
-pub(crate) fn parse_observation(
+fn flatten_extract<'py, T: FromPyObject<'py>>(value: &Bound<'py, PyAny>) -> PyResult<Vec<T>> {
+    value
+        .call_method0("flatten")?
+        .call_method0("tolist")?
+        .extract()
+}
+
+pub(crate) fn parse_obs(
     observation: &Bound<'_, PyAny>,
     space: &Space<TensorData>,
 ) -> PyResult<TensorData> {
@@ -131,14 +135,14 @@ pub(crate) fn parse_observation(
         )),
         Space::Continuous { shape, .. }
         | Space::MultiDiscrete { shape, .. }
-        | Space::MultiBinary { shape } => parse_tensor_observation(observation, shape),
-        Space::Tuple(spaces) => parse_fields(
+        | Space::MultiBinary { shape } => parse_tensor_obs(observation, shape),
+        Space::Tuple(spaces) => parse_obs_fields(
             spaces
                 .iter()
                 .enumerate()
                 .map(|(idx, space)| Ok((observation.get_item(idx)?, space))),
         ),
-        Space::Dict(spaces) => parse_fields(
+        Space::Dict(spaces) => parse_obs_fields(
             spaces
                 .iter()
                 .map(|(key, space)| Ok((observation.get_item(key)?, space))),
@@ -146,10 +150,7 @@ pub(crate) fn parse_observation(
     }
 }
 
-fn parse_tensor_observation(
-    observation: &Bound<'_, PyAny>,
-    shape: &[usize],
-) -> PyResult<TensorData> {
+fn parse_tensor_obs(observation: &Bound<'_, PyAny>, shape: &[usize]) -> PyResult<TensorData> {
     let values = observation
         .call_method0("flatten")?
         .call_method0("tolist")?;
@@ -157,13 +158,13 @@ fn parse_tensor_observation(
     Ok(TensorData::new(values, shape.to_vec()))
 }
 
-fn parse_fields<'py>(
+fn parse_obs_fields<'py>(
     fields: impl IntoIterator<Item = PyResult<(Bound<'py, PyAny>, &'py Space<TensorData>)>>,
 ) -> PyResult<TensorData> {
     let mut data = Vec::new();
     for field in fields {
         let (value, space) = field?;
-        data.extend(parse_observation(&value, space)?.into_vec());
+        data.extend(parse_obs(&value, space)?.into_vec());
     }
     Ok(TensorData::from_vec(data))
 }
