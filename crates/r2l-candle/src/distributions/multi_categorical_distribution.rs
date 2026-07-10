@@ -52,11 +52,6 @@ impl MultiCategoricalDistribution {
     pub fn observation_size(&self) -> usize {
         self.logits.input_size()
     }
-
-    /// Returns the number of discrete action dimensions.
-    pub fn action_size(&self) -> usize {
-        self.nvec.len()
-    }
 }
 
 impl Actor for MultiCategoricalDistribution {
@@ -77,7 +72,7 @@ impl Actor for MultiCategoricalDistribution {
             let action = with_rng(|rng| distribution.sample(rng));
             actions.push(action as f32);
         }
-        Ok(Tensor::from_vec(actions, self.action_size(), &self.device)?.detach())
+        Ok(Tensor::from_vec(actions, self.nvec.len(), &self.device)?.detach())
     }
 }
 

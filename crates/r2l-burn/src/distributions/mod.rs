@@ -14,13 +14,15 @@ use r2l_core::{
 use crate::distributions::{
     bernoulli_distribution::BernoulliDistribution,
     categorical_distribution::CategoricalDistribution,
-    diagonal_distribution::DiagGaussianDistribution,
+    composite_distribution::CompositeDistribution, diagonal_distribution::DiagGaussianDistribution,
     multi_categorical_distribution::MultiCategoricalDistribution,
 };
 /// Bernoulli policy distribution for multi-binary action spaces.
 pub mod bernoulli_distribution;
 /// Categorical policy distribution for discrete action spaces.
 pub mod categorical_distribution;
+/// Composite policy distribution for tuple and dict action spaces.
+pub mod composite_distribution;
 /// Diagonal-Gaussian policy distribution for continuous action spaces.
 pub mod diagonal_distribution;
 /// Multi-categorical policy distribution for multi-discrete action spaces.
@@ -43,6 +45,8 @@ pub enum PolicyKind<B: Backend> {
     MultiCategorical(MultiCategoricalDistribution<B>),
     /// Policy for multi-binary action spaces.
     Bernoulli(BernoulliDistribution<B>),
+    /// Policy for tuple and dict action spaces.
+    Composite(CompositeDistribution<B>),
 }
 
 impl<B: Backend> PolicyKind<B> {
@@ -90,20 +94,24 @@ impl<B: Backend> PolicyKind<B> {
         activation: ActivationFunction,
     ) -> Self {
         match action_space_type {
-            ActionSpaceType::Discrete => Self::categorical(policy_layers, activation),
-            ActionSpaceType::Continuous => Self::continuous(policy_layers, activation),
+            ActionSpaceType::Discrete { .. } => Self::categorical(policy_layers, activation),
+            ActionSpaceType::Continuous { .. } => Self::continuous(policy_layers, activation),
             ActionSpaceType::MultiDiscrete { nvec } => {
                 Self::multi_categorical(policy_layers, nvec, activation)
             }
             ActionSpaceType::MultiBinary { size } => {
                 Self::bernoulli(policy_layers, size, activation)
             }
-            ActionSpaceType::Tuple(_) => {
-                todo!();
-            }
-            ActionSpaceType::Dict(_) => {
-                todo!();
-            }
+            ActionSpaceType::Tuple(spaces) => PolicyKind::Composite(CompositeDistribution::build(
+                spaces,
+                policy_layers,
+                activation,
+            )),
+            ActionSpaceType::Dict(spaces) => PolicyKind::Composite(CompositeDistribution::build(
+                spaces.into_values().collect(),
+                policy_layers,
+                activation,
+            )),
         }
     }
 }
@@ -117,6 +125,7 @@ impl<B: Backend> Actor for PolicyKind<B> {
             Self::Diag(diag) => diag.action(observation),
             Self::MultiCategorical(multi) => multi.action(observation),
             Self::Bernoulli(bernoulli) => bernoulli.action(observation),
+            Self::Composite(composite) => composite.action(observation),
         }
     }
 
@@ -126,6 +135,7 @@ impl<B: Backend> Actor for PolicyKind<B> {
             Self::Diag(diag) => diag.try_serialize(),
             Self::MultiCategorical(multi) => multi.try_serialize(),
             Self::Bernoulli(bernoulli) => bernoulli.try_serialize(),
+            Self::Composite(composite) => composite.try_serialize(),
         }
     }
 }
@@ -141,6 +151,7 @@ impl<B: Backend> Policy for PolicyKind<B> {
             Self::Diag(diag) => diag.log_probs(observations, actions),
             Self::MultiCategorical(multi) => multi.log_probs(observations, actions),
             Self::Bernoulli(bernoulli) => bernoulli.log_probs(observations, actions),
+            Self::Composite(composite) => composite.log_probs(observations, actions),
         }
     }
 
@@ -150,6 +161,7 @@ impl<B: Backend> Policy for PolicyKind<B> {
             Self::Diag(diag) => diag.std(),
             Self::MultiCategorical(multi) => multi.std(),
             Self::Bernoulli(bernoulli) => bernoulli.std(),
+            Self::Composite(composite) => composite.std(),
         }
     }
 
@@ -159,6 +171,7 @@ impl<B: Backend> Policy for PolicyKind<B> {
             Self::Diag(diag) => diag.entropy(states),
             Self::MultiCategorical(multi) => multi.entropy(states),
             Self::Bernoulli(bernoulli) => bernoulli.entropy(states),
+            Self::Composite(composite) => composite.entropy(states),
         }
     }
 
@@ -168,6 +181,7 @@ impl<B: Backend> Policy for PolicyKind<B> {
             Self::Diag(diag) => diag.resample_noise(),
             Self::MultiCategorical(multi) => multi.resample_noise(),
             Self::Bernoulli(bernoulli) => bernoulli.resample_noise(),
+            Self::Composite(composite) => composite.resample_noise(),
         }
     }
 }

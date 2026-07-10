@@ -9,6 +9,8 @@
 pub mod bernoulli_distribution;
 /// Categorical policy distribution for discrete action spaces.
 pub mod categorical_distribution;
+/// Composite policy distribution for tuple and dict action spaces.
+pub mod composite_distribution;
 /// Diagonal-Gaussian policy distribution for continuous action spaces.
 pub mod diagonal_distribution;
 /// Multi-categorical policy distribution for multi-discrete action spaces.
@@ -21,6 +23,7 @@ use bernoulli_distribution::BernoulliDistribution;
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use categorical_distribution::CategoricalDistribution;
+use composite_distribution::CompositeDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
 use multi_categorical_distribution::MultiCategoricalDistribution;
 use r2l_core::{
@@ -44,6 +47,8 @@ pub enum CandlePolicyKind {
     MultiCategorical(MultiCategoricalDistribution),
     /// Policy for multi-binary action spaces.
     Bernoulli(BernoulliDistribution),
+    /// Policy for tuple and dict action spaces.
+    Composite(CompositeDistribution),
 }
 
 impl CandlePolicyKind {
@@ -54,6 +59,7 @@ impl CandlePolicyKind {
             Self::DiagGaussian(d) => d.device(),
             Self::MultiCategorical(m) => m.device(),
             Self::Bernoulli(b) => b.device(),
+            Self::Composite(c) => c.device(),
         }
     }
 
@@ -64,6 +70,7 @@ impl CandlePolicyKind {
             Self::DiagGaussian(d) => d.observation_size(),
             Self::MultiCategorical(m) => m.observation_size(),
             Self::Bernoulli(b) => b.observation_size(),
+            Self::Composite(c) => c.observation_size(),
         }
     }
 
@@ -75,7 +82,7 @@ impl CandlePolicyKind {
         );
         let tensors = candle_core::safetensors::load_buffer(bytes, &device).unwrap();
 
-        if tensors.contains_key("log_std") {
+        if tensors.contains_key("policy.log_std") {
             Self::DiagGaussian(DiagGaussianDistribution::from_parts(
                 tensors, device, metadata,
             ))
@@ -94,17 +101,13 @@ impl CandlePolicyKind {
         observation_size: usize,
         activation: ActivationFunction,
     ) -> Result<Self> {
-        let layers = &[hidden_layers, &[action_size]].concat();
-        let distr = CategoricalDistribution::build(
-            observation_size,
-            action_size,
-            layers,
+        Self::build(
+            ActionSpaceType::Discrete { size: action_size },
             policy_varbuilder,
-            policy_varbuilder.device().clone(),
-            "policy",
+            hidden_layers,
+            observation_size,
             activation,
-        )?;
-        Ok(Self::Categorical(distr))
+        )
     }
 
     /// Builds a diagonal-Gaussian Candle policy.
@@ -115,17 +118,13 @@ impl CandlePolicyKind {
         observation_size: usize,
         activation: ActivationFunction,
     ) -> Result<Self> {
-        let layers = &[hidden_layers, &[action_size]].concat();
-        let log_std = policy_varbuilder.get(action_size, "log_std")?;
-        let distr = DiagGaussianDistribution::build(
-            observation_size,
-            layers,
+        Self::build(
+            ActionSpaceType::Continuous { size: action_size },
             policy_varbuilder,
-            log_std,
-            "policy",
+            hidden_layers,
+            observation_size,
             activation,
-        )?;
-        Ok(Self::DiagGaussian(distr))
+        )
     }
 
     /// Builds a multi-categorical Candle policy.
@@ -136,16 +135,13 @@ impl CandlePolicyKind {
         observation_size: usize,
         activation: ActivationFunction,
     ) -> Result<Self> {
-        let distr = MultiCategoricalDistribution::build(
-            observation_size,
-            nvec,
-            hidden_layers,
+        Self::build(
+            ActionSpaceType::MultiDiscrete { nvec },
             policy_varbuilder,
-            policy_varbuilder.device().clone(),
-            "policy",
+            hidden_layers,
+            observation_size,
             activation,
-        )?;
-        Ok(Self::MultiCategorical(distr))
+        )
     }
 
     /// Builds a Bernoulli Candle policy.
@@ -156,16 +152,13 @@ impl CandlePolicyKind {
         observation_size: usize,
         activation: ActivationFunction,
     ) -> Result<Self> {
-        let distr = BernoulliDistribution::build(
-            observation_size,
-            action_size,
-            hidden_layers,
+        Self::build(
+            ActionSpaceType::MultiBinary { size: action_size },
             policy_varbuilder,
-            policy_varbuilder.device().clone(),
-            "policy",
+            hidden_layers,
+            observation_size,
             activation,
-        )?;
-        Ok(Self::Bernoulli(distr))
+        )
     }
 
     /// Builds the appropriate Candle policy for the given action-space type.
@@ -173,45 +166,90 @@ impl CandlePolicyKind {
         action_space: ActionSpaceType,
         policy_varbuilder: &VarBuilder,
         hidden_layers: &[usize],
-        action_size: usize,
         observation_size: usize,
         activation: ActivationFunction,
     ) -> Result<Self> {
+        Self::build_with_prefix(
+            action_space,
+            policy_varbuilder,
+            hidden_layers,
+            observation_size,
+            activation,
+            "policy",
+        )
+    }
+
+    pub(crate) fn build_with_prefix(
+        action_space: ActionSpaceType,
+        policy_varbuilder: &VarBuilder,
+        hidden_layers: &[usize],
+        observation_size: usize,
+        activation: ActivationFunction,
+        prefix: &str,
+    ) -> Result<Self> {
         match action_space {
-            ActionSpaceType::Discrete => Self::categorical(
-                policy_varbuilder,
-                hidden_layers,
-                action_size,
-                observation_size,
-                activation,
-            ),
-            ActionSpaceType::Continuous => Self::diag_gaussian(
-                policy_varbuilder,
-                hidden_layers,
-                action_size,
-                observation_size,
-                activation,
-            ),
-            ActionSpaceType::MultiDiscrete { nvec } => Self::multi_categorical(
-                policy_varbuilder,
-                hidden_layers,
-                nvec,
-                observation_size,
-                activation,
-            ),
-            ActionSpaceType::MultiBinary { size } => Self::bernoulli(
-                policy_varbuilder,
-                hidden_layers,
-                size,
-                observation_size,
-                activation,
-            ),
-            ActionSpaceType::Tuple(_) => {
-                todo!();
+            ActionSpaceType::Discrete { size } => {
+                let layers = &[hidden_layers, &[size]].concat();
+                Ok(Self::Categorical(CategoricalDistribution::build(
+                    observation_size,
+                    size,
+                    layers,
+                    policy_varbuilder,
+                    policy_varbuilder.device().clone(),
+                    prefix,
+                    activation,
+                )?))
             }
-            ActionSpaceType::Dict(_) => {
-                todo!();
+            ActionSpaceType::Continuous { size } => {
+                let layers = &[hidden_layers, &[size]].concat();
+                let log_std = policy_varbuilder.get(size, &format!("{prefix}.log_std"))?;
+                Ok(Self::DiagGaussian(DiagGaussianDistribution::build(
+                    observation_size,
+                    layers,
+                    policy_varbuilder,
+                    log_std,
+                    prefix,
+                    activation,
+                )?))
             }
+            ActionSpaceType::MultiDiscrete { nvec } => {
+                Ok(Self::MultiCategorical(MultiCategoricalDistribution::build(
+                    observation_size,
+                    nvec,
+                    hidden_layers,
+                    policy_varbuilder,
+                    policy_varbuilder.device().clone(),
+                    prefix,
+                    activation,
+                )?))
+            }
+            ActionSpaceType::MultiBinary { size } => {
+                Ok(Self::Bernoulli(BernoulliDistribution::build(
+                    observation_size,
+                    size,
+                    hidden_layers,
+                    policy_varbuilder,
+                    policy_varbuilder.device().clone(),
+                    prefix,
+                    activation,
+                )?))
+            }
+            ActionSpaceType::Tuple(spaces) => Ok(Self::Composite(CompositeDistribution::build(
+                spaces,
+                policy_varbuilder,
+                hidden_layers,
+                observation_size,
+                activation,
+                prefix,
+            )?)),
+            ActionSpaceType::Dict(spaces) => Ok(Self::Composite(CompositeDistribution::build(
+                spaces.into_values().collect(),
+                policy_varbuilder,
+                hidden_layers,
+                observation_size,
+                activation,
+                prefix,
+            )?)),
         }
     }
 }
@@ -225,6 +263,7 @@ impl Actor for CandlePolicyKind {
             Self::DiagGaussian(diag) => diag.action(observation),
             Self::MultiCategorical(multi) => multi.action(observation),
             Self::Bernoulli(bernoulli) => bernoulli.action(observation),
+            Self::Composite(composite) => composite.action(observation),
         }
     }
 
@@ -234,6 +273,7 @@ impl Actor for CandlePolicyKind {
             Self::DiagGaussian(diag) => diag.try_serialize(),
             Self::MultiCategorical(multi) => multi.try_serialize(),
             Self::Bernoulli(bernoulli) => bernoulli.try_serialize(),
+            Self::Composite(composite) => composite.try_serialize(),
         }
     }
 }
@@ -245,6 +285,7 @@ impl Policy for CandlePolicyKind {
             Self::DiagGaussian(diag) => diag.log_probs(states, actions),
             Self::MultiCategorical(multi) => multi.log_probs(states, actions),
             Self::Bernoulli(bernoulli) => bernoulli.log_probs(states, actions),
+            Self::Composite(composite) => composite.log_probs(states, actions),
         }
     }
 
@@ -254,6 +295,7 @@ impl Policy for CandlePolicyKind {
             Self::DiagGaussian(diag) => diag.entropy(states),
             Self::MultiCategorical(multi) => multi.entropy(states),
             Self::Bernoulli(bernoulli) => bernoulli.entropy(states),
+            Self::Composite(composite) => composite.entropy(states),
         }
     }
 
@@ -263,6 +305,7 @@ impl Policy for CandlePolicyKind {
             Self::DiagGaussian(diag) => diag.std(),
             Self::MultiCategorical(multi) => multi.std(),
             Self::Bernoulli(bernoulli) => bernoulli.std(),
+            Self::Composite(composite) => composite.std(),
         }
     }
 
@@ -272,6 +315,7 @@ impl Policy for CandlePolicyKind {
             Self::DiagGaussian(diag) => diag.resample_noise(),
             Self::MultiCategorical(multi) => multi.resample_noise(),
             Self::Bernoulli(bernoulli) => bernoulli.resample_noise(),
+            Self::Composite(composite) => composite.resample_noise(),
         }
     }
 }

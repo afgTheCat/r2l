@@ -7,12 +7,26 @@ use crate::tensor::R2lTensor;
 /// The type of action space.
 #[derive(Debug, Clone)]
 pub enum ActionSpaceType {
-    Discrete,
-    Continuous,
+    Discrete { size: usize },
+    Continuous { size: usize },
     MultiDiscrete { nvec: Vec<usize> },
     MultiBinary { size: usize },
     Tuple(Vec<ActionSpaceType>),
     Dict(BTreeMap<String, ActionSpaceType>),
+}
+
+impl ActionSpaceType {
+    /// Returns the flattened action tensor size used by r2l policies.
+    pub fn tensor_size(&self) -> usize {
+        match self {
+            Self::Discrete { size } | Self::Continuous { size } | Self::MultiBinary { size } => {
+                *size
+            }
+            Self::MultiDiscrete { nvec } => nvec.len(),
+            Self::Tuple(spaces) => spaces.iter().map(Self::tensor_size).sum(),
+            Self::Dict(spaces) => spaces.values().map(Self::tensor_size).sum(),
+        }
+    }
 }
 
 /// Description of an observation or action space.
@@ -92,9 +106,9 @@ impl<T: R2lTensor> Space<T> {
     pub fn size(&self) -> usize {
         match &self {
             Self::Discrete(size) => *size,
-            Self::Continuous { shape, .. } => shape.iter().product(),
-            Self::MultiDiscrete { shape, .. } => shape.iter().product(),
-            Self::MultiBinary { shape } => shape.iter().product(),
+            Self::Continuous { shape, .. }
+            | Self::MultiDiscrete { shape, .. }
+            | Self::MultiBinary { shape, .. } => shape.iter().product(),
             Self::Tuple(spaces) => spaces.iter().map(Self::size).sum(),
             Self::Dict(spaces) => spaces.values().map(Self::size).sum(),
         }

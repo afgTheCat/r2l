@@ -19,7 +19,6 @@ pub trait AgentBuilder {
     fn build(
         self,
         observation_size: usize,
-        action_size: usize,
         action_space: ActionSpaceType,
         seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent>;

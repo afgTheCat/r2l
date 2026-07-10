@@ -102,7 +102,6 @@ impl OnPolicyLearningModuleBuilder {
     pub fn build_candle(
         self,
         observation_size: usize,
-        action_size: usize,
         action_space: ActionSpaceType,
         device: &Device,
     ) -> anyhow::Result<CandlePolicyValueModule> {
@@ -112,7 +111,6 @@ impl OnPolicyLearningModuleBuilder {
             action_space,
             &policy_vb,
             &self.policy_hidden_layers,
-            action_size,
             observation_size,
             self.activation_function,
         )?;
@@ -149,9 +147,9 @@ impl OnPolicyLearningModuleBuilder {
     pub fn build_burn<B: AutodiffBackend>(
         self,
         observation_size: usize,
-        action_size: usize,
         action_space: ActionSpaceType,
     ) -> anyhow::Result<BurnPolicyValueModule<B>> {
+        let action_size = action_space.tensor_size();
         let policy_layers = &[
             &[observation_size][..],
             &self.policy_hidden_layers[..],

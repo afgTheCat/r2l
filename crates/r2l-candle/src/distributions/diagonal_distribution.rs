@@ -52,7 +52,7 @@ impl DiagGaussianDistribution {
         let (observation_size, layers) = network_shape(&tensors, "policy");
         let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
         let action_size = *layers.last().unwrap();
-        let log_std = vb.get(action_size, "log_std").unwrap();
+        let log_std = vb.get(action_size, "policy.log_std").unwrap();
         Self::build(
             observation_size,
             &layers,
@@ -100,7 +100,7 @@ impl Actor for DiagGaussianDistribution {
         }
         .to_safetensors_metadata();
         let mut tensors = self.mu_net.named_tensors("policy");
-        tensors.push(("log_std".to_string(), self.log_std.clone()));
+        tensors.push(("policy.log_std".to_string(), self.log_std.clone()));
         st_serialize(tensors, Some(metadata)).ok()
     }
 }

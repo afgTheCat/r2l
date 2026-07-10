@@ -39,11 +39,6 @@ impl<B: Backend> MultiCategoricalDistribution<B> {
         let logits = Sequential::build(layers, activation);
         Self { logits, nvec }
     }
-
-    /// Returns the number of discrete action dimensions.
-    pub fn action_size(&self) -> usize {
-        self.nvec.len()
-    }
 }
 
 impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
@@ -64,7 +59,7 @@ impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
             actions.push(action as f32);
         }
         Ok(Tensor::from_data(
-            TensorData::new(actions, vec![self.action_size()]),
+            TensorData::new(actions, vec![self.nvec.len()]),
             &device,
         ))
     }

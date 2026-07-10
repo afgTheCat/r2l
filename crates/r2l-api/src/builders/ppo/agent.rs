@@ -150,18 +150,14 @@ impl AgentBuilder for PPOAgentBuilder {
     fn build(
         self,
         observation_size: usize,
-        action_size: usize,
         action_space: ActionSpaceType,
         seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
         self.seed(seed);
         let device = self.backend.device.clone();
-        let lm = self.learning_module_builder.build_candle(
-            observation_size,
-            action_size,
-            action_space,
-            &device,
-        )?;
+        let lm =
+            self.learning_module_builder
+                .build_candle(observation_size, action_space, &device)?;
         let hooks = self.hook_builder.build();
         let params = self.params;
         Ok(PPOCandleAgent(PPO { lm, hooks, params }))
@@ -174,16 +170,13 @@ impl AgentBuilder for PPOBurnAgentBuilder {
     fn build(
         self,
         observation_size: usize,
-        action_size: usize,
         action_space: ActionSpaceType,
         seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
         self.seed(seed);
-        let lm = self.learning_module_builder.build_burn::<BurnBackend>(
-            observation_size,
-            action_size,
-            action_space,
-        )?;
+        let lm = self
+            .learning_module_builder
+            .build_burn::<BurnBackend>(observation_size, action_space)?;
         let hooks = self.hook_builder.build();
         let params = self.params;
         Ok(PPOBurnAgent(PPO { lm, hooks, params }))

@@ -299,11 +299,10 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
         let observation_size = env_description.observation_size();
-        let action_size = env_description.action_size();
         let action_space = action_space_type(env_description.action_space);
-        let agent =
-            self.agent_builder
-                .build(observation_size, action_size, action_space, self.seed)?;
+        let agent = self
+            .agent_builder
+            .build(observation_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|eb| eb.build());
         let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator);
         Ok(OnPolicyAlgorithm {
@@ -336,13 +335,12 @@ impl<
         }
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let observation_size = env_description.observation_size();
-        let action_size = env_description.action_size();
         let action_space = action_space_type(env_description.action_space);
         let sampler = self.sampler_builder.build();
         let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);
-        let agent =
-            self.agent_builder
-                .build(observation_size, action_size, action_space, self.seed)?;
+        let agent = self
+            .agent_builder
+            .build(observation_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|evaluator_builder| {
             let eval_sampler = R2lNormalizedSampler::build_with_obs_normalizer(
                 evaluator_builder.env_builder().clone(),
@@ -367,8 +365,10 @@ impl<
 
 fn action_space_type<T: R2lTensor>(space: Space<T>) -> ActionSpaceType {
     match space {
-        Space::Discrete(_) => ActionSpaceType::Discrete,
-        Space::Continuous { .. } => ActionSpaceType::Continuous,
+        Space::Discrete(size) => ActionSpaceType::Discrete { size },
+        Space::Continuous { shape, .. } => ActionSpaceType::Continuous {
+            size: shape.iter().product(),
+        },
         Space::MultiDiscrete { nvec, .. } => ActionSpaceType::MultiDiscrete {
             nvec: nvec.to_vec().into_iter().map(|n| n as usize).collect(),
         },
