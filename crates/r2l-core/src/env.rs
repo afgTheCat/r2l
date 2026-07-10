@@ -265,3 +265,12 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
         }
     }
 }
+
+/// Returns `(offset, choices)` ranges for a flattened multi-discrete logits vector.
+pub fn action_ranges(nvec: &[usize]) -> impl Iterator<Item = (usize, usize)> + '_ {
+    nvec.iter().scan(0, |offset, choices| {
+        let start = *offset;
+        *offset += *choices;
+        Some((start, *choices))
+    })
+}
