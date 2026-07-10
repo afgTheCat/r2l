@@ -6,26 +6,26 @@
 //! interface.
 
 /// Bernoulli policy distribution for multi-binary action spaces.
-pub mod bernoulli_distribution;
+pub mod bernoulli;
 /// Categorical policy distribution for discrete action spaces.
-pub mod categorical_distribution;
+pub mod categorical;
 /// Composite policy distribution for tuple and dict action spaces.
-pub mod composite_distribution;
+pub mod composite;
 /// Diagonal-Gaussian policy distribution for continuous action spaces.
-pub mod diagonal_distribution;
+pub mod diagonal;
 /// Multi-categorical policy distribution for multi-discrete action spaces.
-pub mod multi_categorical_distribution;
+pub mod multi_categorical;
 
 use std::{f32, fmt::Debug};
 
 use anyhow::Result;
-use bernoulli_distribution::BernoulliDistribution;
+use bernoulli::BernoulliDistribution;
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
-use categorical_distribution::CategoricalDistribution;
-use composite_distribution::CompositeDistribution;
-use diagonal_distribution::DiagGaussianDistribution;
-use multi_categorical_distribution::MultiCategoricalDistribution;
+use categorical::CategoricalDistribution;
+use composite::CompositeDistribution;
+use diagonal::DiagGaussianDistribution;
+use multi_categorical::MultiCategoricalDistribution;
 use r2l_core::{
     env::ActionSpaceType,
     models::{ActivationFunction, Actor, Policy, PolicyMetadata},

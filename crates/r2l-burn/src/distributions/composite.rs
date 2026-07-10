@@ -7,10 +7,8 @@ use r2l_core::{
 };
 
 use crate::distributions::{
-    bernoulli_distribution::BernoulliDistribution,
-    categorical_distribution::CategoricalDistribution,
-    diagonal_distribution::DiagGaussianDistribution,
-    multi_categorical_distribution::MultiCategoricalDistribution,
+    bernoulli::BernoulliDistribution, categorical::CategoricalDistribution,
+    diagonal::DiagGaussianDistribution, multi_categorical::MultiCategoricalDistribution,
 };
 
 #[derive(Debug, Module)]
@@ -112,10 +110,9 @@ impl<B: Backend> CompositeDistribution<B> {
             }
             ActionSpaceType::Continuous { .. } => {
                 let child_layers = child_layers(policy_layers, action_size);
-                policies.push(CompositePolicyChildren::Diag(DiagGaussianDistribution::build(
-                    &child_layers,
-                    activation,
-                )));
+                policies.push(CompositePolicyChildren::Diag(
+                    DiagGaussianDistribution::build(&child_layers, activation),
+                ));
                 action_sizes.push(action_size);
             }
             ActionSpaceType::MultiDiscrete { nvec } => {
@@ -142,24 +139,12 @@ impl<B: Backend> CompositeDistribution<B> {
             }
             ActionSpaceType::Tuple(spaces) => {
                 for space in spaces {
-                    Self::push_child(
-                        space,
-                        policy_layers,
-                        activation,
-                        policies,
-                        action_sizes,
-                    );
+                    Self::push_child(space, policy_layers, activation, policies, action_sizes);
                 }
             }
             ActionSpaceType::Dict(spaces) => {
                 for space in spaces.into_values() {
-                    Self::push_child(
-                        space,
-                        policy_layers,
-                        activation,
-                        policies,
-                        action_sizes,
-                    );
+                    Self::push_child(space, policy_layers, activation, policies, action_sizes);
                 }
             }
         }

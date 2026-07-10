@@ -12,23 +12,22 @@ use r2l_core::{
 };
 
 use crate::distributions::{
-    bernoulli_distribution::BernoulliDistribution,
-    categorical_distribution::CategoricalDistribution,
-    composite_distribution::CompositeDistribution, diagonal_distribution::DiagGaussianDistribution,
-    multi_categorical_distribution::MultiCategoricalDistribution,
+    bernoulli::BernoulliDistribution, categorical::CategoricalDistribution,
+    composite::CompositeDistribution, diagonal::DiagGaussianDistribution,
+    multi_categorical::MultiCategoricalDistribution,
 };
 /// Bernoulli policy distribution for multi-binary action spaces.
-pub mod bernoulli_distribution;
+pub mod bernoulli;
 /// Categorical policy distribution for discrete action spaces.
-pub mod categorical_distribution;
+pub mod categorical;
 /// Composite policy distribution for tuple and dict action spaces.
-pub mod composite_distribution;
+pub mod composite;
 /// Diagonal-Gaussian policy distribution for continuous action spaces.
-pub mod diagonal_distribution;
+pub mod diagonal;
 /// Multi-categorical policy distribution for multi-discrete action spaces.
-pub mod multi_categorical_distribution;
+pub mod multi_categorical;
 /// Recurrent categorical policy distribution for discrete action spaces.
-pub mod recurrent_categorical_distribution;
+pub mod recurrent_categorical;
 
 /// Erased Burn policy type covering the supported action-space variants.
 ///
