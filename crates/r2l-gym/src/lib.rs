@@ -11,12 +11,11 @@
 //! - [`GymEnvBuilder`], an [`EnvBuilder`]
 //!   implementation that constructs named Gymnasium environments
 //!
-//! At the moment, the adapter supports:
-//! - discrete action spaces
-//! - box-shaped continuous action spaces
-//! - observation spaces that expose a Gymnasium `shape`
-//!
-//! Other Gymnasium space variants are not yet handled by this crate.
+//! The adapter maps Gymnasium `Discrete`, `Box`, `MultiDiscrete`,
+//! `MultiBinary`, `Tuple`, and `Dict` spaces into `r2l-core` space metadata.
+//! Observations are converted into flat [`TensorData`] values. Discrete
+//! observations are one-hot encoded, while structured `Tuple` and `Dict`
+//! observations are flattened recursively.
 
 use anyhow::Result;
 use pyo3::{
@@ -37,13 +36,12 @@ use parse::{parse_action, parse_gym_space, parse_obs};
 /// `GymEnv` wraps a Gymnasium environment created through `gymnasium.make` and
 /// exposes its observation/action spaces through `r2l-core` space types.
 ///
-/// This wrapper currently supports:
-/// - Gymnasium `Discrete` action spaces
-/// - Gymnasium `Box` action spaces
+/// This wrapper currently supports Gymnasium `Discrete`, `Box`,
+/// `MultiDiscrete`, `MultiBinary`, `Tuple`, and `Dict` spaces.
 ///
 /// Continuous actions are clipped to the environment's declared bounds before
-/// stepping. Discrete actions are expected in the action tensor format produced
-/// by the rest of the `r2l` stack.
+/// stepping. Structured actions are read from flat tensors and recursively
+/// rebuilt into the Python values expected by Gymnasium.
 pub struct GymEnv {
     env: PyObject,
     action_space: Space<TensorData>,

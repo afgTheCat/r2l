@@ -129,10 +129,12 @@ pub(crate) fn parse_obs(
     space: &Space<TensorData>,
 ) -> PyResult<TensorData> {
     match space {
-        Space::Discrete(_) => Ok(TensorData::new(
-            vec![observation.extract::<f32>()?],
-            vec![1],
-        )),
+        Space::Discrete(size) => {
+            let idx: usize = observation.extract()?;
+            let mut values = vec![0.; *size];
+            values[idx] = 1.;
+            Ok(TensorData::new(values, vec![*size]))
+        }
         Space::Continuous { shape, .. }
         | Space::MultiDiscrete { shape, .. }
         | Space::MultiBinary { shape } => parse_tensor_obs(observation, shape),
