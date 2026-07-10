@@ -51,7 +51,7 @@ pub(crate) fn parse_gym_space(
         }
         Ok(Space::dict(parsed))
     } else {
-        todo!();
+        unreachable!()
     }
 }
 

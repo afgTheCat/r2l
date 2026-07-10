@@ -14,14 +14,14 @@ use crate::distributions::{
 };
 
 #[derive(Debug, Module)]
-enum CompositePolicyLeaf<B: Backend> {
+enum CompositePolicyChildren<B: Backend> {
     Categorical(CategoricalDistribution<B>),
     Diag(DiagGaussianDistribution<B>),
     MultiCategorical(MultiCategoricalDistribution<B>),
     Bernoulli(BernoulliDistribution<B>),
 }
 
-impl<B: Backend> CompositePolicyLeaf<B> {
+impl<B: Backend> CompositePolicyChildren<B> {
     fn action(&self, observation: Tensor<B, 1>) -> anyhow::Result<Tensor<B, 1>> {
         match self {
             Self::Categorical(policy) => policy.action(observation),
@@ -66,7 +66,7 @@ impl<B: Backend> CompositePolicyLeaf<B> {
 /// Composite Burn policy for tuple and dict action spaces.
 #[derive(Debug, Module)]
 pub struct CompositeDistribution<B: Backend> {
-    policies: Vec<CompositePolicyLeaf<B>>,
+    policies: Vec<CompositePolicyChildren<B>>,
     action_sizes: Vec<usize>,
 }
 
@@ -80,7 +80,7 @@ impl<B: Backend> CompositeDistribution<B> {
         let mut policies = Vec::new();
         let mut action_sizes = Vec::new();
         for action_space in action_spaces {
-            Self::push_leaf_policies(
+            Self::push_child(
                 action_space,
                 policy_layers,
                 activation,
@@ -94,32 +94,32 @@ impl<B: Backend> CompositeDistribution<B> {
         }
     }
 
-    fn push_leaf_policies(
+    fn push_child(
         action_space: ActionSpaceType,
         policy_layers: &[usize],
         activation: ActivationFunction,
-        policies: &mut Vec<CompositePolicyLeaf<B>>,
+        policies: &mut Vec<CompositePolicyChildren<B>>,
         action_sizes: &mut Vec<usize>,
     ) {
         let action_size = action_space.tensor_size();
         match action_space {
             ActionSpaceType::Discrete { .. } => {
                 let child_layers = child_layers(policy_layers, action_size);
-                policies.push(CompositePolicyLeaf::Categorical(
+                policies.push(CompositePolicyChildren::Categorical(
                     CategoricalDistribution::build(&child_layers, activation),
                 ));
                 action_sizes.push(action_size);
             }
             ActionSpaceType::Continuous { .. } => {
                 let child_layers = child_layers(policy_layers, action_size);
-                policies.push(CompositePolicyLeaf::Diag(DiagGaussianDistribution::build(
+                policies.push(CompositePolicyChildren::Diag(DiagGaussianDistribution::build(
                     &child_layers,
                     activation,
                 )));
                 action_sizes.push(action_size);
             }
             ActionSpaceType::MultiDiscrete { nvec } => {
-                policies.push(CompositePolicyLeaf::MultiCategorical(
+                policies.push(CompositePolicyChildren::MultiCategorical(
                     MultiCategoricalDistribution::build(
                         policy_layers[0],
                         &policy_layers[1..policy_layers.len() - 1],
@@ -130,7 +130,7 @@ impl<B: Backend> CompositeDistribution<B> {
                 action_sizes.push(action_size);
             }
             ActionSpaceType::MultiBinary { .. } => {
-                policies.push(CompositePolicyLeaf::Bernoulli(
+                policies.push(CompositePolicyChildren::Bernoulli(
                     BernoulliDistribution::build(
                         policy_layers[0],
                         &policy_layers[1..policy_layers.len() - 1],
@@ -142,7 +142,7 @@ impl<B: Backend> CompositeDistribution<B> {
             }
             ActionSpaceType::Tuple(spaces) => {
                 for space in spaces {
-                    Self::push_leaf_policies(
+                    Self::push_child(
                         space,
                         policy_layers,
                         activation,
@@ -153,7 +153,7 @@ impl<B: Backend> CompositeDistribution<B> {
             }
             ActionSpaceType::Dict(spaces) => {
                 for space in spaces.into_values() {
-                    Self::push_leaf_policies(
+                    Self::push_child(
                         space,
                         policy_layers,
                         activation,
