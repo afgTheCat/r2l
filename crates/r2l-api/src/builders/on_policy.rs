@@ -4,6 +4,7 @@ use r2l_core::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
     rng::set_seed,
+    tensor::R2lTensor,
 };
 use r2l_sampler::{
     NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler, SamplerExecutionMode,
@@ -299,22 +300,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
         let sampler = self.sampler_builder.build();
         let observation_size = env_description.observation_size();
         let action_size = env_description.action_size();
-        let action_space = match env_description.action_space {
-            Space::Discrete(_) => ActionSpaceType::Discrete,
-            Space::Continuous { .. } => ActionSpaceType::Continuous,
-            Space::MultiDiscrete { .. } => {
-                todo!();
-            }
-            Space::MultiBinary { .. } => {
-                todo!();
-            }
-            Space::Tuple(_) => {
-                todo!();
-            }
-            Space::Dict(_) => {
-                todo!();
-            }
-        };
+        let action_space = action_space_type(env_description.action_space);
         let agent =
             self.agent_builder
                 .build(observation_size, action_size, action_space, self.seed)?;
@@ -351,22 +337,7 @@ impl<
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let observation_size = env_description.observation_size();
         let action_size = env_description.action_size();
-        let action_space = match env_description.action_space {
-            Space::Discrete(_) => ActionSpaceType::Discrete,
-            Space::Continuous { .. } => ActionSpaceType::Continuous,
-            Space::MultiDiscrete { .. } => {
-                todo!();
-            }
-            Space::MultiBinary { .. } => {
-                todo!();
-            }
-            Space::Tuple(_) => {
-                todo!();
-            }
-            Space::Dict(_) => {
-                todo!();
-            }
-        };
+        let action_space = action_space_type(env_description.action_space);
         let sampler = self.sampler_builder.build();
         let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);
         let agent =
@@ -391,5 +362,24 @@ impl<
             },
             hooks,
         })
+    }
+}
+
+fn action_space_type<T: R2lTensor>(space: Space<T>) -> ActionSpaceType {
+    match space {
+        Space::Discrete(_) => ActionSpaceType::Discrete,
+        Space::Continuous { .. } => ActionSpaceType::Continuous,
+        Space::MultiDiscrete { nvec, .. } => ActionSpaceType::MultiDiscrete {
+            nvec: nvec.to_vec().into_iter().map(|n| n as usize).collect(),
+        },
+        Space::MultiBinary { .. } => {
+            todo!();
+        }
+        Space::Tuple(_) => {
+            todo!();
+        }
+        Space::Dict(_) => {
+            todo!();
+        }
     }
 }

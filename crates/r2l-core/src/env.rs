@@ -5,10 +5,11 @@ use anyhow::Result;
 use crate::tensor::R2lTensor;
 
 /// The type of action space.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum ActionSpaceType {
     Discrete,
     Continuous,
+    MultiDiscrete { nvec: Vec<usize> },
 }
 
 /// Description of an observation or action space.

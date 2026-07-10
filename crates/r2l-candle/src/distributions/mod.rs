@@ -9,6 +9,8 @@
 pub mod categorical_distribution;
 /// Diagonal-Gaussian policy distribution for continuous action spaces.
 pub mod diagonal_distribution;
+/// Multi-categorical policy distribution for multi-discrete action spaces.
+pub mod multi_categorical_distribution;
 
 use std::{f32, fmt::Debug};
 
@@ -17,6 +19,7 @@ use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use categorical_distribution::CategoricalDistribution;
 use diagonal_distribution::DiagGaussianDistribution;
+use multi_categorical_distribution::MultiCategoricalDistribution;
 use r2l_core::{
     env::ActionSpaceType,
     models::{ActivationFunction, Actor, Policy, PolicyMetadata},
@@ -34,6 +37,8 @@ pub enum CandlePolicyKind {
     Categorical(CategoricalDistribution),
     /// Policy for continuous action spaces.
     DiagGaussian(DiagGaussianDistribution),
+    /// Policy for multi-discrete action spaces.
+    MultiCategorical(MultiCategoricalDistribution),
 }
 
 impl CandlePolicyKind {
@@ -42,6 +47,7 @@ impl CandlePolicyKind {
         match self {
             Self::Categorical(c) => c.device(),
             Self::DiagGaussian(d) => d.device(),
+            Self::MultiCategorical(m) => m.device(),
         }
     }
 
@@ -50,6 +56,7 @@ impl CandlePolicyKind {
         match self {
             Self::Categorical(c) => c.observation_size(),
             Self::DiagGaussian(d) => d.observation_size(),
+            Self::MultiCategorical(m) => m.observation_size(),
         }
     }
 
@@ -114,6 +121,26 @@ impl CandlePolicyKind {
         Ok(Self::DiagGaussian(distr))
     }
 
+    /// Builds a multi-categorical Candle policy.
+    pub fn multi_categorical(
+        policy_varbuilder: &VarBuilder,
+        hidden_layers: &[usize],
+        nvec: Vec<usize>,
+        observation_size: usize,
+        activation: ActivationFunction,
+    ) -> Result<Self> {
+        let distr = MultiCategoricalDistribution::build(
+            observation_size,
+            nvec,
+            hidden_layers,
+            policy_varbuilder,
+            policy_varbuilder.device().clone(),
+            "policy",
+            activation,
+        )?;
+        Ok(Self::MultiCategorical(distr))
+    }
+
     /// Builds the appropriate Candle policy for the given action-space type.
     pub fn build(
         action_space: ActionSpaceType,
@@ -138,6 +165,13 @@ impl CandlePolicyKind {
                 observation_size,
                 activation,
             ),
+            ActionSpaceType::MultiDiscrete { nvec } => Self::multi_categorical(
+                policy_varbuilder,
+                hidden_layers,
+                nvec,
+                observation_size,
+                activation,
+            ),
         }
     }
 }
@@ -149,6 +183,7 @@ impl Actor for CandlePolicyKind {
         match self {
             Self::Categorical(cat) => cat.action(observation),
             Self::DiagGaussian(diag) => diag.action(observation),
+            Self::MultiCategorical(multi) => multi.action(observation),
         }
     }
 
@@ -156,6 +191,7 @@ impl Actor for CandlePolicyKind {
         match self {
             Self::Categorical(cat) => cat.try_serialize(),
             Self::DiagGaussian(diag) => diag.try_serialize(),
+            Self::MultiCategorical(multi) => multi.try_serialize(),
         }
     }
 }
@@ -165,6 +201,7 @@ impl Policy for CandlePolicyKind {
         match self {
             Self::Categorical(cat) => cat.log_probs(states, actions),
             Self::DiagGaussian(diag) => diag.log_probs(states, actions),
+            Self::MultiCategorical(multi) => multi.log_probs(states, actions),
         }
     }
 
@@ -172,6 +209,7 @@ impl Policy for CandlePolicyKind {
         match self {
             Self::Categorical(cat) => cat.entropy(states),
             Self::DiagGaussian(diag) => diag.entropy(states),
+            Self::MultiCategorical(multi) => multi.entropy(states),
         }
     }
 
@@ -179,6 +217,7 @@ impl Policy for CandlePolicyKind {
         match self {
             Self::Categorical(cat) => cat.std(),
             Self::DiagGaussian(diag) => diag.std(),
+            Self::MultiCategorical(multi) => multi.std(),
         }
     }
 
@@ -186,6 +225,7 @@ impl Policy for CandlePolicyKind {
         match self {
             Self::Categorical(cat) => cat.resample_noise(),
             Self::DiagGaussian(diag) => diag.resample_noise(),
+            Self::MultiCategorical(multi) => multi.resample_noise(),
         }
     }
 }

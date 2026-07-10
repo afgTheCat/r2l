@@ -56,6 +56,9 @@ impl<B: Backend> PolicyKind<B> {
         match action_space_type {
             ActionSpaceType::Discrete => Self::categorical(policy_layers, activation),
             ActionSpaceType::Continuous => Self::continuous(policy_layers, activation),
+            ActionSpaceType::MultiDiscrete { .. } => {
+                todo!();
+            }
         }
     }
 }
