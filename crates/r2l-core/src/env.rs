@@ -11,6 +11,8 @@ pub enum ActionSpaceType {
     Continuous,
     MultiDiscrete { nvec: Vec<usize> },
     MultiBinary { size: usize },
+    Tuple(Vec<ActionSpaceType>),
+    Dict(BTreeMap<String, ActionSpaceType>),
 }
 
 /// Description of an observation or action space.

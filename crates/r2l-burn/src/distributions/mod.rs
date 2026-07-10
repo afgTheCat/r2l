@@ -98,6 +98,12 @@ impl<B: Backend> PolicyKind<B> {
             ActionSpaceType::MultiBinary { size } => {
                 Self::bernoulli(policy_layers, size, activation)
             }
+            ActionSpaceType::Tuple(_) => {
+                todo!();
+            }
+            ActionSpaceType::Dict(_) => {
+                todo!();
+            }
         }
     }
 }

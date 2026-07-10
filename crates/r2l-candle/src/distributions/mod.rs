@@ -206,6 +206,12 @@ impl CandlePolicyKind {
                 observation_size,
                 activation,
             ),
+            ActionSpaceType::Tuple(_) => {
+                todo!();
+            }
+            ActionSpaceType::Dict(_) => {
+                todo!();
+            }
         }
     }
 }

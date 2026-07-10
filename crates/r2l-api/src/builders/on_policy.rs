@@ -375,11 +375,14 @@ fn action_space_type<T: R2lTensor>(space: Space<T>) -> ActionSpaceType {
         Space::MultiBinary { shape } => ActionSpaceType::MultiBinary {
             size: shape.iter().product(),
         },
-        Space::Tuple(_) => {
-            todo!();
+        Space::Tuple(spaces) => {
+            ActionSpaceType::Tuple(spaces.into_iter().map(action_space_type).collect())
         }
-        Space::Dict(_) => {
-            todo!();
-        }
+        Space::Dict(spaces) => ActionSpaceType::Dict(
+            spaces
+                .into_iter()
+                .map(|(key, space)| (key, action_space_type(space)))
+                .collect(),
+        ),
     }
 }
