@@ -119,7 +119,7 @@ impl Env for GymEnv {
 
     fn step(&mut self, action: TensorData) -> Result<Snapshot<TensorData>> {
         let snapshot = Python::with_gil(|py| {
-            let action = parse_action(py, action, &self.action_space)?;
+            let action = parse_action(py, &action.into_vec(), &self.action_space)?;
             let step = self.env.call_method(py, "step", (action,), None)?;
             let step = step.bind(py);
             let next_state = parse_observation(&step.get_item(0)?, &self.observation_space)?;

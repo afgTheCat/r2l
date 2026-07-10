@@ -1,6 +1,6 @@
 use pyo3::{
     Bound, IntoPyObjectExt, PyResult, Python,
-    types::{PyAny, PyAnyMethods, PyModule},
+    types::{PyAny, PyAnyMethods, PyDict, PyDictMethods, PyModule, PyTuple},
 };
 use r2l_core::{env::Space, tensor::TensorData};
 
@@ -60,18 +60,21 @@ pub(crate) fn parse_gym_space(
 
 pub(crate) fn parse_action<'py>(
     py: Python<'py>,
-    action: TensorData,
+    action: &[f32],
     space: &Space<TensorData>,
 ) -> PyResult<Bound<'py, PyAny>> {
     match space {
         Space::Continuous {
             min: Some(min),
             max: Some(max),
+            shape,
             ..
-        } => action.clamp(min, max).into_vec().into_bound_py_any(py),
-        Space::Continuous { .. } => action.into_vec().into_bound_py_any(py),
+        } => TensorData::new(action.to_vec(), shape.clone())
+            .clamp(min, max)
+            .into_vec()
+            .into_bound_py_any(py),
+        Space::Continuous { .. } => action.to_vec().into_bound_py_any(py),
         Space::Discrete(_) => {
-            let action = action.into_vec();
             // TODO: remove unwrap
             action
                 .iter()
@@ -80,18 +83,41 @@ pub(crate) fn parse_action<'py>(
                 .into_bound_py_any(py)
         }
         Space::MultiDiscrete { .. } => {
-            todo!();
+            let action: Vec<usize> = action.iter().map(|value| *value as usize).collect();
+            action.into_bound_py_any(py)
         }
         Space::MultiBinary { .. } => {
-            todo!();
+            let action: Vec<usize> = action.iter().map(|value| (*value > 0.) as usize).collect();
+            action.into_bound_py_any(py)
         }
-        Space::Tuple(_) => {
-            todo!();
+        Space::Tuple(spaces) => {
+            let actions = parse_child_actions(py, action, spaces)?;
+            Ok(PyTuple::new(py, actions)?.into_any())
         }
-        Space::Dict(_) => {
-            todo!();
+        Space::Dict(spaces) => {
+            let parsed_actions = parse_child_actions(py, action, spaces.values())?;
+            let actions = PyDict::new(py);
+            for (key, action) in spaces.keys().zip(parsed_actions) {
+                actions.set_item(key, action)?;
+            }
+            Ok(actions.into_any())
         }
     }
+}
+
+fn parse_child_actions<'py, 'space>(
+    py: Python<'py>,
+    action: &[f32],
+    spaces: impl IntoIterator<Item = &'space Space<TensorData>>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let mut offset = 0;
+    let mut actions = Vec::new();
+    for space in spaces {
+        let end = offset + space.size();
+        actions.push(parse_action(py, &action[offset..end], space)?);
+        offset = end;
+    }
+    Ok(actions)
 }
 
 pub(crate) fn parse_observation(
@@ -106,8 +132,17 @@ pub(crate) fn parse_observation(
         Space::Continuous { shape, .. }
         | Space::MultiDiscrete { shape, .. }
         | Space::MultiBinary { shape } => parse_tensor_observation(observation, shape),
-        Space::Tuple(spaces) => parse_tuple_observation(observation, spaces),
-        Space::Dict(spaces) => parse_dict_observation(observation, spaces),
+        Space::Tuple(spaces) => parse_fields(
+            spaces
+                .iter()
+                .enumerate()
+                .map(|(idx, space)| Ok((observation.get_item(idx)?, space))),
+        ),
+        Space::Dict(spaces) => parse_fields(
+            spaces
+                .iter()
+                .map(|(key, space)| Ok((observation.get_item(key)?, space))),
+        ),
     }
 }
 
@@ -122,25 +157,12 @@ fn parse_tensor_observation(
     Ok(TensorData::new(values, shape.to_vec()))
 }
 
-fn parse_tuple_observation(
-    observation: &Bound<'_, PyAny>,
-    spaces: &[Space<TensorData>],
+fn parse_fields<'py>(
+    fields: impl IntoIterator<Item = PyResult<(Bound<'py, PyAny>, &'py Space<TensorData>)>>,
 ) -> PyResult<TensorData> {
     let mut data = Vec::new();
-    for (idx, space) in spaces.iter().enumerate() {
-        let value = observation.get_item(idx)?;
-        data.extend(parse_observation(&value, space)?.into_vec());
-    }
-    Ok(TensorData::from_vec(data))
-}
-
-fn parse_dict_observation(
-    observation: &Bound<'_, PyAny>,
-    spaces: &std::collections::BTreeMap<String, Space<TensorData>>,
-) -> PyResult<TensorData> {
-    let mut data = Vec::new();
-    for (key, space) in spaces {
-        let value = observation.get_item(key)?;
+    for field in fields {
+        let (value, space) = field?;
         data.extend(parse_observation(&value, space)?.into_vec());
     }
     Ok(TensorData::from_vec(data))
