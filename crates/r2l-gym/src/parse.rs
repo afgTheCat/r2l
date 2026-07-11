@@ -170,3 +170,30 @@ fn parse_obs_fields<'py>(
     }
     Ok(TensorData::from_vec(data))
 }
+
+#[cfg(test)]
+mod tests {
+    use pyo3::{PyResult, Python, types::PyAnyMethods};
+
+    use super::parse_gym_space;
+
+    #[test]
+    fn fundamental_space_shapes_match_gymnasium() -> PyResult<()> {
+        Python::with_gil(|py| {
+            let spaces = py.import("gymnasium.spaces")?;
+            let gym_spaces = [
+                spaces.getattr("Discrete")?.call1((3,))?,
+                spaces.getattr("Box")?.call1((-1., 1., (2, 3)))?,
+                spaces.getattr("MultiDiscrete")?.call1((vec![2, 3],))?,
+                spaces.getattr("MultiBinary")?.call1(((2, 3),))?,
+            ];
+
+            for gym_space in gym_spaces {
+                let gym_shape: Vec<usize> = gym_space.getattr("shape")?.extract()?;
+                let space = parse_gym_space(&gym_space, &spaces)?;
+                assert_eq!(space.shape(), Some(gym_shape.as_slice()));
+            }
+            Ok(())
+        })
+    }
+}

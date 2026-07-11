@@ -37,6 +37,17 @@ pub enum Space<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> Space<T> {
+    /// Returns the Gymnasium shape when the space has one.
+    pub fn shape(&self) -> Option<&[usize]> {
+        match self {
+            Self::Discrete(_) => Some(&[]),
+            Self::Box { shape, .. }
+            | Self::MultiDiscrete { shape, .. }
+            | Self::MultiBinary { shape } => Some(shape),
+            Self::Tuple(_) | Self::Dict(_) => None,
+        }
+    }
+
     /// Returns the flattened size of the space.
     pub fn size(&self) -> usize {
         match &self {
