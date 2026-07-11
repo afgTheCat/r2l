@@ -10,7 +10,7 @@ use r2l_core::models::{ActivationFunction, Actor, Policy};
 
 use crate::sequential::Sequential;
 
-/// Diagonal-Gaussian Burn policy for continuous action spaces.
+/// Diagonal-Gaussian Burn policy for Box action spaces.
 ///
 /// This policy predicts the mean of a Gaussian action distribution and keeps a
 /// learned diagonal log-standard-deviation parameter. It implements the

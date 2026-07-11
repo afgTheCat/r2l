@@ -1,10 +1,9 @@
 use r2l_core::{
-    env::{ActionSpaceType, EnvBuilder, Space},
+    env::EnvBuilder,
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
     rng::set_seed,
-    tensor::R2lTensor,
 };
 use r2l_sampler::{
     NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler, SamplerExecutionMode,
@@ -299,7 +298,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let sampler = self.sampler_builder.build();
         let observation_size = env_description.observation_size();
-        let action_space = action_space_type(env_description.action_space);
+        let action_space = env_description.action_space;
         let agent = self
             .agent_builder
             .build(observation_size, action_space, self.seed)?;
@@ -335,7 +334,7 @@ impl<
         }
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let observation_size = env_description.observation_size();
-        let action_space = action_space_type(env_description.action_space);
+        let action_space = env_description.action_space;
         let sampler = self.sampler_builder.build();
         let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);
         let agent = self
@@ -360,29 +359,5 @@ impl<
             },
             hooks,
         })
-    }
-}
-
-fn action_space_type<T: R2lTensor>(space: Space<T>) -> ActionSpaceType {
-    match space {
-        Space::Discrete(size) => ActionSpaceType::Discrete { size },
-        Space::Continuous { shape, .. } => ActionSpaceType::Continuous {
-            size: shape.iter().product(),
-        },
-        Space::MultiDiscrete { nvec, .. } => ActionSpaceType::MultiDiscrete {
-            nvec: nvec.to_vec().into_iter().map(|n| n as usize).collect(),
-        },
-        Space::MultiBinary { shape } => ActionSpaceType::MultiBinary {
-            size: shape.iter().product(),
-        },
-        Space::Tuple(spaces) => {
-            ActionSpaceType::Tuple(spaces.into_iter().map(action_space_type).collect())
-        }
-        Space::Dict(spaces) => ActionSpaceType::Dict(
-            spaces
-                .into_iter()
-                .map(|(key, space)| (key, action_space_type(space)))
-                .collect(),
-        ),
     }
 }

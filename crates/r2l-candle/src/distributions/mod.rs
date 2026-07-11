@@ -1,7 +1,7 @@
 //! Candle policy distributions used by the on-policy stack.
 //!
 //! This module exposes concrete policy implementations for discrete and
-//! continuous action spaces together with [`crate::distributions::CandlePolicyKind`],
+//! Box action spaces together with [`crate::distributions::CandlePolicyKind`],
 //! an enum that erases the concrete policy type behind one Candle-facing policy
 //! interface.
 
@@ -11,7 +11,7 @@ pub mod bernoulli;
 pub mod categorical;
 /// Composite policy distribution for tuple and dict action spaces.
 pub mod composite;
-/// Diagonal-Gaussian policy distribution for continuous action spaces.
+/// Diagonal-Gaussian policy distribution for Box action spaces.
 pub mod diagonal;
 /// Multi-categorical policy distribution for multi-discrete action spaces.
 pub mod multi_categorical;
@@ -27,8 +27,9 @@ use composite::CompositeDistribution;
 use diagonal::DiagGaussianDistribution;
 use multi_categorical::MultiCategoricalDistribution;
 use r2l_core::{
-    env::ActionSpaceType,
+    env::Space,
     models::{ActivationFunction, Actor, Policy, PolicyMetadata},
+    tensor::R2lTensor,
 };
 use safetensors::SafeTensors;
 
@@ -36,12 +37,12 @@ use safetensors::SafeTensors;
 ///
 /// This enum is the main policy type used by the Candle on-policy learning
 /// modules. It dispatches to a categorical policy for discrete action spaces
-/// and to a diagonal-Gaussian policy for continuous action spaces.
+/// and to a diagonal-Gaussian policy for Box action spaces.
 #[derive(Debug, Clone)]
 pub enum CandlePolicyKind {
     /// Policy for discrete action spaces.
     Categorical(CategoricalDistribution),
-    /// Policy for continuous action spaces.
+    /// Policy for Box action spaces.
     DiagGaussian(DiagGaussianDistribution),
     /// Policy for multi-discrete action spaces.
     MultiCategorical(MultiCategoricalDistribution),
@@ -93,77 +94,9 @@ impl CandlePolicyKind {
         }
     }
 
-    /// Builds a categorical Candle policy.
-    pub fn categorical(
-        policy_varbuilder: &VarBuilder,
-        hidden_layers: &[usize],
-        action_size: usize,
-        observation_size: usize,
-        activation: ActivationFunction,
-    ) -> Result<Self> {
-        Self::build(
-            ActionSpaceType::Discrete { size: action_size },
-            policy_varbuilder,
-            hidden_layers,
-            observation_size,
-            activation,
-        )
-    }
-
-    /// Builds a diagonal-Gaussian Candle policy.
-    pub fn diag_gaussian(
-        policy_varbuilder: &VarBuilder,
-        hidden_layers: &[usize],
-        action_size: usize,
-        observation_size: usize,
-        activation: ActivationFunction,
-    ) -> Result<Self> {
-        Self::build(
-            ActionSpaceType::Continuous { size: action_size },
-            policy_varbuilder,
-            hidden_layers,
-            observation_size,
-            activation,
-        )
-    }
-
-    /// Builds a multi-categorical Candle policy.
-    pub fn multi_categorical(
-        policy_varbuilder: &VarBuilder,
-        hidden_layers: &[usize],
-        nvec: Vec<usize>,
-        observation_size: usize,
-        activation: ActivationFunction,
-    ) -> Result<Self> {
-        Self::build(
-            ActionSpaceType::MultiDiscrete { nvec },
-            policy_varbuilder,
-            hidden_layers,
-            observation_size,
-            activation,
-        )
-    }
-
-    /// Builds a Bernoulli Candle policy.
-    pub fn bernoulli(
-        policy_varbuilder: &VarBuilder,
-        hidden_layers: &[usize],
-        action_size: usize,
-        observation_size: usize,
-        activation: ActivationFunction,
-    ) -> Result<Self> {
-        Self::build(
-            ActionSpaceType::MultiBinary { size: action_size },
-            policy_varbuilder,
-            hidden_layers,
-            observation_size,
-            activation,
-        )
-    }
-
-    /// Builds the appropriate Candle policy for the given action-space type.
-    pub fn build(
-        action_space: ActionSpaceType,
+    /// Builds the appropriate Candle policy for the given action space.
+    pub fn build<T: R2lTensor>(
+        action_space: Space<T>,
         policy_varbuilder: &VarBuilder,
         hidden_layers: &[usize],
         observation_size: usize,
@@ -179,8 +112,8 @@ impl CandlePolicyKind {
         )
     }
 
-    pub(crate) fn build_with_prefix(
-        action_space: ActionSpaceType,
+    pub(crate) fn build_with_prefix<T: R2lTensor>(
+        action_space: Space<T>,
         policy_varbuilder: &VarBuilder,
         hidden_layers: &[usize],
         observation_size: usize,
@@ -188,7 +121,7 @@ impl CandlePolicyKind {
         prefix: &str,
     ) -> Result<Self> {
         match action_space {
-            ActionSpaceType::Discrete { size } => {
+            Space::Discrete(size) => {
                 let layers = &[hidden_layers, &[size]].concat();
                 Ok(Self::Categorical(CategoricalDistribution::build(
                     observation_size,
@@ -200,7 +133,8 @@ impl CandlePolicyKind {
                     activation,
                 )?))
             }
-            ActionSpaceType::Continuous { size } => {
+            Space::Box { shape, .. } => {
+                let size = shape.iter().product();
                 let layers = &[hidden_layers, &[size]].concat();
                 let log_std = policy_varbuilder.get(size, &format!("{prefix}.log_std"))?;
                 Ok(Self::DiagGaussian(DiagGaussianDistribution::build(
@@ -212,10 +146,10 @@ impl CandlePolicyKind {
                     activation,
                 )?))
             }
-            ActionSpaceType::MultiDiscrete { nvec } => {
+            Space::MultiDiscrete { nvec, .. } => {
                 Ok(Self::MultiCategorical(MultiCategoricalDistribution::build(
                     observation_size,
-                    nvec,
+                    nvec.to_vec().into_iter().map(|n| n as usize).collect(),
                     hidden_layers,
                     policy_varbuilder,
                     policy_varbuilder.device().clone(),
@@ -223,7 +157,8 @@ impl CandlePolicyKind {
                     activation,
                 )?))
             }
-            ActionSpaceType::MultiBinary { size } => {
+            Space::MultiBinary { shape } => {
+                let size = shape.iter().product();
                 Ok(Self::Bernoulli(BernoulliDistribution::build(
                     observation_size,
                     size,
@@ -234,7 +169,7 @@ impl CandlePolicyKind {
                     activation,
                 )?))
             }
-            ActionSpaceType::Tuple(spaces) => Ok(Self::Composite(CompositeDistribution::build(
+            Space::Tuple(spaces) => Ok(Self::Composite(CompositeDistribution::build(
                 spaces,
                 policy_varbuilder,
                 hidden_layers,
@@ -242,7 +177,7 @@ impl CandlePolicyKind {
                 activation,
                 prefix,
             )?)),
-            ActionSpaceType::Dict(spaces) => Ok(Self::Composite(CompositeDistribution::build(
+            Space::Dict(spaces) => Ok(Self::Composite(CompositeDistribution::build(
                 spaces.into_values().collect(),
                 policy_varbuilder,
                 hidden_layers,

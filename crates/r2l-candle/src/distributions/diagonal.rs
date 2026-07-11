@@ -10,7 +10,7 @@ use safetensors::serialize as st_serialize;
 use crate::sequential::{Sequential, build_sequential, network_shape};
 
 // TODO: we may want to resample the noise better than it is now
-/// Diagonal-Gaussian Candle policy for continuous action spaces.
+/// Diagonal-Gaussian Candle policy for Box action spaces.
 ///
 /// This policy predicts the mean of a Gaussian action distribution and keeps a
 /// learned diagonal log-standard-deviation parameter. It implements the

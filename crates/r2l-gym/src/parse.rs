@@ -16,7 +16,7 @@ pub(crate) fn parse_gym_space(
         let shape: Vec<usize> = space.getattr("shape")?.extract()?;
         let low = flatten_extract(&space.getattr("low")?)?;
         let high = flatten_extract(&space.getattr("high")?)?;
-        Ok(Space::Continuous {
+        Ok(Space::Box {
             min: Some(TensorData::new(low, shape.clone())),
             max: Some(TensorData::new(high, shape.clone())),
             shape,
@@ -26,20 +26,20 @@ pub(crate) fn parse_gym_space(
         let shape: Vec<usize> = nvec.getattr("shape")?.extract()?;
         let nvec: Vec<usize> = flatten_extract(&nvec)?;
         let nvec = nvec.into_iter().map(|n| n as f32).collect();
-        Ok(Space::multi_discrete(
-            TensorData::new(nvec, shape.clone()),
+        Ok(Space::MultiDiscrete {
+            nvec: TensorData::new(nvec, shape.clone()),
             shape,
-        ))
+        })
     } else if is_space("MultiBinary")? {
         let shape = space.getattr("shape")?.extract()?;
-        Ok(Space::multi_binary(shape))
+        Ok(Space::MultiBinary { shape })
     } else if is_space("Tuple")? {
         let spaces = space.getattr("spaces")?;
         let mut parsed = Vec::new();
         for space in spaces.try_iter()? {
             parsed.push(parse_gym_space(&space?, gym_spaces)?);
         }
-        Ok(Space::tuple(parsed))
+        Ok(Space::Tuple(parsed))
     } else if is_space("Dict")? {
         let spaces = space.getattr("spaces")?;
         let mut parsed = std::collections::BTreeMap::new();
@@ -49,7 +49,7 @@ pub(crate) fn parse_gym_space(
             let space = item.get_item(1)?;
             parsed.insert(key, parse_gym_space(&space, gym_spaces)?);
         }
-        Ok(Space::dict(parsed))
+        Ok(Space::Dict(parsed))
     } else {
         unreachable!()
     }
@@ -61,7 +61,7 @@ pub(crate) fn parse_action<'py>(
     space: &Space<TensorData>,
 ) -> PyResult<Bound<'py, PyAny>> {
     match space {
-        Space::Continuous {
+        Space::Box {
             min: Some(min),
             max: Some(max),
             shape,
@@ -70,7 +70,7 @@ pub(crate) fn parse_action<'py>(
             .clamp(min, max)
             .into_vec()
             .into_bound_py_any(py),
-        Space::Continuous { .. } => action.to_vec().into_bound_py_any(py),
+        Space::Box { .. } => action.to_vec().into_bound_py_any(py),
         Space::Discrete(_) => {
             // TODO: remove unwrap
             action
@@ -135,7 +135,7 @@ pub(crate) fn parse_obs(
             values[idx] = 1.;
             Ok(TensorData::new(values, vec![*size]))
         }
-        Space::Continuous { shape, .. }
+        Space::Box { shape, .. }
         | Space::MultiDiscrete { shape, .. }
         | Space::MultiBinary { shape } => parse_tensor_obs(observation, shape),
         Space::Tuple(spaces) => parse_obs_fields(

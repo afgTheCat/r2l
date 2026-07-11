@@ -39,7 +39,7 @@ use parse::{parse_action, parse_gym_space, parse_obs};
 /// This wrapper currently supports Gymnasium `Discrete`, `Box`,
 /// `MultiDiscrete`, `MultiBinary`, `Tuple`, and `Dict` spaces.
 ///
-/// Continuous actions are clipped to the environment's declared bounds before
+/// Box actions are clipped to the environment's declared bounds before
 /// stepping. Structured actions are read from flat tensors and recursively
 /// rebuilt into the Python values expected by Gymnasium.
 pub struct GymEnv {

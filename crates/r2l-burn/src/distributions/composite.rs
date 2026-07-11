@@ -2,8 +2,9 @@ use anyhow::bail;
 use burn::{Tensor, module::Module, prelude::Backend};
 use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
-    env::ActionSpaceType,
+    env::Space,
     models::{ActivationFunction, Actor, Policy},
+    tensor::R2lTensor,
 };
 
 use crate::distributions::{
@@ -70,8 +71,8 @@ pub struct CompositeDistribution<B: Backend> {
 
 impl<B: Backend> CompositeDistribution<B> {
     /// Builds one child policy per nested action space.
-    pub fn build(
-        action_spaces: Vec<ActionSpaceType>,
+    pub fn build<T: R2lTensor>(
+        action_spaces: Vec<Space<T>>,
         policy_layers: &[usize],
         activation: ActivationFunction,
     ) -> Self {
@@ -92,41 +93,51 @@ impl<B: Backend> CompositeDistribution<B> {
         }
     }
 
-    fn push_child(
-        action_space: ActionSpaceType,
+    fn push_child<T: R2lTensor>(
+        action_space: Space<T>,
         policy_layers: &[usize],
         activation: ActivationFunction,
         policies: &mut Vec<CompositePolicyChildren<B>>,
         action_sizes: &mut Vec<usize>,
     ) {
-        let action_size = action_space.tensor_size();
+        let action_size = action_space.size();
         match action_space {
-            ActionSpaceType::Discrete { .. } => {
-                let child_layers = child_layers(policy_layers, action_size);
+            Space::Discrete(_) => {
+                let child_layers = [
+                    &[policy_layers[0]],
+                    &policy_layers[1..policy_layers.len() - 1],
+                    &[action_size],
+                ]
+                .concat();
                 policies.push(CompositePolicyChildren::Categorical(
                     CategoricalDistribution::build(&child_layers, activation),
                 ));
                 action_sizes.push(action_size);
             }
-            ActionSpaceType::Continuous { .. } => {
-                let child_layers = child_layers(policy_layers, action_size);
+            Space::Box { .. } => {
+                let child_layers = [
+                    &[policy_layers[0]],
+                    &policy_layers[1..policy_layers.len() - 1],
+                    &[action_size],
+                ]
+                .concat();
                 policies.push(CompositePolicyChildren::Diag(
                     DiagGaussianDistribution::build(&child_layers, activation),
                 ));
                 action_sizes.push(action_size);
             }
-            ActionSpaceType::MultiDiscrete { nvec } => {
+            Space::MultiDiscrete { nvec, .. } => {
                 policies.push(CompositePolicyChildren::MultiCategorical(
                     MultiCategoricalDistribution::build(
                         policy_layers[0],
                         &policy_layers[1..policy_layers.len() - 1],
-                        nvec,
+                        nvec.to_vec().into_iter().map(|n| n as usize).collect(),
                         activation,
                     ),
                 ));
                 action_sizes.push(action_size);
             }
-            ActionSpaceType::MultiBinary { .. } => {
+            Space::MultiBinary { .. } => {
                 policies.push(CompositePolicyChildren::Bernoulli(
                     BernoulliDistribution::build(
                         policy_layers[0],
@@ -137,27 +148,18 @@ impl<B: Backend> CompositeDistribution<B> {
                 ));
                 action_sizes.push(action_size);
             }
-            ActionSpaceType::Tuple(spaces) => {
+            Space::Tuple(spaces) => {
                 for space in spaces {
                     Self::push_child(space, policy_layers, activation, policies, action_sizes);
                 }
             }
-            ActionSpaceType::Dict(spaces) => {
+            Space::Dict(spaces) => {
                 for space in spaces.into_values() {
                     Self::push_child(space, policy_layers, activation, policies, action_sizes);
                 }
             }
         }
     }
-}
-
-fn child_layers(policy_layers: &[usize], action_size: usize) -> Vec<usize> {
-    [
-        &[policy_layers[0]],
-        &policy_layers[1..policy_layers.len() - 1],
-        &[action_size],
-    ]
-    .concat()
 }
 
 impl<B: Backend> Actor for CompositeDistribution<B> {

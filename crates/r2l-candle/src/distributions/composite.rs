@@ -2,8 +2,9 @@ use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use r2l_core::{
-    env::ActionSpaceType,
+    env::Space,
     models::{ActivationFunction, Actor, Policy},
+    tensor::R2lTensor,
 };
 
 use crate::distributions::CandlePolicyKind;
@@ -19,8 +20,8 @@ pub struct CompositeDistribution {
 
 impl CompositeDistribution {
     /// Builds one child policy per nested action space.
-    pub fn build(
-        action_spaces: Vec<ActionSpaceType>,
+    pub fn build<T: R2lTensor>(
+        action_spaces: Vec<Space<T>>,
         policy_varbuilder: &VarBuilder,
         hidden_layers: &[usize],
         observation_size: usize,
@@ -30,7 +31,7 @@ impl CompositeDistribution {
         let mut policies = Vec::new();
         let mut action_sizes = Vec::new();
         for (idx, action_space) in action_spaces.into_iter().enumerate() {
-            let action_size = action_space.tensor_size();
+            let action_size = action_space.size();
             let child_prefix = format!("{prefix}.{idx}");
             policies.push(CandlePolicyKind::build_with_prefix(
                 action_space,

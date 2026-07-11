@@ -3,7 +3,7 @@
 //! This crate provides the Candle implementations used by the higher-level
 //! on-policy APIs in the workspace. Its public surface is centered on:
 //! - [`distributions`], which contains Candle policy implementations for
-//!   discrete and continuous action spaces
+//!   discrete and Box action spaces
 //! - [`learning_module`], which contains a Candle
 //!   [`OnPolicyLearningModule`](r2l_core::on_policy::learning_module::OnPolicyLearningModule)
 //!   implementation for policy/value training

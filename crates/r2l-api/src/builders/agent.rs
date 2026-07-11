@@ -1,6 +1,8 @@
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
-use r2l_core::{env::ActionSpaceType, models::ActivationFunction, on_policy::algorithm::Agent};
+use r2l_core::{
+    env::Space, models::ActivationFunction, on_policy::algorithm::Agent, tensor::R2lTensor,
+};
 
 use crate::builders::learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType};
 
@@ -16,10 +18,10 @@ pub trait AgentBuilder {
 
     // TODO: This API is heavily in progress
     /// Builds the configured agent for the provided environment dimensions.
-    fn build(
+    fn build<T: R2lTensor>(
         self,
         observation_size: usize,
-        action_space: ActionSpaceType,
+        action_space: Space<T>,
         seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent>;
 }

@@ -1,14 +1,15 @@
 //! Burn policy distributions used by the on-policy stack.
 //!
 //! This module exposes concrete policy implementations for discrete and
-//! continuous action spaces together with [`crate::distributions::PolicyKind`],
+//! Box action spaces together with [`crate::distributions::PolicyKind`],
 //! an enum that erases the concrete policy type behind one Burn-facing policy
 //! interface.
 
 use burn::{Tensor, module::Module, prelude::Backend};
 use r2l_core::{
-    env::ActionSpaceType,
+    env::Space,
     models::{ActivationFunction, Actor, Policy},
+    tensor::R2lTensor,
 };
 
 use crate::distributions::{
@@ -22,7 +23,7 @@ pub mod bernoulli;
 pub mod categorical;
 /// Composite policy distribution for tuple and dict action spaces.
 pub mod composite;
-/// Diagonal-Gaussian policy distribution for continuous action spaces.
+/// Diagonal-Gaussian policy distribution for Box action spaces.
 pub mod diagonal;
 /// Multi-categorical policy distribution for multi-discrete action spaces.
 pub mod multi_categorical;
@@ -33,12 +34,12 @@ pub mod recurrent_categorical;
 ///
 /// This enum is the main policy type used by the Burn on-policy learning
 /// modules. It dispatches to a categorical policy for discrete action spaces
-/// and to a diagonal-Gaussian policy for continuous action spaces.
+/// and to a diagonal-Gaussian policy for Box action spaces.
 #[derive(Debug, Module)]
 pub enum PolicyKind<B: Backend> {
     /// Policy for discrete action spaces.
     Categorical(CategoricalDistribution<B>),
-    /// Policy for continuous action spaces.
+    /// Policy for Box action spaces.
     Diag(DiagGaussianDistribution<B>),
     /// Policy for multi-discrete action spaces.
     MultiCategorical(MultiCategoricalDistribution<B>),
@@ -56,7 +57,7 @@ impl<B: Backend> PolicyKind<B> {
         ))
     }
 
-    fn continuous(policy_layers: &[usize], activation: ActivationFunction) -> Self {
+    fn box_policy(policy_layers: &[usize], activation: ActivationFunction) -> Self {
         PolicyKind::Diag(DiagGaussianDistribution::build(policy_layers, activation))
     }
 
@@ -86,27 +87,29 @@ impl<B: Backend> PolicyKind<B> {
         ))
     }
 
-    /// Builds the appropriate Burn policy for the given action-space type.
-    pub fn build(
-        action_space_type: ActionSpaceType,
+    /// Builds the appropriate Burn policy for the given action space.
+    pub fn build<T: R2lTensor>(
+        action_space: Space<T>,
         policy_layers: &[usize],
         activation: ActivationFunction,
     ) -> Self {
-        match action_space_type {
-            ActionSpaceType::Discrete { .. } => Self::categorical(policy_layers, activation),
-            ActionSpaceType::Continuous { .. } => Self::continuous(policy_layers, activation),
-            ActionSpaceType::MultiDiscrete { nvec } => {
+        match action_space {
+            Space::Discrete(_) => Self::categorical(policy_layers, activation),
+            Space::Box { .. } => Self::box_policy(policy_layers, activation),
+            Space::MultiDiscrete { nvec, .. } => {
+                let nvec = nvec.to_vec().into_iter().map(|n| n as usize).collect();
                 Self::multi_categorical(policy_layers, nvec, activation)
             }
-            ActionSpaceType::MultiBinary { size } => {
+            Space::MultiBinary { shape } => {
+                let size = shape.iter().product();
                 Self::bernoulli(policy_layers, size, activation)
             }
-            ActionSpaceType::Tuple(spaces) => PolicyKind::Composite(CompositeDistribution::build(
+            Space::Tuple(spaces) => PolicyKind::Composite(CompositeDistribution::build(
                 spaces,
                 policy_layers,
                 activation,
             )),
-            ActionSpaceType::Dict(spaces) => PolicyKind::Composite(CompositeDistribution::build(
+            Space::Dict(spaces) => PolicyKind::Composite(CompositeDistribution::build(
                 spaces.into_values().collect(),
                 policy_layers,
                 activation,

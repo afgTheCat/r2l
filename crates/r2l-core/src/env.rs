@@ -4,38 +4,13 @@ use anyhow::Result;
 
 use crate::tensor::R2lTensor;
 
-/// The type of action space.
-#[derive(Debug, Clone)]
-pub enum ActionSpaceType {
-    Discrete { size: usize },
-    Continuous { size: usize },
-    MultiDiscrete { nvec: Vec<usize> },
-    MultiBinary { size: usize },
-    Tuple(Vec<ActionSpaceType>),
-    Dict(BTreeMap<String, ActionSpaceType>),
-}
-
-impl ActionSpaceType {
-    /// Returns the flattened action tensor size used by r2l policies.
-    pub fn tensor_size(&self) -> usize {
-        match self {
-            Self::Discrete { size } | Self::Continuous { size } | Self::MultiBinary { size } => {
-                *size
-            }
-            Self::MultiDiscrete { nvec } => nvec.len(),
-            Self::Tuple(spaces) => spaces.iter().map(Self::tensor_size).sum(),
-            Self::Dict(spaces) => spaces.values().map(Self::tensor_size).sum(),
-        }
-    }
-}
-
 /// Description of an observation or action space.
 #[derive(Debug, Clone)]
 pub enum Space<T: R2lTensor> {
     /// Discrete space with `usize` possible values.
     Discrete(usize),
-    /// Continuous tensor space with optional elementwise bounds.
-    Continuous {
+    /// Gymnasium Box space with optional elementwise bounds.
+    Box {
         /// Optional minimum values.
         min: Option<T>,
         /// Optional maximum values.
@@ -62,51 +37,11 @@ pub enum Space<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> Space<T> {
-    pub fn discrete(size: usize) -> Self {
-        Self::Discrete(size)
-    }
-
-    pub fn continuous(shape: Vec<usize>, min: Option<T>, max: Option<T>) -> Self {
-        let size: usize = shape.iter().product();
-        if let Some(min) = min.as_ref() {
-            debug_assert_eq!(min.size(), size);
-        }
-        if let Some(max) = max.as_ref() {
-            debug_assert_eq!(max.size(), size);
-        }
-        Self::Continuous { min, max, shape }
-    }
-
-    /// Creates an unbounded continuous space from tensor dimensions.
-    pub fn continuous_from_dims(dims: Vec<usize>) -> Self {
-        Self::Continuous {
-            min: None,
-            max: None,
-            shape: dims,
-        }
-    }
-
-    pub fn multi_discrete(nvec: T, shape: Vec<usize>) -> Self {
-        Self::MultiDiscrete { nvec, shape }
-    }
-
-    pub fn multi_binary(shape: Vec<usize>) -> Self {
-        Self::MultiBinary { shape }
-    }
-
-    pub fn tuple(spaces: Vec<Space<T>>) -> Self {
-        Self::Tuple(spaces)
-    }
-
-    pub fn dict(spaces: BTreeMap<String, Space<T>>) -> Self {
-        Self::Dict(spaces)
-    }
-
     /// Returns the flattened size of the space.
     pub fn size(&self) -> usize {
         match &self {
             Self::Discrete(size) => *size,
-            Self::Continuous { shape, .. }
+            Self::Box { shape, .. }
             | Self::MultiDiscrete { shape, .. }
             | Self::MultiBinary { shape, .. } => shape.iter().product(),
             Self::Tuple(spaces) => spaces.iter().map(Self::size).sum(),
