@@ -4,7 +4,7 @@ use burn::prelude::Backend;
 use candle_core::Device;
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
-use r2l_core::{env::ActionSpaceType, models::ActivationFunction};
+use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
 
 use crate::{
     BurnBackend,
@@ -147,21 +147,17 @@ impl<Backend> OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, Backend> {
 impl AgentBuilder for PPOAgentBuilder {
     type Agent = PPOCandleAgent;
 
-    fn build(
+    fn build<T: R2lTensor>(
         self,
         observation_size: usize,
-        action_size: usize,
-        action_space: ActionSpaceType,
+        action_space: Space<T>,
         seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
         self.seed(seed);
         let device = self.backend.device.clone();
-        let lm = self.learning_module_builder.build_candle(
-            observation_size,
-            action_size,
-            action_space,
-            &device,
-        )?;
+        let lm =
+            self.learning_module_builder
+                .build_candle(observation_size, action_space, &device)?;
         let hooks = self.hook_builder.build();
         let params = self.params;
         Ok(PPOCandleAgent(PPO { lm, hooks, params }))
@@ -171,19 +167,16 @@ impl AgentBuilder for PPOAgentBuilder {
 impl AgentBuilder for PPOBurnAgentBuilder {
     type Agent = PPOBurnAgent<BurnBackend>;
 
-    fn build(
+    fn build<T: R2lTensor>(
         self,
         observation_size: usize,
-        action_size: usize,
-        action_space: ActionSpaceType,
+        action_space: Space<T>,
         seed: Option<u64>,
     ) -> anyhow::Result<Self::Agent> {
         self.seed(seed);
-        let lm = self.learning_module_builder.build_burn::<BurnBackend>(
-            observation_size,
-            action_size,
-            action_space,
-        )?;
+        let lm = self
+            .learning_module_builder
+            .build_burn::<BurnBackend, _>(observation_size, action_space)?;
         let hooks = self.hook_builder.build();
         let params = self.params;
         Ok(PPOBurnAgent(PPO { lm, hooks, params }))

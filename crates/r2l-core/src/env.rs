@@ -1,53 +1,50 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use anyhow::Result;
 
 use crate::tensor::R2lTensor;
-
-/// The type of action space.
-#[derive(Debug, Clone, Copy)]
-pub enum ActionSpaceType {
-    Discrete,
-    Continuous,
-}
 
 /// Description of an observation or action space.
 #[derive(Debug, Clone)]
 pub enum Space<T: R2lTensor> {
     /// Discrete space with `usize` possible values.
     Discrete(usize),
-    /// Continuous vector space with optional elementwise bounds.
-    Continuous {
+    /// Gymnasium Box space with optional elementwise bounds.
+    Box {
         /// Optional minimum values.
         min: Option<T>,
         /// Optional maximum values.
         max: Option<T>,
-        /// Number of scalar elements in the flattened space.
-        size: usize,
+        /// Tensor shape of the space.
+        shape: Vec<usize>,
     },
+    /// Multiple discrete spaces packed into one tensor.
+    MultiDiscrete {
+        /// Number of categories for each discrete dimension.
+        nvec: T,
+        /// Tensor shape of the discrete dimensions.
+        shape: Vec<usize>,
+    },
+    /// Binary tensor space.
+    MultiBinary {
+        /// Tensor shape of the binary dimensions.
+        shape: Vec<usize>,
+    },
+    /// Ordered collection of spaces.
+    Tuple(Vec<Space<T>>),
+    /// Named collection of spaces.
+    Dict(BTreeMap<String, Space<T>>),
 }
 
 impl<T: R2lTensor> Space<T> {
-    pub fn discrete(size: usize) -> Self {
-        Self::Discrete(size)
-    }
-
-    pub fn continuous(size: usize, min: Option<T>, max: Option<T>) -> Self {
-        if let Some(min) = min.as_ref() {
-            debug_assert_eq!(min.size(), size);
-        }
-        if let Some(max) = max.as_ref() {
-            debug_assert_eq!(max.size(), size);
-        }
-        Self::Continuous { min, max, size }
-    }
-
-    /// Creates an unbounded continuous space from tensor dimensions.
-    pub fn continuous_from_dims(dims: Vec<usize>) -> Self {
-        Self::Continuous {
-            min: None,
-            max: None,
-            size: dims.iter().product(),
+    /// Returns the Gymnasium shape when the space has one.
+    pub fn shape(&self) -> Option<&[usize]> {
+        match self {
+            Self::Discrete(_) => Some(&[]),
+            Self::Box { shape, .. }
+            | Self::MultiDiscrete { shape, .. }
+            | Self::MultiBinary { shape } => Some(shape),
+            Self::Tuple(_) | Self::Dict(_) => None,
         }
     }
 
@@ -55,7 +52,11 @@ impl<T: R2lTensor> Space<T> {
     pub fn size(&self) -> usize {
         match &self {
             Self::Discrete(size) => *size,
-            Self::Continuous { size, .. } => *size,
+            Self::Box { shape, .. }
+            | Self::MultiDiscrete { shape, .. }
+            | Self::MultiBinary { shape, .. } => shape.iter().product(),
+            Self::Tuple(spaces) => spaces.iter().map(Self::size).sum(),
+            Self::Dict(spaces) => spaces.values().map(Self::size).sum(),
         }
     }
 }
@@ -226,4 +227,13 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
             Self::Heterogenous { builders } => builders[0].env_description(),
         }
     }
+}
+
+/// Returns `(offset, choices)` ranges for a flattened multi-discrete logits vector.
+pub fn action_ranges(nvec: &[usize]) -> impl Iterator<Item = (usize, usize)> + '_ {
+    nvec.iter().scan(0, |offset, choices| {
+        let start = *offset;
+        *offset += *choices;
+        Some((start, *choices))
+    })
 }

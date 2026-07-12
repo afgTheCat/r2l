@@ -9,7 +9,7 @@ use r2l_burn::{
 use r2l_candle::{
     distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
 };
-use r2l_core::{env::ActionSpaceType, models::ActivationFunction};
+use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
 
 /// Optimizer layout for on-policy policy/value learning modules.
 ///
@@ -99,11 +99,10 @@ pub(crate) struct OnPolicyLearningModuleBuilder {
 }
 
 impl OnPolicyLearningModuleBuilder {
-    pub fn build_candle(
+    pub fn build_candle<T: R2lTensor>(
         self,
         observation_size: usize,
-        action_size: usize,
-        action_space: ActionSpaceType,
+        action_space: Space<T>,
         device: &Device,
     ) -> anyhow::Result<CandlePolicyValueModule> {
         let policy_varmap = VarMap::new();
@@ -112,7 +111,6 @@ impl OnPolicyLearningModuleBuilder {
             action_space,
             &policy_vb,
             &self.policy_hidden_layers,
-            action_size,
             observation_size,
             self.activation_function,
         )?;
@@ -146,12 +144,12 @@ impl OnPolicyLearningModuleBuilder {
         }
     }
 
-    pub fn build_burn<B: AutodiffBackend>(
+    pub fn build_burn<B: AutodiffBackend, T: R2lTensor>(
         self,
         observation_size: usize,
-        action_size: usize,
-        action_space: ActionSpaceType,
+        action_space: Space<T>,
     ) -> anyhow::Result<BurnPolicyValueModule<B>> {
+        let action_size = action_space.size();
         let policy_layers = &[
             &[observation_size][..],
             &self.policy_hidden_layers[..],

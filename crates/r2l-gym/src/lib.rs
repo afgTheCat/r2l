@@ -11,12 +11,11 @@
 //! - [`GymEnvBuilder`], an [`EnvBuilder`]
 //!   implementation that constructs named Gymnasium environments
 //!
-//! At the moment, the adapter supports:
-//! - discrete action spaces
-//! - box-shaped continuous action spaces
-//! - observation spaces that expose a Gymnasium `shape`
-//!
-//! Other Gymnasium space variants are not yet handled by this crate.
+//! The adapter maps Gymnasium `Discrete`, `Box`, `MultiDiscrete`,
+//! `MultiBinary`, `Tuple`, and `Dict` spaces into `r2l-core` space metadata.
+//! Observations are converted into flat [`TensorData`] values. Discrete
+//! observations are one-hot encoded, while structured `Tuple` and `Dict`
+//! observations are flattened recursively.
 
 use anyhow::Result;
 use pyo3::{
@@ -28,18 +27,21 @@ use r2l_core::{
     tensor::TensorData,
 };
 
+mod parse;
+
+use parse::{parse_action, parse_gym_space, parse_obs};
+
 /// Python-backed Gymnasium environment implementing `r2l`'s [`Env`] trait.
 ///
 /// `GymEnv` wraps a Gymnasium environment created through `gymnasium.make` and
 /// exposes its observation/action spaces through `r2l-core` space types.
 ///
-/// This wrapper currently supports:
-/// - Gymnasium `Discrete` action spaces
-/// - Gymnasium `Box` action spaces
+/// This wrapper currently supports Gymnasium `Discrete`, `Box`,
+/// `MultiDiscrete`, `MultiBinary`, `Tuple`, and `Dict` spaces.
 ///
-/// Continuous actions are clipped to the environment's declared bounds before
-/// stepping. Discrete actions are expected in the action tensor format produced
-/// by the rest of the `r2l` stack.
+/// Box actions are clipped to the environment's declared bounds before
+/// stepping. Structured actions are read from flat tensors and recursively
+/// rebuilt into the Python values expected by Gymnasium.
 pub struct GymEnv {
     env: PyObject,
     action_space: Space<TensorData>,
@@ -59,28 +61,11 @@ impl GymEnv {
             }
             let make = gym.getattr("make")?;
             let env = make.call((name,), Some(&kwargs))?;
-            let action_space = env.getattr("action_space")?;
             let gym_spaces = py.import("gymnasium.spaces")?;
-            let action_space = if action_space.is_instance(&gym_spaces.getattr("Discrete")?)? {
-                let val = action_space.getattr("n")?.extract()?;
-                Space::Discrete(val)
-            } else if action_space.is_instance(&gym_spaces.getattr("Box")?)? {
-                let low: Vec<f32> = action_space.getattr("low")?.extract()?;
-                let action_size = low.len();
-                let low = TensorData::new(low, vec![action_size]);
-                let high: Vec<f32> = action_space.getattr("high")?.extract()?;
-                let high = TensorData::new(high, vec![action_size]);
-                Space::Continuous {
-                    min: Some(low),
-                    max: Some(high),
-                    size: action_size,
-                }
-            } else {
-                todo!("Other actions spaces are not yet supported");
-            };
+            let action_space = env.getattr("action_space")?;
+            let action_space = parse_gym_space(&action_space, &gym_spaces)?;
             let observation_space = env.getattr("observation_space")?;
-            let observation_space: Vec<usize> = observation_space.getattr("shape")?.extract()?;
-            let observation_space = Space::continuous_from_dims(observation_space);
+            let observation_space = parse_gym_space(&observation_space, &gym_spaces)?;
             PyResult::Ok(GymEnv {
                 env: env.into(),
                 action_space,
@@ -88,31 +73,6 @@ impl GymEnv {
             })
         });
         env.map_err(anyhow::Error::from)
-    }
-
-    /// Returns the flattened observation size expected by `r2l`.
-    pub fn observation_size(&self) -> usize {
-        self.observation_space.size()
-    }
-
-    /// Returns the action size expected by `r2l`.
-    pub fn action_size(&self) -> usize {
-        self.action_space.size()
-    }
-
-    /// Returns the observation space description discovered from Gymnasium.
-    pub fn observation_space(&self) -> Space<TensorData> {
-        self.observation_space.clone()
-    }
-
-    /// Returns the action space description discovered from Gymnasium.
-    pub fn action_space(&self) -> Space<TensorData> {
-        self.action_space.clone()
-    }
-
-    /// Returns `(action_size, observation_size)`.
-    pub fn io_sizes(&self) -> (usize, usize) {
-        (self.action_size(), self.observation_size())
     }
 }
 
@@ -125,34 +85,17 @@ impl Env for GymEnv {
             kwargs.set_item("seed", seed)?;
             let state = self.env.call_method(py, "reset", (), Some(&kwargs))?;
             let step = state.bind(py);
-            let state = step.get_item(0)?.extract()?;
-            PyResult::Ok(TensorData::from_vec(state))
+            parse_obs(&step.get_item(0)?, &self.observation_space)
         })?;
         Ok(state)
     }
 
     fn step(&mut self, action: TensorData) -> Result<Snapshot<TensorData>> {
         let snapshot = Python::with_gil(|py| {
-            let step = match &self.action_space {
-                Space::Continuous {
-                    min: Some(min),
-                    max: Some(max),
-                    ..
-                } => {
-                    let clipped_action = action.clamp(min, max);
-                    let action_vec: Vec<f32> = clipped_action.into_vec();
-                    self.env.call_method(py, "step", (action_vec,), None)?
-                }
-                _ => {
-                    let action: Vec<f32> = action.into_vec();
-                    // TODO: remove unwrap
-                    let action = action.iter().position(|i| *i > 0.).unwrap();
-                    self.env.call_method(py, "step", (action,), None)?
-                }
-            };
+            let action = parse_action(py, &action.into_vec(), &self.action_space)?;
+            let step = self.env.call_method(py, "step", (action,), None)?;
             let step = step.bind(py);
-            let next_state: Vec<f32> = step.get_item(0)?.extract()?;
-            let next_state = TensorData::from_vec(next_state);
+            let next_state = parse_obs(&step.get_item(0)?, &self.observation_space)?;
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
             let truncated: bool = step.get_item(3)?.extract()?;

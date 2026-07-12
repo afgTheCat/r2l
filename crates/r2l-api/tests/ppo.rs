@@ -178,7 +178,7 @@ fn mountain_car_candle() {
 
 // TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
-fn mountain_car_continuous_candle() {
+fn mountain_car_box_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
     // https://huggingface.co/sb3/ppo-MountainCarContinuous-v0
     configure_candle_ppo_test(PPOTestConfig {
@@ -230,7 +230,7 @@ fn lunar_lander_candle() {
 
 // TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
-fn lunar_lander_continuous_candle() {
+fn lunar_lander_box_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
     // https://huggingface.co/sb3/ppo-LunarLanderContinuous-v2
     configure_candle_ppo_test(PPOTestConfig {

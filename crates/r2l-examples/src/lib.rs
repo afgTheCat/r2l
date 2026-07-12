@@ -8,7 +8,7 @@ mod test {
 
     use burn::backend::NdArray;
     use burn_store::{ModuleStore, SafetensorsStore};
-    use r2l_burn::distributions::diagonal_distribution::DiagGaussianDistribution;
+    use r2l_burn::distributions::diagonal::DiagGaussianDistribution;
 
     #[test]
     fn module_loading() {

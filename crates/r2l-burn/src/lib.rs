@@ -3,7 +3,7 @@
 //! This crate provides the Burn implementations used by the higher-level
 //! on-policy APIs in the workspace. Its public surface is centered on:
 //! - [`distributions`], which contains Burn policy implementations for
-//!   discrete and continuous action spaces
+//!   discrete and Box action spaces
 //! - [`learning_module`], which contains Burn
 //!   [`OnPolicyLearningModule`](r2l_core::on_policy::learning_module::OnPolicyLearningModule)
 //!   implementations for policy/value training

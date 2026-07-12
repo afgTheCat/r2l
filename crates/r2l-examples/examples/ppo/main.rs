@@ -6,7 +6,7 @@ use burn_store::SafetensorsStore;
 use r2l_api::{
     Evaluator, LearningSchedule, PPOAlgorithmBuilder, SamplerExecutionMode, StepHookBound,
 };
-use r2l_burn::distributions::diagonal_distribution::DiagGaussianDistribution;
+use r2l_burn::distributions::diagonal::DiagGaussianDistribution;
 
 const ENV_NAME: &str = "Pendulum-v1";
 
