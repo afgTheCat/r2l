@@ -66,11 +66,15 @@ pub(crate) fn parse_action<'py>(
             max: Some(max),
             shape,
             ..
-        } => TensorData::new(action.to_vec(), shape.clone())
-            .clamp(min, max)
-            .into_vec()
-            .into_bound_py_any(py),
-        Space::Box { .. } => action.to_vec().into_bound_py_any(py),
+        } => action_array(
+            py,
+            TensorData::new(action.to_vec(), shape.clone())
+                .clamp(min, max)
+                .into_vec(),
+            shape,
+            "float32",
+        ),
+        Space::Box { shape, .. } => action_array(py, action.to_vec(), shape, "float32"),
         Space::Discrete(_) => {
             // TODO: remove unwrap
             action
@@ -79,14 +83,16 @@ pub(crate) fn parse_action<'py>(
                 .unwrap()
                 .into_bound_py_any(py)
         }
-        Space::MultiDiscrete { .. } => {
-            let action: Vec<usize> = action.iter().map(|value| *value as usize).collect();
-            action.into_bound_py_any(py)
-        }
-        Space::MultiBinary { .. } => {
-            let action: Vec<usize> = action.iter().map(|value| (*value > 0.) as usize).collect();
-            action.into_bound_py_any(py)
-        }
+        Space::MultiDiscrete { shape, .. } => action_array(py, action.to_vec(), shape, "int64"),
+        Space::MultiBinary { shape } => action_array(
+            py,
+            action
+                .iter()
+                .map(|value| if *value > 0. { 1. } else { 0. })
+                .collect(),
+            shape,
+            "int8",
+        ),
         Space::Tuple(spaces) => {
             let actions = parse_child_actions(py, action, spaces)?;
             Ok(PyTuple::new(py, actions)?.into_any())
@@ -100,6 +106,18 @@ pub(crate) fn parse_action<'py>(
             Ok(actions.into_any())
         }
     }
+}
+
+fn action_array<'py>(
+    py: Python<'py>,
+    action: Vec<f32>,
+    shape: &[usize],
+    dtype: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    py.import("numpy")?
+        .call_method1("asarray", (action,))?
+        .call_method1("astype", (dtype,))?
+        .call_method1("reshape", (shape,))
 }
 
 fn parse_child_actions<'py, 'space>(
@@ -170,7 +188,7 @@ fn parse_obs_fields<'py>(
 mod tests {
     use pyo3::{PyResult, Python, types::PyAnyMethods};
 
-    use super::parse_gym_space;
+    use super::{parse_action, parse_gym_space};
 
     #[test]
     fn fundamental_space_shapes_match_gymnasium() -> PyResult<()> {
@@ -188,6 +206,21 @@ mod tests {
                 let space = parse_gym_space(&gym_space, &spaces)?;
                 assert_eq!(space.shape(), Some(gym_shape.as_slice()));
             }
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn multi_binary_actions_keep_gymnasium_shape() -> PyResult<()> {
+        Python::with_gil(|py| {
+            let spaces = py.import("gymnasium.spaces")?;
+            let gym_space = spaces.getattr("MultiBinary")?.call1(((2, 3),))?;
+            let space = parse_gym_space(&gym_space, &spaces)?;
+            let action = parse_action(py, &[1., 0., 1., 0., 1., 0.], &space)?;
+            let shape: Vec<usize> = action.getattr("shape")?.extract()?;
+
+            assert_eq!(shape, vec![2, 3]);
+            assert!(gym_space.call_method1("contains", (action,))?.is_truthy()?);
             Ok(())
         })
     }
