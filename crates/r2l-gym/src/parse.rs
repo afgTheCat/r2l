@@ -137,7 +137,10 @@ pub(crate) fn parse_obs(
         }
         Space::Box { shape, .. }
         | Space::MultiDiscrete { shape, .. }
-        | Space::MultiBinary { shape } => parse_tensor_obs(observation, shape),
+        | Space::MultiBinary { shape } => {
+            let values = flatten_extract(observation)?;
+            Ok(TensorData::new(values, shape.to_vec()))
+        }
         Space::Tuple(spaces) => parse_obs_fields(
             spaces
                 .iter()
@@ -150,14 +153,6 @@ pub(crate) fn parse_obs(
                 .map(|(key, space)| Ok((observation.get_item(key)?, space))),
         ),
     }
-}
-
-fn parse_tensor_obs(observation: &Bound<'_, PyAny>, shape: &[usize]) -> PyResult<TensorData> {
-    let values = observation
-        .call_method0("flatten")?
-        .call_method0("tolist")?;
-    let values: Vec<f32> = values.extract()?;
-    Ok(TensorData::new(values, shape.to_vec()))
 }
 
 fn parse_obs_fields<'py>(

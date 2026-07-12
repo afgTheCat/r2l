@@ -74,31 +74,6 @@ impl GymEnv {
         });
         env.map_err(anyhow::Error::from)
     }
-
-    /// Returns the flattened observation size expected by `r2l`.
-    pub fn observation_size(&self) -> usize {
-        self.observation_space.size()
-    }
-
-    /// Returns the action size expected by `r2l`.
-    pub fn action_size(&self) -> usize {
-        self.action_space.size()
-    }
-
-    /// Returns the observation space description discovered from Gymnasium.
-    pub fn observation_space(&self) -> Space<TensorData> {
-        self.observation_space.clone()
-    }
-
-    /// Returns the action space description discovered from Gymnasium.
-    pub fn action_space(&self) -> Space<TensorData> {
-        self.action_space.clone()
-    }
-
-    /// Returns `(action_size, observation_size)`.
-    pub fn io_sizes(&self) -> (usize, usize) {
-        (self.action_size(), self.observation_size())
-    }
 }
 
 impl Env for GymEnv {
