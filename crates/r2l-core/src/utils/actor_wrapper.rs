@@ -21,9 +21,14 @@ impl<D: Actor + Clone, T: R2lTensor> ActorWrapper<D, T> {
 
 impl<D: Actor + Clone, T: R2lTensor> Actor for ActorWrapper<D, T> {
     type Tensor = T;
+    type State = D::State;
 
-    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let action = self.actor.action(D::Tensor::convert(&observation))?;
-        Ok(T::convert(&action))
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        state: Option<Self::State>,
+    ) -> Result<(Self::Tensor, Self::State)> {
+        let (action, state) = self.actor.action(D::Tensor::convert(&observation), state)?;
+        Ok((T::convert(&action), state))
     }
 }

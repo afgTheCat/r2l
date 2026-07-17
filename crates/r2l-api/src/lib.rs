@@ -15,6 +15,7 @@ pub use builders::a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAg
 pub use builders::a2c::algorithm::{
     A2CAlgorithmBuilder, A2CBurnAlgorithmBuilder, A2CCandleAlgorithmBuilder,
 };
+pub use builders::agent::AgentBuilder;
 pub use builders::agent::OnPolicyAgentBuilder;
 pub use builders::learning_module::OnPolicyLearningModuleType;
 pub use builders::on_policy::OnPolicyAlgorithmBuilder;

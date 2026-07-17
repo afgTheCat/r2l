@@ -64,12 +64,15 @@ impl CompositeDistribution {
 
 impl Actor for CompositeDistribution {
     type Tensor = Tensor;
-    fn action(&self, observation: Tensor) -> Result<Tensor> {
+    type State = ();
+
+    fn action(&self, observation: Tensor, _state: Option<()>) -> Result<(Tensor, ())> {
         let mut actions = Vec::new();
         for policy in &self.policies {
-            actions.push(policy.action(observation.clone())?);
+            let (action, ()) = policy.action(observation.clone(), None)?;
+            actions.push(action);
         }
-        Ok(Tensor::cat(&actions, 0)?.detach())
+        Ok((Tensor::cat(&actions, 0)?.detach(), ()))
     }
 }
 

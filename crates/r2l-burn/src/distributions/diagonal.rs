@@ -48,15 +48,20 @@ impl<B: Backend> DiagGaussianDistribution<B> {
 
 impl<B: Backend> Actor for DiagGaussianDistribution<B> {
     type Tensor = Tensor<B, 1>;
+    type State = ();
 
-    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        _state: Option<Self::State>,
+    ) -> Result<(Self::Tensor, Self::State)> {
         let device = Default::default();
         let observation: Tensor<B, 2> = observation.unsqueeze();
         let mu = self.mu_net.forward(observation);
         let std = self.log_std.val().exp();
         let noise = Tensor::random(mu.shape(), BurnDistribution::Normal(0., 1.), &device);
         let action = mu + noise * std;
-        Ok(action.squeeze_dims(&[1]))
+        Ok((action.squeeze_dims(&[1]), ()))
     }
 
     // This will serialize the model to safetesnors

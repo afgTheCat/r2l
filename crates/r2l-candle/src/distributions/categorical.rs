@@ -79,8 +79,9 @@ impl CategoricalDistribution {
 
 impl Actor for CategoricalDistribution {
     type Tensor = Tensor;
+    type State = ();
 
-    fn action(&self, observation: Tensor) -> Result<Tensor> {
+    fn action(&self, observation: Tensor, _state: Option<()>) -> Result<(Tensor, ())> {
         assert!(
             observation.rank() == 1,
             "Observation should be a flattened tensor"
@@ -94,7 +95,7 @@ impl Actor for CategoricalDistribution {
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
         let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
-        Ok(action)
+        Ok((action, ()))
     }
 
     fn try_serialize(&self) -> Option<Vec<u8>> {

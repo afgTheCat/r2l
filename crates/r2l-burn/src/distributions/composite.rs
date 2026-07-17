@@ -22,12 +22,13 @@ enum CompositePolicyChildren<B: Backend> {
 
 impl<B: Backend> CompositePolicyChildren<B> {
     fn action(&self, observation: Tensor<B, 1>) -> anyhow::Result<Tensor<B, 1>> {
-        match self {
-            Self::Categorical(policy) => policy.action(observation),
-            Self::Diag(policy) => policy.action(observation),
-            Self::MultiCategorical(policy) => policy.action(observation),
-            Self::Bernoulli(policy) => policy.action(observation),
-        }
+        let (action, ()) = match self {
+            Self::Categorical(policy) => policy.action(observation, None),
+            Self::Diag(policy) => policy.action(observation, None),
+            Self::MultiCategorical(policy) => policy.action(observation, None),
+            Self::Bernoulli(policy) => policy.action(observation, None),
+        }?;
+        Ok(action)
     }
 
     fn log_probs(
@@ -164,13 +165,18 @@ impl<B: Backend> CompositeDistribution<B> {
 
 impl<B: Backend> Actor for CompositeDistribution<B> {
     type Tensor = Tensor<B, 1>;
+    type State = ();
 
-    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        _state: Option<Self::State>,
+    ) -> anyhow::Result<(Self::Tensor, Self::State)> {
         let mut actions = Vec::new();
         for policy in &self.policies {
             actions.push(policy.action(observation.clone())?);
         }
-        Ok(Tensor::cat(actions, 0))
+        Ok((Tensor::cat(actions, 0), ()))
     }
 
     fn try_serialize(&self) -> Option<Vec<u8>> {

@@ -13,14 +13,24 @@ pub trait Agent {
     /// Tensor type shared with the sampler and rollout buffers.
     type Tensor: R2lTensor;
 
+    /// State carried between actor invocations during rollout collection.
+    ///
+    /// Stateless agents use `()`. Recurrent agents can use a backend-specific
+    /// hidden-state type, which the sampler preserves independently for each
+    /// environment worker.
+    type RolloutState: Clone + Send + Sync + 'static;
+
     /// Actor type used by samplers to collect new rollouts.
-    type Actor: Actor<Tensor = Self::Tensor>;
+    type Actor: Actor<Tensor = Self::Tensor, State = Self::RolloutState>;
 
     /// Returns an actor snapshot for rollout collection.
     fn actor(&self) -> Self::Actor;
 
     /// Learns from a batch of trajectory containers.
-    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()>;
+    fn learn<B: TrajectoryBatch<Self::Tensor, State = Self::RolloutState>>(
+        &mut self,
+        buffers: &[B],
+    ) -> Result<()>;
 
     /// Releases agent resources before the training loop exits.
     fn shutdown(&mut self) {}
@@ -29,22 +39,32 @@ pub trait Agent {
 pub trait Sampler {
     type Tensor: R2lTensor;
 
+    /// State carried between actor invocations by each environment worker.
+    ///
+    /// Stateless samplers use `()`.
+    type State: Clone + Send + Sync + 'static;
+
     /// Resets all environments managed by the sampler.
     fn reset_all_envs(&mut self) {}
 
     /// Collects rollout data using the provided actor.
-    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A);
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor, State = Self::State> + Clone>(
+        &mut self,
+        actor: A,
+    );
 
     /// Creates a view for the agents.
-    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]>;
+    fn trajectory_views<'a>(
+        &'a mut self,
+    ) -> impl AsRef<[TrajectoryView<'a, Self::Tensor, Self::State>]>;
 
     /// Releases sampler resources before the training loop exits.
     fn shutdown(&mut self) {}
 }
 
 pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
-    type SamplerActor: Actor<Tensor = S::Tensor> + Clone;
-    type AgentBuffer<'a>: TrajectoryBatch<A::Tensor>
+    type SamplerActor: Actor<Tensor = S::Tensor, State = S::State> + Clone;
+    type AgentBuffer<'a>: TrajectoryBatch<A::Tensor, State = A::State>
     where
         Self: 'a,
         S: 'a;
@@ -53,7 +73,7 @@ pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
 
     fn adapt_buffer<'a>(
         &self,
-        buffers: &'a [TrajectoryView<'a, S::Tensor>],
+        buffers: &'a [TrajectoryView<'a, S::Tensor, S::State>],
     ) -> impl AsRef<[Self::AgentBuffer<'a>]>
     where
         Self: 'a,
@@ -62,10 +82,10 @@ pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
 
 pub struct DefaultAdapter;
 
-impl<A: Actor + Clone, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter {
+impl<A: Actor + Clone, S: Sampler<State = A::State>> OnPolicyAdapters<A, S> for DefaultAdapter {
     type SamplerActor = ActorWrapper<A, S::Tensor>;
     type AgentBuffer<'a>
-        = TrajectoryViewsWrapper<'a, A::Tensor>
+        = TrajectoryViewsWrapper<'a, A::Tensor, A::State>
     where
         Self: 'a,
         S: 'a;
@@ -76,13 +96,13 @@ impl<A: Actor + Clone, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter {
 
     fn adapt_buffer<'a>(
         &self,
-        buffers: &'a [TrajectoryView<'a, S::Tensor>],
+        buffers: &'a [TrajectoryView<'a, S::Tensor, S::State>],
     ) -> impl AsRef<[Self::AgentBuffer<'a>]>
     where
         Self: 'a,
         S: 'a,
     {
-        let views: Vec<TrajectoryViewsWrapper<'a, A::Tensor>> = buffers
+        let views: Vec<TrajectoryViewsWrapper<'a, A::Tensor, A::State>> = buffers
             .iter()
             .map(TrajectoryViewsWrapper::from_view::<S::Tensor>)
             .collect();
@@ -110,7 +130,9 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>> OnPolicyRuntime<A, 
     }
 
     /// Returns the last collected trajectory containers from the sampler.
-    pub fn trajectory_containers(&mut self) -> impl AsRef<[TrajectoryView<'_, S::Tensor>]> {
+    pub fn trajectory_containers(
+        &mut self,
+    ) -> impl AsRef<[TrajectoryView<'_, S::Tensor, S::State>]> {
         self.sampler.trajectory_views()
     }
 

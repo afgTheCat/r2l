@@ -93,8 +93,19 @@ pub trait Actor: Send + 'static {
     /// Tensor type accepted as observations and returned as actions.
     type Tensor: R2lTensor;
 
-    /// Selects an action for a single observation.
-    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
+    /// State carried between action selections.
+    ///
+    /// Stateless actors use `()`.
+    type State: Clone + Send + Sync + 'static;
+
+    /// Selects an action and returns the state for the next invocation.
+    ///
+    /// `None` indicates that the observation starts a new episode.
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        state: Option<Self::State>,
+    ) -> Result<(Self::Tensor, Self::State)>;
 
     /// Tries to serialize the Actor
     fn try_serialize(&self) -> Option<Vec<u8>> {

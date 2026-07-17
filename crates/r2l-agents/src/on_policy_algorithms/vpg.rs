@@ -43,7 +43,7 @@ pub struct VPG<Module: OnPolicyLearningModule> {
 }
 
 impl<Module: OnPolicyLearningModule> VPG<Module> {
-    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -68,7 +68,7 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
     }
 
     /// Prototype learning entrypoint over finalized trajectory batches.
-    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
+    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
         batches: &[B],
     ) -> Result<()> {
@@ -86,13 +86,17 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
 
 impl<M: OnPolicyLearningModule> Agent for VPG<M> {
     type Tensor = M::InferenceTensor;
+    type RolloutState = M::InferenceState;
     type Actor = M::InferencePolicy;
 
     fn actor(&self) -> Self::Actor {
         self.lm.inference_policy()
     }
 
-    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
+    fn learn<B: TrajectoryBatch<Self::Tensor, State = Self::RolloutState>>(
+        &mut self,
+        buffers: &[B],
+    ) -> Result<()> {
         VPG::learn(self, buffers)
     }
 }

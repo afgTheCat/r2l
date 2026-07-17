@@ -44,7 +44,10 @@ impl<E: Env> EpisodeBoundHook<E> {
 impl<E: Env> SamplerHook for EpisodeBoundHook<E> {
     type E = E;
 
-    fn hook(&mut self, _core: &mut R2lSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook<S: Clone + Send + Sync + 'static>(
+        &mut self,
+        _core: &mut R2lSamplerCore<Self::E, S>,
+    ) -> SamplerHookResult {
         self.next_result()
     }
 }
@@ -52,7 +55,10 @@ impl<E: Env> SamplerHook for EpisodeBoundHook<E> {
 impl<E: Env<Tensor: R2lTensor>> NormalizedSamplerHook for EpisodeBoundHook<E> {
     type E = E;
 
-    fn hook(&mut self, _core: &mut R2lNormalizedSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook<S: Clone + Send + Sync + 'static>(
+        &mut self,
+        _core: &mut R2lNormalizedSamplerCore<Self::E, S>,
+    ) -> SamplerHookResult {
         self.next_result()
     }
 }
@@ -95,7 +101,10 @@ impl<E: Env<Tensor: R2lTensor>> StepBoundHook<E> {
 impl<E: Env<Tensor: R2lTensor>> SamplerHook for StepBoundHook<E> {
     type E = E;
 
-    fn hook(&mut self, _core: &mut R2lSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook<S: Clone + Send + Sync + 'static>(
+        &mut self,
+        _core: &mut R2lSamplerCore<Self::E, S>,
+    ) -> SamplerHookResult {
         self.next_result()
     }
 }
@@ -103,7 +112,10 @@ impl<E: Env<Tensor: R2lTensor>> SamplerHook for StepBoundHook<E> {
 impl<E: Env<Tensor: R2lTensor>> NormalizedSamplerHook for StepBoundHook<E> {
     type E = E;
 
-    fn hook(&mut self, _core: &mut R2lNormalizedSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook<S: Clone + Send + Sync + 'static>(
+        &mut self,
+        _core: &mut R2lNormalizedSamplerCore<Self::E, S>,
+    ) -> SamplerHookResult {
         self.next_result()
     }
 }

@@ -59,7 +59,7 @@ pub struct PPOBatchData<T: R2lTensor> {
 
 /// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
 pub trait PPOHook<M: OnPolicyLearningModule> {
-    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor, State = M::InferenceState>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
@@ -70,7 +70,7 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn rollout_hook<B: TrajectoryBatch<M::InferenceTensor, State = M::InferenceState>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
@@ -101,7 +101,7 @@ pub struct PPO<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
 }
 
 impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
-    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -147,7 +147,9 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
         }
     }
 
-    fn learning_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn learning_loop<
+        B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>,
+    >(
         &mut self,
         batches: &[B],
         advantages: Advantages,
@@ -164,7 +166,7 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
     }
 
     /// Prototype learning entrypoint over finalized trajectory batches.
-    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
+    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
         batches: &[B],
     ) -> Result<()> {
@@ -191,13 +193,17 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
 
 impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
     type Tensor = M::InferenceTensor;
+    type RolloutState = M::InferenceState;
     type Actor = M::InferencePolicy;
 
     fn actor(&self) -> Self::Actor {
         self.lm.inference_policy()
     }
 
-    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
+    fn learn<B: TrajectoryBatch<Self::Tensor, State = Self::RolloutState>>(
+        &mut self,
+        buffers: &[B],
+    ) -> Result<()> {
         PPO::learn(self, buffers)
     }
 }

@@ -194,6 +194,13 @@ impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>>
 {
     /// Builds the configured sampler instance.
     pub fn build(self) -> R2lSampler<EB::Env, S::Target> {
+        self.build_with_state()
+    }
+
+    /// Builds a sampler for actors using the specified rollout state type.
+    pub fn build_with_state<RS: Clone + Send + Sync + 'static>(
+        self,
+    ) -> R2lSampler<EB::Env, S::Target, RS> {
         let hook = self.hook_builder.build();
         R2lSampler::build(self.env_builder, hook, self.execution_mode)
     }
@@ -206,6 +213,13 @@ impl<
 {
     /// Builds the configured normalized sampler instance.
     pub fn build(self) -> R2lNormalizedSampler<EB::Env, S::Target> {
+        self.build_with_state()
+    }
+
+    /// Builds a normalized sampler for actors using the specified rollout state type.
+    pub fn build_with_state<RS: Clone + Send + Sync + 'static>(
+        self,
+    ) -> R2lNormalizedSampler<EB::Env, S::Target, RS> {
         let hook = self.hook_builder.build();
         R2lNormalizedSampler::build(
             self.env_builder,

@@ -13,3 +13,10 @@ r2l-core = { workspace = true }
 crossbeam = { workspace = true }
 rand = { workspace = true }
 itertools = "0.15.0"
+
+[dev-dependencies]
+r2l-api = { workspace = true }
+r2l-gym = { workspace = true }
+r2l-agents = { workspace = true }
+r2l-burn = { workspace = true }
+burn = { workspace = true }

@@ -51,7 +51,7 @@ pub struct A2CBatchData<T: R2lTensor> {
 
 /// Hook interface for customizing A2C training over trajectory batches.
 pub trait A2CHook<M: OnPolicyLearningModule> {
-    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor, State = M::InferenceState>>(
         &mut self,
         _params: &mut A2CParams,
         _module: &mut M,
@@ -72,7 +72,7 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Continue)
     }
 
-    fn after_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn after_learning_hook<B: TrajectoryBatch<M::InferenceTensor, State = M::InferenceState>>(
         &mut self,
         _params: &mut A2CParams,
         _module: &mut M,
@@ -93,7 +93,7 @@ pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
 }
 
 impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
-    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -130,7 +130,7 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
     }
 
     /// Prototype learning entrypoint over finalized trajectory batches.
-    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
+    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
         batches: &[B],
     ) -> Result<()> {
@@ -160,13 +160,17 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
 
 impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
     type Tensor = M::InferenceTensor;
+    type RolloutState = M::InferenceState;
     type Actor = M::InferencePolicy;
 
     fn actor(&self) -> Self::Actor {
         self.lm.inference_policy()
     }
 
-    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
+    fn learn<B: TrajectoryBatch<Self::Tensor, State = Self::RolloutState>>(
+        &mut self,
+        buffers: &[B],
+    ) -> Result<()> {
         A2C::learn(self, buffers)
     }
 }

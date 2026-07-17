@@ -13,7 +13,7 @@ use burn::{
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_core::{
-    models::{ActivationFunction, LearningModule, Policy, ValueFunction},
+    models::{ActivationFunction, Actor, LearningModule, Policy, ValueFunction},
     on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
 
@@ -29,13 +29,40 @@ pub trait BurnPolicy<B: AutodiffBackend>:
     + ModuleDisplay
     + Policy<Tensor = Tensor<B, 1>>
 {
+    fn lift_state(state: &<Self::InnerModule as Actor>::State) -> Self::State;
 }
 
-impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
+impl<B: AutodiffBackend, M> BurnPolicy<B> for M
+where
     M: AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
         + ModuleDisplay
-        + Policy<Tensor = Tensor<B, 1>>
+        + Policy<Tensor = Tensor<B, 1>>,
+    M::State: BurnStateLifter<B, InferenceState = <M::InnerModule as Actor>::State>,
 {
+    fn lift_state(state: &<Self::InnerModule as Actor>::State) -> Self::State {
+        <M::State as BurnStateLifter<B>>::lift_state(state)
+    }
+}
+
+/// Converts rollout state from Burn's inner backend to its autodiff backend.
+pub trait BurnStateLifter<B: AutodiffBackend>: Clone + Send + Sync + 'static {
+    type InferenceState: Clone + Send + Sync + 'static;
+
+    fn lift_state(state: &Self::InferenceState) -> Self;
+}
+
+impl<B: AutodiffBackend> BurnStateLifter<B> for () {
+    type InferenceState = ();
+
+    fn lift_state(_state: &Self::InferenceState) -> Self {}
+}
+
+impl<B: AutodiffBackend, const D: usize> BurnStateLifter<B> for Tensor<B, D> {
+    type InferenceState = Tensor<B::InnerBackend, D>;
+
+    fn lift_state(state: &Self::InferenceState) -> Self {
+        Tensor::from_data(state.to_data(), &Default::default())
+    }
 }
 
 /// Loss container used by Burn on-policy learning modules.
@@ -159,6 +186,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueMod
 impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for JointPolicyValueModule<B, D> {
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
+    type InferenceState = <D::InnerModule as Actor>::State;
+    type LearningState = D::State;
     type Policy = D;
     type InferencePolicy = D::InnerModule;
 
@@ -176,6 +205,10 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for JointPolic
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
         Tensor::from_data(t.to_data(), &Default::default())
+    }
+
+    fn state_lifter(state: &Self::InferenceState) -> Self::LearningState {
+        D::lift_state(state)
     }
 }
 
@@ -258,6 +291,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueMod
 impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolicyValueModule<B, D> {
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
+    type InferenceState = <D::InnerModule as Actor>::State;
+    type LearningState = D::State;
     type Policy = D;
     type InferencePolicy = D::InnerModule;
 
@@ -275,6 +310,10 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolic
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
         Tensor::from_data(t.to_data(), &Default::default())
+    }
+
+    fn state_lifter(state: &Self::InferenceState) -> Self::LearningState {
+        D::lift_state(state)
     }
 }
 
@@ -367,6 +406,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueModule<B
 impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValueModule<B, D> {
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
+    type InferenceState = <D::InnerModule as Actor>::State;
+    type LearningState = D::State;
     type Policy = D;
     type InferencePolicy = D::InnerModule;
 
@@ -393,6 +434,10 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValu
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
         Tensor::from_data(t.to_data(), &Default::default())
+    }
+
+    fn state_lifter(state: &Self::InferenceState) -> Self::LearningState {
+        D::lift_state(state)
     }
 }
 

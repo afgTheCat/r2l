@@ -8,36 +8,45 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-pub enum WorkerCommand<T: R2lTensor> {
+pub enum WorkerCommand<T: R2lTensor, S: Clone + Send + Sync + 'static> {
     Step,
-    SetPolicy(Box<dyn Actor<Tensor = T>>),
+    SetPolicy(Box<dyn Actor<Tensor = T, State = S>>),
     ResetEnv(u64),
     Stop,
 }
 
-pub enum WorkerResult<T: R2lTensor> {
-    Stepped(Memory<T>),
+pub enum WorkerResult<T: R2lTensor, S: Clone + Send + Sync + 'static> {
+    Stepped(Memory<T, S>),
     PolicySet,
     EnvReset,
     Stopped,
 }
 
-struct Worker<T: R2lTensor, E: Env<Tensor = T>> {
-    actor: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
+struct Worker<T: R2lTensor, E: Env<Tensor = T>, S: Clone + Send + Sync + 'static> {
+    actor: Option<Box<dyn Actor<Tensor = E::Tensor, State = S>>>,
+    actor_state: Option<S>,
     env: E,
 }
 
-impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
+impl<T: R2lTensor, E: Env<Tensor = T>, S: Clone + Send + Sync + 'static> Worker<T, E, S> {
     fn new(env: E) -> Self {
-        Self { actor: None, env }
+        Self {
+            actor: None,
+            actor_state: None,
+            env,
+        }
     }
 
-    fn step(&mut self, handle: &mut ElementHandle<T>) -> Memory<T> {
-        let Some(policy) = &mut self.actor else {
-            todo!()
-        };
+    fn set_actor(&mut self, actor: Box<dyn Actor<Tensor = E::Tensor, State = S>>) {
+        self.actor = Some(actor);
+    }
+
+    fn step(&mut self, handle: &mut ElementHandle<T>) -> Memory<T, S> {
+        let Some(policy) = &self.actor else { todo!() };
         let state = handle.lock().unwrap().clone();
-        let action = policy.action(state.clone()).unwrap();
+        let actor_state = self.actor_state.take();
+        let memory_actor_state = actor_state.clone();
+        let (action, next_actor_state) = policy.action(state.clone(), actor_state).unwrap();
         let Snapshot {
             state: mut next_state,
             reward,
@@ -48,11 +57,13 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
         if done {
             next_state = self.env.reset(sample_u64()).unwrap();
         }
+        self.actor_state = (!done).then_some(next_actor_state);
         *handle.lock().unwrap() = next_state.clone();
         Memory {
             state,
             next_state,
             action,
+            actor_state: memory_actor_state,
             reward,
             terminated,
             truncated,
@@ -60,12 +71,12 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
     }
 }
 
-struct VecWorker<T: R2lTensor, E: Env<Tensor = T>> {
-    worker: Worker<T, E>,
+struct VecWorker<T: R2lTensor, E: Env<Tensor = T>, S: Clone + Send + Sync + 'static> {
+    worker: Worker<T, E, S>,
     handle: ElementHandle<T>,
 }
 
-impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
+impl<T: R2lTensor, E: Env<Tensor = T>, S: Clone + Send + Sync + 'static> VecWorker<T, E, S> {
     fn new(env: E, handle: ElementHandle<T>) -> Self {
         Self {
             worker: Worker::new(env),
@@ -73,25 +84,26 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
         }
     }
 
-    fn step(&mut self) -> Memory<T> {
+    fn step(&mut self) -> Memory<T, S> {
         self.worker.step(&mut self.handle)
     }
 
-    fn set_policy(&mut self, policy: Box<dyn Actor<Tensor = T>>) {
-        self.worker.actor = Some(policy);
+    fn set_policy(&mut self, policy: Box<dyn Actor<Tensor = T, State = S>>) {
+        self.worker.set_actor(policy);
     }
 
     fn reset(&mut self) {
         let state = self.worker.env.reset(sample_u64()).unwrap();
+        self.worker.actor_state = None;
         *self.handle.lock().unwrap() = state;
     }
 }
 
-pub struct VecWorkers<T: R2lTensor, E: Env<Tensor = T>> {
-    workers: Vec<VecWorker<T, E>>,
+pub struct VecWorkers<T: R2lTensor, E: Env<Tensor = T>, S: Clone + Send + Sync + 'static = ()> {
+    workers: Vec<VecWorker<T, E, S>>,
 }
 
-impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
+impl<T: R2lTensor, E: Env<Tensor = T>, S: Clone + Send + Sync + 'static> VecWorkers<T, E, S> {
     pub fn new(workers: Vec<(E, ElementHandle<T>)>) -> Self {
         let workers = workers
             .into_iter()
@@ -100,7 +112,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
         Self { workers }
     }
 
-    fn step(&mut self) -> MultiMemory<T> {
+    fn step(&mut self) -> MultiMemory<T, S> {
         let mut multi_memory = MultiMemory::with_capacity(self.workers.len());
         for worker in &mut self.workers {
             multi_memory.push_memory(worker.step());
@@ -108,7 +120,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
         multi_memory
     }
 
-    fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<T> {
+    fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<T, S> {
         let mut multi_memory = MultiMemory::with_capacity(indices.len());
         for idx in indices {
             multi_memory.push_memory(self.workers[*idx].step());
@@ -116,7 +128,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
         multi_memory
     }
 
-    fn set_policy<A: Actor<Tensor = T> + Clone>(&mut self, policy: A) {
+    fn set_policy<A: Actor<Tensor = T, State = S> + Clone>(&mut self, policy: A) {
         for worker in &mut self.workers {
             worker.set_policy(Box::new(policy.clone()));
         }
@@ -129,14 +141,14 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
     }
 }
 
-pub struct ThreadWorker<T: R2lTensor, E: Env<Tensor = T>> {
-    worker: Worker<T, E>,
-    rx: Receiver<WorkerCommand<T>>,
-    tx: Sender<WorkerResult<T>>,
+pub struct ThreadWorker<T: R2lTensor, E: Env<Tensor = T>, S: Clone + Send + Sync + 'static = ()> {
+    worker: Worker<T, E, S>,
+    rx: Receiver<WorkerCommand<T, S>>,
+    tx: Sender<WorkerResult<T, S>>,
 }
 
-impl<T: R2lTensor, E: Env<Tensor = T>> ThreadWorker<T, E> {
-    fn new(env: E, rx: Receiver<WorkerCommand<T>>, tx: Sender<WorkerResult<T>>) -> Self {
+impl<T: R2lTensor, E: Env<Tensor = T>, S: Clone + Send + Sync + 'static> ThreadWorker<T, E, S> {
+    fn new(env: E, rx: Receiver<WorkerCommand<T, S>>, tx: Sender<WorkerResult<T, S>>) -> Self {
         Self {
             worker: Worker::new(env),
             rx,
@@ -145,7 +157,9 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ThreadWorker<T, E> {
     }
 }
 
-impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
+impl<T: R2lTensor, E: Env<Tensor = T>, S: Clone + Send + Sync + 'static> ElementWorker
+    for ThreadWorker<T, E, S>
+{
     type T = T;
 
     fn build(&mut self) -> Self::T {
@@ -160,11 +174,12 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
                     self.tx.send(WorkerResult::Stepped(memory)).unwrap();
                 }
                 WorkerCommand::SetPolicy(policy) => {
-                    self.worker.actor = Some(policy);
+                    self.worker.set_actor(policy);
                     self.tx.send(WorkerResult::PolicySet).unwrap();
                 }
                 WorkerCommand::ResetEnv(seed) => {
                     let state = self.worker.env.reset(seed).unwrap();
+                    self.worker.actor_state = None;
                     *handle.lock().unwrap() = state;
                     self.tx.send(WorkerResult::EnvReset).unwrap();
                 }
@@ -177,17 +192,23 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
     }
 }
 
-pub struct ThreadWorkerFactory<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> {
-    rx: Receiver<WorkerCommand<T>>,
-    tx: Sender<WorkerResult<T>>,
+pub struct ThreadWorkerFactory<
+    T: R2lTensor,
+    EB: EnvBuilder<Env: Env<Tensor = T>>,
+    S: Clone + Send + Sync + 'static = (),
+> {
+    rx: Receiver<WorkerCommand<T, S>>,
+    tx: Sender<WorkerResult<T, S>>,
     env_builder: EB,
     worker_seed: u64,
 }
 
-impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ThreadWorkerFactory<T, EB> {
+impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>, S: Clone + Send + Sync + 'static>
+    ThreadWorkerFactory<T, EB, S>
+{
     pub fn new(
-        rx: Receiver<WorkerCommand<T>>,
-        tx: Sender<WorkerResult<T>>,
+        rx: Receiver<WorkerCommand<T, S>>,
+        tx: Sender<WorkerResult<T, S>>,
         env_builder: EB,
         worker_seed: u64,
     ) -> Self {
@@ -200,10 +221,10 @@ impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ThreadWorkerFactory<T, 
     }
 }
 
-impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ElementWorkerFactory
-    for ThreadWorkerFactory<T, EB>
+impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>, S: Clone + Send + Sync + 'static>
+    ElementWorkerFactory for ThreadWorkerFactory<T, EB, S>
 {
-    type Worker = ThreadWorker<T, <EB as EnvBuilder>::Env>;
+    type Worker = ThreadWorker<T, <EB as EnvBuilder>::Env, S>;
 
     fn build(self) -> Self::Worker {
         set_seed(self.worker_seed);
@@ -212,38 +233,41 @@ impl<T: R2lTensor, EB: EnvBuilder<Env: Env<Tensor = T>>> ElementWorkerFactory
     }
 }
 
-pub struct ThreadHandle<T: R2lTensor> {
-    command_tx: Sender<WorkerCommand<T>>,
-    result_rx: Receiver<WorkerResult<T>>,
+pub struct ThreadHandle<T: R2lTensor, S: Clone + Send + Sync + 'static = ()> {
+    command_tx: Sender<WorkerCommand<T, S>>,
+    result_rx: Receiver<WorkerResult<T, S>>,
 }
 
-impl<T: R2lTensor> ThreadHandle<T> {
-    pub fn new(command_tx: Sender<WorkerCommand<T>>, result_rx: Receiver<WorkerResult<T>>) -> Self {
+impl<T: R2lTensor, S: Clone + Send + Sync + 'static> ThreadHandle<T, S> {
+    pub fn new(
+        command_tx: Sender<WorkerCommand<T, S>>,
+        result_rx: Receiver<WorkerResult<T, S>>,
+    ) -> Self {
         Self {
             command_tx,
             result_rx,
         }
     }
 
-    fn send(&self, command: WorkerCommand<T>) {
+    fn send(&self, command: WorkerCommand<T, S>) {
         self.command_tx.send(command).unwrap();
     }
 
-    fn recv(&self) -> WorkerResult<T> {
+    fn recv(&self) -> WorkerResult<T, S> {
         self.result_rx.recv().unwrap()
     }
 }
 
-pub struct ThreadWorkers<T: R2lTensor> {
-    worker_handles: Vec<ThreadHandle<T>>,
+pub struct ThreadWorkers<T: R2lTensor, S: Clone + Send + Sync + 'static = ()> {
+    worker_handles: Vec<ThreadHandle<T, S>>,
 }
 
-impl<T: R2lTensor> ThreadWorkers<T> {
-    pub fn new(worker_handles: Vec<ThreadHandle<T>>) -> Self {
+impl<T: R2lTensor, S: Clone + Send + Sync + 'static> ThreadWorkers<T, S> {
+    pub fn new(worker_handles: Vec<ThreadHandle<T, S>>) -> Self {
         Self { worker_handles }
     }
 
-    fn step(&self) -> MultiMemory<T> {
+    fn step(&self) -> MultiMemory<T, S> {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::Step);
         }
@@ -257,7 +281,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         multi_memory
     }
 
-    fn step_indexed(&self, indices: &[usize]) -> MultiMemory<T> {
+    fn step_indexed(&self, indices: &[usize]) -> MultiMemory<T, S> {
         for idx in indices {
             self.worker_handles[*idx].send(WorkerCommand::Step);
         }
@@ -271,7 +295,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         multi_memory
     }
 
-    fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
+    fn set_policy<A: Actor<Tensor = T, State = S> + Clone>(&self, policy: A) {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
         }
@@ -305,27 +329,27 @@ impl<T: R2lTensor> ThreadWorkers<T> {
     }
 }
 
-pub enum WorkerPool<E: Env<Tensor: R2lTensor>> {
-    Vec(VecWorkers<E::Tensor, E>),
-    Thread(ThreadWorkers<E::Tensor>),
+pub enum WorkerPool<E: Env<Tensor: R2lTensor>, S: Clone + Send + Sync + 'static = ()> {
+    Vec(VecWorkers<E::Tensor, E, S>),
+    Thread(ThreadWorkers<E::Tensor, S>),
 }
 
-impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
-    pub fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<E::Tensor> {
+impl<E: Env<Tensor: R2lTensor>, S: Clone + Send + Sync + 'static> WorkerPool<E, S> {
+    pub fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<E::Tensor, S> {
         match self {
             Self::Vec(workers) => workers.step_indexed(indices),
             Self::Thread(workers) => workers.step_indexed(indices),
         }
     }
 
-    pub fn step(&mut self) -> MultiMemory<E::Tensor> {
+    pub fn step(&mut self) -> MultiMemory<E::Tensor, S> {
         match self {
             Self::Vec(workers) => workers.step(),
             Self::Thread(workers) => workers.step(),
         }
     }
 
-    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
+    pub fn set_policy<A: Actor<Tensor = E::Tensor, State = S> + Clone>(&mut self, policy: A) {
         match self {
             Self::Vec(workers) => workers.set_policy(policy),
             Self::Thread(workers) => workers.set_policy(policy),

@@ -43,8 +43,13 @@ impl<B: Backend> MultiCategoricalDistribution<B> {
 
 impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
     type Tensor = Tensor<B, 1>;
+    type State = ();
 
-    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        _state: Option<Self::State>,
+    ) -> anyhow::Result<(Self::Tensor, Self::State)> {
         let device = Default::default();
         let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation).squeeze::<1>();
@@ -58,9 +63,9 @@ impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
             let action = with_rng(|rng| distribution.sample(rng));
             actions.push(action as f32);
         }
-        Ok(Tensor::from_data(
-            TensorData::new(actions, vec![self.nvec.len()]),
-            &device,
+        Ok((
+            Tensor::from_data(TensorData::new(actions, vec![self.nvec.len()]), &device),
+            (),
         ))
     }
 

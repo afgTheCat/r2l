@@ -1,7 +1,7 @@
 use anyhow::bail;
 use burn::{
     module::Module,
-    nn::{Linear, LinearConfig, Rnn, RnnConfig},
+    nn::{Linear, LinearConfig, Rnn, RnnConfig, RnnState},
     tensor::{
         Tensor, TensorData,
         activation::{log_softmax, softmax},
@@ -20,9 +20,9 @@ use crate::sequential::Sequential;
 
 /// Recurrent categorical Burn policy for discrete action spaces.
 ///
-/// This is the first recurrent policy building block. It uses a stateless
-/// length-1 sequence path to satisfy the current [`Policy`] trait; later
-/// recurrent PPO work should add hidden-state-aware traits and samplers.
+/// This is the first recurrent policy building block. Action selection accepts
+/// and returns hidden state, while the current [`Policy`] training methods
+/// still use a stateless length-1 sequence path until recurrent PPO is wired.
 #[derive(Debug, Module)]
 pub struct RecurrentCategoricalDistribution<B: Backend> {
     encoder: Sequential<B>,
@@ -42,7 +42,6 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
             layers.len() >= 2,
             "recurrent categorical policy requires input and output sizes"
         );
-
         let device = Default::default();
         let observation_size = layers[0];
         let action_size = *layers.last().unwrap();
@@ -56,13 +55,11 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
         } else {
             vec![observation_size]
         };
-
         let encoder = Sequential::build(&encoder_layers, ActivationFunction::default());
         let recurrent = RnnConfig::new(recurrent_size, recurrent_size, true).init::<B>(&device);
         let logits = LinearConfig::new(recurrent_size, action_size)
             .with_bias(true)
             .init::<B>(&device);
-
         Self {
             encoder,
             recurrent,
@@ -71,12 +68,17 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
         }
     }
 
-    fn logits(&self, states: Tensor<B, 2>) -> Tensor<B, 2> {
+    fn logits(
+        &self,
+        states: Tensor<B, 2>,
+        state: Option<Tensor<B, 2>>,
+    ) -> (Tensor<B, 2>, Tensor<B, 2>) {
         let encoded = self.encoder.forward(states);
         let sequence = encoded.unsqueeze_dim(1);
-        let (recurrent_output, _) = self.recurrent.forward(sequence, None);
+        let state = state.map(RnnState::new);
+        let (recurrent_output, state) = self.recurrent.forward(sequence, state);
         let recurrent_output = recurrent_output.squeeze_dim(1);
-        self.logits.forward(recurrent_output)
+        (self.logits.forward(recurrent_output), state.hidden)
     }
 
     // TODO: this is brittle in the same way as the other Burn distributions.
@@ -100,19 +102,27 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
 
 impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
     type Tensor = Tensor<B, 1>;
+    type State = Tensor<B, 2>;
 
-    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        state: Option<Self::State>,
+    ) -> anyhow::Result<(Self::Tensor, Self::State)> {
         let device = Default::default();
         let observation: Tensor<B, 2> = observation.unsqueeze();
-        let logits = self.logits(observation);
+        let (logits, state) = self.logits(observation, state);
         let action_probs: Vec<f32> = softmax(logits, 1).to_data().to_vec().unwrap();
         let distribution = WeightedIndex::new(&action_probs).unwrap();
         let action = with_rng(|rng| distribution.sample(rng));
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
-        Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
-            &device,
+        Ok((
+            Tensor::from_data(
+                TensorData::new(action_mask, vec![self.action_size]),
+                &device,
+            ),
+            state,
         ))
     }
 
@@ -131,7 +141,7 @@ impl<B: Backend> Policy for RecurrentCategoricalDistribution<B> {
     ) -> anyhow::Result<Self::Tensor> {
         let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
-        let logits = self.logits(states);
+        let (logits, _) = self.logits(states, None);
         let log_probs = log_softmax(logits, 1);
         let log_probs = (actions * log_probs).sum_dim(1);
         Ok(log_probs.squeeze())
@@ -139,7 +149,7 @@ impl<B: Backend> Policy for RecurrentCategoricalDistribution<B> {
 
     fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
         let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
-        let logits = self.logits(states);
+        let (logits, _) = self.logits(states, None);
         let probs = softmax(logits.clone(), 1);
         let log_probs = log_softmax(logits, 1);
         let entropy_per_state = (probs * log_probs).neg().sum_dim(1);

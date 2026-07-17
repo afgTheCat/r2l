@@ -6880,9 +6880,14 @@ version = "0.0.2-rc2"
 dependencies = [
  "anyhow",
  "bimodal-array",
+ "burn",
  "crossbeam",
  "itertools 0.15.0",
+ "r2l-agents",
+ "r2l-api",
+ "r2l-burn",
  "r2l-core",
+ "r2l-gym",
  "rand 0.10.1",
 ]
 

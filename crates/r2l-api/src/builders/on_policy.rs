@@ -25,13 +25,25 @@ use crate::{
 
 type DefaultOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
     A,
-    R2lSampler<<EB as EnvBuilder>::Env, <SH as SamplerHookBuilder>::Target>,
+    R2lSampler<
+        <EB as EnvBuilder>::Env,
+        <SH as SamplerHookBuilder>::Target,
+        <A as Agent>::RolloutState,
+    >,
     DefaultOnPolicyAlgorithmHooks<
         A,
-        R2lSampler<<EB as EnvBuilder>::Env, <SH as SamplerHookBuilder>::Target>,
+        R2lSampler<
+            <EB as EnvBuilder>::Env,
+            <SH as SamplerHookBuilder>::Target,
+            <A as Agent>::RolloutState,
+        >,
         DefaultAdapter,
         <EB as EnvBuilder>::Env,
-        R2lSampler<<EB as EnvBuilder>::Env, EpisodeBoundHook<<EB as EnvBuilder>::Env>>,
+        R2lSampler<
+            <EB as EnvBuilder>::Env,
+            EpisodeBoundHook<<EB as EnvBuilder>::Env>,
+            <A as Agent>::RolloutState,
+        >,
     >,
 >;
 
@@ -40,13 +52,25 @@ type DefaultOnPolicyAlgorithmFor<AB, EB, SH> =
 
 type NormalizedOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
     A,
-    R2lNormalizedSampler<<EB as EnvBuilder>::Env, <SH as SamplerHookBuilder>::Target>,
+    R2lNormalizedSampler<
+        <EB as EnvBuilder>::Env,
+        <SH as SamplerHookBuilder>::Target,
+        <A as Agent>::RolloutState,
+    >,
     DefaultOnPolicyAlgorithmHooks<
         A,
-        R2lNormalizedSampler<<EB as EnvBuilder>::Env, <SH as SamplerHookBuilder>::Target>,
+        R2lNormalizedSampler<
+            <EB as EnvBuilder>::Env,
+            <SH as SamplerHookBuilder>::Target,
+            <A as Agent>::RolloutState,
+        >,
         DefaultAdapter,
         <EB as EnvBuilder>::Env,
-        R2lNormalizedSampler<<EB as EnvBuilder>::Env, EpisodeBoundHook<<EB as EnvBuilder>::Env>>,
+        R2lNormalizedSampler<
+            <EB as EnvBuilder>::Env,
+            EpisodeBoundHook<<EB as EnvBuilder>::Env>,
+            <A as Agent>::RolloutState,
+        >,
     >,
 >;
 
@@ -289,14 +313,20 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
     where
         DefaultAdapter: OnPolicyAdapters<
                 <<AB as AgentBuilder>::Agent as Agent>::Actor,
-                R2lSampler<<EB as EnvBuilder>::Env, SH::Target>,
+                R2lSampler<
+                    <EB as EnvBuilder>::Env,
+                    SH::Target,
+                    <<AB as AgentBuilder>::Agent as Agent>::RolloutState,
+                >,
             >,
     {
         if let Some(seed) = self.seed {
             set_seed(seed);
         }
         let env_description = self.sampler_builder.env_builder.env_description()?;
-        let sampler = self.sampler_builder.build();
+        let sampler = self
+            .sampler_builder
+            .build_with_state::<<<AB as AgentBuilder>::Agent as Agent>::RolloutState>();
         let observation_size = env_description.observation_size();
         let action_space = env_description.action_space;
         let agent = self
@@ -326,7 +356,11 @@ impl<
     where
         DefaultAdapter: OnPolicyAdapters<
                 <<AB as AgentBuilder>::Agent as Agent>::Actor,
-                R2lNormalizedSampler<<EB as EnvBuilder>::Env, SH::Target>,
+                R2lNormalizedSampler<
+                    <EB as EnvBuilder>::Env,
+                    SH::Target,
+                    <<AB as AgentBuilder>::Agent as Agent>::RolloutState,
+                >,
             >,
     {
         if let Some(seed) = self.seed {
@@ -335,13 +369,19 @@ impl<
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let observation_size = env_description.observation_size();
         let action_space = env_description.action_space;
-        let sampler = self.sampler_builder.build();
+        let sampler = self
+            .sampler_builder
+            .build_with_state::<<<AB as AgentBuilder>::Agent as Agent>::RolloutState>();
         let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);
         let agent = self
             .agent_builder
             .build(observation_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|evaluator_builder| {
-            let eval_sampler = R2lNormalizedSampler::build_with_obs_normalizer(
+            let eval_sampler = R2lNormalizedSampler::<
+                <EB as EnvBuilder>::Env,
+                EpisodeBoundHook<<EB as EnvBuilder>::Env>,
+                <<AB as AgentBuilder>::Agent as Agent>::RolloutState,
+            >::build_with_obs_normalizer(
                 evaluator_builder.env_builder().clone(),
                 EpisodeBoundHook::new(evaluator_builder.n_episodes()),
                 evaluator_builder.execution_mode(),

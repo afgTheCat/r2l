@@ -77,8 +77,9 @@ impl DiagGaussianDistribution {
 
 impl Actor for DiagGaussianDistribution {
     type Tensor = Tensor;
+    type State = ();
 
-    fn action(&self, observation: Tensor) -> Result<Tensor> {
+    fn action(&self, observation: Tensor, _state: Option<()>) -> Result<(Tensor, ())> {
         assert!(
             observation.rank() == 1,
             "Observation should be a flattened tensor"
@@ -91,7 +92,7 @@ impl Actor for DiagGaussianDistribution {
         let std = self.log_std.exp()?.unsqueeze(0)?;
         let noise = Tensor::randn(0f32, 1., self.log_std.shape(), self.log_std.device())?;
         let action = (mu + std.mul(&noise.unsqueeze(0)?)?)?.squeeze(0)?.detach();
-        Ok(action)
+        Ok((action, ()))
     }
 
     fn try_serialize(&self) -> Option<Vec<u8>> {

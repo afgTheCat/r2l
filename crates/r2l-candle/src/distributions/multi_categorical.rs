@@ -56,8 +56,9 @@ impl MultiCategoricalDistribution {
 
 impl Actor for MultiCategoricalDistribution {
     type Tensor = Tensor;
+    type State = ();
 
-    fn action(&self, observation: Tensor) -> Result<Tensor> {
+    fn action(&self, observation: Tensor, _state: Option<()>) -> Result<(Tensor, ())> {
         assert!(
             observation.rank() == 1,
             "Observation should be a flattened tensor"
@@ -72,7 +73,10 @@ impl Actor for MultiCategoricalDistribution {
             let action = with_rng(|rng| distribution.sample(rng));
             actions.push(action as f32);
         }
-        Ok(Tensor::from_vec(actions, self.nvec.len(), &self.device)?.detach())
+        Ok((
+            Tensor::from_vec(actions, self.nvec.len(), &self.device)?.detach(),
+            (),
+        ))
     }
 }
 

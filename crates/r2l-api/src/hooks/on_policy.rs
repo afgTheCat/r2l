@@ -62,7 +62,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     S: Sampler,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
-    S2: Sampler<Tensor = S::Tensor>,
+    S2: Sampler<Tensor = S::Tensor, State = S::State>,
 > {
     learning_schedule: LearningSchedule,
     evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
@@ -75,7 +75,7 @@ impl<
     S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
-    S2: Sampler<Tensor = S::Tensor>,
+    S2: Sampler<Tensor = S::Tensor, State = S::State>,
 > DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
 {
     /// Creates the default outer-loop hooks for the given learning schedule.
@@ -97,7 +97,7 @@ impl<
     S: Sampler<Tensor: R2lTensor>,
     C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
-    S2: Sampler<Tensor = S::Tensor>,
+    S2: Sampler<Tensor = S::Tensor, State = S::State>,
 > OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
 {
     type A = A;
