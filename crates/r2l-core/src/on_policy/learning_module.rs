@@ -1,5 +1,5 @@
 use crate::{
-    models::{LearningModule, Policy, ValueFunction},
+    models::{Actor, LearningModule, ValueFunction},
     on_policy::losses::FromPolicyValueLosses,
     tensor::R2lTensor,
 };
@@ -23,9 +23,9 @@ pub trait OnPolicyLearningModule:
     type LearningState: Clone + Send + Sync + 'static;
 
     /// Policy type used for rollout/inference.
-    type InferencePolicy: Policy<Tensor = Self::InferenceTensor, State = Self::InferenceState>;
+    type InferencePolicy: Actor<Tensor = Self::InferenceTensor, State = Self::InferenceState>;
     /// Policy type used while computing losses.
-    type Policy: Policy<Tensor = Self::LearningTensor, State = Self::LearningState>;
+    type Policy: Actor<Tensor = Self::LearningTensor, State = Self::LearningState>;
 
     /// Converts an inference tensor into a learning tensor.
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;

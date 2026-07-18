@@ -213,8 +213,10 @@ pub struct DefaultA2CHook<T = ()> {
     pub(crate) _lm: PhantomData<T>,
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
-    for DefaultA2CHook<BurnPolicyValueModule<B, D>>
+impl<B, D> A2CHook<BurnPolicyValueModule<B, D>> for DefaultA2CHook<BurnPolicyValueModule<B, D>>
+where
+    B: AutodiffBackend,
+    D: BurnPolicy<B> + Policy,
 {
     fn before_learning_hook<
         C: TrajectoryBatch<<BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor>,

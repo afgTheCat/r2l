@@ -245,8 +245,11 @@ pub struct DefaultPPOHook<T = ()> {
     pub(crate) _lm: PhantomData<T>,
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
-    for DefaultPPOHook<BurnPolicyValueModule<B, D>>
+impl<B, D> PPOHook<BurnPolicyValueModule<B, D>> for DefaultPPOHook<BurnPolicyValueModule<B, D>>
+where
+    B: AutodiffBackend,
+    D: BurnPolicy<B> + Policy,
+    D::InnerModule: Policy,
 {
     fn before_learning_hook<
         BT: TrajectoryBatch<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,

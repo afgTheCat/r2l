@@ -84,7 +84,10 @@ pub mod prelude {
     pub use crate::HookResult;
     pub use crate::buffers::Memory;
     pub use crate::env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Space};
-    pub use crate::models::{ActivationFunction, Actor, LearningModule, Policy, ValueFunction};
+    pub use crate::models::{
+        ActivationFunction, Actor, LearningModule, Policy, RecurrentPolicy, RecurrentPolicyOutput,
+        ValueFunction,
+    };
     pub use crate::on_policy::learning_module::OnPolicyLearningModule;
     pub use crate::on_policy::losses::FromPolicyValueLosses;
     pub use crate::tensor::{R2lTensor, TensorData};

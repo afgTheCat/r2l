@@ -13,7 +13,7 @@ use burn::{
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_core::{
-    models::{ActivationFunction, Actor, LearningModule, Policy, ValueFunction},
+    models::{ActivationFunction, Actor, LearningModule, ValueFunction},
     on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
 
@@ -22,21 +22,22 @@ use crate::{distributions::PolicyKind, sequential::Sequential};
 // A series constraints that we need for the policy to work nicely with AdamW
 /// Trait alias-like bound for Burn policies used by on-policy learning modules.
 ///
-/// This captures the combination of Burn autodiff support and `r2l-core`
-/// [`Policy`] behavior required by the Burn learning-module implementations.
+/// This captures the Burn autodiff and inference-time [`Actor`] behavior
+/// required by the Burn learning-module implementations. Algorithms add their
+/// own [`r2l_core::models::Policy`] or recurrent-policy bounds.
 pub trait BurnPolicy<B: AutodiffBackend>:
-    AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
+    AutodiffModule<B, InnerModule: ModuleDisplay + Actor<Tensor = Tensor<B::InnerBackend, 1>>>
     + ModuleDisplay
-    + Policy<Tensor = Tensor<B, 1>>
+    + Actor<Tensor = Tensor<B, 1>>
 {
     fn lift_state(state: &<Self::InnerModule as Actor>::State) -> Self::State;
 }
 
 impl<B: AutodiffBackend, M> BurnPolicy<B> for M
 where
-    M: AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
+    M: AutodiffModule<B, InnerModule: ModuleDisplay + Actor<Tensor = Tensor<B::InnerBackend, 1>>>
         + ModuleDisplay
-        + Policy<Tensor = Tensor<B, 1>>,
+        + Actor<Tensor = Tensor<B, 1>>,
     M::State: BurnStateLifter<B, InferenceState = <M::InnerModule as Actor>::State>,
 {
     fn lift_state(state: &<Self::InnerModule as Actor>::State) -> Self::State {

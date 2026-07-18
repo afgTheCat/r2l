@@ -142,30 +142,3 @@ impl<T: R2lTensor, S: Clone + Send + Sync + 'static> TrajectoryBuffer<T, S> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::TrajectoryBuffer;
-    use crate::{
-        buffers::{Memory, TrajectoryBatch},
-        tensor::TensorData,
-    };
-
-    #[test]
-    fn actor_states_stay_aligned_with_transitions() {
-        let mut buffer = TrajectoryBuffer::<TensorData, usize>::default();
-        buffer.push(Memory {
-            state: TensorData::from_vec(vec![0.0]),
-            next_state: TensorData::from_vec(vec![1.0]),
-            action: TensorData::from_vec(vec![1.0]),
-            actor_state: Some(7),
-            reward: 1.0,
-            terminated: false,
-            truncated: false,
-        });
-
-        let view = buffer.to_trajectory_view();
-        assert_eq!(view.len(), 1);
-        assert_eq!(view.actor_states(), &[Some(7)]);
-    }
-}

@@ -50,7 +50,10 @@ pub struct A2CBatchData<T: R2lTensor> {
 }
 
 /// Hook interface for customizing A2C training over trajectory batches.
-pub trait A2CHook<M: OnPolicyLearningModule> {
+pub trait A2CHook<M: OnPolicyLearningModule>
+where
+    M::Policy: Policy<State = M::LearningState>,
+{
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor, State = M::InferenceState>>(
         &mut self,
         _params: &mut A2CParams,
@@ -83,7 +86,12 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
 }
 
 /// Prototype Advantage Actor-Critic algorithm over finalized trajectory batches.
-pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
+pub struct A2C<Module, Hooks>
+where
+    Module: OnPolicyLearningModule,
+    Module::Policy: Policy<State = Module::LearningState>,
+    Hooks: A2CHook<Module>,
+{
     /// A2C hyperparameters.
     pub params: A2CParams,
     /// Learning module containing policy, value function, and optimizer state.
@@ -92,7 +100,12 @@ pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
     pub hooks: Hooks,
 }
 
-impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
+impl<Module, Hooks> A2C<Module, Hooks>
+where
+    Module: OnPolicyLearningModule,
+    Module::Policy: Policy<State = Module::LearningState>,
+    Hooks: A2CHook<Module>,
+{
     fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
         batches: &[B],
@@ -158,7 +171,12 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
     }
 }
 
-impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
+impl<M, H> Agent for A2C<M, H>
+where
+    M: OnPolicyLearningModule,
+    M::Policy: Policy<State = M::LearningState>,
+    H: A2CHook<M>,
+{
     type Tensor = M::InferenceTensor;
     type RolloutState = M::InferenceState;
     type Actor = M::InferencePolicy;

@@ -35,14 +35,22 @@ impl Default for VPGParams {
 }
 
 /// Prototype Vanilla Policy Gradient algorithm over finalized trajectory batches.
-pub struct VPG<Module: OnPolicyLearningModule> {
+pub struct VPG<Module>
+where
+    Module: OnPolicyLearningModule,
+    Module::Policy: Policy<State = Module::LearningState>,
+{
     /// VPG hyperparameters.
     pub params: VPGParams,
     /// Learning module containing policy, value function, and optimizer state.
     pub lm: Module,
 }
 
-impl<Module: OnPolicyLearningModule> VPG<Module> {
+impl<Module> VPG<Module>
+where
+    Module: OnPolicyLearningModule,
+    Module::Policy: Policy<State = Module::LearningState>,
+{
     fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
         batches: &[B],
@@ -84,7 +92,11 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
     }
 }
 
-impl<M: OnPolicyLearningModule> Agent for VPG<M> {
+impl<M> Agent for VPG<M>
+where
+    M: OnPolicyLearningModule,
+    M::Policy: Policy<State = M::LearningState>,
+{
     type Tensor = M::InferenceTensor;
     type RolloutState = M::InferenceState;
     type Actor = M::InferencePolicy;

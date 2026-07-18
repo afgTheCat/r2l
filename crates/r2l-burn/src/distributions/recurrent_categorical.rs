@@ -1,4 +1,4 @@
-use anyhow::bail;
+use anyhow::{bail, ensure};
 use burn::{
     module::Module,
     nn::{Linear, LinearConfig, Rnn, RnnConfig, RnnState},
@@ -10,7 +10,7 @@ use burn::{
 };
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, RecurrentPolicy, RecurrentPolicyOutput},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistribution;
@@ -20,9 +20,8 @@ use crate::sequential::Sequential;
 
 /// Recurrent categorical Burn policy for discrete action spaces.
 ///
-/// This is the first recurrent policy building block. Action selection accepts
-/// and returns hidden state, while the current [`Policy`] training methods
-/// still use a stateless length-1 sequence path until recurrent PPO is wired.
+/// Action selection accepts and returns hidden state. The [`RecurrentPolicy`]
+/// implementation evaluates a contiguous sequence from a supplied state.
 #[derive(Debug, Module)]
 pub struct RecurrentCategoricalDistribution<B: Backend> {
     encoder: Sequential<B>,
@@ -68,16 +67,16 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
         }
     }
 
-    fn logits(
+    fn sequence_logits(
         &self,
         states: Tensor<B, 2>,
         state: Option<Tensor<B, 2>>,
     ) -> (Tensor<B, 2>, Tensor<B, 2>) {
         let encoded = self.encoder.forward(states);
-        let sequence = encoded.unsqueeze_dim(1);
+        let sequence = encoded.unsqueeze_dim(0);
         let state = state.map(RnnState::new);
         let (recurrent_output, state) = self.recurrent.forward(sequence, state);
-        let recurrent_output = recurrent_output.squeeze_dim(1);
+        let recurrent_output = recurrent_output.squeeze_dim(0);
         (self.logits.forward(recurrent_output), state.hidden)
     }
 
@@ -111,7 +110,7 @@ impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
     ) -> anyhow::Result<(Self::Tensor, Self::State)> {
         let device = Default::default();
         let observation: Tensor<B, 2> = observation.unsqueeze();
-        let (logits, state) = self.logits(observation, state);
+        let (logits, state) = self.sequence_logits(observation, state);
         let action_probs: Vec<f32> = softmax(logits, 1).to_data().to_vec().unwrap();
         let distribution = WeightedIndex::new(&action_probs).unwrap();
         let action = with_rng(|rng| distribution.sample(rng));
@@ -133,28 +132,36 @@ impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
     }
 }
 
-impl<B: Backend> Policy for RecurrentCategoricalDistribution<B> {
-    fn log_probs(
+impl<B: Backend> RecurrentPolicy for RecurrentCategoricalDistribution<B> {
+    fn evaluate_sequence(
         &self,
-        states: &[Self::Tensor],
+        observations: &[Self::Tensor],
         actions: &[Self::Tensor],
-    ) -> anyhow::Result<Self::Tensor> {
-        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
+        initial_state: Option<&Self::State>,
+    ) -> anyhow::Result<RecurrentPolicyOutput<Self::Tensor, Self::State>> {
+        ensure!(
+            !observations.is_empty(),
+            "recurrent sequence must not be empty"
+        );
+        ensure!(
+            observations.len() == actions.len(),
+            "recurrent observations and actions must have equal lengths"
+        );
+        let observations: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
-        let (logits, _) = self.logits(states, None);
-        let log_probs = log_softmax(logits, 1);
-        let log_probs = (actions * log_probs).sum_dim(1);
-        Ok(log_probs.squeeze())
-    }
-
-    fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
-        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
-        let (logits, _) = self.logits(states, None);
+        let (logits, final_state) = self.sequence_logits(observations, initial_state.cloned());
         let probs = softmax(logits.clone(), 1);
         let log_probs = log_softmax(logits, 1);
-        let entropy_per_state = (probs * log_probs).neg().sum_dim(1);
-        let entropy = entropy_per_state.mean();
-        Ok(entropy)
+        let entropy = (probs * log_probs.clone())
+            .neg()
+            .sum_dim(1)
+            .squeeze_dims(&[1]);
+        let log_probs = (actions * log_probs).sum_dim(1).squeeze_dims(&[1]);
+        Ok(RecurrentPolicyOutput {
+            log_probs,
+            entropy,
+            final_state,
+        })
     }
 
     fn std(&self) -> anyhow::Result<f32> {
