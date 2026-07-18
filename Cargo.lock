@@ -6830,6 +6830,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "r2l-envs"
+version = "0.0.2-rc2"
+dependencies = [
+ "anyhow",
+ "r2l-core",
+ "rand 0.10.1",
+]
+
+[[package]]
 name = "r2l-examples"
 version = "0.0.2-rc2"
 dependencies = [

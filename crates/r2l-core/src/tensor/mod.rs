@@ -116,6 +116,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     }
 }
 
+// TODO: stupid name
 /// Backend-neutral owned tensor payload.
 ///
 /// `TensorData` stores flat `f32` data with an explicit shape. It is useful for
