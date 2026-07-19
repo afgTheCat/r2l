@@ -69,13 +69,76 @@ impl<T: R2lTensor> RunningMeanStd<T> {
     }
 }
 
+/// Running mean and variance for scalar `f32` samples.
+#[derive(Clone, Debug)]
+pub struct RunningMeanStdF32 {
+    pub mean: f32,
+    pub var: f32,
+    count: f32,
+}
+
+impl Default for RunningMeanStdF32 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RunningMeanStdF32 {
+    /// Creates scalar running statistics with a small initial sample count.
+    pub fn new() -> Self {
+        Self::with_epsilon(1e-4)
+    }
+
+    /// Creates scalar running statistics with the provided initial sample count.
+    pub fn with_epsilon(epsilon: f32) -> Self {
+        assert!(epsilon >= 0.0);
+        Self {
+            mean: 0.0,
+            var: 1.0,
+            count: epsilon,
+        }
+    }
+
+    fn update_from_moments(&mut self, batch_mean: f32, batch_var: f32, batch_count: f32) {
+        if batch_count == 0.0 {
+            return;
+        }
+        let total_count = self.count + batch_count;
+        let delta = batch_mean - self.mean;
+        self.mean += delta * batch_count / total_count;
+        let m_a = self.var * self.count;
+        let m_b = batch_var * batch_count;
+        let m_2 = m_a + m_b + delta.powi(2) * self.count * batch_count / total_count;
+        self.var = m_2 / total_count;
+        self.count = total_count;
+    }
+
+    /// Updates the running statistics from a batch of scalar samples.
+    pub fn update(&mut self, samples: &[f32]) {
+        if samples.is_empty() {
+            return;
+        }
+        let batch_count = samples.len() as f32;
+        let batch_mean = samples.iter().sum::<f32>() / batch_count;
+        let batch_var = samples
+            .iter()
+            .map(|sample| (*sample - batch_mean).powi(2))
+            .sum::<f32>()
+            / batch_count;
+        self.update_from_moments(batch_mean, batch_var, batch_count);
+    }
+}
+
 #[cfg(test)]
 mod test {
     use anyhow::Result;
     use candle_core::{Device, Tensor};
     use rand::{RngExt, rng};
 
-    use crate::{running_mean::RunningMeanStd, tensor::R2lTensor};
+    use crate::{
+        running_mean::{RunningMeanStd, RunningMeanStdF32},
+        tensor::R2lTensor,
+    };
 
     fn biased_var(t: &Tensor, dim: usize) -> candle_core::Result<Tensor> {
         let mean = t.mean_keepdim(dim)?;
@@ -137,5 +200,27 @@ mod test {
         assert!(var_diff.to_scalar::<f32>()? < eps, "variance mismatch");
 
         Ok(())
+    }
+
+    #[test]
+    fn scalar_running_mean_std_updates_across_batches() {
+        let mut rms = RunningMeanStdF32::with_epsilon(0.0);
+
+        rms.update(&[1.0, 2.0]);
+        rms.update(&[3.0, 4.0]);
+
+        assert!((rms.mean - 2.5).abs() < 1e-6);
+        assert!((rms.var - 1.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn scalar_running_mean_std_has_stable_initial_variance() {
+        let mut rms = RunningMeanStdF32::new();
+
+        rms.update(&[1.0]);
+
+        assert!(rms.mean.is_finite());
+        assert!(rms.var.is_finite());
+        assert!(rms.var > 0.0);
     }
 }
