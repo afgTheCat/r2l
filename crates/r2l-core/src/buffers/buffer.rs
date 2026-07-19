@@ -5,21 +5,23 @@ use crate::{
 
 // the new buffer type I am experimenting with. Probably going to make things faster
 #[derive(Clone)]
-pub struct TrajectoryBuffer<T: R2lTensor> {
+pub struct TrajectoryBuffer<T: R2lTensor, S: Clone + Send + Sync + 'static = ()> {
     states: Vec<T>,
     next_states: Vec<T>,
     actions: Vec<T>,
+    actor_states: Vec<Option<S>>,
     rewards: Vec<f32>,
     terminated: Vec<bool>,
     truncated: Vec<bool>,
 }
 
-impl<T: R2lTensor> Default for TrajectoryBuffer<T> {
+impl<T: R2lTensor, S: Clone + Send + Sync + 'static> Default for TrajectoryBuffer<T, S> {
     fn default() -> Self {
         Self {
             states: Default::default(),
             next_states: Default::default(),
             actions: Default::default(),
+            actor_states: Default::default(),
             rewards: Default::default(),
             terminated: Default::default(),
             truncated: Default::default(),
@@ -27,16 +29,21 @@ impl<T: R2lTensor> Default for TrajectoryBuffer<T> {
     }
 }
 
-pub struct TrajectoryView<'a, T: R2lTensor> {
+pub struct TrajectoryView<'a, T: R2lTensor, S: Clone + Send + Sync + 'static = ()> {
     pub states: &'a [T],
     pub next_states: &'a [T],
     pub actions: &'a [T],
+    pub actor_states: &'a [Option<S>],
     pub rewards: &'a [f32],
     pub terminated: &'a [bool],
     pub truncated: &'a [bool],
 }
 
-impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryView<'a, T> {
+impl<'a, T: R2lTensor, S: Clone + Send + Sync + 'static> TrajectoryBatch<T>
+    for TrajectoryView<'a, T, S>
+{
+    type State = S;
+
     fn len(&self) -> usize {
         self.states.len()
     }
@@ -57,6 +64,10 @@ impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryView<'a, T> {
         self.actions
     }
 
+    fn actor_states(&self) -> &[Option<Self::State>] {
+        self.actor_states
+    }
+
     fn rewards(&self) -> &[f32] {
         self.rewards
     }
@@ -70,7 +81,7 @@ impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryView<'a, T> {
     }
 }
 
-impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
+impl<'a, T: R2lTensor, S: Clone + Send + Sync + 'static> TrajectoryView<'a, T, S> {
     pub fn dones(&self) -> impl Iterator<Item = bool> {
         self.terminated
             .iter()
@@ -83,21 +94,23 @@ impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
     }
 }
 
-impl<T: R2lTensor> TrajectoryBuffer<T> {
+impl<T: R2lTensor, S: Clone + Send + Sync + 'static> TrajectoryBuffer<T, S> {
     pub fn clear(&mut self) {
         self.states.clear();
         self.next_states.clear();
         self.actions.clear();
+        self.actor_states.clear();
         self.rewards.clear();
         self.terminated.clear();
         self.truncated.clear();
     }
 
-    pub fn push(&mut self, memory: Memory<T>) {
+    pub fn push(&mut self, memory: Memory<T, S>) {
         let Memory {
             state,
             next_state,
             action,
+            actor_state,
             reward,
             terminated,
             truncated,
@@ -105,6 +118,7 @@ impl<T: R2lTensor> TrajectoryBuffer<T> {
         self.states.push(state);
         self.next_states.push(next_state);
         self.actions.push(action);
+        self.actor_states.push(actor_state);
         self.rewards.push(reward);
         self.terminated.push(terminated);
         self.truncated.push(truncated);
@@ -116,11 +130,12 @@ impl<T: R2lTensor> TrajectoryBuffer<T> {
         }
     }
 
-    pub fn to_trajectory_view(&self) -> TrajectoryView<'_, T> {
+    pub fn to_trajectory_view(&self) -> TrajectoryView<'_, T, S> {
         TrajectoryView {
             states: &self.states,
             next_states: &self.next_states,
             actions: &self.actions,
+            actor_states: &self.actor_states,
             rewards: &self.rewards,
             terminated: &self.terminated,
             truncated: &self.truncated,

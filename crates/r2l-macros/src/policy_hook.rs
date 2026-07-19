@@ -204,31 +204,3 @@ impl ToTokens for PolicyTrait {
         );
     }
 }
-
-#[cfg(test)]
-mod test {
-    use quote::ToTokens;
-    use syn::parse_quote;
-
-    use super::PolicyTrait;
-
-    #[test]
-    fn building_it() {
-        let hooktrait: PolicyTrait = parse_quote! {
-            pub trait BatchHook<P> {
-                fn call_hook(
-                    &mut self,
-                    policy: &mut P,
-                    policy_loss: &mut PolicyLoss,
-                    logp: &Logp,
-                    values_pred: &ValuesPred,
-                    value_loss: &ValueLoss,
-                    logp_diff: &LogpDiff,
-                ) -> candle_core::Result<bool>;
-            }
-        };
-        let mut token_stream = proc_macro2::TokenStream::new();
-        hooktrait.to_tokens(&mut token_stream);
-        println!("{token_stream}");
-    }
-}

@@ -17,13 +17,17 @@ pub struct PPOBurnAgent<B: AutodiffBackend>(
 
 impl<B: AutodiffBackend> Agent for PPOBurnAgent<B> {
     type Tensor = burn::Tensor<B::InnerBackend, 1>;
+    type RolloutState = ();
     type Actor = <PolicyKind<B> as AutodiffModule<B>>::InnerModule;
 
     fn actor(&self) -> Self::Actor {
         self.0.actor()
     }
 
-    fn learn<BT: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[BT]) -> anyhow::Result<()> {
+    fn learn<BT: TrajectoryBatch<Self::Tensor, State = Self::RolloutState>>(
+        &mut self,
+        buffers: &[BT],
+    ) -> anyhow::Result<()> {
         self.0.learn(buffers)
     }
 
@@ -39,13 +43,17 @@ pub struct PPOCandleAgent(
 
 impl Agent for PPOCandleAgent {
     type Tensor = candle_core::Tensor;
+    type RolloutState = ();
     type Actor = CandlePolicyKind;
 
     fn actor(&self) -> Self::Actor {
         self.0.actor()
     }
 
-    fn learn<BT: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[BT]) -> anyhow::Result<()> {
+    fn learn<BT: TrajectoryBatch<Self::Tensor, State = Self::RolloutState>>(
+        &mut self,
+        buffers: &[BT],
+    ) -> anyhow::Result<()> {
         self.0.learn(buffers)
     }
 

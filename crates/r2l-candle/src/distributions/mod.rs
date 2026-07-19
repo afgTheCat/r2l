@@ -191,14 +191,19 @@ impl CandlePolicyKind {
 
 impl Actor for CandlePolicyKind {
     type Tensor = Tensor;
+    type State = ();
 
-    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        state: Option<Self::State>,
+    ) -> Result<(Self::Tensor, Self::State)> {
         match self {
-            Self::Categorical(cat) => cat.action(observation),
-            Self::DiagGaussian(diag) => diag.action(observation),
-            Self::MultiCategorical(multi) => multi.action(observation),
-            Self::Bernoulli(bernoulli) => bernoulli.action(observation),
-            Self::Composite(composite) => composite.action(observation),
+            Self::Categorical(cat) => cat.action(observation, state),
+            Self::DiagGaussian(diag) => diag.action(observation, state),
+            Self::MultiCategorical(multi) => multi.action(observation, state),
+            Self::Bernoulli(bernoulli) => bernoulli.action(observation, state),
+            Self::Composite(composite) => composite.action(observation, state),
         }
     }
 

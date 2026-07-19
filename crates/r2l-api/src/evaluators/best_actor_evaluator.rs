@@ -95,7 +95,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     /// Builds a best-actor evaluator for the requested actor type.
     pub fn build<A: Actor>(
         self,
-    ) -> BestActorEvaluator<A, R2lSampler<EB::Env, EpisodeBoundHook<EB::Env>>> {
+    ) -> BestActorEvaluator<A, R2lSampler<EB::Env, EpisodeBoundHook<EB::Env>, A::State>> {
         let sampler = R2lSampler::build(
             self.env_builder,
             EpisodeBoundHook::new(self.n_episodes),
@@ -173,7 +173,7 @@ pub struct BestActorEvaluator<A: Actor, S: Sampler> {
 impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
     pub fn eval<
         AG: Agent<Actor = A>,
-        TS: Sampler<Tensor = ES::Tensor>,
+        TS: Sampler<Tensor = ES::Tensor, State = ES::State>,
         C: OnPolicyAdapters<AG::Actor, TS>,
     >(
         &mut self,
@@ -193,7 +193,7 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
     /// Evaluates the actor and stores it if it outperforms the current best actor.
     pub fn eval_adapted(
         &mut self,
-        adapted_actor: impl Actor<Tensor = ES::Tensor> + Clone,
+        adapted_actor: impl Actor<Tensor = ES::Tensor, State = ES::State> + Clone,
         actor: A,
     ) {
         self.sampler.reset_all_envs();

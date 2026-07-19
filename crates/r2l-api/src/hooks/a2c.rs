@@ -213,7 +213,7 @@ pub struct DefaultA2CHook<T = ()> {
     pub(crate) _lm: PhantomData<T>,
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
+impl<B: AutodiffBackend, D: BurnPolicy<B> + Policy> A2CHook<BurnPolicyValueModule<B, D>>
     for DefaultA2CHook<BurnPolicyValueModule<B, D>>
 {
     fn before_learning_hook<

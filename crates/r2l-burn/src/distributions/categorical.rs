@@ -53,8 +53,13 @@ impl<B: Backend> CategoricalDistribution<B> {
 
 impl<B: Backend> Actor for CategoricalDistribution<B> {
     type Tensor = Tensor<B, 1>;
+    type State = ();
 
-    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        _state: Option<Self::State>,
+    ) -> anyhow::Result<(Self::Tensor, Self::State)> {
         let device = Default::default();
         let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation);
@@ -63,9 +68,12 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
         let action = with_rng(|rng| distribution.sample(rng));
         let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
         action_mask[action] = 1.;
-        Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
-            &device,
+        Ok((
+            Tensor::from_data(
+                TensorData::new(action_mask, vec![self.action_size]),
+                &device,
+            ),
+            (),
         ))
     }
 

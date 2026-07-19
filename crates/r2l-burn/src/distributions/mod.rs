@@ -29,6 +29,8 @@ pub mod diagonal;
 pub mod multi_categorical;
 /// Recurrent categorical policy distribution for discrete action spaces.
 pub mod recurrent_categorical;
+/// Recurrent diagonal-Gaussian policy distribution for Box action spaces.
+pub mod recurrent_diagonal;
 
 /// Erased Burn policy type covering the supported action-space variants.
 ///
@@ -120,14 +122,19 @@ impl<B: Backend> PolicyKind<B> {
 
 impl<B: Backend> Actor for PolicyKind<B> {
     type Tensor = Tensor<B, 1>;
+    type State = ();
 
-    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        state: Option<Self::State>,
+    ) -> anyhow::Result<(Self::Tensor, Self::State)> {
         match self {
-            Self::Categorical(cat) => cat.action(observation),
-            Self::Diag(diag) => diag.action(observation),
-            Self::MultiCategorical(multi) => multi.action(observation),
-            Self::Bernoulli(bernoulli) => bernoulli.action(observation),
-            Self::Composite(composite) => composite.action(observation),
+            Self::Categorical(cat) => cat.action(observation, state),
+            Self::Diag(diag) => diag.action(observation, state),
+            Self::MultiCategorical(multi) => multi.action(observation, state),
+            Self::Bernoulli(bernoulli) => bernoulli.action(observation, state),
+            Self::Composite(composite) => composite.action(observation, state),
         }
     }
 

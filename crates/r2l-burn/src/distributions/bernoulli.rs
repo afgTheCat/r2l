@@ -40,8 +40,13 @@ impl<B: Backend> BernoulliDistribution<B> {
 
 impl<B: Backend> Actor for BernoulliDistribution<B> {
     type Tensor = Tensor<B, 1>;
+    type State = ();
 
-    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        _state: Option<Self::State>,
+    ) -> anyhow::Result<(Self::Tensor, Self::State)> {
         let device = Default::default();
         let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation).squeeze::<1>();
@@ -56,9 +61,9 @@ impl<B: Backend> Actor for BernoulliDistribution<B> {
                 }
             })
             .collect();
-        Ok(Tensor::from_data(
-            TensorData::new(actions, vec![self.action_size]),
-            &device,
+        Ok((
+            Tensor::from_data(TensorData::new(actions, vec![self.action_size]), &device),
+            (),
         ))
     }
 

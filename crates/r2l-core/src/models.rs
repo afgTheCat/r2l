@@ -93,8 +93,19 @@ pub trait Actor: Send + 'static {
     /// Tensor type accepted as observations and returned as actions.
     type Tensor: R2lTensor;
 
-    /// Selects an action for a single observation.
-    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
+    /// State carried between action selections.
+    ///
+    /// Stateless actors use `()`.
+    type State: Clone + Send + Sync + 'static;
+
+    /// Selects an action and returns the state for the next invocation.
+    ///
+    /// `None` indicates that the observation starts a new episode.
+    fn action(
+        &self,
+        observation: Self::Tensor,
+        state: Option<Self::State>,
+    ) -> Result<(Self::Tensor, Self::State)>;
 
     /// Tries to serialize the Actor
     fn try_serialize(&self) -> Option<Vec<u8>> {
@@ -119,6 +130,39 @@ pub trait Policy: Actor {
 
     /// Computes the policy entropy for a batch of states.
     fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor>;
+
+    /// Resamples exploration noise for policies that use state-independent
+    /// noise. Implementations without such noise may keep the default no-op.
+    fn resample_noise(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+/// Results produced by evaluating one contiguous recurrent-policy sequence.
+pub struct RecurrentPolicyOutput<T, S> {
+    /// Log probability of each supplied action.
+    pub log_probs: T,
+    /// Entropy of the action distribution at each step.
+    pub entropy: T,
+    /// State produced after the final observation in the sequence.
+    pub final_state: S,
+}
+
+/// Trainable policy interface for contiguous recurrent sequences.
+///
+/// The initial state is supplied only once. Implementations must carry the
+/// resulting state through the sequence so gradients can flow across steps.
+pub trait RecurrentPolicy: Actor {
+    /// Evaluates observations and actions starting from `initial_state`.
+    fn evaluate_sequence(
+        &self,
+        observations: &[Self::Tensor],
+        actions: &[Self::Tensor],
+        initial_state: Option<&Self::State>,
+    ) -> Result<RecurrentPolicyOutput<Self::Tensor, Self::State>>;
+
+    /// Returns a representative action standard deviation when available.
+    fn std(&self) -> Result<f32>;
 
     /// Resamples exploration noise for policies that use state-independent
     /// noise. Implementations without such noise may keep the default no-op.

@@ -10,6 +10,8 @@
 pub mod a2c;
 /// Proximal Policy Optimization implementation and hook interface.
 pub mod ppo;
+/// Recurrent Proximal Policy Optimization implementation and hook interface.
+pub mod recurrent_ppo;
 /// Vanilla Policy Gradient implementation.
 pub mod vpg;
 

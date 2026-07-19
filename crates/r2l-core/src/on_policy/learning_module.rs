@@ -1,5 +1,5 @@
 use crate::{
-    models::{LearningModule, Policy, ValueFunction},
+    models::{Actor, LearningModule, ValueFunction},
     on_policy::losses::FromPolicyValueLosses,
     tensor::R2lTensor,
 };
@@ -17,14 +17,21 @@ pub trait OnPolicyLearningModule:
     type InferenceTensor: R2lTensor;
     /// Tensor type used for differentiable learning computations.
     type LearningTensor: R2lTensor;
+    /// Recurrent state produced by the inference policy during rollouts.
+    type InferenceState: Clone + Send + Sync + 'static;
+    /// Recurrent state consumed by the differentiable policy during learning.
+    type LearningState: Clone + Send + Sync + 'static;
 
     /// Policy type used for rollout/inference.
-    type InferencePolicy: Policy<Tensor = Self::InferenceTensor>;
+    type InferencePolicy: Actor<Tensor = Self::InferenceTensor, State = Self::InferenceState>;
     /// Policy type used while computing losses.
-    type Policy: Policy<Tensor = Self::LearningTensor>;
+    type Policy: Actor<Tensor = Self::LearningTensor, State = Self::LearningState>;
 
     /// Converts an inference tensor into a learning tensor.
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;
+
+    /// Converts a detached inference state into a train-time state.
+    fn state_lifter(state: &Self::InferenceState) -> Self::LearningState;
 
     /// Creates a learning tensor from flat scalar data.
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor;

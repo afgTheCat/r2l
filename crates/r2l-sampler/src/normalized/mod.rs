@@ -30,7 +30,10 @@ use crate::{
 pub trait NormalizedSamplerHook {
     type E: Env<Tensor: R2lTensor>;
 
-    fn hook(&mut self, core: &mut R2lNormalizedSamplerCore<Self::E>) -> SamplerHookResult;
+    fn hook<S: Clone + Send + Sync + 'static>(
+        &mut self,
+        core: &mut R2lNormalizedSamplerCore<Self::E, S>,
+    ) -> SamplerHookResult;
 }
 
 /// Controls whether a normalized sampler mutates shared normalization stats.
@@ -40,21 +43,22 @@ pub enum NormalizerMode {
     ReadOnly,
 }
 
-pub struct R2lNormalizedSamplerCore<E: Env<Tensor: R2lTensor>> {
-    pool: WorkerPool<E>,
+pub struct R2lNormalizedSamplerCore<
+    E: Env<Tensor: R2lTensor>,
+    S: Clone + Send + Sync + 'static = (),
+> {
+    pool: WorkerPool<E, S>,
     pub obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     last_states: ArrayHandle<E::Tensor>,
     // Here there is no need to have each thread own the buffer
-    buffers: Vec<TrajectoryBuffer<E::Tensor>>,
+    buffers: Vec<TrajectoryBuffer<E::Tensor, S>>,
 }
 
-impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
+impl<E: Env<Tensor: R2lTensor>, S: Clone + Send + Sync + 'static> R2lNormalizedSamplerCore<E, S> {
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-        _with_reward_normalizer: bool,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
@@ -71,7 +75,6 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
             pool,
             last_states,
             obs_normalizer,
-            reward_normalizer: None,
         }
     }
 
@@ -79,7 +82,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
     fn build_vec_workers<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         num_envs: usize,
-    ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
+    ) -> (ArrayHandle<E::Tensor>, WorkerPool<E, S>) {
         let mut envs_and_states = Vec::with_capacity(num_envs);
         for env_idx in 0..num_envs {
             let mut env = env_builder.build_idx(env_idx).unwrap();
@@ -102,7 +105,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
     fn build_thread_workers<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         num_envs: usize,
-    ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
+    ) -> (ArrayHandle<E::Tensor>, WorkerPool<E, S>) {
         let mut worker_handles = Vec::with_capacity(num_envs);
         let factories = (0..num_envs)
             .map(|idx| {
@@ -207,11 +210,11 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
         self.buffers.iter_mut().for_each(|buffer| buffer.clear());
     }
 
-    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
+    pub fn set_policy<A: Actor<Tensor = E::Tensor, State = S> + Clone>(&mut self, policy: A) {
         self.pool.set_policy(policy);
     }
 
-    pub fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, E::Tensor>]> {
+    pub fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, E::Tensor, S>]> {
         self.buffers
             .iter()
             .map(|buffer| buffer.to_trajectory_view())
@@ -223,19 +226,25 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
     }
 }
 
-pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> {
-    core: R2lNormalizedSamplerCore<E>,
+pub struct R2lNormalizedSampler<
+    E: Env<Tensor: R2lTensor>,
+    H: NormalizedSamplerHook<E = E>,
+    S: Clone + Send + Sync + 'static = (),
+> {
+    core: R2lNormalizedSamplerCore<E, S>,
     hook: H,
 }
 
-impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSampler<E, H> {
+impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>, S: Clone + Send + Sync + 'static>
+    R2lNormalizedSampler<E, H, S>
+{
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         hook: H,
         execution_mode: SamplerExecutionMode,
         with_obs_normalizer: Option<f32>,
         obs_normalizer_mode: NormalizerMode,
-        with_reward_normalizer: bool,
+        _with_reward_normalizer: bool,
     ) -> Self {
         let env_description = env_builder.env_description().unwrap();
         let obs_normalizer = with_obs_normalizer.map(|clip| {
@@ -243,12 +252,7 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
             ClippedNormalizer::new(obs_normalizer_mode, clip, vec![obs_size])
         });
         Self {
-            core: R2lNormalizedSamplerCore::build(
-                env_builder,
-                execution_mode,
-                obs_normalizer,
-                with_reward_normalizer,
-            ),
+            core: R2lNormalizedSamplerCore::build(env_builder, execution_mode, obs_normalizer),
             hook,
         }
     }
@@ -258,15 +262,10 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-        with_reward_normalizer: bool,
+        _with_reward_normalizer: bool,
     ) -> Self {
         Self {
-            core: R2lNormalizedSamplerCore::build(
-                env_builder,
-                execution_mode,
-                obs_normalizer,
-                with_reward_normalizer,
-            ),
+            core: R2lNormalizedSamplerCore::build(env_builder, execution_mode, obs_normalizer),
             hook,
         }
     }
@@ -279,10 +278,11 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
     }
 }
 
-impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler
-    for R2lNormalizedSampler<E, H>
+impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>, S: Clone + Send + Sync + 'static>
+    Sampler for R2lNormalizedSampler<E, H, S>
 {
     type Tensor = E::Tensor;
+    type State = S;
 
     fn reset_all_envs(&mut self) {
         self.core.pool.reset_all();
@@ -293,7 +293,10 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler
         self.core.clear_buffers();
     }
 
-    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor, State = Self::State> + Clone>(
+        &mut self,
+        actor: A,
+    ) {
         self.core.clear_buffers();
         self.core.set_policy(actor.clone());
         loop {
@@ -305,7 +308,9 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler
         }
     }
 
-    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]> {
+    fn trajectory_views<'a>(
+        &'a mut self,
+    ) -> impl AsRef<[TrajectoryView<'a, Self::Tensor, Self::State>]> {
         self.core.trajectory_views()
     }
 

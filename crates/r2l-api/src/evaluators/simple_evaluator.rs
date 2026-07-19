@@ -19,16 +19,16 @@ use crate::hooks::sampler::EpisodeBoundHook;
 pub struct Evaluator<
     E: Env,
     A: Actor,
-    AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>> = DefaultAdapter,
+    AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>, A::State>> = DefaultAdapter,
 > {
-    sampler: R2lSampler<E, EpisodeBoundHook<E>>,
+    sampler: R2lSampler<E, EpisodeBoundHook<E>, A::State>,
     adapter: AD,
     _phantom: PhantomData<A>,
 }
 
 impl<E: Env, A: Actor> Evaluator<E, A, DefaultAdapter>
 where
-    DefaultAdapter: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>>,
+    DefaultAdapter: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>, A::State>>,
 {
     /// Creates a new evaluator for a custom environment builder.
     pub fn new<EB: EnvBuilder<Env = E>>(
@@ -50,7 +50,7 @@ where
 
 impl<A: Actor> Evaluator<GymEnv, A, DefaultAdapter>
 where
-    DefaultAdapter: OnPolicyAdapters<A, R2lSampler<GymEnv, EpisodeBoundHook<GymEnv>>>,
+    DefaultAdapter: OnPolicyAdapters<A, R2lSampler<GymEnv, EpisodeBoundHook<GymEnv>, A::State>>,
 {
     /// Creates a new evaluator for a Gym environment.
     pub fn gym<EB: Into<GymEnvBuilder>>(
@@ -63,14 +63,14 @@ where
     }
 }
 
-impl<E: Env, A: Actor, AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>>>
+impl<E: Env, A: Actor, AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>, A::State>>>
     Evaluator<E, A, AD>
 {
     /// Evaluates an actor and returns the collected trajectory views.
     pub fn eval(
         &mut self,
         actor: A,
-    ) -> impl AsRef<[TrajectoryView<'_, <<AD as OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>>>::SamplerActor as Actor>::Tensor>]>
+    ) -> impl AsRef<[TrajectoryView<'_, <<AD as OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>, A::State>>>::SamplerActor as Actor>::Tensor, A::State>]>
     {
         let adapted_actor = self.adapter.adapt_actor(actor);
         self.sampler.reset_all_envs();

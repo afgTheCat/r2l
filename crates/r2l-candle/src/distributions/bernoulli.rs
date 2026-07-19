@@ -50,8 +50,9 @@ impl BernoulliDistribution {
 
 impl Actor for BernoulliDistribution {
     type Tensor = Tensor;
+    type State = ();
 
-    fn action(&self, observation: Tensor) -> Result<Tensor> {
+    fn action(&self, observation: Tensor, _state: Option<()>) -> Result<(Tensor, ())> {
         assert!(
             observation.rank() == 1,
             "Observation should be a flattened tensor"
@@ -69,7 +70,10 @@ impl Actor for BernoulliDistribution {
                 }
             })
             .collect();
-        Ok(Tensor::from_vec(actions, self.action_size, &self.device)?.detach())
+        Ok((
+            Tensor::from_vec(actions, self.action_size, &self.device)?.detach(),
+            (),
+        ))
     }
 }
 

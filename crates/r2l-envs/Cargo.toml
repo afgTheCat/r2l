@@ -1,5 +1,5 @@
 [package]
-name = "r2l-sampler"
+name = "r2l-envs"
 version.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -7,16 +7,12 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
-bimodal-array = { workspace = true }
-r2l-core = { workspace = true }
-crossbeam = { workspace = true }
 rand = { workspace = true }
-itertools = "0.15.0"
+r2l-core = { workspace = true }
+anyhow = { workspace = true }
 
 [dev-dependencies]
-r2l-api = { workspace = true }
-r2l-gym = { workspace = true }
+burn = { workspace = true }
 r2l-agents = { workspace = true }
 r2l-burn = { workspace = true }
-burn = { workspace = true }
+r2l-sampler = { workspace = true }

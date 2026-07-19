@@ -82,20 +82,14 @@ macro_rules! return_on_hook_result {
 /// and learning modules.
 pub mod prelude {
     pub use crate::HookResult;
-    pub use crate::buffers::{
-        // EditableTrajectoryContainer, ExpandableTrajectoryContainer,
-        Memory,
-        // TrajectoryContainer,
-        // fix_sized::FixedSizeStateBuffer,
-        // variable_sized::VariableSizedStateBuffer,
-    };
+    pub use crate::buffers::Memory;
     pub use crate::env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Space};
-    pub use crate::models::{ActivationFunction, Actor, LearningModule, Policy, ValueFunction};
-    // pub use crate::on_policy::algorithm::{
-    //     Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyAlgorithmHooks,
-    //     OnPolicyRuntime, Sampler,
-    // };
+    pub use crate::models::{
+        ActivationFunction, Actor, LearningModule, Policy, RecurrentPolicy, RecurrentPolicyOutput,
+        ValueFunction,
+    };
     pub use crate::on_policy::learning_module::OnPolicyLearningModule;
     pub use crate::on_policy::losses::FromPolicyValueLosses;
     pub use crate::tensor::{R2lTensor, TensorData};
+    pub use crate::utils::actor_wrapper::ActorWrapper;
 }

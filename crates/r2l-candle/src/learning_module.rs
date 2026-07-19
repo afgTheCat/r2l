@@ -358,6 +358,8 @@ impl LearningModule for PolicyValueModule {
 impl OnPolicyLearningModule for PolicyValueModule {
     type LearningTensor = Tensor;
     type InferenceTensor = Tensor;
+    type InferenceState = ();
+    type LearningState = ();
     type Policy = CandlePolicyKind;
     type InferencePolicy = CandlePolicyKind;
 
@@ -375,5 +377,9 @@ impl OnPolicyLearningModule for PolicyValueModule {
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
         t.clone()
+    }
+
+    fn state_lifter(state: &Self::InferenceState) -> Self::LearningState {
+        *state
     }
 }
