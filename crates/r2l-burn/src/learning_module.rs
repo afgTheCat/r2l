@@ -33,12 +33,15 @@ pub trait BurnPolicy<B: AutodiffBackend>:
     fn lift_state(state: &<Self::InnerModule as Actor>::State) -> Self::State;
 }
 
-impl<B: AutodiffBackend, M> BurnPolicy<B> for M
-where
+impl<
+    B: AutodiffBackend,
     M: AutodiffModule<B, InnerModule: ModuleDisplay + Actor<Tensor = Tensor<B::InnerBackend, 1>>>
         + ModuleDisplay
-        + Actor<Tensor = Tensor<B, 1>>,
-    M::State: BurnStateLifter<B, InferenceState = <M::InnerModule as Actor>::State>,
+        + Actor<
+            Tensor = Tensor<B, 1>,
+            State: BurnStateLifter<B, InferenceState = <M::InnerModule as Actor>::State>,
+        >,
+> BurnPolicy<B> for M
 {
     fn lift_state(state: &<Self::InnerModule as Actor>::State) -> Self::State {
         <M::State as BurnStateLifter<B>>::lift_state(state)

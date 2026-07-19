@@ -59,10 +59,9 @@ pub struct RecurrentPPOBatchData<T: R2lTensor> {
 }
 
 /// Hook interface for customizing recurrent PPO training.
-pub trait RecurrentPPOHook<M: OnPolicyLearningModule>
-where
-    M::Policy: RecurrentPolicy<State = M::LearningState>,
-    M::InferencePolicy: RecurrentPolicy<State = M::InferenceState>,
+pub trait RecurrentPPOHook<
+    M: OnPolicyLearningModule<Policy: RecurrentPolicy, InferencePolicy: RecurrentPolicy>,
+>
 {
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor, State = M::InferenceState>>(
         &mut self,
@@ -95,11 +94,8 @@ where
     }
 }
 
-impl<M> RecurrentPPOHook<M> for ()
-where
-    M: OnPolicyLearningModule,
-    M::Policy: RecurrentPolicy<State = M::LearningState>,
-    M::InferencePolicy: RecurrentPolicy<State = M::InferenceState>,
+impl<M: OnPolicyLearningModule<Policy: RecurrentPolicy, InferencePolicy: RecurrentPolicy>>
+    RecurrentPPOHook<M> for ()
 {
 }
 
@@ -164,17 +160,11 @@ impl Iterator for SequenceIndexIterator {
     }
 }
 
-fn sample_sequence<T1, T2, B, L>(
+fn sample_sequence<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -> T2>(
     batches: &[B],
     sequence: SequenceIndex,
     lifter: L,
-) -> (Vec<T2>, Vec<T2>)
-where
-    T1: R2lTensor,
-    T2: R2lTensor,
-    B: TrajectoryBatch<T1>,
-    L: Fn(&T1) -> T2,
-{
+) -> (Vec<T2>, Vec<T2>) {
     let batch = &batches[sequence.batch];
     let observations = batch.states()[sequence.start..sequence.end]
         .iter()
@@ -187,12 +177,15 @@ where
     (observations, actions)
 }
 
-fn recurrent_logps<T, B, P>(batches: &[B], policy: &P, sequence_length: usize) -> Result<Logps>
-where
+fn recurrent_logps<
     T: R2lTensor,
-    B: TrajectoryBatch<T, State = P::State>,
     P: RecurrentPolicy<Tensor = T>,
-{
+    B: TrajectoryBatch<T, State = P::State>,
+>(
+    batches: &[B],
+    policy: &P,
+    sequence_length: usize,
+) -> Result<Logps> {
     let mut logps = batches
         .iter()
         .map(|batch| vec![0.0; batch.len()])
@@ -215,13 +208,10 @@ where
 }
 
 /// PPO variant that trains recurrent policies over contiguous sequence chunks.
-pub struct RecurrentPPO<Module, Hooks>
-where
-    Module: OnPolicyLearningModule,
-    Module::Policy: RecurrentPolicy<State = Module::LearningState>,
-    Module::InferencePolicy: RecurrentPolicy<State = Module::InferenceState>,
+pub struct RecurrentPPO<
+    Module: OnPolicyLearningModule<Policy: RecurrentPolicy, InferencePolicy: RecurrentPolicy>,
     Hooks: RecurrentPPOHook<Module>,
-{
+> {
     /// Recurrent PPO hyperparameters.
     pub params: RecurrentPPOParams,
     /// Learning module containing policy, value function, and optimizer state.
@@ -230,12 +220,10 @@ where
     pub hooks: Hooks,
 }
 
-impl<Module, Hooks> RecurrentPPO<Module, Hooks>
-where
-    Module: OnPolicyLearningModule,
-    Module::Policy: RecurrentPolicy<State = Module::LearningState>,
-    Module::InferencePolicy: RecurrentPolicy<State = Module::InferenceState>,
+impl<
+    Module: OnPolicyLearningModule<Policy: RecurrentPolicy, InferencePolicy: RecurrentPolicy>,
     Hooks: RecurrentPPOHook<Module>,
+> RecurrentPPO<Module, Hooks>
 {
     fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
@@ -336,12 +324,10 @@ where
     }
 }
 
-impl<M, H> Agent for RecurrentPPO<M, H>
-where
-    M: OnPolicyLearningModule,
-    M::Policy: RecurrentPolicy<State = M::LearningState>,
-    M::InferencePolicy: RecurrentPolicy<State = M::InferenceState>,
+impl<
+    M: OnPolicyLearningModule<Policy: RecurrentPolicy, InferencePolicy: RecurrentPolicy>,
     H: RecurrentPPOHook<M>,
+> Agent for RecurrentPPO<M, H>
 {
     type Tensor = M::InferenceTensor;
     type RolloutState = M::InferenceState;

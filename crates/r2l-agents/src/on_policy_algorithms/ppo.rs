@@ -58,11 +58,7 @@ pub struct PPOBatchData<T: R2lTensor> {
 }
 
 /// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
-pub trait PPOHook<M: OnPolicyLearningModule>
-where
-    M::Policy: Policy<State = M::LearningState>,
-    M::InferencePolicy: Policy<State = M::InferenceState>,
-{
+pub trait PPOHook<M: OnPolicyLearningModule<Policy: Policy, InferencePolicy: Policy>> {
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor, State = M::InferenceState>>(
         &mut self,
         _params: &mut PPOParams,
@@ -95,13 +91,10 @@ where
 }
 
 /// Prototype PPO variant over finalized trajectory batches.
-pub struct PPO<Module, Hooks>
-where
-    Module: OnPolicyLearningModule,
-    Module::Policy: Policy<State = Module::LearningState>,
-    Module::InferencePolicy: Policy<State = Module::InferenceState>,
+pub struct PPO<
+    Module: OnPolicyLearningModule<Policy: Policy, InferencePolicy: Policy>,
     Hooks: PPOHook<Module>,
-{
+> {
     /// PPO hyperparameters.
     pub params: PPOParams,
     /// Learning module containing policy, value function, and optimizer state.
@@ -110,12 +103,10 @@ where
     pub hooks: Hooks,
 }
 
-impl<Module, Hooks> PPO<Module, Hooks>
-where
-    Module: OnPolicyLearningModule,
-    Module::Policy: Policy<State = Module::LearningState>,
-    Module::InferencePolicy: Policy<State = Module::InferenceState>,
+impl<
+    Module: OnPolicyLearningModule<Policy: Policy, InferencePolicy: Policy>,
     Hooks: PPOHook<Module>,
+> PPO<Module, Hooks>
 {
     fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor, State = Module::InferenceState>>(
         &mut self,
@@ -207,12 +198,8 @@ where
     }
 }
 
-impl<M, H> Agent for PPO<M, H>
-where
-    M: OnPolicyLearningModule,
-    M::Policy: Policy<State = M::LearningState>,
-    M::InferencePolicy: Policy<State = M::InferenceState>,
-    H: PPOHook<M>,
+impl<M: OnPolicyLearningModule<Policy: Policy, InferencePolicy: Policy>, H: PPOHook<M>> Agent
+    for PPO<M, H>
 {
     type Tensor = M::InferenceTensor;
     type RolloutState = M::InferenceState;
