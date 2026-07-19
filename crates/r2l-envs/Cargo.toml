@@ -10,3 +10,9 @@ license.workspace = true
 rand = { workspace = true }
 r2l-core = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+burn = { workspace = true }
+r2l-agents = { workspace = true }
+r2l-burn = { workspace = true }
+r2l-sampler = { workspace = true }

@@ -1,3 +1,3 @@
-mod running_sum_env;
+mod sum_target;
 
-pub use running_sum_env::RunningSumEnv;
+pub use sum_target::SumTargetEnv;

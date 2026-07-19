@@ -6834,7 +6834,11 @@ name = "r2l-envs"
 version = "0.0.2-rc2"
 dependencies = [
  "anyhow",
+ "burn",
+ "r2l-agents",
+ "r2l-burn",
  "r2l-core",
+ "r2l-sampler",
  "rand 0.10.1",
 ]
 

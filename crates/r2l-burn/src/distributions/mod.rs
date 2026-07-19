@@ -29,6 +29,8 @@ pub mod diagonal;
 pub mod multi_categorical;
 /// Recurrent categorical policy distribution for discrete action spaces.
 pub mod recurrent_categorical;
+/// Recurrent diagonal-Gaussian policy distribution for Box action spaces.
+pub mod recurrent_diagonal;
 
 /// Erased Burn policy type covering the supported action-space variants.
 ///
