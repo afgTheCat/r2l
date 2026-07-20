@@ -33,11 +33,13 @@ pub trait SamplerHook {
     type E: Env;
 
     fn hook(&mut self, core: &mut R2lSamplerCore<Self::E>) -> SamplerHookResult;
+
+    fn reset(&mut self) {}
 }
 
 pub struct R2lSamplerCore<E: Env> {
-    buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
-    worker_pool: WorkerPool<E>,
+    pub buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
+    pub worker_pool: WorkerPool<E>,
 }
 
 impl<E: Env> R2lSamplerCore<E> {
@@ -117,6 +119,7 @@ impl<E: Env, H: SamplerHook<E = E>> Sampler for R2lSampler<E, H> {
 
     fn reset_all_envs(&mut self) {
         self.core.reset_all_envs();
+        self.hook.reset();
     }
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {

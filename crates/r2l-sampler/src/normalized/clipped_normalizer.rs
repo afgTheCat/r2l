@@ -6,7 +6,7 @@ use r2l_core::{running_mean::RunningMeanStd, tensor::R2lTensor};
 
 use crate::NormalizerMode;
 
-const EPS: f32 = 1e-8;
+const EPSILON: f32 = 1e-8;
 
 #[derive(Clone)]
 pub struct ClippedNormalizerInner<T: R2lTensor> {
@@ -26,7 +26,7 @@ impl<T: R2lTensor> ClippedNormalizerInner<T> {
             let (data, shape) = obs.to_vec_and_shape();
             let normalized = izip!(data, &mean, &var)
                 .map(|(val, mean, var)| {
-                    ((val - mean) / (var + EPS).sqrt()).clamp(-self.clip, self.clip)
+                    ((val - mean) / (var + EPSILON).sqrt()).clamp(-self.clip, self.clip)
                 })
                 .collect();
             *obs = T::from_vec_and_shape(normalized, shape);

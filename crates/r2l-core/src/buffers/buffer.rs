@@ -116,6 +116,27 @@ impl<T: R2lTensor> TrajectoryBuffer<T> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.states.len()
+    }
+
+    pub fn terminated(&self) -> &[bool] {
+        &self.terminated
+    }
+
+    pub fn truncated(&self) -> &[bool] {
+        &self.truncated
+    }
+
+    pub fn rewards(&self) -> &[f32] {
+        &self.rewards
+    }
+
+    /// Returns mutable access to the stored rewards.
+    pub fn rewards_mut(&mut self) -> &mut [f32] {
+        &mut self.rewards
+    }
+
     pub fn to_trajectory_view(&self) -> TrajectoryView<'_, T> {
         TrajectoryView {
             states: &self.states,

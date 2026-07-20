@@ -15,9 +15,9 @@ struct PPOTestConfig {
     n_timesteps: usize,
     vf_coeff: Option<f32>,
     gradient_clipping: Option<f32>,
-    // TODO: implement these features
     norm_obs: Option<bool>,
     norm_reward: Option<bool>,
+    // TODO: implement these features
     use_sde: Option<bool>,
     sde_sample_freq: Option<usize>,
 }
@@ -50,6 +50,10 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
 
     if let Some(gradient_clipping) = config.gradient_clipping {
         ppo_builder = ppo_builder.with_gradient_clipping(Some(gradient_clipping));
+    }
+
+    if config.norm_reward == Some(true) {
+        ppo_builder = ppo_builder.with_reward_normalizer(config.gamma, 10.0);
     }
 
     if config.norm_obs == Some(true) {
