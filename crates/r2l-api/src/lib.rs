@@ -6,6 +6,7 @@ mod builders;
 mod evaluators;
 mod hooks;
 mod utils;
+pub mod zoo_parser;
 
 type BurnBackend = Autodiff<NdArray>;
 
