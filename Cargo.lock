@@ -694,17 +694,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bindgen_cuda"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "282be55fb326843bb67cccceeeaf21c961ef303f60018f9a2ab69494dad8eaf9"
-dependencies = [
- "glob",
- "num_cpus",
- "rayon",
-]
-
-[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1533,38 +1522,12 @@ dependencies = [
 
 [[package]]
 name = "candle-core"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c15b675b80d994b2eadb20a4bbe434eabeb454eac3ee5e2b4cf6f147ee9be091"
-dependencies = [
- "byteorder",
- "candle-kernels",
- "candle-ug",
- "cudarc 0.19.8",
- "float8 0.6.1",
- "gemm 0.19.0",
- "half",
- "libm",
- "memmap2",
- "num-traits",
- "num_cpus",
- "rand 0.9.5",
- "rand_distr 0.5.1",
- "rayon",
- "safetensors 0.7.0",
- "thiserror 2.0.19",
- "yoke 0.8.3",
- "zip 7.2.0",
-]
-
-[[package]]
-name = "candle-core"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bd9895436c1ba5dc1037a19935d084b838db066ff4e15ef7dded020b7c12a4a"
 dependencies = [
  "byteorder",
- "float8 0.7.0",
+ "float8",
  "gemm 0.19.0",
  "half",
  "libm",
@@ -1582,35 +1545,64 @@ dependencies = [
 ]
 
 [[package]]
-name = "candle-kernels"
-version = "0.9.2"
+name = "candle-core"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8455f84bd810047c7c41216683c1020c915a9f8a740b3b0eabdd4fb2fbaa660"
+checksum = "5ecb245093b0f791b89d3420c3df9c6d49c60ab63ba54db896bf8a3baf486706"
 dependencies = [
- "bindgen_cuda",
+ "byteorder",
+ "candle-kernels",
+ "candle-ug",
+ "cudarc 0.19.8",
+ "float8",
+ "gemm 0.19.0",
+ "half",
+ "libc",
+ "libm",
+ "memmap2",
+ "num-traits",
+ "num_cpus",
+ "rand 0.9.5",
+ "rand_distr 0.5.1",
+ "rayon",
+ "safetensors 0.8.0",
+ "thiserror 2.0.19",
+ "tokenizers",
+ "yoke 0.8.3",
+ "zerocopy",
+ "zip 8.6.0",
+]
+
+[[package]]
+name = "candle-kernels"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67450168a281bbb195a14cc85cf164c7a12023a54a03409a3324f476346e0789"
+dependencies = [
+ "cudaforge",
 ]
 
 [[package]]
 name = "candle-nn"
-version = "0.9.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3045fa9e7aef8567d209a27d56b692f60b96f4d0569f4c3011f8ca6715c65e03"
+checksum = "eaa10b6ccc365b33210ce404fbf45e60d3e0bdac1004463cf1052e6ee1c1739a"
 dependencies = [
- "candle-core 0.9.2",
+ "candle-core 0.11.0",
  "half",
  "libc",
  "num-traits",
  "rayon",
- "safetensors 0.7.0",
+ "safetensors 0.8.0",
  "serde",
  "thiserror 2.0.19",
 ]
 
 [[package]]
 name = "candle-ug"
-version = "0.9.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c22d62be69068bf58987a45f690612739d8d2ea1bf508c1b87dc6815a019575d"
+checksum = "257411c33abf7d898a31ac20d80813dfe96ff09e23a73039e22ab293aea9b871"
 dependencies = [
  "ug",
  "ug-cuda",
@@ -2215,7 +2207,7 @@ dependencies = [
  "embassy-futures",
  "embassy-time",
  "float4",
- "float8 0.7.0",
+ "float8",
  "futures-lite",
  "half",
  "hashbrown 0.16.1",
@@ -2632,6 +2624,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "cudaforge"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d475ff95b9e4096878f47fe0ca5dbad0e23849a79fc225305ea06c2f25771cd"
+dependencies = [
+ "anyhow",
+ "fs2",
+ "glob",
+ "num_cpus",
+ "rayon",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.19",
+ "walkdir",
+ "which",
+]
+
+[[package]]
 name = "cudarc"
 version = "0.17.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2647,7 +2658,7 @@ version = "0.19.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42310153e06cf4cd532901f7096beb27504d681736a29ee90728ae4e2d93b2a8"
 dependencies = [
- "float8 0.7.0",
+ "float8",
  "half",
  "libloading 0.9.0",
 ]
@@ -3294,6 +3305,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_home"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7f84e12ccf0a7ddc17a6c41c93326024c42920d7ee630d04950e6926645c0fe"
+
+[[package]]
 name = "epaint"
 version = "0.32.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3532,19 +3549,6 @@ checksum = "9a5404bf31d22893d61cf24d4dda149d8e6b2ff07601c3cb3be651031f61a4ed"
 
 [[package]]
 name = "float8"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "719a903cc23e4a89e87962c2a80fdb45cdaad0983a89bd150bb57b4c8571a7d5"
-dependencies = [
- "cudarc 0.19.8",
- "half",
- "num-traits",
- "rand 0.9.5",
- "rand_distr 0.5.1",
-]
-
-[[package]]
-name = "float8"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2d1f04709a8ac06e8e8042875a3c466cc4832d3c1a18dbcb9dba3c6e83046bc"
@@ -3607,6 +3611,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fs2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -6745,7 +6759,7 @@ dependencies = [
  "anyhow",
  "bimodal-array",
  "burn",
- "candle-core 0.9.2",
+ "candle-core 0.11.0",
  "candle-nn",
  "crossbeam",
  "derive_more",
@@ -6776,13 +6790,13 @@ name = "r2l-candle"
 version = "0.0.2-rc2"
 dependencies = [
  "anyhow",
- "candle-core 0.9.2",
+ "candle-core 0.11.0",
  "candle-nn",
  "derive_more",
  "either",
  "r2l-core",
  "rand 0.10.2",
- "safetensors 0.7.0",
+ "safetensors 0.8.0",
 ]
 
 [[package]]
@@ -6791,7 +6805,7 @@ version = "0.0.2-rc2"
 dependencies = [
  "anyhow",
  "burn",
- "candle-core 0.9.2",
+ "candle-core 0.11.0",
  "derive_more",
  "either",
  "itertools 0.14.0",
@@ -6806,7 +6820,7 @@ dependencies = [
  "anyhow",
  "burn",
  "burn-store",
- "candle-core 0.9.2",
+ "candle-core 0.11.0",
  "candle-nn",
  "crossterm 0.29.0",
  "eframe",
@@ -7541,6 +7555,19 @@ dependencies = [
  "hashbrown 0.16.1",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "safetensors"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79b079b829cb27a1c3c374341345ed2e8b2c0c839034522cee576c140bd7f846"
+dependencies = [
+ "hashbrown 0.16.1",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -9867,6 +9894,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "which"
+version = "7.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24d643ce3fd3e5b54854602a080f34fb10ab75e0b813ee32d00ca2b44fa74762"
+dependencies = [
+ "either",
+ "env_home",
+ "rustix 1.1.4",
+ "winsafe",
+]
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10385,6 +10424,12 @@ checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "winsafe"
+version = "0.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wit-bindgen"

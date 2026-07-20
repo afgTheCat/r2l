@@ -1,0 +1,3 @@
+[env]
+CANDLE_NUM_THREADS = { value = "1", force = true }
+RAYON_NUM_THREADS = { value = "1", force = true }
