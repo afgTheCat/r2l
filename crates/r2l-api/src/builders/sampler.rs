@@ -9,7 +9,10 @@ use r2l_sampler::{
     SamplerHook,
 };
 
-use crate::hooks::sampler::{EpisodeBoundHook, StepBoundHook};
+use crate::{
+    hooks::sampler::{EpisodeBoundHook, StepBoundHook},
+    utils::RewardNormalizer,
+};
 
 /// Builder trait for sampler hook configurations.
 ///
@@ -25,7 +28,18 @@ pub trait SamplerHookBuilder {
     type Target: SamplerHook<E = Self::Env>;
 
     /// Builds the hook used by [`SamplerBuilder`] when constructing a sampler.
-    fn build(self) -> Self::Target;
+    fn build(self, n_envs: usize) -> Self::Target;
+}
+
+struct RewardNormalizerParams {
+    gamma: f32,
+    clip_reward: f32,
+}
+
+impl RewardNormalizerParams {
+    fn build_normalizer(&self, n_envs: usize) -> RewardNormalizer {
+        RewardNormalizer::new(n_envs, self.gamma, self.clip_reward)
+    }
 }
 
 /// Step-bounded sampler hook configuration.
@@ -34,6 +48,7 @@ pub trait SamplerHookBuilder {
 /// number of environment steps have been collected per active worker.
 pub struct StepHookBound<E: Env<Tensor: R2lTensor>> {
     n_step: usize,
+    reward_normalizer: Option<RewardNormalizerParams>,
     _phantom: PhantomData<E>,
 }
 
@@ -42,8 +57,15 @@ impl<E: Env<Tensor: R2lTensor>> StepHookBound<E> {
     pub fn new(n_step: usize) -> Self {
         Self {
             n_step,
+            reward_normalizer: None,
             _phantom: PhantomData,
         }
+    }
+
+    /// Enables reward normalization with the given discount factor and clipping bound.
+    pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
+        self.reward_normalizer = Some(RewardNormalizerParams { gamma, clip_reward });
+        self
     }
 }
 
@@ -51,8 +73,9 @@ impl<E: Env<Tensor: R2lTensor>> SamplerHookBuilder for StepHookBound<E> {
     type Env = E;
     type Target = StepBoundHook<Self::Env>;
 
-    fn build(self) -> Self::Target {
-        StepBoundHook::new(self.n_step)
+    fn build(self, n_env: usize) -> Self::Target {
+        let reward_normalizer = self.reward_normalizer.map(|p| p.build_normalizer(n_env));
+        StepBoundHook::new(self.n_step, reward_normalizer)
     }
 }
 
@@ -79,7 +102,7 @@ impl<E: Env> SamplerHookBuilder for EpisodeHookBound<E> {
     type Env = E;
     type Target = EpisodeBoundHook<Self::Env>;
 
-    fn build(self) -> Self::Target {
+    fn build(self, _n_envs: usize) -> Self::Target {
         EpisodeBoundHook::new(self.n_episodes)
     }
 }
@@ -194,7 +217,8 @@ impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>>
 {
     /// Builds the configured sampler instance.
     pub fn build(self) -> R2lSampler<EB::Env, S::Target> {
-        let hook = self.hook_builder.build();
+        let n_envs = self.env_builder.num_envs();
+        let hook = self.hook_builder.build(n_envs);
         R2lSampler::build(self.env_builder, hook, self.execution_mode)
     }
 }
@@ -206,7 +230,8 @@ impl<
 {
     /// Builds the configured normalized sampler instance.
     pub fn build(self) -> R2lNormalizedSampler<EB::Env, S::Target> {
-        let hook = self.hook_builder.build();
+        let n_envs = self.env_builder.num_envs();
+        let hook = self.hook_builder.build(n_envs);
         R2lNormalizedSampler::build(
             self.env_builder,
             hook,

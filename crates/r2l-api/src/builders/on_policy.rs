@@ -1,9 +1,10 @@
 use r2l_core::{
-    env::EnvBuilder,
+    env::{Env, EnvBuilder},
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
     rng::set_seed,
+    tensor::R2lTensor,
 };
 use r2l_sampler::{
     NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler, SamplerExecutionMode,
@@ -15,6 +16,7 @@ use crate::{
         agent::AgentBuilder,
         sampler::{
             DirectSamplerSelection, NormalizedSamplerSelection, SamplerBuilder, SamplerHookBuilder,
+            StepHookBound,
         },
     },
     hooks::{
@@ -265,6 +267,19 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             seed,
         }
+    }
+}
+
+impl<AB: AgentBuilder, EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>, ST>
+    OnPolicyAlgorithmBuilder<AB, EB, StepHookBound<EB::Env>, ST>
+{
+    /// Enables reward normalization for step-bounded training rollouts.
+    pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
+        self.sampler_builder.hook_builder = self
+            .sampler_builder
+            .hook_builder
+            .with_reward_normalizer(gamma, clip_reward);
+        self
     }
 }
 

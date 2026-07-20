@@ -31,6 +31,8 @@ pub trait NormalizedSamplerHook {
     type E: Env<Tensor: R2lTensor>;
 
     fn hook(&mut self, core: &mut R2lNormalizedSamplerCore<Self::E>) -> SamplerHookResult;
+
+    fn reset(&mut self) {}
 }
 
 /// Controls whether a normalized sampler mutates shared normalization stats.
@@ -41,12 +43,10 @@ pub enum NormalizerMode {
 }
 
 pub struct R2lNormalizedSamplerCore<E: Env<Tensor: R2lTensor>> {
-    pool: WorkerPool<E>,
+    pub pool: WorkerPool<E>,
     pub obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    reward_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    last_states: ArrayHandle<E::Tensor>,
-    // Here there is no need to have each thread own the buffer
-    buffers: Vec<TrajectoryBuffer<E::Tensor>>,
+    pub last_states: ArrayHandle<E::Tensor>,
+    pub buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
 
 impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
@@ -71,7 +71,6 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
             pool,
             last_states,
             obs_normalizer,
-            reward_normalizer: None,
         }
     }
 
@@ -161,13 +160,6 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
                 last_states[*idx] = next_state;
             }
         }
-        // TODO: add this once the normalizer is working as intended
-        // multi_memory.rewards = if let Some(rew_normalizer) = self.reward_normalizer.as_mut() {
-        //     rew_normalizer.normalize(std::mem::take(&mut multi_memory.rewards))
-        // } else {
-        //     std::mem::take(&mut multi_memory.rewards)
-        // };
-
         let last_states = self.last_states.lock().unwrap();
         let next_states = indices
             .iter()
@@ -188,12 +180,6 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
             obs_normalizer.apply_in_place(&mut last_states)
         }
 
-        // TODO: add this once the normalizer is working as intended
-        // multi_memory.rewards = if let Some(rew_normalizer) = self.reward_normalizer.as_mut() {
-        //     rew_normalizer.normalize(std::mem::take(&mut multi_memory.rewards))
-        // } else {
-        //     std::mem::take(&mut multi_memory.rewards)
-        // };
         let last_states = self.last_states.lock().unwrap();
         let memories = multi_memory.into_memories(&last_states);
         let terminations = memories.iter().map(|memory| memory.is_done()).collect();
@@ -291,6 +277,7 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler
             obs_normalizer.apply_in_place(&mut last_states);
         }
         self.core.clear_buffers();
+        self.hook.reset();
     }
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
 
 #[allow(dead_code)]
@@ -15,14 +17,17 @@ struct PPOTestConfig {
     n_timesteps: usize,
     vf_coeff: Option<f32>,
     gradient_clipping: Option<f32>,
-    // TODO: implement these features
     norm_obs: Option<bool>,
     norm_reward: Option<bool>,
+    // TODO: implement these features
     use_sde: Option<bool>,
     sde_sample_freq: Option<usize>,
 }
 
 fn configure_candle_ppo_test(config: PPOTestConfig) {
+    let logs_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../logs");
+    std::fs::create_dir_all(&logs_dir).unwrap();
+    let eval_name = format!("ppo-{}", config.env_name);
     let mut ppo_builder = PPOAlgorithmBuilder::gym(config.env_name, config.n_envs)
         .with_candle(candle_core::Device::Cpu)
         .with_entropy_coeff(config.entropy_coeff)
@@ -30,7 +35,9 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
         .with_gamma(config.gamma)
         .with_total_epochs(config.total_epochs)
         .with_rollout_bound(StepHookBound::new(config.n_steps))
-        .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps));
+        .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps))
+        .with_evaluator_best_actor_path(logs_dir.join(format!("{eval_name}.safetensor")))
+        .with_csv_states(logs_dir.join(format!("{eval_name}.csv")));
 
     if let Some(clip_range) = config.clip_range {
         ppo_builder = ppo_builder.with_clip_range(clip_range);
@@ -50,6 +57,10 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
 
     if let Some(gradient_clipping) = config.gradient_clipping {
         ppo_builder = ppo_builder.with_gradient_clipping(Some(gradient_clipping));
+    }
+
+    if config.norm_reward == Some(true) {
+        ppo_builder = ppo_builder.with_reward_normalizer(config.gamma, 10.0);
     }
 
     if config.norm_obs == Some(true) {
@@ -88,7 +99,7 @@ fn cartpole_candle() {
 }
 
 #[test]
-fn pendulum_candle_builder() {
+fn pendulum_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
     // https://huggingface.co/sb3/ppo-Pendulum-v1
     configure_candle_ppo_test(PPOTestConfig {
@@ -110,20 +121,6 @@ fn pendulum_candle_builder() {
         use_sde: Some(true),
         sde_sample_freq: Some(4),
     });
-}
-
-#[test]
-fn pendulum_candle() {
-    let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
-        .with_clip_range(0.2)
-        .with_lambda(0.95)
-        .with_gamma(0.9)
-        .with_learning_rate(0.001)
-        .with_total_epochs(10)
-        .with_rollout_bound(StepHookBound::new(1024))
-        .with_learning_schedule(LearningSchedule::total_step_bound(100000));
-    let mut algo = builder.build().unwrap();
-    algo.train().unwrap();
 }
 
 #[test]
