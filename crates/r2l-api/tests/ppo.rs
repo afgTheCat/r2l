@@ -99,7 +99,7 @@ fn cartpole_candle() {
 }
 
 #[test]
-fn pendulum_candle_builder() {
+fn pendulum_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
     // https://huggingface.co/sb3/ppo-Pendulum-v1
     configure_candle_ppo_test(PPOTestConfig {
