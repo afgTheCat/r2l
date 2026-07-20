@@ -1,7 +1,30 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
+use r2l_core::on_policy::algorithm::{DefaultAdapter, OnPolicyAlgorithm};
+use r2l_gym::{GymEnv, GymEnvBuilder};
+use r2l_sampler::R2lNormalizedSampler;
 use serde::{Deserialize, Serialize};
 use yaml_serde::Value;
+
+use crate::{
+    BurnBackend, DefaultOnPolicyAlgorithmHooks, EpisodeBoundHook, LearningSchedule,
+    PPOAlgorithmBuilder, PPOBurnAgent, PPOBurnAlgorithmBuilder, StepBoundHook, StepHookBound,
+    builders::sampler::NormalizedSamplerSelection,
+};
+
+pub type RlZooPpoBuilder =
+    PPOBurnAlgorithmBuilder<GymEnvBuilder, StepHookBound<GymEnv>, NormalizedSamplerSelection>;
+pub type RlZooPpoAlgorithm = OnPolicyAlgorithm<
+    PPOBurnAgent<BurnBackend>,
+    R2lNormalizedSampler<GymEnv, StepBoundHook<GymEnv>>,
+    DefaultOnPolicyAlgorithmHooks<
+        PPOBurnAgent<BurnBackend>,
+        R2lNormalizedSampler<GymEnv, StepBoundHook<GymEnv>>,
+        DefaultAdapter,
+        GymEnv,
+        R2lNormalizedSampler<GymEnv, EpisodeBoundHook<GymEnv>>,
+    >,
+>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RlZooDefault {
@@ -15,12 +38,16 @@ pub struct RlZooEnvironmentConfig {
     n_timesteps: Option<f32>,
     policy: Option<String>,
     n_steps: Option<usize>,
+    batch_size: Option<usize>,
     gae_lambda: Option<f32>,
     gamma: Option<f32>,
     n_epochs: Option<usize>,
     ent_coef: Option<f32>,
-    learning_rate: Option<Value>,
-    clip_range: Option<Value>,
+    learning_rate: Option<f64>,
+    clip_range: Option<f32>,
+    vf_coef: Option<f32>,
+    max_grad_norm: Option<f32>,
+    normalize: Option<bool>,
     use_sde: Option<bool>,
     sde_sample_freq: Option<usize>,
 }
@@ -36,27 +63,89 @@ impl RlZooEnvironmentConfig {
         self
     }
 
-    // fn to_algorithm(self) -> Option<> {}
+    fn suppoerted(&self) -> bool {
+        if let Some(policy) = &self.policy
+            && policy != "MlpPolicy"
+        {
+            return false;
+        }
+        true
+    }
+
+    pub fn build_burn_ppo_algorithm(&self, env_name: &str) -> anyhow::Result<RlZooPpoAlgorithm> {
+        let n_envs = self.n_envs.unwrap();
+        let n_steps = self.n_steps.unwrap();
+        let n_timesteps = self.n_timesteps.unwrap() as usize;
+
+        let mut builder = PPOAlgorithmBuilder::gym(env_name, n_envs)
+            .with_burn()
+            .with_rollout_bound(StepHookBound::new(n_steps))
+            .with_learning_schedule(LearningSchedule::total_step_bound(n_timesteps))
+            .with_observation_normalizer(10.0);
+
+        if let Some(gae_lambda) = self.gae_lambda {
+            builder = builder.with_lambda(gae_lambda);
+        }
+        if let Some(gamma) = self.gamma {
+            builder = builder.with_gamma(gamma);
+        }
+        if let Some(n_epochs) = self.n_epochs {
+            builder = builder.with_total_epochs(n_epochs);
+        }
+        if let Some(ent_coef) = self.ent_coef {
+            builder = builder.with_entropy_coeff(ent_coef);
+        }
+        if let Some(batch_size) = self.batch_size {
+            builder = builder.with_sample_size(batch_size);
+        }
+        if let Some(learning_rate) = self.learning_rate.as_ref() {
+            builder = builder.with_learning_rate(*learning_rate);
+        }
+        if let Some(clip_range) = self.clip_range.as_ref() {
+            builder = builder.with_clip_range(*clip_range);
+        }
+        if let Some(vf_coef) = self.vf_coef {
+            builder = builder.with_vf_coeff(Some(vf_coef));
+        }
+        if let Some(max_grad_norm) = self.max_grad_norm {
+            builder = builder.with_gradient_clipping(Some(max_grad_norm));
+        }
+
+        builder.build()
+    }
 }
 
-pub fn parse_rl_zoo_config(path: PathBuf) {
-    let content = fs::read_to_string(path).unwrap();
-    let mut parsed_content: BTreeMap<String, Value> = yaml_serde::from_str(&content).unwrap();
-    let rl_zoo_default: RlZooDefault = parsed_content
-        .remove("default")
-        .map(|val| yaml_serde::from_value(val).unwrap())
-        .unwrap();
-    // TODO: should we pass this?
-    parsed_content.remove("atari");
-    let zoo_configs: BTreeMap<String, RlZooEnvironmentConfig> = parsed_content
-        .into_iter()
-        .map(|(env_name, val)| {
+struct ZooConfig {
+    supported_envs: BTreeMap<String, RlZooEnvironmentConfig>,
+    unsupported_envs: BTreeMap<String, RlZooEnvironmentConfig>,
+}
+
+impl ZooConfig {
+    pub fn parse_rl_zoo_config(path: PathBuf) -> Self {
+        let content = fs::read_to_string(path).unwrap();
+        let mut parsed_content: BTreeMap<String, Value> = yaml_serde::from_str(&content).unwrap();
+        let rl_zoo_default: RlZooDefault = parsed_content
+            .remove("default")
+            .map(|val| yaml_serde::from_value(val).unwrap())
+            .unwrap();
+        // TODO: should we pass this?
+        parsed_content.remove("atari");
+        let mut supported_envs = BTreeMap::new();
+        let mut unsupported_envs = BTreeMap::new();
+        for (env_name, val) in parsed_content {
             let rl_zoo_config = yaml_serde::from_value::<RlZooEnvironmentConfig>(val).unwrap();
             let rl_zoo_config = rl_zoo_config.merge_with_default(&rl_zoo_default);
-            (env_name, rl_zoo_config)
-        })
-        .collect();
-    println!("{zoo_configs:#?}");
+            if rl_zoo_config.suppoerted() {
+                supported_envs.insert(env_name, rl_zoo_config);
+            } else {
+                unsupported_envs.insert(env_name, rl_zoo_config);
+            }
+        }
+        Self {
+            supported_envs,
+            unsupported_envs,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -68,6 +157,7 @@ mod test {
     #[test]
     fn zoo_parser_test() {
         let path = PathBuf::from("/home/g/git/r2l/assets/ppo.yaml");
-        parse_rl_zoo_config(path);
+        let configs = parse_rl_zoo_config(path);
+        println!("{configs:#?}");
     }
 }
