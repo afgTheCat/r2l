@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 use r2l_core::on_policy::algorithm::{DefaultAdapter, OnPolicyAlgorithm};
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::R2lNormalizedSampler;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use yaml_serde::Value;
 
 use crate::{
@@ -32,6 +32,91 @@ pub struct RlZooDefault {
     policy: String,
 }
 
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum RlZooSchedule {
+    Constant(f64),
+    Linear(f64),
+}
+
+impl RlZooSchedule {
+    fn initial_value(self) -> f64 {
+        match self {
+            Self::Constant(value) | Self::Linear(value) => value,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for RlZooSchedule {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        if let Ok(value) = yaml_serde::from_value::<f64>(value.clone()) {
+            return Ok(Self::Constant(value));
+        }
+
+        let value = yaml_serde::from_value::<String>(value)
+            .map_err(|err| de::Error::custom(err.to_string()))?;
+        if let Some(value) = value.strip_prefix("lin_") {
+            let value = value.parse().map_err(de::Error::custom)?;
+            return Ok(Self::Linear(value));
+        }
+
+        Err(de::Error::custom(format!(
+            "unsupported RL Zoo schedule: {value}"
+        )))
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum RlZooNormalize {
+    Enabled(bool),
+    Options {
+        norm_obs: Option<bool>,
+        norm_reward: Option<bool>,
+    },
+}
+
+impl<'de> Deserialize<'de> for RlZooNormalize {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        if let Ok(enabled) = yaml_serde::from_value::<bool>(value.clone()) {
+            return Ok(Self::Enabled(enabled));
+        }
+        let value = yaml_serde::from_value::<String>(value)
+            .map_err(|err| de::Error::custom(err.to_string()))?;
+        let norm_obs = parse_python_bool_option(&value, "norm_obs");
+        let norm_reward = parse_python_bool_option(&value, "norm_reward");
+        if norm_obs.is_some() || norm_reward.is_some() {
+            return Ok(Self::Options {
+                norm_obs,
+                norm_reward,
+            });
+        }
+        Err(de::Error::custom(format!(
+            "unsupported RL Zoo normalize value: {value}"
+        )))
+    }
+}
+
+fn parse_python_bool_option(value: &str, key: &str) -> Option<bool> {
+    let key_pos = value.find(key)?;
+    let rest = &value[key_pos + key.len()..];
+    let colon_pos = rest.find(':')?;
+    let rest = rest[colon_pos + 1..].trim_start();
+    if rest.starts_with("True") {
+        Some(true)
+    } else if rest.starts_with("False") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RlZooEnvironmentConfig {
     n_envs: Option<usize>,
@@ -43,11 +128,11 @@ pub struct RlZooEnvironmentConfig {
     gamma: Option<f32>,
     n_epochs: Option<usize>,
     ent_coef: Option<f32>,
-    learning_rate: Option<f64>,
-    clip_range: Option<f32>,
+    learning_rate: Option<RlZooSchedule>,
+    clip_range: Option<RlZooSchedule>,
     vf_coef: Option<f32>,
     max_grad_norm: Option<f32>,
-    normalize: Option<bool>,
+    normalize: Option<RlZooNormalize>,
     use_sde: Option<bool>,
     sde_sample_freq: Option<usize>,
 }
@@ -98,11 +183,11 @@ impl RlZooEnvironmentConfig {
         if let Some(batch_size) = self.batch_size {
             builder = builder.with_sample_size(batch_size);
         }
-        if let Some(learning_rate) = self.learning_rate.as_ref() {
-            builder = builder.with_learning_rate(*learning_rate);
+        if let Some(learning_rate) = self.learning_rate {
+            builder = builder.with_learning_rate(learning_rate.initial_value());
         }
-        if let Some(clip_range) = self.clip_range.as_ref() {
-            builder = builder.with_clip_range(*clip_range);
+        if let Some(clip_range) = self.clip_range {
+            builder = builder.with_clip_range(clip_range.initial_value() as f32);
         }
         if let Some(vf_coef) = self.vf_coef {
             builder = builder.with_vf_coeff(Some(vf_coef));
@@ -115,9 +200,10 @@ impl RlZooEnvironmentConfig {
     }
 }
 
-struct ZooConfig {
-    supported_envs: BTreeMap<String, RlZooEnvironmentConfig>,
-    unsupported_envs: BTreeMap<String, RlZooEnvironmentConfig>,
+#[derive(Debug)]
+pub struct ZooConfig {
+    pub supported_envs: BTreeMap<String, RlZooEnvironmentConfig>,
+    pub unsupported_envs: BTreeMap<String, RlZooEnvironmentConfig>,
 }
 
 impl ZooConfig {
@@ -145,19 +231,5 @@ impl ZooConfig {
             supported_envs,
             unsupported_envs,
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::path::PathBuf;
-
-    use crate::zoo_parser::parse_rl_zoo_config;
-
-    #[test]
-    fn zoo_parser_test() {
-        let path = PathBuf::from("/home/g/git/r2l/assets/ppo.yaml");
-        let configs = parse_rl_zoo_config(path);
-        println!("{configs:#?}");
     }
 }
