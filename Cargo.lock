@@ -6879,6 +6879,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "r2l-zoo-evaluator"
+version = "0.0.2-rc2"
+dependencies = [
+ "r2l-api",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

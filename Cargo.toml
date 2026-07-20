@@ -9,6 +9,7 @@ members = [
   "crates/r2l-candle",
   "crates/r2l-burn",
   "crates/r2l-sampler",
+  "crates/r2l-zoo-evaluator",
 ]
 resolver = "3"
 
