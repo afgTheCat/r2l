@@ -64,7 +64,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
     }
 
     if config.norm_obs == Some(true) {
-        let ppo_builder = ppo_builder.with_observation_normalizer(10.);
+        let ppo_builder = ppo_builder.with_observation_normalizer(Some(10.));
         let mut ppo = ppo_builder.build().unwrap();
         ppo.train().unwrap();
     } else {

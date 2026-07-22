@@ -6,9 +6,8 @@ mod builders;
 mod evaluators;
 mod hooks;
 mod utils;
-pub mod zoo_parser;
 
-type BurnBackend = Autodiff<NdArray>;
+pub type BurnBackend = Autodiff<NdArray>;
 
 pub use agents::a2c::{A2CBurnAgent, A2CCandleAgent};
 pub use agents::ppo::{PPOBurnAgent, PPOCandleAgent};

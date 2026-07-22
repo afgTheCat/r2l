@@ -6777,8 +6777,6 @@ dependencies = [
  "r2l-gym",
  "r2l-sampler",
  "rand 0.10.2",
- "serde",
- "yaml_serde",
 ]
 
 [[package]]
@@ -6882,7 +6880,13 @@ dependencies = [
 name = "r2l-zoo-evaluator"
 version = "0.0.2-rc2"
 dependencies = [
+ "anyhow",
  "r2l-api",
+ "r2l-core",
+ "r2l-gym",
+ "r2l-sampler",
+ "serde",
+ "yaml_serde",
 ]
 
 [[package]]

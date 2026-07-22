@@ -22,8 +22,6 @@ rand = "0.10.0"
 anyhow = { workspace = true }
 derive_more = "2.0.1"
 bimodal-array = { workspace = true }
-yaml_serde = "0.10.4"
-serde = { version = "1.0.229", features = ["derive"] }
 
 [features]
 test-utils = []

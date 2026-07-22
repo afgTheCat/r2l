@@ -248,10 +248,10 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
         self
     }
 
-    /// Switches training and evaluation rollout collection to normalized observations.
+    /// Switches rollout collection to normalized sampling with an optional observation normalizer.
     pub fn with_observation_normalizer(
         self,
-        obs_clip: f32,
+        obs_clip: Option<f32>,
     ) -> OnPolicyAlgorithmBuilder<AB, EB, SH, NormalizedSamplerSelection> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,

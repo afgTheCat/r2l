@@ -8,3 +8,9 @@ license.workspace = true
 
 [dependencies]
 r2l-api = { workspace = true }
+r2l-core = { workspace = true }
+r2l-gym = { workspace = true }
+r2l-sampler = { workspace = true }
+yaml_serde = "0.10.4"
+serde = { version = "1.0.229", features = ["derive"] }
+anyhow = { workspace = true }
