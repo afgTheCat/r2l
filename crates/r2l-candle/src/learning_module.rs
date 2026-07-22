@@ -77,6 +77,16 @@ impl SplitPolicyValueOptimizer {
         self.policy_optimizer_with_grad.optimizer.learning_rate()
     }
 
+    /// Sets the learning rate for both policy and value optimizers.
+    pub fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.policy_optimizer_with_grad
+            .optimizer
+            .set_learning_rate(learning_rate);
+        self.value_optimizer_with_grad
+            .optimizer
+            .set_learning_rate(learning_rate);
+    }
+
     /// Sets gradient clipping for the policy optimizer.
     pub fn set_policy_grad_clip(&mut self, max_grad_norm: Option<f32>) {
         self.policy_optimizer_with_grad
@@ -121,6 +131,13 @@ impl JointPolicyValueOptimizer {
     /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer_with_grad.optimizer.learning_rate()
+    }
+
+    /// Sets the learning rate for the shared optimizer.
+    pub fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.optimizer_with_grad
+            .optimizer
+            .set_learning_rate(learning_rate);
     }
 
     /// Sets gradient clipping for the shared optimizer.
@@ -224,6 +241,14 @@ impl PolicyValueOptimizer {
         match self {
             Self::Joint(joint) => joint.policy_learning_rate(),
             Self::Split(split) => split.policy_learning_rate(),
+        }
+    }
+
+    /// Sets the learning rate on the contained optimizer state.
+    pub fn set_learning_rate(&mut self, learning_rate: f64) {
+        match self {
+            Self::Joint(joint) => joint.set_learning_rate(learning_rate),
+            Self::Split(split) => split.set_learning_rate(learning_rate),
         }
     }
 
@@ -367,6 +392,10 @@ impl OnPolicyLearningModule for PolicyValueModule {
 
     fn policy(&self) -> &Self::Policy {
         &self.policy
+    }
+
+    fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.optimizer.set_learning_rate(learning_rate);
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {

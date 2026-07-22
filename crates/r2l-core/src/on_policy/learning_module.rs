@@ -34,4 +34,7 @@ pub trait OnPolicyLearningModule:
 
     /// Returns the train-time policy.
     fn policy(&self) -> &Self::Policy;
+
+    /// Sets the learning rate used by future updates.
+    fn set_learning_rate(&mut self, learning_rate: f64);
 }

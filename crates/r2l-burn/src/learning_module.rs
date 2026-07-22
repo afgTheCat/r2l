@@ -127,6 +127,11 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueModule<B, M> {
     pub fn policy_learning_rate(&self) -> f64 {
         self.lr
     }
+
+    /// Sets the learning rate for the shared optimizer.
+    pub fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.lr = learning_rate;
+    }
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for JointPolicyValueModule<B, M> {
@@ -168,6 +173,10 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for JointPolic
 
     fn policy(&self) -> &Self::Policy {
         &self.model.policy
+    }
+
+    fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.set_learning_rate(learning_rate);
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
@@ -220,6 +229,12 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
     pub fn policy_learning_rate(&self) -> f64 {
         self.policy_lr
     }
+
+    /// Sets the learning rate for both policy and value optimizers.
+    pub fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.policy_lr = learning_rate;
+        self.value_lr = learning_rate;
+    }
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for SplitPolicyValueModule<B, M> {
@@ -267,6 +282,10 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolic
 
     fn policy(&self) -> &Self::Policy {
         &self.policy
+    }
+
+    fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.set_learning_rate(learning_rate);
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
@@ -340,6 +359,14 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
             Self::Split(lm) => lm.policy_learning_rate(),
         }
     }
+
+    /// Sets the learning rate on the contained optimizer state.
+    pub fn set_learning_rate(&mut self, learning_rate: f64) {
+        match self {
+            Self::Joint(lm) => lm.set_learning_rate(learning_rate),
+            Self::Split(lm) => lm.set_learning_rate(learning_rate),
+        }
+    }
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for PolicyValueModule<B, M> {
@@ -382,6 +409,10 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValu
             Self::Joint(lm) => lm.policy(),
             Self::Split(lm) => lm.policy(),
         }
+    }
+
+    fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.set_learning_rate(learning_rate);
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {

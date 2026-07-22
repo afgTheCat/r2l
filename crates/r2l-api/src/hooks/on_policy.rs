@@ -50,6 +50,27 @@ impl LearningSchedule {
     }
 }
 
+/// Learning-rate policy applied over the progress of an on-policy training run.
+#[derive(Debug, Clone, Copy)]
+pub enum LearningRateSchedule {
+    /// Keep the learning rate fixed throughout training.
+    Constant(f64),
+    /// Decay the initial learning rate linearly to zero.
+    Linear(f64),
+}
+
+impl LearningRateSchedule {
+    /// Returns the learning rate for the remaining fraction of training.
+    pub fn value(self, progress_remaining: f64) -> f64 {
+        match self {
+            Self::Constant(learning_rate) => learning_rate,
+            Self::Linear(initial_learning_rate) => {
+                initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
+            }
+        }
+    }
+}
+
 /// Default outer-loop hooks used by high-level on-policy algorithm builders.
 ///
 /// This hook is responsible for lifecycle behavior around training rather than
@@ -65,6 +86,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     S2: Sampler<Tensor = S::Tensor>,
 > {
     learning_schedule: LearningSchedule,
+    learning_rate_schedule: Option<LearningRateSchedule>,
     evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
     should_stop: bool,
     _phantom: PhantomData<(A, S, C, E)>,
@@ -85,10 +107,20 @@ impl<
     ) -> Self {
         Self {
             learning_schedule,
+            learning_rate_schedule: None,
             evaluator,
             should_stop: false,
             _phantom: PhantomData,
         }
+    }
+
+    /// Applies a learning-rate schedule over the configured training duration.
+    pub fn with_learning_rate_schedule(
+        mut self,
+        learning_rate_schedule: LearningRateSchedule,
+    ) -> Self {
+        self.learning_rate_schedule = Some(learning_rate_schedule);
+        self
     }
 }
 
@@ -115,13 +147,15 @@ impl<
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
-        self.should_stop = match &mut self.learning_schedule {
+        let progress_remaining = match &mut self.learning_schedule {
             LearningSchedule::RolloutBound {
                 total_rollouts,
                 current_rollout,
             } => {
                 *current_rollout += 1;
-                current_rollout >= total_rollouts
+                self.should_stop = current_rollout >= total_rollouts;
+                let completed_rollouts = (*current_rollout).min(*total_rollouts);
+                1.0 - completed_rollouts as f64 / *total_rollouts as f64
             }
             LearningSchedule::TotalStepBound {
                 total_steps,
@@ -131,9 +165,17 @@ impl<
                 let rollout_steps: usize =
                     rollouts.as_ref().iter().map(|e| e.actions().len()).sum();
                 *current_step += rollout_steps;
-                current_step >= total_steps
+                self.should_stop = current_step >= total_steps;
+                let completed_steps = (*current_step).min(*total_steps);
+                1.0 - completed_steps as f64 / *total_steps as f64
             }
         };
+
+        if let Some(learning_rate_schedule) = self.learning_rate_schedule {
+            runtime
+                .agent
+                .set_learning_rate(learning_rate_schedule.value(progress_remaining));
+        }
 
         HookResult::Continue
     }

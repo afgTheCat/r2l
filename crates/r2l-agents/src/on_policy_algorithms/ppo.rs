@@ -200,4 +200,8 @@ impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
     fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
         PPO::learn(self, buffers)
     }
+
+    fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.lm.set_learning_rate(learning_rate);
+    }
 }

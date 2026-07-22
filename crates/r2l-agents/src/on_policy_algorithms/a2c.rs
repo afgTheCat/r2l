@@ -169,4 +169,8 @@ impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
     fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
         A2C::learn(self, buffers)
     }
+
+    fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.lm.set_learning_rate(learning_rate);
+    }
 }

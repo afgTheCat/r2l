@@ -22,6 +22,9 @@ pub trait Agent {
     /// Learns from a batch of trajectory containers.
     fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()>;
 
+    /// Sets the learning rate used by future updates.
+    fn set_learning_rate(&mut self, learning_rate: f64);
+
     /// Releases agent resources before the training loop exits.
     fn shutdown(&mut self) {}
 }

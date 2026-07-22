@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use r2l_api::{
-    BurnBackend, DefaultOnPolicyAlgorithmHooks, EpisodeBoundHook, LearningSchedule,
-    PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
+    BurnBackend, DefaultOnPolicyAlgorithmHooks, EpisodeBoundHook, LearningRateSchedule,
+    LearningSchedule, PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
 };
 use r2l_core::on_policy::algorithm::{DefaultAdapter, OnPolicyAlgorithm};
 use r2l_gym::GymEnv;
@@ -32,6 +32,15 @@ impl RlZooSchedule {
     fn initial_value(self) -> f64 {
         match self {
             Self::Constant(value) | Self::Linear(value) => value,
+        }
+    }
+}
+
+impl From<RlZooSchedule> for LearningRateSchedule {
+    fn from(schedule: RlZooSchedule) -> Self {
+        match schedule {
+            RlZooSchedule::Constant(value) => Self::Constant(value),
+            RlZooSchedule::Linear(value) => Self::Linear(value),
         }
     }
 }
@@ -166,7 +175,7 @@ impl RlZooEnvironmentConfig {
             .with_total_epochs(self.n_epochs)
             .with_entropy_coeff(self.ent_coef)
             .with_sample_size(self.batch_size)
-            .with_learning_rate(self.learning_rate.initial_value())
+            .with_learning_rate_schedule(self.learning_rate.into())
             .with_clip_range(self.clip_range.initial_value() as f32)
             .with_log_std_init(self.log_std_init)
             .with_vf_coeff(Some(self.vf_coef))
