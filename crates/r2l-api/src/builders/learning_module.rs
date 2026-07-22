@@ -95,6 +95,7 @@ pub(crate) struct OnPolicyLearningModuleBuilder {
     pub(crate) policy_hidden_layers: Vec<usize>,
     pub(crate) value_hidden_layers: Vec<usize>,
     pub(crate) activation_function: ActivationFunction,
+    pub(crate) log_std_init: f32,
     pub(crate) learning_module_type: OnPolicyLearningModuleType,
 }
 
@@ -113,6 +114,7 @@ impl OnPolicyLearningModuleBuilder {
             &self.policy_hidden_layers,
             observation_size,
             self.activation_function,
+            self.log_std_init,
         )?;
         match self.learning_module_type {
             OnPolicyLearningModuleType::Joint {
@@ -156,7 +158,12 @@ impl OnPolicyLearningModuleBuilder {
             &[action_size],
         ]
         .concat();
-        let policy = PolicyKind::build(action_space, policy_layers, self.activation_function);
+        let policy = PolicyKind::build(
+            action_space,
+            policy_layers,
+            self.activation_function,
+            self.log_std_init,
+        );
         let learning_module = match self.learning_module_type {
             OnPolicyLearningModuleType::Joint {
                 max_grad_norm,

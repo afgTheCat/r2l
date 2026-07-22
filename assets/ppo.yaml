@@ -34,6 +34,7 @@ atari:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 Pendulum-v1:
   n_envs: 4
@@ -58,6 +59,7 @@ Pendulum-v1:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 CartPole-v1:
   n_envs: 8
@@ -82,6 +84,7 @@ CartPole-v1:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MountainCar-v0:
   n_envs: 16
@@ -106,6 +109,7 @@ MountainCar-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MountainCarContinuous-v0:
   n_envs: 1
@@ -130,6 +134,7 @@ MountainCarContinuous-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -3.29
   policy_kwargs: dict(log_std_init=-3.29, ortho_init=False)
 Acrobot-v1:
   n_envs: 16
@@ -154,6 +159,7 @@ Acrobot-v1:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 BipedalWalker-v3:
   n_envs: 32
@@ -178,6 +184,7 @@ BipedalWalker-v3:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 BipedalWalkerHardcore-v3:
   n_envs: 16
@@ -202,6 +209,7 @@ BipedalWalkerHardcore-v3:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 LunarLander-v3:
   n_envs: 16
@@ -226,6 +234,7 @@ LunarLander-v3:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 LunarLanderContinuous-v3:
   n_envs: 16
@@ -250,6 +259,7 @@ LunarLanderContinuous-v3:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 HalfCheetahBulletEnv-v0:
   n_envs: 16
@@ -274,6 +284,7 @@ HalfCheetahBulletEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -2
   policy_kwargs: dict(log_std_init=-2, ortho_init=False, activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]) )
 AntBulletEnv-v0:
   n_envs: 16
@@ -298,6 +309,7 @@ AntBulletEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -1
   policy_kwargs: dict(log_std_init=-1, ortho_init=False, activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]) )
 Walker2DBulletEnv-v0:
   n_envs: 16
@@ -322,6 +334,7 @@ Walker2DBulletEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -2
   policy_kwargs: dict(log_std_init=-2, ortho_init=False, activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]) )
 HopperBulletEnv-v0:
   n_envs: 16
@@ -346,6 +359,7 @@ HopperBulletEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -2
   policy_kwargs: dict(log_std_init=-2, ortho_init=False, activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]) )
 ReacherBulletEnv-v0:
   n_envs: 8
@@ -370,6 +384,7 @@ ReacherBulletEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -2.7
   policy_kwargs: dict(log_std_init=-2.7, ortho_init=False, activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]) )
 MinitaurBulletEnv-v0:
   n_envs: 8
@@ -394,6 +409,7 @@ MinitaurBulletEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MinitaurBulletDuckEnv-v0:
   n_envs: 8
@@ -418,6 +434,7 @@ MinitaurBulletDuckEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 HumanoidBulletEnv-v0:
   n_envs: 8
@@ -442,6 +459,7 @@ HumanoidBulletEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 InvertedDoublePendulumBulletEnv-v0:
   n_envs: 8
@@ -466,6 +484,7 @@ InvertedDoublePendulumBulletEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 InvertedPendulumSwingupBulletEnv-v0:
   n_envs: 8
@@ -490,6 +509,7 @@ InvertedPendulumSwingupBulletEnv-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-Empty-Random-5x5-v0:
   n_envs: 8
@@ -515,6 +535,7 @@ MiniGrid-Empty-Random-5x5-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-FourRooms-v0:
   n_envs: 8
@@ -540,6 +561,7 @@ MiniGrid-FourRooms-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-DoorKey-5x5-v0:
   n_envs: 8
@@ -565,6 +587,7 @@ MiniGrid-DoorKey-5x5-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-MultiRoom-N4-S5-v0:
   n_envs: 8
@@ -590,6 +613,7 @@ MiniGrid-MultiRoom-N4-S5-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-Fetch-5x5-N2-v0:
   n_envs: 8
@@ -615,6 +639,7 @@ MiniGrid-Fetch-5x5-N2-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-GoToDoor-5x5-v0:
   n_envs: 8
@@ -640,6 +665,7 @@ MiniGrid-GoToDoor-5x5-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-PutNear-6x6-N2-v0:
   n_envs: 8
@@ -665,6 +691,7 @@ MiniGrid-PutNear-6x6-N2-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-RedBlueDoors-6x6-v0:
   n_envs: 8
@@ -690,6 +717,7 @@ MiniGrid-RedBlueDoors-6x6-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-LockedRoom-v0:
   n_envs: 8
@@ -715,6 +743,7 @@ MiniGrid-LockedRoom-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-KeyCorridorS3R1-v0:
   n_envs: 8
@@ -740,6 +769,7 @@ MiniGrid-KeyCorridorS3R1-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-Unlock-v0:
   n_envs: 8
@@ -765,6 +795,7 @@ MiniGrid-Unlock-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 MiniGrid-ObstructedMaze-2Dlh-v0:
   n_envs: 8
@@ -790,6 +821,7 @@ MiniGrid-ObstructedMaze-2Dlh-v0:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 CarRacing-v3:
   n_envs: 8
@@ -824,6 +856,7 @@ CarRacing-v3:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -2
   policy_kwargs: dict(log_std_init=-2, ortho_init=False, activation_fn=nn.GELU, net_arch=dict(pi=[256], vf=[256]), )
 Ant-v4:
   n_envs: 1
@@ -848,6 +881,7 @@ Ant-v4:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 Swimmer-v4:
   n_envs: 4
@@ -872,6 +906,7 @@ Swimmer-v4:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 HalfCheetah-v4:
   n_envs: 1
@@ -896,6 +931,7 @@ HalfCheetah-v4:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -2
   policy_kwargs: dict( log_std_init=-2, ortho_init=False, activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]) )
 Hopper-v4:
   n_envs: 1
@@ -920,6 +956,7 @@ Hopper-v4:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -2
   policy_kwargs: dict( log_std_init=-2, ortho_init=False, activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]) )
 HumanoidStandup-v2:
   n_envs: 1
@@ -944,6 +981,7 @@ HumanoidStandup-v2:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -2
   policy_kwargs: dict( log_std_init=-2, ortho_init=False, activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]) )
 Humanoid-v4:
   n_envs: 1
@@ -968,6 +1006,7 @@ Humanoid-v4:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: -2
   policy_kwargs: dict( log_std_init=-2, ortho_init=False, activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]) )
 InvertedDoublePendulum-v2:
   n_envs: 1
@@ -992,6 +1031,7 @@ InvertedDoublePendulum-v2:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 InvertedPendulum-v2:
   n_envs: 1
@@ -1016,6 +1056,7 @@ InvertedPendulum-v2:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 Reacher-v2:
   n_envs: 1
@@ -1040,6 +1081,7 @@ Reacher-v2:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null
 Walker2d-v4:
   n_envs: 1
@@ -1064,4 +1106,5 @@ Walker2d-v4:
   rollout_buffer_kwargs: null
   target_kl: null
   stats_window_size: 100
+  log_std_init: 0.0
   policy_kwargs: null

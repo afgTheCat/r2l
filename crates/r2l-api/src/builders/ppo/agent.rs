@@ -56,6 +56,7 @@ impl PPOAgentBuilder {
                 policy_hidden_layers: vec![64, 64],
                 value_hidden_layers: vec![64, 64],
                 activation_function: ActivationFunction::default(),
+                log_std_init: 0.0,
                 learning_module_type: OnPolicyLearningModuleType::Joint {
                     params: ParamsAdamW {
                         lr: 3e-4,

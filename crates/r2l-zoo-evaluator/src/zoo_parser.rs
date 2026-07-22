@@ -138,6 +138,7 @@ pub struct RlZooEnvironmentConfig {
     clip_range: RlZooSchedule,
     vf_coef: f32,
     max_grad_norm: f32,
+    log_std_init: f32,
     normalize: RlZooNormalize,
     use_sde: bool,
     sde_sample_freq: i32,
@@ -167,6 +168,7 @@ impl RlZooEnvironmentConfig {
             .with_sample_size(self.batch_size)
             .with_learning_rate(self.learning_rate.initial_value())
             .with_clip_range(self.clip_range.initial_value() as f32)
+            .with_log_std_init(self.log_std_init)
             .with_vf_coeff(Some(self.vf_coef))
             .with_gradient_clipping(Some(self.max_grad_norm));
         if self.normalize.norm_reward() {

@@ -26,6 +26,7 @@ impl CompositeDistribution {
         hidden_layers: &[usize],
         observation_size: usize,
         activation: ActivationFunction,
+        log_std_init: f32,
         prefix: &str,
     ) -> Result<Self> {
         let mut policies = Vec::new();
@@ -39,6 +40,7 @@ impl CompositeDistribution {
                 hidden_layers,
                 observation_size,
                 activation,
+                log_std_init,
                 &child_prefix,
             )?);
             action_sizes.push(action_size);

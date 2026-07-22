@@ -108,6 +108,12 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
         self
     }
 
+    /// Sets the initial log standard deviation for Gaussian policies.
+    pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
+        self.learning_module_builder.log_std_init = log_std_init;
+        self
+    }
+
     /// Sets the optimizer learning rate for all configured optimizers.
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.learning_module_builder.learning_module_type = self
