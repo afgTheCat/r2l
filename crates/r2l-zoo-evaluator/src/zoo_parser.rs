@@ -169,11 +169,9 @@ impl RlZooEnvironmentConfig {
             .with_clip_range(self.clip_range.initial_value() as f32)
             .with_vf_coeff(Some(self.vf_coef))
             .with_gradient_clipping(Some(self.max_grad_norm));
-
         if self.normalize.norm_reward() {
             builder = builder.with_reward_normalizer(self.gamma, 10.0);
         }
-
         builder.build()
     }
 }

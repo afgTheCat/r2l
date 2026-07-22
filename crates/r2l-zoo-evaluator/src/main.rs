@@ -8,8 +8,11 @@ mod zoo_parser;
 
 use std::path::PathBuf;
 
+use r2l_core::rng::set_seed;
+
 use crate::zoo_parser::ZooConfig;
 
+const SEED: u64 = 0;
 const CONFIG_PATH: &str = "/home/gabor/projects/r2l/assets/ppo.yaml";
 const LOG_DIR: &str = "/home/gabor/projects/r2l/logs";
 const SMALL_ENVIRONMENTS: [&str; 5] = [
@@ -21,6 +24,8 @@ const SMALL_ENVIRONMENTS: [&str; 5] = [
 ];
 
 fn main() {
+    // Sets the seed. Burn does respect this, making the tests reproducible
+    set_seed(SEED);
     let config_path = PathBuf::from(CONFIG_PATH);
     let mut zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
     println!("Not testing {}", zoo_config.unsupported_envs.len());
