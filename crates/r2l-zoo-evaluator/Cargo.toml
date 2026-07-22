@@ -14,3 +14,4 @@ r2l-sampler = { workspace = true }
 yaml_serde = "0.10.4"
 serde = { version = "1.0.229", features = ["derive"] }
 anyhow = { workspace = true }
+clap = { version = "4.5.60", features = ["derive"] }
