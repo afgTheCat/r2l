@@ -162,6 +162,7 @@ impl RlZooEnvironmentConfig {
         &self,
         env_name: &str,
         csv_path: PathBuf,
+        seed: u64,
     ) -> anyhow::Result<RlZooPpoAlgorithm> {
         let obs_clip = self.normalize.norm_obs().then_some(10.0);
         let mut builder = PPOAlgorithmBuilder::gym(env_name, self.n_envs)
@@ -179,6 +180,7 @@ impl RlZooEnvironmentConfig {
             .with_clip_range(self.clip_range.initial_value() as f32)
             .with_log_std_init(self.log_std_init)
             .with_vf_coeff(Some(self.vf_coef))
+            .with_seed(seed)
             .with_gradient_clipping(Some(self.max_grad_norm));
         if self.normalize.norm_reward() {
             builder = builder.with_reward_normalizer(self.gamma, 10.0);

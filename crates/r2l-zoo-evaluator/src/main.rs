@@ -10,7 +10,6 @@ use std::{path::PathBuf, process::Command};
 
 use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
-use r2l_core::rng::set_seed;
 
 use crate::zoo_parser::ZooConfig;
 
@@ -76,15 +75,15 @@ fn evaluate_all() -> anyhow::Result<()> {
 }
 
 fn evaluate(envs: Vec<String>) -> anyhow::Result<()> {
-    // Sets the seed. Burn does respect this, making the tests reproducible
-    set_seed(SEED);
     let config_path = PathBuf::from(CONFIG_PATH);
     let zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
     for env in envs {
         let log_file = PathBuf::from(LOG_DIR).join(format!("{env}.csv"));
         let env_config = zoo_config.supported_envs.get(&env).unwrap();
         println!("Evaluating {env}");
-        let mut algorithm = env_config.build_burn_ppo_algorithm(&env, log_file).unwrap();
+        let mut algorithm = env_config
+            .build_burn_ppo_algorithm(&env, log_file, SEED)
+            .unwrap();
         algorithm.train().unwrap();
     }
     Ok(())
@@ -102,7 +101,7 @@ mod test {
     use crate::evaluate;
 
     #[test]
-    fn bipedal_walker() {
-        evaluate(vec!["BipedalWalker-v3".into()]).unwrap();
+    fn pendulum_v1() {
+        evaluate(vec!["Pendulum-v1".into()]).unwrap();
     }
 }

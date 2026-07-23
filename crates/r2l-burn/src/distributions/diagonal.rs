@@ -59,7 +59,7 @@ impl<B: Backend> Actor for DiagGaussianDistribution<B> {
         let std = self.log_std.val().exp();
         let noise = Tensor::random(mu.shape(), BurnDistribution::Normal(0., 1.), &device);
         let action = mu + noise * std;
-        Ok(action.squeeze_dims(&[1]))
+        Ok(action.squeeze_dims(&[0]))
     }
 
     // This will serialize the model to safetesnors
