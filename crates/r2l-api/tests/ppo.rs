@@ -19,7 +19,6 @@ struct PPOTestConfig {
     gradient_clipping: Option<f32>,
     norm_obs: Option<bool>,
     norm_reward: Option<bool>,
-    // TODO: implement these features
     use_sde: Option<bool>,
     sde_sample_freq: Option<usize>,
 }

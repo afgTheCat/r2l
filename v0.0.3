@@ -1,6 +1,9 @@
 [ ] We could make the GUI look better
 [ ] Just like we have a BurnPolicy, we might want to introduce a CandlePolicy.
-[ ] Error handling
+[ ] Error handling [!!]
 [ ] Support linear PPO clipping schedules (`clip_range`)
 [ ] Support generalized State-Dependent Exploration (gSDE), including configurable noise resampling for continuous policies
 [ ] I don't like how MultiMemory transforms states back and forth. I think the whole normalized sampler probably needs a minor redesign
+[ ] We need the r2l-api to be simplified. What we should probably do is a bunch of type erasures so that the builders can be more easily passed around
+[ ] Reconsider wether TrajectoryBatch is still neeeded
+[ ] DiagGaussianDistribution::from_store is brittle. We def want to revisit the whole serialization fiasco. Same goes for RecurrentCategoricalDistribution::from_store. Also for CategoricalDistribution::from_store.

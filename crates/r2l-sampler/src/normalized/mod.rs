@@ -145,7 +145,6 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
 
     fn step_indexed(&mut self, indices: &[usize]) -> Vec<bool> {
         let multi_memory = self.pool.step_indexed(indices);
-        // TODO: this is kinda ugly
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
             let mut next_states = indices

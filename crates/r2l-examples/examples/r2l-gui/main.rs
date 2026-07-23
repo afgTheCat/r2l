@@ -1,6 +1,3 @@
-// TODO: egui app here, should be different from the ratatui app in that the learning will not
-// happen on a separate thread, just to illustrate how to use the training hooks
-
 mod table;
 
 use std::sync::mpsc;
@@ -116,7 +113,6 @@ pub fn train_ppo(
     total_rollouts: usize,
     clip_range: f32,
 ) -> anyhow::Result<()> {
-    // TODO: The generic here is ugly
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
         .with_seed(0)

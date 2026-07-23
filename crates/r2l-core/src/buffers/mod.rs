@@ -64,7 +64,6 @@ impl<T: R2lTensor> MultiMemory<T> {
         self.truncateds.push(truncated);
     }
 
-    // TODO: maybe an iterator would be better
     pub fn into_memories(self, next_states: &[T]) -> Vec<Memory<T>> {
         let mut memories = Vec::with_capacity(self.last_states.len());
         let Self {
@@ -95,7 +94,6 @@ impl<T: R2lTensor> MultiMemory<T> {
     }
 }
 
-// TODO: do we need this trait?
 pub trait TrajectoryBatch<T: R2lTensor> {
     fn len(&self) -> usize;
 

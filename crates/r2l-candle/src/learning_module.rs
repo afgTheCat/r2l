@@ -121,7 +121,6 @@ impl LearningModule for SplitPolicyValueOptimizer {
 }
 
 /// The policy and the value fuction has the same optimizer
-/// TODO: value_net does not need to be here
 /// Policy/value optimizer with one shared optimizer configuration.
 pub struct JointPolicyValueOptimizer {
     optimizer_with_grad: OptimizerWithMaxGrad,

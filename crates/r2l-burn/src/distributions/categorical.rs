@@ -39,7 +39,6 @@ impl<B: Backend> CategoricalDistribution<B> {
         }
     }
 
-    // TODO: this is quite brittle like this
     /// Builds a categoriacal policy using a safetensor store
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let logits_layers = Sequential::<B>::dims_from_store("logits", store);

@@ -1,4 +1,5 @@
 use candle_core::{Device, Tensor};
+use itertools::izip;
 
 use crate::tensor::{R2lTensor, TensorData};
 
@@ -66,12 +67,11 @@ impl R2lTensor for Tensor {
 }
 
 impl TensorData {
-    // TODO: implement this without relying on candle
     pub fn clamp(&self, min: &Self, max: &Self) -> Self {
-        let t = Tensor::convert(self);
-        let min_t = Tensor::convert(min);
-        let max_t = Tensor::convert(max);
-        TensorData::convert(&t.clamp(&min_t, &max_t).unwrap())
+        let data = izip!(&self.data, &min.data, &max.data)
+            .map(|(value, min, max)| value.clamp(*min, *max))
+            .collect();
+        Self::new(data, self.shape.clone())
     }
 }
 

@@ -6,7 +6,6 @@ use r2l_core::{
 
 use crate::builders::learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType};
 
-// TODO: we might not need this trait in the future
 /// Trait implemented by concrete `Agent` builders.
 ///
 /// This trait turns high-level agent configuration into a backend-specific
@@ -16,7 +15,6 @@ pub trait AgentBuilder {
     /// Agent type produced by this builder.
     type Agent: Agent;
 
-    // TODO: This API is heavily in progress
     /// Builds the configured agent for the provided environment dimensions.
     fn build<T: R2lTensor>(
         self,

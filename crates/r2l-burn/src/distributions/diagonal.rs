@@ -37,7 +37,6 @@ impl<B: Backend> DiagGaussianDistribution<B> {
         Self { mu_net, log_std }
     }
 
-    // TODO: this is quite brittle like this
     /// Builds a diagonal-Guassian policy using a safetensor store
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let mu_layers = Sequential::<B>::dims_from_store("mu_net", store);
