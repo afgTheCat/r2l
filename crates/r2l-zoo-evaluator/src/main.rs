@@ -40,7 +40,7 @@ enum Cli {
     /// Trains and evaluates one environment in this process.
     Evaluate {
         /// Gymnasium environment ID.
-        env: String,
+        env: Vec<String>,
     },
 }
 
@@ -48,7 +48,8 @@ fn evaluate_all() -> anyhow::Result<()> {
     let executable = std::env::current_exe().context("failed to locate evaluator executable")?;
     let mut children = Vec::with_capacity(SMALL_ENVIRONMENTS.len());
     for env in SMALL_ENVIRONMENTS {
-        match Command::new(&executable).args(["evaluate", env]).spawn() {
+        let command = Command::new(&executable).args(["evaluate", env]).spawn();
+        match command {
             Ok(child) => children.push((env, child)),
             Err(error) => {
                 for (_, child) in &mut children {
@@ -74,33 +75,18 @@ fn evaluate_all() -> anyhow::Result<()> {
     }
 }
 
-fn evaluate(env: String) -> anyhow::Result<()> {
-    if !SMALL_ENVIRONMENTS.contains(&env.as_str()) {
-        bail!(
-            "unsupported evaluation environment {env}; choose one of: {}",
-            SMALL_ENVIRONMENTS.join(", ")
-        );
-    }
+fn evaluate(envs: Vec<String>) -> anyhow::Result<()> {
     // Sets the seed. Burn does respect this, making the tests reproducible
     set_seed(SEED);
     let config_path = PathBuf::from(CONFIG_PATH);
-    let mut zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
-    println!(
-        "Ignoring {} unsupported Zoo configurations",
-        zoo_config.unsupported_envs.len()
-    );
-    let env_config = zoo_config
-        .supported_envs
-        .remove(&env)
-        .with_context(|| format!("missing supported Zoo configuration for {env}"))?;
-    println!("Evaluating {env}");
-    let log_file = PathBuf::from(LOG_DIR).join(format!("{env}.csv"));
-    let mut algorithm = env_config
-        .build_burn_ppo_algorithm(&env, log_file)
-        .with_context(|| format!("failed to build PPO algorithm for {env}"))?;
-    algorithm
-        .train()
-        .with_context(|| format!("training {env} failed"))?;
+    let zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
+    for env in envs {
+        let log_file = PathBuf::from(LOG_DIR).join(format!("{env}.csv"));
+        let env_config = zoo_config.supported_envs.get(&env).unwrap();
+        println!("Evaluating {env}");
+        let mut algorithm = env_config.build_burn_ppo_algorithm(&env, log_file).unwrap();
+        algorithm.train().unwrap();
+    }
     Ok(())
 }
 
@@ -108,5 +94,15 @@ fn main() -> anyhow::Result<()> {
     match Args::parse().command {
         Some(Cli::Evaluate { env }) => evaluate(env),
         None => evaluate_all(),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::evaluate;
+
+    #[test]
+    fn bipedal_walker() {
+        evaluate(vec!["BipedalWalker-v3".into()]).unwrap();
     }
 }
