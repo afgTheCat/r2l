@@ -6963,16 +6963,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "r2l-macros"
-version = "0.0.2-rc2"
-dependencies = [
- "itertools 0.14.0",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "r2l-sampler"
 version = "0.0.2-rc2"
 dependencies = [

@@ -173,7 +173,6 @@ fn mountain_car_candle() {
     });
 }
 
-// TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
 fn mountain_car_box_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
@@ -199,7 +198,6 @@ fn mountain_car_box_candle() {
     });
 }
 
-// TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
 fn lunar_lander_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
@@ -225,7 +223,6 @@ fn lunar_lander_candle() {
     });
 }
 
-// TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
 fn lunar_lander_box_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt

@@ -74,26 +74,23 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
         }
     }
 
-    // TODO: ugly! will need to make this nicer
     fn build_vec_workers<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         num_envs: usize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
-        let mut envs_and_states = Vec::with_capacity(num_envs);
+        let mut envs = Vec::with_capacity(num_envs);
+        let mut initial_states = Vec::with_capacity(num_envs);
         for env_idx in 0..num_envs {
             let mut env = env_builder.build_idx(env_idx).unwrap();
             let state = env.reset(sample_u64()).unwrap();
-            envs_and_states.push((env, state));
+            initial_states.push(state.clone());
+            envs.push(env);
         }
-        let initial_states = envs_and_states
-            .iter()
-            .map(|(_, state)| state.clone())
-            .collect();
         let (last_states, last_state_handles) = bimodal_array(initial_states);
-        let workers = envs_and_states
+        let workers = envs
             .into_iter()
             .zip(last_state_handles)
-            .map(|((env, _), handle)| (env, handle))
+            .map(|(env, handle)| (env, handle))
             .collect();
         (last_states, WorkerPool::Vec(VecWorkers::new(workers)))
     }
@@ -179,7 +176,6 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
             let mut last_states = self.last_states.lock().unwrap();
             obs_normalizer.apply_in_place(&mut last_states)
         }
-
         let last_states = self.last_states.lock().unwrap();
         let memories = multi_memory.into_memories(&last_states);
         let terminations = memories.iter().map(|memory| memory.is_done()).collect();

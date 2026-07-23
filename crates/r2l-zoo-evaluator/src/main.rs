@@ -14,8 +14,8 @@ use clap::{Parser, Subcommand};
 use crate::zoo_parser::ZooConfig;
 
 const SEED: u64 = 0;
-const CONFIG_PATH: &str = "/home/gabor/projects/r2l/assets/ppo.yaml";
-const LOG_DIR: &str = "/home/gabor/projects/r2l/logs";
+const CONFIG_PATH: &str = "../../assets/ppo.yaml";
+const LOG_DIR: &str = "../../logs";
 const SMALL_ENVIRONMENTS: [&str; 8] = [
     "MountainCarContinuous-v0",
     "CartPole-v1",
@@ -75,10 +75,11 @@ fn evaluate_all() -> anyhow::Result<()> {
 }
 
 fn evaluate(envs: Vec<String>) -> anyhow::Result<()> {
-    let config_path = PathBuf::from(CONFIG_PATH);
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config_path = crate_dir.join(CONFIG_PATH);
     let zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
     for env in envs {
-        let log_file = PathBuf::from(LOG_DIR).join(format!("{env}.csv"));
+        let log_file = crate_dir.join(LOG_DIR).join(format!("{env}.csv"));
         let env_config = zoo_config.supported_envs.get(&env).unwrap();
         println!("Evaluating {env}");
         let mut algorithm = env_config

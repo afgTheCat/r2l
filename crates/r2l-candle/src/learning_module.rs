@@ -180,7 +180,6 @@ impl SequentialValueFunction {
     }
 }
 
-// TODO: maybe value function could be a subtrait on LearningModule?
 impl ValueFunction for SequentialValueFunction {
     type Tensor = Tensor;
 
