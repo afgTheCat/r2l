@@ -19,7 +19,6 @@ struct PPOTestConfig {
     gradient_clipping: Option<f32>,
     norm_obs: Option<bool>,
     norm_reward: Option<bool>,
-    // TODO: implement these features
     use_sde: Option<bool>,
     sde_sample_freq: Option<usize>,
 }
@@ -64,7 +63,7 @@ fn configure_candle_ppo_test(config: PPOTestConfig) {
     }
 
     if config.norm_obs == Some(true) {
-        let ppo_builder = ppo_builder.with_observation_normalizer(10.);
+        let ppo_builder = ppo_builder.with_observation_normalizer(Some(10.));
         let mut ppo = ppo_builder.build().unwrap();
         ppo.train().unwrap();
     } else {
@@ -173,7 +172,6 @@ fn mountain_car_candle() {
     });
 }
 
-// TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
 fn mountain_car_box_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
@@ -199,7 +197,6 @@ fn mountain_car_box_candle() {
     });
 }
 
-// TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
 fn lunar_lander_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt
@@ -225,7 +222,6 @@ fn lunar_lander_candle() {
     });
 }
 
-// TODO: this does not learn, as we will need norm_obs and norm_reward to work
 #[test]
 fn lunar_lander_box_candle() {
     // Source: Stable-Baselines3 / RL Zoo reference captured in envs_to_test.txt

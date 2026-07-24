@@ -122,9 +122,16 @@ where
         self
     }
 
+    /// Sets the initial log standard deviation for Gaussian policies.
+    pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
+        self.agent_builder = self.agent_builder.with_log_std_init(log_std_init);
+        self
+    }
+
     /// Sets the optimizer learning rate for all configured optimizers.
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.agent_builder = self.agent_builder.with_learning_rate(learning_rate);
+        self.learning_rate_schedule = Some(crate::LearningRateSchedule::Constant(learning_rate));
         self
     }
 
@@ -240,6 +247,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder,
             seed,
@@ -247,6 +255,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
             seed,
@@ -258,6 +267,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder,
             seed,
@@ -265,6 +275,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
             seed,
@@ -289,6 +300,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder,
             seed,
@@ -296,6 +308,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_candle(device),
             seed,
@@ -307,6 +320,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder,
             seed,
@@ -314,6 +328,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
         OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder: agent_builder.with_burn(),
             seed,

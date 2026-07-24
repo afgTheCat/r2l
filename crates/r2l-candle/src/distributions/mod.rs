@@ -21,7 +21,7 @@ use std::{f32, fmt::Debug};
 use anyhow::Result;
 use bernoulli::BernoulliDistribution;
 use candle_core::{Device, Tensor};
-use candle_nn::VarBuilder;
+use candle_nn::{Init, VarBuilder};
 use categorical::CategoricalDistribution;
 use composite::CompositeDistribution;
 use diagonal::DiagGaussianDistribution;
@@ -101,6 +101,7 @@ impl CandlePolicyKind {
         hidden_layers: &[usize],
         observation_size: usize,
         activation: ActivationFunction,
+        log_std_init: f32,
     ) -> Result<Self> {
         Self::build_with_prefix(
             action_space,
@@ -108,6 +109,7 @@ impl CandlePolicyKind {
             hidden_layers,
             observation_size,
             activation,
+            log_std_init,
             "policy",
         )
     }
@@ -118,6 +120,7 @@ impl CandlePolicyKind {
         hidden_layers: &[usize],
         observation_size: usize,
         activation: ActivationFunction,
+        log_std_init: f32,
         prefix: &str,
     ) -> Result<Self> {
         match action_space {
@@ -136,7 +139,11 @@ impl CandlePolicyKind {
             Space::Box { shape, .. } => {
                 let size = shape.iter().product();
                 let layers = &[hidden_layers, &[size]].concat();
-                let log_std = policy_varbuilder.get(size, &format!("{prefix}.log_std"))?;
+                let log_std = policy_varbuilder.get_with_hints(
+                    size,
+                    &format!("{prefix}.log_std"),
+                    Init::Const(log_std_init as f64),
+                )?;
                 Ok(Self::DiagGaussian(DiagGaussianDistribution::build(
                     observation_size,
                     layers,
@@ -175,6 +182,7 @@ impl CandlePolicyKind {
                 hidden_layers,
                 observation_size,
                 activation,
+                log_std_init,
                 prefix,
             )?)),
             Space::Dict(spaces) => Ok(Self::Composite(CompositeDistribution::build(
@@ -183,6 +191,7 @@ impl CandlePolicyKind {
                 hidden_layers,
                 observation_size,
                 activation,
+                log_std_init,
                 prefix,
             )?)),
         }

@@ -75,6 +75,7 @@ impl<B: Backend> CompositeDistribution<B> {
         action_spaces: Vec<Space<T>>,
         policy_layers: &[usize],
         activation: ActivationFunction,
+        log_std_init: f32,
     ) -> Self {
         let mut policies = Vec::new();
         let mut action_sizes = Vec::new();
@@ -83,6 +84,7 @@ impl<B: Backend> CompositeDistribution<B> {
                 action_space,
                 policy_layers,
                 activation,
+                log_std_init,
                 &mut policies,
                 &mut action_sizes,
             );
@@ -97,6 +99,7 @@ impl<B: Backend> CompositeDistribution<B> {
         action_space: Space<T>,
         policy_layers: &[usize],
         activation: ActivationFunction,
+        log_std_init: f32,
         policies: &mut Vec<CompositePolicyChildren<B>>,
         action_sizes: &mut Vec<usize>,
     ) {
@@ -122,7 +125,7 @@ impl<B: Backend> CompositeDistribution<B> {
                 ]
                 .concat();
                 policies.push(CompositePolicyChildren::Diag(
-                    DiagGaussianDistribution::build(&child_layers, activation),
+                    DiagGaussianDistribution::build(&child_layers, activation, log_std_init),
                 ));
                 action_sizes.push(action_size);
             }
@@ -150,12 +153,26 @@ impl<B: Backend> CompositeDistribution<B> {
             }
             Space::Tuple(spaces) => {
                 for space in spaces {
-                    Self::push_child(space, policy_layers, activation, policies, action_sizes);
+                    Self::push_child(
+                        space,
+                        policy_layers,
+                        activation,
+                        log_std_init,
+                        policies,
+                        action_sizes,
+                    );
                 }
             }
             Space::Dict(spaces) => {
                 for space in spaces.into_values() {
-                    Self::push_child(space, policy_layers, activation, policies, action_sizes);
+                    Self::push_child(
+                        space,
+                        policy_layers,
+                        activation,
+                        log_std_init,
+                        policies,
+                        action_sizes,
+                    );
                 }
             }
         }

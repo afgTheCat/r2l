@@ -6,7 +6,6 @@ use r2l_core::{
 
 use crate::builders::learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType};
 
-// TODO: we might not need this trait in the future
 /// Trait implemented by concrete `Agent` builders.
 ///
 /// This trait turns high-level agent configuration into a backend-specific
@@ -16,7 +15,6 @@ pub trait AgentBuilder {
     /// Agent type produced by this builder.
     type Agent: Agent;
 
-    // TODO: This API is heavily in progress
     /// Builds the configured agent for the provided environment dimensions.
     fn build<T: R2lTensor>(
         self,
@@ -105,6 +103,12 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
     /// Sets the hidden-layer activation function used by policy and value networks.
     pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
         self.learning_module_builder.activation_function = activation_function;
+        self
+    }
+
+    /// Sets the initial log standard deviation for Gaussian policies.
+    pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
+        self.learning_module_builder.log_std_init = log_std_init;
         self
     }
 

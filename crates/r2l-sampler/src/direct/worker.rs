@@ -273,7 +273,6 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         Self { worker_handles }
     }
 
-    // TODO: this can fail. We need to mark this as failible once we figured the right Error types out
     pub fn env_description(&self) -> EnvDescription<T> {
         self.worker_handles[0].env_description()
     }

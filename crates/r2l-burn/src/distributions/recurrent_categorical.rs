@@ -79,7 +79,6 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
         self.logits.forward(recurrent_output)
     }
 
-    // TODO: this is brittle in the same way as the other Burn distributions.
     /// Builds a recurrent categorical policy using a safetensor store.
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let mut encoder_layers = Sequential::<B>::dims_from_store("encoder", store);

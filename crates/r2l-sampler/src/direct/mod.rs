@@ -60,7 +60,7 @@ impl<E: Env> R2lSamplerCore<E> {
                     .into_iter()
                     .enumerate()
                     .map(|(idx, element_handle)| {
-                        let env = env_builder.build_idx(idx).unwrap(); // TODO: for now
+                        let env = env_builder.build_idx(idx).unwrap();
                         Worker::new(env, element_handle)
                     })
                     .collect();

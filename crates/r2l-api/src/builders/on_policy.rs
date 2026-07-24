@@ -74,6 +74,7 @@ pub struct OnPolicyAlgorithmBuilder<
 > {
     pub(crate) sampler_builder: SamplerBuilder<EB, SH, ST>,
     pub(crate) learning_schedule: LearningSchedule,
+    pub(crate) learning_rate_schedule: Option<crate::LearningRateSchedule>,
     pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
     pub(crate) agent_builder: AB,
     pub(crate) seed: Option<u64>,
@@ -90,6 +91,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             evaluator_builder: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
+            learning_rate_schedule: None,
             seed: None,
         }
     }
@@ -103,6 +105,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             sampler_builder,
             agent_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             seed,
         } = self;
@@ -111,6 +114,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             evaluator_builder,
             learning_schedule,
+            learning_rate_schedule,
             seed,
         }
     }
@@ -125,6 +129,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             sampler_builder,
             agent_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             seed,
         } = self;
@@ -133,6 +138,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
             agent_builder,
             evaluator_builder,
             learning_schedule,
+            learning_rate_schedule,
             seed,
         }
     }
@@ -149,6 +155,15 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
     /// Replaces the learning schedule that controls training termination.
     pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
         self.learning_schedule = learning_schedule;
+        self
+    }
+
+    /// Sets the learning-rate schedule applied over the training duration.
+    pub fn with_learning_rate_schedule(
+        mut self,
+        learning_rate_schedule: crate::LearningRateSchedule,
+    ) -> Self {
+        self.learning_rate_schedule = Some(learning_rate_schedule);
         self
     }
 
@@ -248,14 +263,15 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
         self
     }
 
-    /// Switches training and evaluation rollout collection to normalized observations.
+    /// Switches rollout collection to normalized sampling with an optional observation normalizer.
     pub fn with_observation_normalizer(
         self,
-        obs_clip: f32,
+        obs_clip: Option<f32>,
     ) -> OnPolicyAlgorithmBuilder<AB, EB, SH, NormalizedSamplerSelection> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder,
             seed,
@@ -263,6 +279,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
         OnPolicyAlgorithmBuilder {
             sampler_builder: sampler_builder.with_obs_normalizer(obs_clip),
             learning_schedule,
+            learning_rate_schedule,
             evaluator_builder,
             agent_builder,
             seed,
@@ -318,7 +335,10 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
             .agent_builder
             .build(observation_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|eb| eb.build());
-        let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator);
+        let mut hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator);
+        if let Some(learning_rate_schedule) = self.learning_rate_schedule {
+            hooks = hooks.with_learning_rate_schedule(learning_rate_schedule);
+        }
         Ok(OnPolicyAlgorithm {
             runtime: OnPolicyRuntime {
                 sampler,
@@ -365,7 +385,10 @@ impl<
             );
             evaluator_builder.build_with_sampler(eval_sampler)
         });
-        let hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator);
+        let mut hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator);
+        if let Some(learning_rate_schedule) = self.learning_rate_schedule {
+            hooks = hooks.with_learning_rate_schedule(learning_rate_schedule);
+        }
         Ok(OnPolicyAlgorithm {
             runtime: OnPolicyRuntime {
                 sampler,

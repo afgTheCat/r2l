@@ -1,0 +1,17 @@
+[package]
+name = "r2l-zoo-evaluator"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+r2l-api = { workspace = true }
+r2l-core = { workspace = true }
+r2l-gym = { workspace = true }
+r2l-sampler = { workspace = true }
+yaml_serde = "0.10.4"
+serde = { version = "1.0.229", features = ["derive"] }
+anyhow = { workspace = true }
+clap = { version = "4.5.60", features = ["derive"] }

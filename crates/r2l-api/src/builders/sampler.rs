@@ -119,7 +119,7 @@ impl<E: Env> SamplerHookBuilder for EpisodeHookBound<E> {
 pub struct DirectSamplerSelection;
 
 pub struct NormalizedSamplerSelection {
-    pub(crate) obs_clip: f32,
+    pub(crate) obs_clip: Option<f32>,
 }
 
 pub struct SamplerBuilder<
@@ -192,10 +192,10 @@ impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>, ST> SamplerBuilder<EB
         self
     }
 
-    /// Switches this builder to construct normalized samplers.
+    /// Switches this builder to normalized sampling with an optional observation normalizer.
     pub fn with_obs_normalizer(
         self,
-        obs_clip: f32,
+        obs_clip: Option<f32>,
     ) -> SamplerBuilder<EB, S, NormalizedSamplerSelection> {
         let SamplerBuilder {
             env_builder,
@@ -236,7 +236,7 @@ impl<
             self.env_builder,
             hook,
             self.execution_mode,
-            Some(self.sampler_type.obs_clip),
+            self.sampler_type.obs_clip,
             NormalizerMode::Update,
             false,
         )

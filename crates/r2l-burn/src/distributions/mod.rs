@@ -57,8 +57,16 @@ impl<B: Backend> PolicyKind<B> {
         ))
     }
 
-    fn box_policy(policy_layers: &[usize], activation: ActivationFunction) -> Self {
-        PolicyKind::Diag(DiagGaussianDistribution::build(policy_layers, activation))
+    fn box_policy(
+        policy_layers: &[usize],
+        activation: ActivationFunction,
+        log_std_init: f32,
+    ) -> Self {
+        PolicyKind::Diag(DiagGaussianDistribution::build(
+            policy_layers,
+            activation,
+            log_std_init,
+        ))
     }
 
     fn multi_categorical(
@@ -92,10 +100,11 @@ impl<B: Backend> PolicyKind<B> {
         action_space: Space<T>,
         policy_layers: &[usize],
         activation: ActivationFunction,
+        log_std_init: f32,
     ) -> Self {
         match action_space {
             Space::Discrete(_) => Self::categorical(policy_layers, activation),
-            Space::Box { .. } => Self::box_policy(policy_layers, activation),
+            Space::Box { .. } => Self::box_policy(policy_layers, activation, log_std_init),
             Space::MultiDiscrete { nvec, .. } => {
                 let nvec = nvec.to_vec().into_iter().map(|n| n as usize).collect();
                 Self::multi_categorical(policy_layers, nvec, activation)
@@ -108,11 +117,13 @@ impl<B: Backend> PolicyKind<B> {
                 spaces,
                 policy_layers,
                 activation,
+                log_std_init,
             )),
             Space::Dict(spaces) => PolicyKind::Composite(CompositeDistribution::build(
                 spaces.into_values().collect(),
                 policy_layers,
                 activation,
+                log_std_init,
             )),
         }
     }

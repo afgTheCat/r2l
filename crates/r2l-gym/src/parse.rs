@@ -75,14 +75,11 @@ pub(crate) fn parse_action<'py>(
             "float32",
         ),
         Space::Box { shape, .. } => action_array(py, action.to_vec(), shape, "float32"),
-        Space::Discrete(_) => {
-            // TODO: remove unwrap
-            action
-                .iter()
-                .position(|i| *i > 0.)
-                .unwrap()
-                .into_bound_py_any(py)
-        }
+        Space::Discrete(_) => action
+            .iter()
+            .position(|i| *i > 0.)
+            .unwrap()
+            .into_bound_py_any(py),
         Space::MultiDiscrete { shape, .. } => action_array(py, action.to_vec(), shape, "int64"),
         Space::MultiBinary { shape } => action_array(
             py,

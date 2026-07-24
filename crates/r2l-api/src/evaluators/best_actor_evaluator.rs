@@ -224,27 +224,21 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
 
     /// Serializes the current best actor and writes eval stats next to it.
     pub fn try_write_to_file(&self) -> Result<()> {
-        let Some(actor) = self.best_actor.as_ref() else {
-            return Ok(());
-        };
-        let Some(bytes) = actor.try_serialize() else {
-            return Ok(());
-        };
-        let Some(path) = self.best_actor_path.as_ref() else {
-            return Ok(());
-        };
-        std::fs::write(path, bytes)?;
-        let Some(path) = self.csv_states_path.as_ref() else {
-            return Ok(());
-        };
-        let mut csv = String::from("average_reward,total_episodes\n");
-        for eval_state in &self.eval_states {
-            csv.push_str(&format!(
-                "{},{}\n",
-                eval_state.avg_reward, eval_state.total_episodes
-            ));
+        if let (Some(actor), Some(path)) = (&self.best_actor, &self.best_actor_path)
+            && let Some(bytes) = actor.try_serialize()
+        {
+            std::fs::write(path, bytes)?;
         }
-        std::fs::write(path, csv)?;
+        if let Some(path) = &self.csv_states_path {
+            let mut csv = String::from("average_reward,total_episodes\n");
+            for eval_state in &self.eval_states {
+                csv.push_str(&format!(
+                    "{},{}\n",
+                    eval_state.avg_reward, eval_state.total_episodes
+                ));
+            }
+            std::fs::write(path, csv)?;
+        }
         Ok(())
     }
 

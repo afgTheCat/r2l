@@ -27,6 +27,10 @@ impl<B: AutodiffBackend> Agent for PPOBurnAgent<B> {
         self.0.learn(buffers)
     }
 
+    fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.0.set_learning_rate(learning_rate);
+    }
+
     fn shutdown(&mut self) {
         self.0.shutdown();
     }
@@ -47,6 +51,10 @@ impl Agent for PPOCandleAgent {
 
     fn learn<BT: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[BT]) -> anyhow::Result<()> {
         self.0.learn(buffers)
+    }
+
+    fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.0.set_learning_rate(learning_rate);
     }
 
     fn shutdown(&mut self) {
