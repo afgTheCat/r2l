@@ -23,15 +23,16 @@ The public traits and their method contracts are documented in the
 
 `r2l-sampler` provides two sampler implementations:
 
-- `R2lSampler` stores raw observations and rewards;
-- `R2lNormalizedSampler` can update and apply clipped observation
-  normalization before exposing trajectories.
+- `DirectSampler` lets workers write transitions directly to output buffers;
+- `StagedSampler` receives transitions from workers and can update and apply
+  clipped observation normalization before committing trajectories.
 
-Both samplers support `SamplerExecutionMode::Vec`, which steps environments on
-the current thread, and `SamplerExecutionMode::Thread`, which assigns each
-environment to a worker thread. Gymnasium environments still execute Python
-code under Python's interpreter lock, so threaded sampling should not be
-assumed to improve Gymnasium throughput.
+Both samplers support `SamplerExecutionMode::SingleThreaded`, which steps
+environments on the current thread, and
+`SamplerExecutionMode::MultiThreaded`, which assigns each environment to a
+worker thread. Gymnasium environments still execute Python code under Python's
+interpreter lock, so threaded sampling should not be assumed to improve
+Gymnasium throughput.
 
 Rollout collection is hook-driven. `StepHookBound` and `EpisodeHookBound`
 provide the standard fixed-step and fixed-episode policies through the

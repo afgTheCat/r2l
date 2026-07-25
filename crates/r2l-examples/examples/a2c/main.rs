@@ -19,7 +19,7 @@ fn main() {
         .with_entropy_coeff(0.2)
         .with_gradient_clipping(Some(0.5))
         .with_rollout_bound(StepHookBound::new(2048))
-        .with_execution_mode(SamplerExecutionMode::Vec)
+        .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_learning_schedule(LearningSchedule::rollout_bound(300))
         .with_reporter(Some(update_tx));
     let mut ppo = a2c_builder.build().unwrap();

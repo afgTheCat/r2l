@@ -24,7 +24,7 @@ use crate::direct::worker::ThreadWorkers;
 use crate::direct::worker::Worker;
 use crate::direct::worker::WorkerPool;
 
-/// Instruction returned by a [`SamplerHook`] during rollout collection.
+/// Instruction returned by a [`DirectSamplerHook`] during rollout collection.
 pub enum SamplerHookResult {
     /// Finish the current rollout.
     Stop,
@@ -33,26 +33,26 @@ pub enum SamplerHookResult {
 }
 
 /// Hook that controls the sequence of collection bounds for a raw sampler.
-pub trait SamplerHook {
+pub trait DirectSamplerHook {
     /// Environment type sampled by the hook's sampler.
     type E: Env;
 
     /// Returns the next collection instruction.
-    fn hook(&mut self, core: &mut R2lSamplerCore<Self::E>) -> SamplerHookResult;
+    fn hook(&mut self, core: &mut DirectSamplerCore<Self::E>) -> SamplerHookResult;
 
     /// Resets hook state before a new training or evaluation run.
     fn reset(&mut self) {}
 }
 
-/// Mutable raw-sampler state exposed to [`SamplerHook`] implementations.
-pub struct R2lSamplerCore<E: Env> {
+/// Mutable direct-sampler state exposed to [`DirectSamplerHook`] implementations.
+pub struct DirectSamplerCore<E: Env> {
     /// Per-environment output buffers.
     pub buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
     /// Inline or threaded environment workers.
     pub worker_pool: WorkerPool<E>,
 }
 
-impl<E: Env> R2lSamplerCore<E> {
+impl<E: Env> DirectSamplerCore<E> {
     /// Resets every worker environment and clears its active episode state.
     pub fn reset_all_envs(&mut self) {
         self.worker_pool.reset_all_envs();
@@ -67,7 +67,7 @@ impl<E: Env> R2lSamplerCore<E> {
         let buffers: Vec<TrajectoryBuffer<E::Tensor>> = vec![TrajectoryBuffer::default(); num_envs];
         let (buffers, buffer_handlers) = bimodal_array(buffers);
         let worker_pool = match execution_mode {
-            SamplerExecutionMode::Vec => {
+            SamplerExecutionMode::SingleThreaded => {
                 let workers: Vec<_> = buffer_handlers
                     .into_iter()
                     .enumerate()
@@ -78,7 +78,7 @@ impl<E: Env> R2lSamplerCore<E> {
                     .collect();
                 WorkerPool::Vec(workers)
             }
-            SamplerExecutionMode::Thread => {
+            SamplerExecutionMode::MultiThreaded => {
                 let env_builder = Arc::new(env_builder);
                 let workers: Vec<_> = buffer_handlers
                     .into_iter()
@@ -108,13 +108,13 @@ impl<E: Env> R2lSamplerCore<E> {
     }
 }
 
-/// Raw rollout sampler controlled by a [`SamplerHook`].
-pub struct R2lSampler<E: Env, H: SamplerHook<E = E>> {
-    core: R2lSamplerCore<E>,
+/// Rollout sampler whose workers write directly to output buffers.
+pub struct DirectSampler<E: Env, H: DirectSamplerHook<E = E>> {
+    core: DirectSamplerCore<E>,
     hook: H,
 }
 
-impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
+impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
     /// Builds a raw sampler and its environment workers.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
@@ -122,13 +122,13 @@ impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
         execution_mode: SamplerExecutionMode,
     ) -> Self {
         Self {
-            core: R2lSamplerCore::build(env_builder, execution_mode),
+            core: DirectSamplerCore::build(env_builder, execution_mode),
             hook,
         }
     }
 }
 
-impl<E: Env, H: SamplerHook<E = E>> Sampler for R2lSampler<E, H> {
+impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
     type Tensor = E::Tensor;
 
     fn reset_all_envs(&mut self) {

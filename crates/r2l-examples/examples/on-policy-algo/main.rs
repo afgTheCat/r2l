@@ -5,8 +5,8 @@ use r2l_gym::GymEnvBuilder;
 fn main() {
     let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
     let algo_builder = PPOAlgorithmBuilder::new(gym_env_builder, 10)
-        .with_execution_mode(SamplerExecutionMode::Thread)
-        .with_execution_mode(SamplerExecutionMode::Vec)
+        .with_execution_mode(SamplerExecutionMode::MultiThreaded)
+        .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_rollout_bound(StepHookBound::new(1000))
         .with_normalize_advantage(true)
         .with_learning_schedule(LearningSchedule::rollout_bound(10))

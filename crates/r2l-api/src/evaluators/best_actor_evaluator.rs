@@ -7,7 +7,7 @@ use r2l_core::{
     models::Actor,
     on_policy::algorithm::{Agent, OnPolicyAdapters, OnPolicyRuntime, Sampler},
 };
-use r2l_sampler::{R2lSampler, SamplerExecutionMode};
+use r2l_sampler::{DirectSampler, SamplerExecutionMode};
 
 use crate::hooks::sampler::EpisodeBoundHook;
 
@@ -34,7 +34,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             env_builder,
             evaluator_frequency: 1,
             n_episodes: 5,
-            execution_mode: SamplerExecutionMode::Thread,
+            execution_mode: SamplerExecutionMode::MultiThreaded,
             eval_path: None,
             csv_states_path: None,
             eval_states: vec![],
@@ -47,7 +47,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             evaluator_frequency: 1,
             env_builder: EnvBuilderType::homogeneous(env_builder, 10),
             n_episodes: 5,
-            execution_mode: SamplerExecutionMode::Thread,
+            execution_mode: SamplerExecutionMode::MultiThreaded,
             eval_path: None,
             csv_states_path: None,
             eval_states: vec![],
@@ -95,8 +95,8 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     /// Builds a best-actor evaluator for the requested actor type.
     pub fn build<A: Actor>(
         self,
-    ) -> BestActorEvaluator<A, R2lSampler<EB::Env, EpisodeBoundHook<EB::Env>>> {
-        let sampler = R2lSampler::build(
+    ) -> BestActorEvaluator<A, DirectSampler<EB::Env, EpisodeBoundHook<EB::Env>>> {
+        let sampler = DirectSampler::build(
             self.env_builder,
             EpisodeBoundHook::new(self.n_episodes),
             self.execution_mode,
@@ -156,7 +156,7 @@ fn assert_file_path_is_valid(path: PathBuf) -> PathBuf {
 
 /// Evaluates an actor through the sampler path and keeps the best one seen.
 ///
-/// This evaluator collects episode-bounded rollouts with [`R2lSampler`],
+/// This evaluator collects episode-bounded rollouts with [`DirectSampler`],
 /// computes the average completed-episode reward, and retains the best actor
 /// observed so far.
 pub struct BestActorEvaluator<A: Actor, S: Sampler> {

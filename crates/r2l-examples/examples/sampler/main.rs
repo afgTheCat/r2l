@@ -8,8 +8,8 @@ fn main() {
     let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
     let sampler_builder =
         SamplerBuilder::<GymEnvBuilder, StepHookBound<_>>::new(gym_env_builder, 10)
-            .with_execution_mode(SamplerExecutionMode::Vec)
-            .with_execution_mode(SamplerExecutionMode::Thread)
+            .with_execution_mode(SamplerExecutionMode::SingleThreaded)
+            .with_execution_mode(SamplerExecutionMode::MultiThreaded)
             .with_hook(EpisodeHookBound::new(10))
             .with_hook(StepHookBound::new(1000));
     let sampler = sampler_builder.build();

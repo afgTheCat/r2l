@@ -20,7 +20,7 @@ use r2l_core::{
 
 use crate::{
     RolloutMode, SamplerExecutionMode, SamplerHookResult,
-    normalized::{
+    staged::{
         clipped_normalizer::ClippedNormalizer,
         worker::ThreadHandle,
         worker::{ThreadWorkerFactory, ThreadWorkers, VecWorkers, WorkerPool},
@@ -28,12 +28,12 @@ use crate::{
 };
 
 /// Hook that controls the sequence of collection bounds for a normalized sampler.
-pub trait NormalizedSamplerHook {
+pub trait StagedSamplerHook {
     /// Environment type sampled by the hook's sampler.
     type E: Env<Tensor: R2lTensor>;
 
     /// Returns the next collection instruction.
-    fn hook(&mut self, core: &mut R2lNormalizedSamplerCore<Self::E>) -> SamplerHookResult;
+    fn hook(&mut self, core: &mut StagedSamplerCore<Self::E>) -> SamplerHookResult;
 
     /// Resets hook state before a new training or evaluation run.
     fn reset(&mut self) {}
@@ -49,7 +49,7 @@ pub enum NormalizerMode {
 }
 
 /// Mutable normalized-sampler state exposed to hook implementations.
-pub struct R2lNormalizedSamplerCore<E: Env<Tensor: R2lTensor>> {
+pub struct StagedSamplerCore<E: Env<Tensor: R2lTensor>> {
     /// Inline or threaded environment workers.
     pub pool: WorkerPool<E>,
     /// Optional shared observation normalizer.
@@ -60,7 +60,7 @@ pub struct R2lNormalizedSamplerCore<E: Env<Tensor: R2lTensor>> {
     pub buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
 
-impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
+impl<E: Env<Tensor: R2lTensor>> StagedSamplerCore<E> {
     /// Builds normalized sampler state and its environment workers.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
@@ -71,8 +71,10 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
         let (mut last_states, pool) = match execution_mode {
-            SamplerExecutionMode::Vec => Self::build_vec_workers(env_builder, num_envs),
-            SamplerExecutionMode::Thread => Self::build_thread_workers(env_builder, num_envs),
+            SamplerExecutionMode::SingleThreaded => Self::build_vec_workers(env_builder, num_envs),
+            SamplerExecutionMode::MultiThreaded => {
+                Self::build_thread_workers(env_builder, num_envs)
+            }
         };
         if let Some(obs_normalizer) = &obs_normalizer {
             let mut last_states = last_states.lock().unwrap();
@@ -218,12 +220,12 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
 }
 
 /// Observation-normalizing rollout sampler controlled by a hook.
-pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> {
-    core: R2lNormalizedSamplerCore<E>,
+pub struct StagedSampler<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> {
+    core: StagedSamplerCore<E>,
     hook: H,
 }
 
-impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSampler<E, H> {
+impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H> {
     /// Builds a sampler and optionally creates an observation normalizer.
     ///
     /// `with_obs_normalizer` is the absolute clipping limit when provided.
@@ -241,7 +243,7 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
             ClippedNormalizer::new(obs_normalizer_mode, clip, vec![obs_size])
         });
         Self {
-            core: R2lNormalizedSamplerCore::build(
+            core: StagedSamplerCore::build(
                 env_builder,
                 execution_mode,
                 obs_normalizer,
@@ -260,7 +262,7 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
         with_reward_normalizer: bool,
     ) -> Self {
         Self {
-            core: R2lNormalizedSamplerCore::build(
+            core: StagedSamplerCore::build(
                 env_builder,
                 execution_mode,
                 obs_normalizer,
@@ -279,9 +281,7 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
     }
 }
 
-impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler
-    for R2lNormalizedSampler<E, H>
-{
+impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedSampler<E, H> {
     type Tensor = E::Tensor;
 
     fn reset_all_envs(&mut self) {

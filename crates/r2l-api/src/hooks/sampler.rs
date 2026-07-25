@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 use r2l_core::{env::Env, tensor::R2lTensor};
 use r2l_sampler::{
-    NormalizedSamplerHook, R2lNormalizedSamplerCore, R2lSamplerCore, RolloutMode, SamplerHook,
-    SamplerHookResult,
+    DirectSamplerCore, DirectSamplerHook, RolloutMode, SamplerHookResult, StagedSamplerCore,
+    StagedSamplerHook,
 };
 
 use crate::utils::RewardNormalizer;
@@ -43,18 +43,18 @@ impl<E: Env> EpisodeBoundHook<E> {
     }
 }
 
-impl<E: Env> SamplerHook for EpisodeBoundHook<E> {
+impl<E: Env> DirectSamplerHook for EpisodeBoundHook<E> {
     type E = E;
 
-    fn hook(&mut self, _core: &mut R2lSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook(&mut self, _core: &mut DirectSamplerCore<Self::E>) -> SamplerHookResult {
         self.next_result()
     }
 }
 
-impl<E: Env<Tensor: R2lTensor>> NormalizedSamplerHook for EpisodeBoundHook<E> {
+impl<E: Env<Tensor: R2lTensor>> StagedSamplerHook for EpisodeBoundHook<E> {
     type E = E;
 
-    fn hook(&mut self, _core: &mut R2lNormalizedSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook(&mut self, _core: &mut StagedSamplerCore<Self::E>) -> SamplerHookResult {
         self.next_result()
     }
 }
@@ -95,10 +95,10 @@ impl<E: Env<Tensor: R2lTensor>> StepBoundHook<E> {
     }
 }
 
-impl<E: Env<Tensor: R2lTensor>> SamplerHook for StepBoundHook<E> {
+impl<E: Env<Tensor: R2lTensor>> DirectSamplerHook for StepBoundHook<E> {
     type E = E;
 
-    fn hook(&mut self, core: &mut R2lSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook(&mut self, core: &mut DirectSamplerCore<Self::E>) -> SamplerHookResult {
         if self.steps_scheduled == self.num_steps
             && let Some(normalizer) = &mut self.reward_normalizer
         {
@@ -116,10 +116,10 @@ impl<E: Env<Tensor: R2lTensor>> SamplerHook for StepBoundHook<E> {
     }
 }
 
-impl<E: Env<Tensor: R2lTensor>> NormalizedSamplerHook for StepBoundHook<E> {
+impl<E: Env<Tensor: R2lTensor>> StagedSamplerHook for StepBoundHook<E> {
     type E = E;
 
-    fn hook(&mut self, core: &mut R2lNormalizedSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook(&mut self, core: &mut StagedSamplerCore<Self::E>) -> SamplerHookResult {
         if self.steps_scheduled == self.num_steps
             && let Some(normalizer) = &mut self.reward_normalizer
         {
