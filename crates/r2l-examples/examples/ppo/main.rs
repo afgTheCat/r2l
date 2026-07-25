@@ -32,7 +32,12 @@ fn main() {
     let mut store = SafetensorsStore::from_file(model_path);
     let distribution = DiagGaussianDistribution::<NdArray>::from_store(&mut store);
     let (episodes, environments) = (10, 10);
-    let mut evaluator = Evaluator::gym(ENV_NAME, episodes, environments, SamplerExecutionMode::Vec);
+    let mut evaluator = Evaluator::gym(
+        ENV_NAME,
+        episodes,
+        environments,
+        SamplerExecutionMode::SingleThreaded,
+    );
     let results = evaluator.eval(distribution);
     let total_rewards = results
         .as_ref()

@@ -177,13 +177,13 @@ pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
 }
 
 /// Shuffled minibatch-index cursor spanning multiple trajectory batches.
-pub struct BatchIndexIterator {
+pub struct ShuffledBatchIndices {
     indices: Vec<(usize, usize)>,
     sample_size: usize,
     current: usize,
 }
 
-impl BatchIndexIterator {
+impl ShuffledBatchIndices {
     /// Creates a shuffled index cursor whose chunks contain at most `sample_size` items.
     pub fn new<T: R2lTensor, B: TrajectoryBatch<T>>(batches: &[B], sample_size: usize) -> Self {
         let mut indices = (0..batches.len())
@@ -201,7 +201,7 @@ impl BatchIndexIterator {
     }
 
     /// Returns the next minibatch of `(batch_index, step_index)` pairs.
-    pub fn iter(&mut self) -> Option<Vec<(usize, usize)>> {
+    pub fn next_batch(&mut self) -> Option<Vec<(usize, usize)>> {
         let total_size = self.indices.len();
         if self.current >= total_size {
             return None;

@@ -5,8 +5,8 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 use r2l_sampler::{
-    NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lSampler, SamplerExecutionMode,
-    SamplerHook,
+    DirectSampler, DirectSamplerHook, NormalizerMode, SamplerExecutionMode, StagedSampler,
+    StagedSamplerHook,
 };
 
 use crate::{
@@ -18,14 +18,14 @@ use crate::{
 ///
 /// Implementations of this trait package a rollout-collection policy into a
 /// type that can later construct the concrete hook consumed by
-/// [`R2lSampler`]. This is the sampler equivalent of choosing a rollout
+/// [`DirectSampler`]. This is the sampler equivalent of choosing a rollout
 /// bound in the original sampler interface, but generalized to a hook-driven
 /// collection model.
 pub trait SamplerHookBuilder {
     /// Environment type collected by the resulting hook.
     type Env: Env;
     /// Concrete sampler hook produced by this builder.
-    type Target: SamplerHook<E = Self::Env>;
+    type Target: DirectSamplerHook<E = Self::Env>;
 
     /// Builds the hook used by [`SamplerBuilder`] when constructing a sampler.
     fn build(self, n_envs: usize) -> Self::Target;
@@ -111,7 +111,7 @@ impl<E: Env> SamplerHookBuilder for EpisodeHookBound<E> {
 pub struct DirectSamplerSelection;
 
 /// Marker selecting observation-normalized rollout storage.
-pub struct NormalizedSamplerSelection {
+pub struct StagedSamplerSelection {
     pub(crate) obs_clip: Option<f32>,
 }
 
@@ -119,7 +119,7 @@ pub struct NormalizedSamplerSelection {
 ///
 /// [`DefaultSamplerBuilder::new`] creates a homogeneous sampler using `n_envs`
 /// copies of one environment builder, a [`StepHookBound`] of `1024`, and
-/// [`SamplerExecutionMode::Vec`].
+/// [`SamplerExecutionMode::SingleThreaded`].
 pub struct SamplerBuilder<
     EB: EnvBuilder,
     S: SamplerHookBuilder<Env = EB::Env>,
@@ -144,7 +144,7 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> DefaultSamplerBuilder<EB> {
         Self {
             env_builder,
             hook_builder: StepHookBound::new(1024),
-            execution_mode: SamplerExecutionMode::Vec,
+            execution_mode: SamplerExecutionMode::SingleThreaded,
             sampler_type: DirectSamplerSelection,
         }
     }
@@ -194,7 +194,7 @@ impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>, ST> SamplerBuilder<EB
     pub fn with_obs_normalizer(
         self,
         obs_clip: Option<f32>,
-    ) -> SamplerBuilder<EB, S, NormalizedSamplerSelection> {
+    ) -> SamplerBuilder<EB, S, StagedSamplerSelection> {
         let SamplerBuilder {
             env_builder,
             hook_builder,
@@ -205,7 +205,7 @@ impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>, ST> SamplerBuilder<EB
             env_builder,
             hook_builder,
             execution_mode,
-            sampler_type: NormalizedSamplerSelection { obs_clip },
+            sampler_type: StagedSamplerSelection { obs_clip },
         }
     }
 }
@@ -214,23 +214,23 @@ impl<EB: EnvBuilder, S: SamplerHookBuilder<Env = EB::Env>>
     SamplerBuilder<EB, S, DirectSamplerSelection>
 {
     /// Builds the configured sampler instance.
-    pub fn build(self) -> R2lSampler<EB::Env, S::Target> {
+    pub fn build(self) -> DirectSampler<EB::Env, S::Target> {
         let n_envs = self.env_builder.num_envs();
         let hook = self.hook_builder.build(n_envs);
-        R2lSampler::build(self.env_builder, hook, self.execution_mode)
+        DirectSampler::build(self.env_builder, hook, self.execution_mode)
     }
 }
 
 impl<
     EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>,
-    S: SamplerHookBuilder<Env = EB::Env, Target: NormalizedSamplerHook<E = <EB as EnvBuilder>::Env>>,
-> SamplerBuilder<EB, S, NormalizedSamplerSelection>
+    S: SamplerHookBuilder<Env = EB::Env, Target: StagedSamplerHook<E = <EB as EnvBuilder>::Env>>,
+> SamplerBuilder<EB, S, StagedSamplerSelection>
 {
     /// Builds the configured normalized sampler instance.
-    pub fn build(self) -> R2lNormalizedSampler<EB::Env, S::Target> {
+    pub fn build(self) -> StagedSampler<EB::Env, S::Target> {
         let n_envs = self.env_builder.num_envs();
         let hook = self.hook_builder.build(n_envs);
-        R2lNormalizedSampler::build(
+        StagedSampler::build(
             self.env_builder,
             hook,
             self.execution_mode,

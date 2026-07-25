@@ -1,16 +1,17 @@
 //! Rollout samplers for `r2l` on-policy algorithms.
 //!
-//! [`R2lSampler`] stores raw observations and rewards, while
-//! [`R2lNormalizedSampler`] can normalize observations before exposing
-//! trajectories. Both support inline and threaded environment workers.
+//! [`DirectSampler`] lets workers write directly to trajectory buffers, while
+//! [`StagedSampler`] receives transitions from workers and can transform them
+//! before writing them. Both support single-threaded and multi-threaded
+//! environment workers.
 
 mod direct;
-mod normalized;
+mod staged;
 
 pub use direct::worker::WorkerPool;
-pub use direct::{R2lSampler, R2lSamplerCore, SamplerHook, SamplerHookResult};
-pub use normalized::{
-    NormalizedSamplerHook, NormalizerMode, R2lNormalizedSampler, R2lNormalizedSamplerCore,
+pub use direct::{DirectSampler, DirectSamplerCore, DirectSamplerHook, SamplerHookResult};
+pub use staged::{
+    NormalizerMode, StagedSampler, StagedSamplerCore, StagedSamplerHook,
     clipped_normalizer::ClippedNormalizer,
 };
 
@@ -21,9 +22,9 @@ pub use normalized::{
 #[derive(Debug, Clone, Copy)]
 pub enum SamplerExecutionMode {
     /// Run sampler workers inline in a local vector on the current thread.
-    Vec,
+    SingleThreaded,
     /// Run sampler workers in dedicated background threads.
-    Thread,
+    MultiThreaded,
 }
 
 /// Bound used for one rollout collection request per environment.

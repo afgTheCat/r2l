@@ -7,28 +7,28 @@ use r2l_core::{
     on_policy::algorithm::{DefaultAdapter, OnPolicyAdapters, Sampler},
 };
 use r2l_gym::{GymEnv, GymEnvBuilder};
-use r2l_sampler::{R2lSampler, SamplerExecutionMode};
+use r2l_sampler::{DirectSampler, SamplerExecutionMode};
 
 use crate::hooks::sampler::EpisodeBoundHook;
 
 /// Generic evaluation helper for the sampler/adapter path.
 ///
 /// This helper adapts an actor to the sampler tensor type, collects
-/// episode-bounded rollouts through [`R2lSampler`], and returns the resulting
+/// episode-bounded rollouts through [`DirectSampler`], and returns the resulting
 /// trajectory views for inspection.
 pub struct Evaluator<
     E: Env,
     A: Actor,
-    AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>> = DefaultAdapter,
+    AD: OnPolicyAdapters<A, DirectSampler<E, EpisodeBoundHook<E>>> = DefaultAdapter,
 > {
-    sampler: R2lSampler<E, EpisodeBoundHook<E>>,
+    sampler: DirectSampler<E, EpisodeBoundHook<E>>,
     adapter: AD,
     _phantom: PhantomData<A>,
 }
 
 impl<E: Env, A: Actor> Evaluator<E, A, DefaultAdapter>
 where
-    DefaultAdapter: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>>,
+    DefaultAdapter: OnPolicyAdapters<A, DirectSampler<E, EpisodeBoundHook<E>>>,
 {
     /// Creates a new evaluator for a custom environment builder.
     pub fn new<EB: EnvBuilder<Env = E>>(
@@ -39,7 +39,7 @@ where
     ) -> Self {
         let hook = EpisodeBoundHook::new(n_episodes);
         let env_builder = EnvBuilderType::homogeneous(builder, n_env);
-        let sampler = R2lSampler::build(env_builder, hook, execution_mode);
+        let sampler = DirectSampler::build(env_builder, hook, execution_mode);
         Self {
             sampler,
             adapter: DefaultAdapter,
@@ -50,7 +50,7 @@ where
 
 impl<A: Actor> Evaluator<GymEnv, A, DefaultAdapter>
 where
-    DefaultAdapter: OnPolicyAdapters<A, R2lSampler<GymEnv, EpisodeBoundHook<GymEnv>>>,
+    DefaultAdapter: OnPolicyAdapters<A, DirectSampler<GymEnv, EpisodeBoundHook<GymEnv>>>,
 {
     /// Creates a new evaluator for a Gym environment.
     pub fn gym<EB: Into<GymEnvBuilder>>(
@@ -63,7 +63,7 @@ where
     }
 }
 
-impl<E: Env, A: Actor, AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>>>
+impl<E: Env, A: Actor, AD: OnPolicyAdapters<A, DirectSampler<E, EpisodeBoundHook<E>>>>
     Evaluator<E, A, AD>
 {
     /// Evaluates an actor and returns the collected trajectory views.
@@ -71,7 +71,7 @@ impl<E: Env, A: Actor, AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>
     pub fn eval(
         &mut self,
         actor: A,
-    ) -> impl AsRef<[TrajectoryView<'_, <<AD as OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>>>>::SamplerActor as Actor>::Tensor>]>
+    ) -> impl AsRef<[TrajectoryView<'_, <<AD as OnPolicyAdapters<A, DirectSampler<E, EpisodeBoundHook<E>>>>::SamplerActor as Actor>::Tensor>]>
     {
         let adapted_actor = self.adapter.adapt_actor(actor);
         self.sampler.reset_all_envs();

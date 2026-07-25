@@ -64,15 +64,15 @@ that are specific to a chosen backend when following compiler suggestions.
 `EpisodeHookBound::new(n)` collects `n` completed episodes per environment.
 Install either with `with_rollout_bound`.
 
-The default `SamplerExecutionMode::Vec` steps workers sequentially on the
-calling thread. `SamplerExecutionMode::Thread` runs workers on dedicated
-threads:
+The default `SamplerExecutionMode::SingleThreaded` steps workers sequentially
+on the calling thread. `SamplerExecutionMode::MultiThreaded` runs workers on
+dedicated threads:
 
 ```rust
 use r2l_api::{PPOAlgorithmBuilder, SamplerExecutionMode};
 
 let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
-    .with_execution_mode(SamplerExecutionMode::Thread);
+    .with_execution_mode(SamplerExecutionMode::MultiThreaded);
 ```
 
 Gymnasium calls still execute under Python's interpreter lock, so threaded

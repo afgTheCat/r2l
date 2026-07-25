@@ -13,7 +13,7 @@ use r2l_core::{
 use crate::{
     HookResult,
     on_policy_algorithms::{
-        Advantages, BatchIndexIterator, Returns, batches_advantages_and_returns, sample,
+        Advantages, Returns, ShuffledBatchIndices, batches_advantages_and_returns, sample,
     },
 };
 
@@ -102,10 +102,10 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
         advantages: &Advantages,
         returns: &Returns,
     ) -> anyhow::Result<()> {
-        let mut index_iterator = BatchIndexIterator::new(batches, self.params.sample_size);
+        let mut batch_indices = ShuffledBatchIndices::new(batches, self.params.sample_size);
         let lm = &mut self.lm;
         loop {
-            let Some(indices) = index_iterator.iter() else {
+            let Some(indices) = batch_indices.next_batch() else {
                 return Ok(());
             };
             let (observations, actions) = sample(batches, &indices, Module::lifter);

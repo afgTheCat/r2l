@@ -29,7 +29,7 @@ pub use builders::ppo::agent::{PPOAgentBuilder, PPOBurnAgentBuilder, PPOCandleAg
 pub use builders::ppo::algorithm::{
     PPOAlgorithmBuilder, PPOBurnAlgorithmBuilder, PPOCandleAlgorithmBuilder,
 };
-pub use builders::sampler::{DirectSamplerSelection, NormalizedSamplerSelection, SamplerBuilder};
+pub use builders::sampler::{DirectSamplerSelection, SamplerBuilder, StagedSamplerSelection};
 pub use builders::sampler::{EpisodeHookBound, StepHookBound};
 pub use evaluators::best_actor_evaluator::{BestActorEvaluator, BestActorEvaluatorBuilder};
 pub use evaluators::simple_evaluator::Evaluator;
@@ -47,4 +47,4 @@ pub use r2l_core::{
     on_policy::algorithm::OnPolicyAlgorithm,
     tensor::TensorData,
 };
-pub use r2l_sampler::{R2lSampler, SamplerExecutionMode};
+pub use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};

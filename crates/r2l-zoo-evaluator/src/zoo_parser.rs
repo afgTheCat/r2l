@@ -6,19 +6,19 @@ use r2l_api::{
 };
 use r2l_core::on_policy::algorithm::{DefaultAdapter, OnPolicyAlgorithm};
 use r2l_gym::GymEnv;
-use r2l_sampler::R2lNormalizedSampler;
+use r2l_sampler::StagedSampler;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use yaml_serde::Value;
 
 pub type RlZooPpoAlgorithm = OnPolicyAlgorithm<
     PPOBurnAgent<BurnBackend>,
-    R2lNormalizedSampler<GymEnv, StepBoundHook<GymEnv>>,
+    StagedSampler<GymEnv, StepBoundHook<GymEnv>>,
     DefaultOnPolicyAlgorithmHooks<
         PPOBurnAgent<BurnBackend>,
-        R2lNormalizedSampler<GymEnv, StepBoundHook<GymEnv>>,
+        StagedSampler<GymEnv, StepBoundHook<GymEnv>>,
         DefaultAdapter,
         GymEnv,
-        R2lNormalizedSampler<GymEnv, EpisodeBoundHook<GymEnv>>,
+        StagedSampler<GymEnv, EpisodeBoundHook<GymEnv>>,
     >,
 >;
 
