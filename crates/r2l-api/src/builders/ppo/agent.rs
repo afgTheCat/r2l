@@ -13,7 +13,7 @@ use crate::{
         agent::{
             AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
         },
-        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
+        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
         ppo::hook::DefaultPPOHookBuilder,
     },
     hooks::ppo::PPOStats,
@@ -57,7 +57,7 @@ impl PPOAgentBuilder {
                 value_hidden_layers: vec![64, 64],
                 activation_function: ActivationFunction::default(),
                 log_std_init: 0.0,
-                learning_module_type: OnPolicyLearningModuleType::Joint {
+                optimizer_layout: OnPolicyOptimizerLayout::Joint {
                     params: ParamsAdamW {
                         lr: 3e-4,
                         beta1: 0.9,

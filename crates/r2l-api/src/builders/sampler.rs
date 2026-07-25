@@ -107,21 +107,19 @@ impl<E: Env> SamplerHookBuilder for EpisodeHookBound<E> {
     }
 }
 
-/// Builder for [`R2lSampler`] instances.
-///
-/// This builder configures how environments are instantiated, which
-/// hook-driven rollout policy controls collection, and where sampler execution
-/// takes place.
-///
-/// By default, [`new`](Self::new) creates a homogeneous vectorized sampler
-/// using `n_envs` copies of the same environment builder, a
-/// [`StepHookBound`] of `1024`, and [`SamplerExecutionMode::Vec`].
+/// Marker selecting raw, unnormalized rollout storage.
 pub struct DirectSamplerSelection;
 
+/// Marker selecting observation-normalized rollout storage.
 pub struct NormalizedSamplerSelection {
     pub(crate) obs_clip: Option<f32>,
 }
 
+/// Configures environment creation, rollout hooks, normalization, and execution.
+///
+/// [`DefaultSamplerBuilder::new`] creates a homogeneous sampler using `n_envs`
+/// copies of one environment builder, a [`StepHookBound`] of `1024`, and
+/// [`SamplerExecutionMode::Vec`].
 pub struct SamplerBuilder<
     EB: EnvBuilder,
     S: SamplerHookBuilder<Env = EB::Env>,
@@ -142,7 +140,7 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> DefaultSamplerBuilder<EB> {
     /// The provided builder is replicated into a homogeneous environment set
     /// with `n_envs` copies.
     pub fn new<B: Into<EB>>(builder: B, n_envs: usize) -> Self {
-        let env_builder = EnvBuilderType::homogenous(builder.into(), n_envs);
+        let env_builder = EnvBuilderType::homogeneous(builder.into(), n_envs);
         Self {
             env_builder,
             hook_builder: StepHookBound::new(1024),

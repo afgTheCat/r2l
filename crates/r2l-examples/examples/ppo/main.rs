@@ -40,7 +40,7 @@ fn main() {
         .map(|tr| tr.rewards.iter().sum::<f32>())
         .sum::<f32>();
     println!(
-        "Average rewards recieved: {}",
+        "Average rewards received: {}",
         total_rewards / (episodes * environments) as f32
     );
 }

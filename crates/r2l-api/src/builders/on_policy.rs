@@ -341,7 +341,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
         self
     }
 
-    /// Sets the frequency with which the evaluator runs.
+    /// Sets the frequency with which the evaluator runs
     pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
         assert!(evaluator_frequency > 0);
         let evaluator_builder =

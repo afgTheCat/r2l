@@ -3,7 +3,7 @@ use crate::{
     tensor::R2lTensor,
 };
 
-// the new buffer type I am experimenting with. Probably going to make things faster
+/// Owned, structure-of-arrays storage for one environment trajectory.
 #[derive(Clone)]
 pub struct TrajectoryBuffer<T: R2lTensor> {
     states: Vec<T>,
@@ -27,12 +27,19 @@ impl<T: R2lTensor> Default for TrajectoryBuffer<T> {
     }
 }
 
+/// Borrowed view over the aligned fields of a [`TrajectoryBuffer`].
 pub struct TrajectoryView<'a, T: R2lTensor> {
+    /// Observations before each action.
     pub states: &'a [T],
+    /// Observations after each action.
     pub next_states: &'a [T],
+    /// Actions selected at each step.
     pub actions: &'a [T],
+    /// Rewards produced at each step.
     pub rewards: &'a [f32],
+    /// Terminal-state flags for each step.
     pub terminated: &'a [bool],
+    /// Truncation flags for each step.
     pub truncated: &'a [bool],
 }
 
@@ -71,6 +78,7 @@ impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryView<'a, T> {
 }
 
 impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
+    /// Iterates over combined termination and truncation flags.
     pub fn dones(&self) -> impl Iterator<Item = bool> {
         self.terminated
             .iter()
@@ -78,12 +86,14 @@ impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
             .map(|(terminated, truncated)| *terminated || *truncated)
     }
 
+    /// Counts transitions that end an episode.
     pub fn episode_terminations(&self) -> usize {
         self.dones().filter(|x| *x).count()
     }
 }
 
 impl<T: R2lTensor> TrajectoryBuffer<T> {
+    /// Removes all stored transitions while retaining allocated capacity.
     pub fn clear(&mut self) {
         self.states.clear();
         self.next_states.clear();
@@ -93,6 +103,7 @@ impl<T: R2lTensor> TrajectoryBuffer<T> {
         self.truncated.clear();
     }
 
+    /// Appends one transition to the buffer.
     pub fn push(&mut self, memory: Memory<T>) {
         let Memory {
             state,
@@ -110,24 +121,34 @@ impl<T: R2lTensor> TrajectoryBuffer<T> {
         self.truncated.push(truncated);
     }
 
+    /// Replaces the most recently stored next state, if one exists.
     pub fn replace_last_next_state(&mut self, next_state: T) {
         if let Some(last_next_state) = self.next_states.last_mut() {
             *last_next_state = next_state;
         }
     }
 
+    /// Returns the number of stored transitions.
     pub fn len(&self) -> usize {
         self.states.len()
     }
 
+    /// Returns `true` when the buffer contains no transitions.
+    pub fn is_empty(&self) -> bool {
+        self.states.is_empty()
+    }
+
+    /// Returns terminal-state flags.
     pub fn terminated(&self) -> &[bool] {
         &self.terminated
     }
 
+    /// Returns truncation flags.
     pub fn truncated(&self) -> &[bool] {
         &self.truncated
     }
 
+    /// Returns stored rewards.
     pub fn rewards(&self) -> &[f32] {
         &self.rewards
     }
@@ -137,6 +158,7 @@ impl<T: R2lTensor> TrajectoryBuffer<T> {
         &mut self.rewards
     }
 
+    /// Borrows the buffer as aligned trajectory slices.
     pub fn to_trajectory_view(&self) -> TrajectoryView<'_, T> {
         TrajectoryView {
             states: &self.states,

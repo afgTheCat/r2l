@@ -1,7 +1,7 @@
-// Fun programming. This is very reminacsent to the the VecNormalize in sb3
+// This is similar to VecNormalize in SB3.
 //
-// Idea: implement a direct way of normalizing the environment. Workers not have access to the same
-// buffer, instead they return the observation and the reward directly. Normalizaiton happens
+// Workers do not write directly to the output buffer; they return observations and rewards.
+// Normalization happens
 // afterwards.
 
 pub mod clipped_normalizer;
@@ -27,29 +27,41 @@ use crate::{
     },
 };
 
+/// Hook that controls the sequence of collection bounds for a normalized sampler.
 pub trait NormalizedSamplerHook {
+    /// Environment type sampled by the hook's sampler.
     type E: Env<Tensor: R2lTensor>;
 
+    /// Returns the next collection instruction.
     fn hook(&mut self, core: &mut R2lNormalizedSamplerCore<Self::E>) -> SamplerHookResult;
 
+    /// Resets hook state before a new training or evaluation run.
     fn reset(&mut self) {}
 }
 
 /// Controls whether a normalized sampler mutates shared normalization stats.
 #[derive(Debug, Clone, Copy)]
 pub enum NormalizerMode {
+    /// Update running statistics before normalizing each batch.
     Update,
+    /// Normalize using existing statistics without updating them.
     ReadOnly,
 }
 
+/// Mutable normalized-sampler state exposed to hook implementations.
 pub struct R2lNormalizedSamplerCore<E: Env<Tensor: R2lTensor>> {
+    /// Inline or threaded environment workers.
     pub pool: WorkerPool<E>,
+    /// Optional shared observation normalizer.
     pub obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    /// Most recent, normalized observation for each environment.
     pub last_states: ArrayHandle<E::Tensor>,
+    /// Per-environment output trajectory buffers.
     pub buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
 
 impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
+    /// Builds normalized sampler state and its environment workers.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
@@ -87,11 +99,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
             envs.push(env);
         }
         let (last_states, last_state_handles) = bimodal_array(initial_states);
-        let workers = envs
-            .into_iter()
-            .zip(last_state_handles)
-            .map(|(env, handle)| (env, handle))
-            .collect();
+        let workers = envs.into_iter().zip(last_state_handles).collect();
         (last_states, WorkerPool::Vec(VecWorkers::new(workers)))
     }
 
@@ -115,6 +123,7 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
         (last_states, WorkerPool::Thread(workers))
     }
 
+    /// Collects a bounded rollout from the worker pool.
     pub fn collect(&mut self, bound: RolloutMode) {
         match bound {
             RolloutMode::StepBound { n_steps } => {
@@ -184,14 +193,17 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
         terminations
     }
 
+    /// Clears all output trajectory buffers.
     pub fn clear_buffers(&mut self) {
         self.buffers.iter_mut().for_each(|buffer| buffer.clear());
     }
 
+    /// Installs a clone of `policy` on every worker.
     pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
         self.pool.set_policy(policy);
     }
 
+    /// Borrows all collected trajectories in worker order.
     pub fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, E::Tensor>]> {
         self.buffers
             .iter()
@@ -199,17 +211,22 @@ impl<E: Env<Tensor: R2lTensor>> R2lNormalizedSamplerCore<E> {
             .collect::<Vec<_>>()
     }
 
+    /// Stops threaded workers.
     pub fn shutdown(&mut self) {
         self.pool.shutdown();
     }
 }
 
+/// Observation-normalizing rollout sampler controlled by a hook.
 pub struct R2lNormalizedSampler<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> {
     core: R2lNormalizedSamplerCore<E>,
     hook: H,
 }
 
 impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSampler<E, H> {
+    /// Builds a sampler and optionally creates an observation normalizer.
+    ///
+    /// `with_obs_normalizer` is the absolute clipping limit when provided.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         hook: H,
@@ -234,6 +251,7 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
         }
     }
 
+    /// Builds a sampler with an existing shared observation normalizer.
     pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         hook: H,
@@ -252,6 +270,7 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> R2lNormalizedSa
         }
     }
 
+    /// Clones the shared observation normalizer with the requested access mode.
     pub fn obs_normalizer(&self, mode: NormalizerMode) -> Option<ClippedNormalizer<E::Tensor>> {
         self.core
             .obs_normalizer

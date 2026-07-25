@@ -313,6 +313,7 @@ impl PolicyValueModule {
     }
 
     /// Builds a policy/value module with separate policy and value optimizers.
+    #[allow(clippy::too_many_arguments)]
     pub fn build_split(
         policy: CandlePolicyKind,
         value_hidden_layers: &[usize],

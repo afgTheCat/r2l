@@ -30,6 +30,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
         (vec, shape)
     }
 
+    /// Creates a tensor by copying flat values into `shape`.
     fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self;
 
     /// Constructs a new tensor based on the a vector and shape
@@ -80,13 +81,16 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Elementwise square.
     fn sqr(&self) -> anyhow::Result<Self>;
 
+    /// Creates a zero-filled tensor with `shape`.
     fn zeros(shape: Vec<usize>) -> Self {
         let data = vec![0f32; shape.iter().product()];
         Self::from_vec_and_shape(data, shape)
     }
 
+    /// Multiplies every element by `scalar`.
     fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self>;
 
+    /// Adds a non-empty slice of equally shaped tensors.
     fn add_multiple(tensors: &[Self]) -> Self {
         assert!(!tensors.is_empty());
         let shape = tensors[0].to_shape();
@@ -103,6 +107,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
         sum.mul_scalar(1f32 / tensors.len() as f32).unwrap()
     }
 
+    /// Calculates the elementwise population variance of a non-empty tensor slice.
     fn var_tensors(tensors: &[Self]) -> Self {
         let mean = Self::mean_tensors(tensors);
         let diffs_sqr = tensors

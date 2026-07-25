@@ -1,3 +1,9 @@
+//! Rollout samplers for `r2l` on-policy algorithms.
+//!
+//! [`R2lSampler`] stores raw observations and rewards, while
+//! [`R2lNormalizedSampler`] can normalize observations before exposing
+//! trajectories. Both support inline and threaded environment workers.
+
 mod direct;
 mod normalized;
 
@@ -20,8 +26,17 @@ pub enum SamplerExecutionMode {
     Thread,
 }
 
+/// Bound used for one rollout collection request per environment.
 #[derive(Debug, Clone, Copy)]
 pub enum RolloutMode {
-    EpisodeBound { n_episodes: usize },
-    StepBound { n_steps: usize },
+    /// Collect until each selected environment completes `n_episodes`.
+    EpisodeBound {
+        /// Number of completed episodes required per environment.
+        n_episodes: usize,
+    },
+    /// Collect a fixed number of steps from each selected environment.
+    StepBound {
+        /// Number of steps required per environment.
+        n_steps: usize,
+    },
 }

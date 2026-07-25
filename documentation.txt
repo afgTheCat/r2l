@@ -1,18 +1,25 @@
-- AI generated docs code chunks
-- Hand written architecture:
-  - On policy algorithm docs
-  - Sampler docs
-  - PPO/A2C docs
-- Hand written user guide:
-  - How to use PPO/A2C default hooks
-  - Hook trait implementations
-- Document capabilities
-  - What we have/don't have
-  - What environments have been tested
-- Update the roadmap for v0.0.3
-  - Sampler hooks -> env normalization + reward normalization
-  - Results
-- Document AI usage
-  - Code is 80% hand written
-  - Code docs are AI generated
-  - Book + Readme is human written
+v0.0.2 documentation status
+
+[x] Public Rust APIs have rustdoc coverage.
+[x] Rustdoc links build with warnings denied.
+[x] Published library crates have package READMEs.
+[x] The book documents the current environment, sampler, backend, schedule,
+    PPO, and A2C APIs.
+[x] The root README lists current capabilities and limitations.
+[x] Off-policy support is identified as a future feature.
+[x] envs_to_test.txt is identified as a benchmark plan rather than completed
+    benchmark evidence.
+
+Still outstanding after the documentation audit:
+
+[ ] Run and publish reproducible training benchmarks for the environments in
+    envs_to_test.txt.
+[ ] Add benchmark artifacts and acceptance thresholds before claiming parity
+    with Stable Baselines3.
+
+AI usage
+
+The v0.0.2 documentation audit and much of the added API prose were prepared
+with Codex and reviewed against the source code and compiler output. Existing
+source and documentation predate this audit; no percentage authorship claim is
+made because it cannot be verified from the repository.

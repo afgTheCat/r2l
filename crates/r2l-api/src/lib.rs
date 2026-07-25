@@ -1,3 +1,9 @@
+//! High-level builders and default hooks for training `r2l` agents.
+//!
+//! Most users should start with [`PPOAlgorithmBuilder`] or
+//! [`A2CAlgorithmBuilder`]. These builders combine an environment, sampler,
+//! backend-specific agent, training schedule, and optional evaluator.
+
 use burn::backend::{Autodiff, NdArray};
 
 // builders + hooks + higher level helpers
@@ -7,6 +13,7 @@ mod evaluators;
 mod hooks;
 mod utils;
 
+/// Default autodifferentiation backend used by Burn-based builders.
 pub type BurnBackend = Autodiff<NdArray>;
 
 pub use agents::a2c::{A2CBurnAgent, A2CCandleAgent};
@@ -16,7 +23,7 @@ pub use builders::a2c::algorithm::{
     A2CAlgorithmBuilder, A2CBurnAlgorithmBuilder, A2CCandleAlgorithmBuilder,
 };
 pub use builders::agent::OnPolicyAgentBuilder;
-pub use builders::learning_module::OnPolicyLearningModuleType;
+pub use builders::learning_module::OnPolicyOptimizerLayout;
 pub use builders::on_policy::OnPolicyAlgorithmBuilder;
 pub use builders::ppo::agent::{PPOAgentBuilder, PPOBurnAgentBuilder, PPOCandleAgentBuilder};
 pub use builders::ppo::algorithm::{

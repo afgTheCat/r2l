@@ -154,7 +154,7 @@ pub struct RlZooEnvironmentConfig {
 }
 
 impl RlZooEnvironmentConfig {
-    fn suppoerted(&self) -> bool {
+    fn supported(&self) -> bool {
         self.policy == "MlpPolicy"
     }
 
@@ -204,7 +204,7 @@ impl ZooConfig {
         let mut unsupported_envs = BTreeMap::new();
         for (env_name, val) in parsed_content {
             let rl_zoo_config = yaml_serde::from_value::<RlZooEnvironmentConfig>(val).unwrap();
-            if rl_zoo_config.suppoerted() {
+            if rl_zoo_config.supported() {
                 supported_envs.insert(env_name, rl_zoo_config);
             } else {
                 unsupported_envs.insert(env_name, rl_zoo_config);

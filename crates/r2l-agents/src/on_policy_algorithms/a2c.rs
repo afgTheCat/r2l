@@ -51,6 +51,7 @@ pub struct A2CBatchData<T: R2lTensor> {
 
 /// Hook interface for customizing A2C training over trajectory batches.
 pub trait A2CHook<M: OnPolicyLearningModule> {
+    /// Runs after advantages and returns are computed and before minibatching.
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut A2CParams,
@@ -62,6 +63,7 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Continue)
     }
 
+    /// Runs after minibatch losses are computed and before the optimizer update.
     fn batch_hook(
         &mut self,
         _params: &mut A2CParams,
@@ -72,6 +74,7 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Continue)
     }
 
+    /// Runs after all minibatches have been processed.
     fn after_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut A2CParams,

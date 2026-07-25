@@ -4,7 +4,7 @@ use r2l_core::{
     env::Space, models::ActivationFunction, on_policy::algorithm::Agent, tensor::R2lTensor,
 };
 
-use crate::builders::learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType};
+use crate::builders::learning_module::{OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout};
 
 /// Trait implemented by concrete `Agent` builders.
 ///
@@ -114,52 +114,52 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
 
     /// Sets the optimizer learning rate for all configured optimizers.
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
-        self.learning_module_builder.learning_module_type = self
+        self.learning_module_builder.optimizer_layout = self
             .learning_module_builder
-            .learning_module_type
+            .optimizer_layout
             .with_lr(learning_rate);
         self
     }
 
     /// Sets the AdamW `beta1` parameter for all configured optimizers.
     pub fn with_beta1(mut self, beta1: f64) -> Self {
-        self.learning_module_builder.learning_module_type = self
+        self.learning_module_builder.optimizer_layout = self
             .learning_module_builder
-            .learning_module_type
+            .optimizer_layout
             .with_beta1(beta1);
         self
     }
 
     /// Sets the AdamW `beta2` parameter for all configured optimizers.
     pub fn with_beta2(mut self, beta2: f64) -> Self {
-        self.learning_module_builder.learning_module_type = self
+        self.learning_module_builder.optimizer_layout = self
             .learning_module_builder
-            .learning_module_type
+            .optimizer_layout
             .with_beta2(beta2);
         self
     }
 
     /// Sets the AdamW epsilon parameter for all configured optimizers.
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
-        self.learning_module_builder.learning_module_type = self
+        self.learning_module_builder.optimizer_layout = self
             .learning_module_builder
-            .learning_module_type
+            .optimizer_layout
             .with_epsilon(epsilon);
         self
     }
 
     /// Sets the AdamW weight decay parameter for all configured optimizers.
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
-        self.learning_module_builder.learning_module_type = self
+        self.learning_module_builder.optimizer_layout = self
             .learning_module_builder
-            .learning_module_type
+            .optimizer_layout
             .with_weight_decay(weight_decay);
         self
     }
 
     /// Uses a joint policy-value learning module configuration.
     pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: ParamsAdamW) -> Self {
-        self.learning_module_builder.learning_module_type = OnPolicyLearningModuleType::Joint {
+        self.learning_module_builder.optimizer_layout = OnPolicyOptimizerLayout::Joint {
             max_grad_norm,
             params,
         };
@@ -174,7 +174,7 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
         value_max_grad_norm: Option<f32>,
         value_params: ParamsAdamW,
     ) -> Self {
-        self.learning_module_builder.learning_module_type = OnPolicyLearningModuleType::Split {
+        self.learning_module_builder.optimizer_layout = OnPolicyOptimizerLayout::Split {
             policy_max_grad_norm,
             policy_params,
             value_max_grad_norm,
@@ -189,12 +189,9 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
         self
     }
 
-    /// Replaces the full learning module configuration.
-    pub fn with_learning_module_type(
-        mut self,
-        learning_module_type: OnPolicyLearningModuleType,
-    ) -> Self {
-        self.learning_module_builder.learning_module_type = learning_module_type;
+    /// Replaces the policy/value optimizer layout.
+    pub fn with_optimizer_layout(mut self, optimizer_layout: OnPolicyOptimizerLayout) -> Self {
+        self.learning_module_builder.optimizer_layout = optimizer_layout;
         self
     }
 }

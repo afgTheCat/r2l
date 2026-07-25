@@ -9,6 +9,7 @@ use crate::{
     utils::{actor_wrapper::ActorWrapper, buffer_wrapper::TrajectoryViewsWrapper},
 };
 
+/// Trainable on-policy component that owns an actor and learns from rollouts.
 pub trait Agent {
     /// Tensor type shared with the sampler and rollout buffers.
     type Tensor: R2lTensor;
@@ -29,7 +30,9 @@ pub trait Agent {
     fn shutdown(&mut self) {}
 }
 
+/// Rollout collector used by an on-policy training loop.
 pub trait Sampler {
+    /// Tensor type stored in collected trajectories.
     type Tensor: R2lTensor;
 
     /// Resets all environments managed by the sampler.
@@ -45,15 +48,20 @@ pub trait Sampler {
     fn shutdown(&mut self) {}
 }
 
+/// Converts actors and trajectory buffers between sampler and agent tensor types.
 pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
+    /// Actor representation accepted by the sampler.
     type SamplerActor: Actor<Tensor = S::Tensor> + Clone;
+    /// Agent-facing view of one sampler trajectory.
     type AgentBuffer<'a>: TrajectoryBatch<A::Tensor>
     where
         Self: 'a,
         S: 'a;
 
+    /// Converts an agent actor into the sampler representation.
     fn adapt_actor(&self, actor: A) -> Self::SamplerActor;
 
+    /// Converts sampler trajectory views into agent-facing batches.
     fn adapt_buffer<'a>(
         &self,
         buffers: &'a [TrajectoryView<'a, S::Tensor>],
@@ -63,6 +71,7 @@ pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
         S: 'a;
 }
 
+/// Default adapter that converts tensors through [`R2lTensor`].
 pub struct DefaultAdapter;
 
 impl<A: Actor + Clone, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter {
@@ -142,6 +151,7 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>> OnPolicyRuntime<A, 
     }
 }
 
+/// Lifecycle hooks that control an [`OnPolicyAlgorithm`] training loop.
 pub trait OnPolicyAlgorithmHooks {
     /// Agent type controlled by the training loop.
     type A: Agent;
@@ -173,6 +183,7 @@ pub trait OnPolicyAlgorithmHooks {
     ) -> Result<()>;
 }
 
+/// Generic on-policy training loop combining a runtime with lifecycle hooks.
 pub struct OnPolicyAlgorithm<
     A: Agent,
     S: Sampler,
@@ -197,6 +208,7 @@ impl<
         Self { runtime, hooks }
     }
 
+    /// Runs training until a hook requests termination.
     pub fn train(&mut self) -> Result<()> {
         return_on_hook_result!(self.hooks.init_hook(&mut self.runtime));
         loop {

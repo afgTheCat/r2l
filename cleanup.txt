@@ -1,0 +1,73 @@
+v0.0.2 documentation and naming cleanup
+
+Documentation changes
+
+- Added or completed rustdoc for externally reachable modules, types, traits,
+  variants, fields, constructors, hook methods, sampler operations, tensor
+  helpers, and algorithm utilities across the workspace.
+- Replaced obsolete r2l-core crate links to TrajectoryContainer and
+  ExpandableTrajectoryContainer with the current TrajectoryBuffer and
+  TrajectoryView types.
+- Added crate-level documentation for r2l-api, r2l-sampler, r2l-examples, and
+  r2l-zoo-evaluator.
+- Added package READMEs for r2l-burn, r2l-candle, and r2l-sampler and expanded
+  the existing public-crate READMEs. All seven library package archives include
+  their README.
+- Updated the root README for the v0.0.2 API, removed a reference to a missing
+  demo GIF, added the supported-capabilities/limitations list, and replaced the
+  obsolete StepTrajectoryBound example with StepHookBound.
+- Reworked the book's overview, user guide, on-policy architecture chapter, and
+  off-policy status page. Removed stale links, stale type names, and invalid
+  mdBook include anchors. The unused user_guide2 draft now points to the
+  maintained guide.
+- Replaced the old documentation checklist with an auditable v0.0.2 status
+  list and an accurate AI-assistance note.
+
+Naming and typo changes made
+
+- Corrected the internal parameter spelling "indicies" to "indices" in the
+  advantage, return, and log-probability sampling helpers.
+- Corrected the internal evaluator-frequency, environment-description, and
+  supported-policy spellings.
+- Corrected user-visible example text from "recieved" to "received".
+- Renamed EnvBuilderType::Homogenous to Homogeneous,
+  EnvBuilderType::Heterogenous to Heterogeneous, and
+  EnvBuilderType::homogenous to homogeneous.
+- Renamed OnPolicyLearningModuleType to OnPolicyOptimizerLayout. Renamed the
+  corresponding builder field to optimizer_layout and the public
+  with_learning_module_type method to with_optimizer_layout.
+- Renamed r2l_burn::learning_module::PolicyValueModuleKind to
+  ActionSpacePolicyValueModule and updated the r2l-api Burn agent types.
+- No compatibility aliases or deprecated forwarding methods were retained;
+  v0.0.2 uses only the corrected names.
+
+Remaining naming suggestions
+
+- SamplerExecutionMode::Vec describes an implementation detail. Inline or
+  CurrentThread would better communicate its behavior next to Thread.
+- BatchIndexIterator is a cursor with an iter() method, not an implementation
+  of Iterator. ShuffledBatchIndices with next_batch(), or implementing Iterator
+  and using next(), would better match Rust conventions.
+
+Release validation
+
+- RUSTDOCFLAGS="-D warnings -D missing-docs" cargo doc --workspace --no-deps
+- cargo test --workspace --doc
+- mdbook build book
+- cargo check --workspace
+- cargo clippy --workspace --all-targets -- -D warnings
+- cargo test -p r2l-core -p r2l-gym -p r2l-sampler -p r2l-agents
+  -p r2l-burn -p r2l-candle --lib
+- cargo package --allow-dirty --list for r2l-core, r2l-gym, r2l-agents,
+  r2l-sampler, r2l-candle, r2l-burn, and r2l-api
+
+All commands above passed during this cleanup.
+
+Release note
+
+- Cargo.toml, workspace dependency requirements, and Cargo.lock now declare
+  version 0.0.2 for every workspace package.
+- No crates were published and no release was created.
+- The long-running Gymnasium training integrations and RL Zoo evaluator were
+  not run as part of the documentation audit. Their configurations represent
+  benchmark targets, not verified performance claims.

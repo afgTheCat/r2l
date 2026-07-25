@@ -24,29 +24,41 @@ use crate::direct::worker::ThreadWorkers;
 use crate::direct::worker::Worker;
 use crate::direct::worker::WorkerPool;
 
+/// Instruction returned by a [`SamplerHook`] during rollout collection.
 pub enum SamplerHookResult {
+    /// Finish the current rollout.
     Stop,
+    /// Collect data up to the supplied bound, then invoke the hook again.
     Bound(RolloutMode),
 }
 
+/// Hook that controls the sequence of collection bounds for a raw sampler.
 pub trait SamplerHook {
+    /// Environment type sampled by the hook's sampler.
     type E: Env;
 
+    /// Returns the next collection instruction.
     fn hook(&mut self, core: &mut R2lSamplerCore<Self::E>) -> SamplerHookResult;
 
+    /// Resets hook state before a new training or evaluation run.
     fn reset(&mut self) {}
 }
 
+/// Mutable raw-sampler state exposed to [`SamplerHook`] implementations.
 pub struct R2lSamplerCore<E: Env> {
+    /// Per-environment output buffers.
     pub buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
+    /// Inline or threaded environment workers.
     pub worker_pool: WorkerPool<E>,
 }
 
 impl<E: Env> R2lSamplerCore<E> {
+    /// Resets every worker environment and clears its active episode state.
     pub fn reset_all_envs(&mut self) {
         self.worker_pool.reset_all_envs();
     }
 
+    /// Builds sampler state from an environment collection and execution mode.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
@@ -96,12 +108,14 @@ impl<E: Env> R2lSamplerCore<E> {
     }
 }
 
+/// Raw rollout sampler controlled by a [`SamplerHook`].
 pub struct R2lSampler<E: Env, H: SamplerHook<E = E>> {
     core: R2lSamplerCore<E>,
     hook: H,
 }
 
 impl<E: Env, H: SamplerHook<E = E>> R2lSampler<E, H> {
+    /// Builds a raw sampler and its environment workers.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         hook: H,

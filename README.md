@@ -1,34 +1,22 @@
 # r2l - a Rust Reinforcement Learning Library
 
 > [!WARNING]  
-> **Pre-Alpha:** This library is under active development. Current APIs are
-> almost surely going to change in the future and documentation might not be up
-> to date.
+> **Pre-alpha:** This library is under active development. APIs may change
+> between releases.
 
 ## Why **r2l**
 
 The goal of **r2l** is to be a customizable, ergonomic and easily embeddable
 library. To be more exact:
 
-- **Customizable**: the user has great control influencing _how_ agents are
-  trained. While **r2l** defines how different components interact with each
-  other, and the core logic of they implement, it also exposes the internals
-  through a hook system for the user.
+- **Customizable**: users have fine-grained control over _how_ agents are
+  trained. **r2l** defines how the components interact while exposing training
+  lifecycle hooks for application-specific behavior.
 - **Ergonomic**: most users are not necessarily concerned with implementation
-  details. In order to alleviate the burden of implementing a complete
-  algorithm, building on the core components, **r2l** aims to implement commonly
-  setups.
-- **Embeddable**: my goal with **r2l** is to be able to use it within a diverse
-  set of applications/environments. Instead of choosing a single deep learning
-  framework, **r2l** uses traits to describe it's needs. In practice, we
-  currently support **candle** and **burn**. If you have a deep learning
-  framework, and would like to have **r2l** support it, open a PR/make an issue.
-
-<p align="center">
-  <img src="assets/tui-demo.gif" alt="Demo GIF"/>
-  <br/>
-  <em>An example of embedding r2l in a terminal application</em>
-</p>
+  details. High-level builders provide common configurations without requiring
+  a complete algorithm implementation.
+- **Embeddable**: **r2l** uses traits instead of requiring one deep-learning
+  framework. Candle and Burn backends are currently supported.
 
 The scope of **r2l** is what Stable Baselines3 covers (by version 0.1.0) and
 Tianshou (by version 1.0.0). On top of core algorithms, a hyperparameter tuning
@@ -38,18 +26,19 @@ library is to be included in the future.
 
 You can get started if you have `gymnasium` like so:
 
-```rust
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepTrajectoryBound};
+```rust,no_run
+use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
 
 fn main() {
     let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
+        .with_burn()
         .with_clip_range(0.2)
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
         .with_total_epochs(10)
-        .with_bound(StepTrajectoryBound::new(1024))
-        .with_learning_schedule(LearningSchedule::total_step_bound(100000));
+        .with_rollout_bound(StepHookBound::new(1024))
+        .with_learning_schedule(LearningSchedule::total_step_bound(100_000));
     let mut algo = builder.build().unwrap();
     algo.train().unwrap();
 }
@@ -57,9 +46,28 @@ fn main() {
 
 For more information, read the [book](https://afgthecat.github.io/r2l/).
 
+## v0.0.2 capabilities
+
+- On-policy PPO and A2C builders, plus lower-level PPO, A2C, and VPG
+  implementations
+- Candle and Burn policy/value backends
+- Inline and threaded rollout workers
+- Step- and episode-bounded rollout hooks
+- Observation normalization, discounted-reward normalization, and linear
+  learning-rate schedules
+- Native `Env` implementations and a Gymnasium adapter for Discrete, Box,
+  MultiDiscrete, MultiBinary, Tuple, and Dict spaces
+- Best-actor evaluation and SafeTensors persistence for backend-specific
+  policies
+
+Off-policy algorithms, a stable public API, and claimed benchmark parity with
+Stable Baselines3 are outside the v0.0.2 release. The configurations in
+`envs_to_test.txt` are a benchmark plan, not a record of completed or passing
+training runs.
+
 ## Roadmap
 
-**Current version: `v0.0.2-rc2`** The project is in an early experimental phase.
+**Current version: `v0.0.2`.** The project is in an early experimental phase.
 Expect missing features, frequent breaking changes, bugs, and everything in
 between.
 

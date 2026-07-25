@@ -103,6 +103,7 @@ pub struct Snapshot<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> Snapshot<T> {
+    /// Creates a transition snapshot.
     pub fn new(state: T, reward: f32, terminated: bool, truncated: bool) -> Self {
         Self {
             state,
@@ -112,6 +113,7 @@ impl<T: R2lTensor> Snapshot<T> {
         }
     }
 
+    /// Returns `true` when the transition ends the episode for any reason.
     pub fn done(&self) -> bool {
         self.terminated || self.truncated
     }
@@ -152,6 +154,7 @@ pub trait EnvBuilder: Sync + Send + 'static {
 }
 // ANCHOR_END: env_builder
 
+/// Tensor type produced by environments built by `EB`.
 pub type TensorOfEnvBuilder<EB> = <<EB as EnvBuilder>::Env as Env>::Tensor;
 
 impl<E: Env, F: Sync + Send + 'static> EnvBuilder for F
@@ -168,19 +171,27 @@ where
 /// Collection of environment builders used to create rollout workers.
 pub enum EnvBuilderType<EB: EnvBuilder> {
     /// Reuses one builder for `n_envs` homogeneous workers.
-    Homogenous { builder: Arc<EB>, n_envs: usize },
+    Homogeneous {
+        /// Shared environment builder.
+        builder: Arc<EB>,
+        /// Number of environments to construct.
+        n_envs: usize,
+    },
     /// Uses one builder per worker.
-    Heterogenous { builders: Vec<Arc<EB>> },
+    Heterogeneous {
+        /// Builders in worker-index order.
+        builders: Vec<Arc<EB>>,
+    },
 }
 
 impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
     fn clone(&self) -> Self {
         match self {
-            Self::Homogenous { builder, n_envs } => Self::Homogenous {
+            Self::Homogeneous { builder, n_envs } => Self::Homogeneous {
                 builder: builder.clone(),
                 n_envs: *n_envs,
             },
-            Self::Heterogenous { builders } => Self::Heterogenous {
+            Self::Heterogeneous { builders } => Self::Heterogeneous {
                 builders: builders.clone(),
             },
         }
@@ -189,8 +200,8 @@ impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
 
 impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// Creates a homogeneous builder collection.
-    pub fn homogenous(builder: EB, n_envs: usize) -> Self {
-        Self::Homogenous {
+    pub fn homogeneous(builder: EB, n_envs: usize) -> Self {
+        Self::Homogeneous {
             builder: Arc::new(builder),
             n_envs,
         }
@@ -199,32 +210,32 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// Builds the environment at `idx`.
     pub fn build_idx(&self, idx: usize) -> Result<EB::Env> {
         match &self {
-            Self::Homogenous { builder, .. } => builder.build_env(),
-            Self::Heterogenous { builders } => builders[idx].build_env(),
+            Self::Homogeneous { builder, .. } => builder.build_env(),
+            Self::Heterogeneous { builders } => builders[idx].build_env(),
         }
     }
 
     /// Returns the number of environments represented by this builder.
     pub fn num_envs(&self) -> usize {
         match self {
-            Self::Homogenous { n_envs, .. } => *n_envs,
-            Self::Heterogenous { builders } => builders.len(),
+            Self::Homogeneous { n_envs, .. } => *n_envs,
+            Self::Heterogeneous { builders } => builders.len(),
         }
     }
 
     /// Returns a representative environment builder.
     pub fn env_builder(&self) -> Arc<EB> {
         match &self {
-            Self::Homogenous { builder, .. } => builder.clone(),
-            Self::Heterogenous { builders } => builders[0].clone(),
+            Self::Homogeneous { builder, .. } => builder.clone(),
+            Self::Heterogeneous { builders } => builders[0].clone(),
         }
     }
 
     /// Returns a representative environment description.
     pub fn env_description(&self) -> Result<EnvDescription<<EB::Env as Env>::Tensor>> {
         match &self {
-            Self::Homogenous { builder, n_envs: _ } => builder.env_description(),
-            Self::Heterogenous { builders } => builders[0].env_description(),
+            Self::Homogeneous { builder, n_envs: _ } => builder.env_description(),
+            Self::Heterogeneous { builders } => builders[0].env_description(),
         }
     }
 }

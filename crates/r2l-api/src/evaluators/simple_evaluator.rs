@@ -38,7 +38,7 @@ where
         execution_mode: SamplerExecutionMode,
     ) -> Self {
         let hook = EpisodeBoundHook::new(n_episodes);
-        let env_builder = EnvBuilderType::homogenous(builder, n_env);
+        let env_builder = EnvBuilderType::homogeneous(builder, n_env);
         let sampler = R2lSampler::build(env_builder, hook, execution_mode);
         Self {
             sampler,
@@ -67,6 +67,7 @@ impl<E: Env, A: Actor, AD: OnPolicyAdapters<A, R2lSampler<E, EpisodeBoundHook<E>
     Evaluator<E, A, AD>
 {
     /// Evaluates an actor and returns the collected trajectory views.
+    #[allow(clippy::type_complexity)]
     pub fn eval(
         &mut self,
         actor: A,

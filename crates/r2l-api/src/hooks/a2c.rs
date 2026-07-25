@@ -54,6 +54,7 @@ pub struct A2CStats {
 }
 
 impl A2CStats {
+    /// Returns the mean entropy loss across collected minibatches.
     pub fn entropy_loss(&self) -> f32 {
         mean(
             &self
@@ -64,6 +65,7 @@ impl A2CStats {
         )
     }
 
+    /// Returns the mean value loss across collected minibatches.
     pub fn value_loss(&self) -> f32 {
         mean(
             &self
@@ -74,6 +76,7 @@ impl A2CStats {
         )
     }
 
+    /// Returns the mean policy loss across collected minibatches.
     pub fn policy_loss(&self) -> f32 {
         mean(
             &self
