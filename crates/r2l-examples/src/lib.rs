@@ -1,5 +1,8 @@
+//! Small shared types used by the runnable workspace examples.
+
 use std::any::Any;
 
+/// Thread-safe, type-erased event payload used by UI examples.
 pub type EventBox = Box<dyn Any + Send + Sync>;
 
 #[cfg(test)]
@@ -17,6 +20,6 @@ mod test {
         let all_tensors = store.get_all_snapshots().unwrap();
         println!("{all_tensors:#?}");
 
-        let model = DiagGaussianDistribution::<NdArray>::from_store(&mut store);
+        let _model = DiagGaussianDistribution::<NdArray>::from_store(&mut store);
     }
 }

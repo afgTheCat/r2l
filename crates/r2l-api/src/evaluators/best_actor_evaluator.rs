@@ -45,7 +45,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     pub fn new(env_builder: EB) -> Self {
         Self {
             evaluator_frequency: 1,
-            env_builder: EnvBuilderType::homogenous(env_builder, 10),
+            env_builder: EnvBuilderType::homogeneous(env_builder, 10),
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::Thread,
             eval_path: None,
@@ -171,6 +171,7 @@ pub struct BestActorEvaluator<A: Actor, S: Sampler> {
 }
 
 impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
+    /// Evaluates the runtime actor when the configured evaluation interval elapses.
     pub fn eval<
         AG: Agent<Actor = A>,
         TS: Sampler<Tensor = ES::Tensor>,

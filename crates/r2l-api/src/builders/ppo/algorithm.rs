@@ -13,7 +13,7 @@ use r2l_gym::GymEnvBuilder;
 use crate::{
     builders::{
         agent::{AgentBuilder, OnPolicyAgentBuilder},
-        learning_module::OnPolicyLearningModuleType,
+        learning_module::OnPolicyOptimizerLayout,
         on_policy::OnPolicyAlgorithmBuilder,
         ppo::{
             agent::{PPOBurnAgentBuilder, PPOCandleAgentBuilder},
@@ -190,14 +190,9 @@ where
         self
     }
 
-    /// Replaces the full learning module configuration.
-    pub fn with_learning_module_type(
-        mut self,
-        learning_module_type: OnPolicyLearningModuleType,
-    ) -> Self {
-        self.agent_builder = self
-            .agent_builder
-            .with_learning_module_type(learning_module_type);
+    /// Replaces the policy/value optimizer layout.
+    pub fn with_optimizer_layout(mut self, optimizer_layout: OnPolicyOptimizerLayout) -> Self {
+        self.agent_builder = self.agent_builder.with_optimizer_layout(optimizer_layout);
         self
     }
 }

@@ -34,6 +34,7 @@ impl<T: R2lTensor> ClippedNormalizerInner<T> {
     }
 }
 
+/// Shared, clipped observation normalizer backed by running statistics.
 #[derive(Clone)]
 pub struct ClippedNormalizer<T: R2lTensor> {
     normalizer_mode: NormalizerMode,
@@ -41,6 +42,7 @@ pub struct ClippedNormalizer<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> ClippedNormalizer<T> {
+    /// Creates a normalizer for observations of `shape`.
     pub fn new(normalizer_mode: NormalizerMode, clip: f32, shape: Vec<usize>) -> Self {
         let rm = RunningMeanStd::new(shape);
         let inner = ClippedNormalizerInner { clip, rm };
@@ -50,6 +52,7 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
         }
     }
 
+    /// Clones this normalizer while changing whether it updates shared statistics.
     pub fn with_mode(&self, normalizer_mode: NormalizerMode) -> Self {
         Self {
             normalizer_mode,
@@ -57,6 +60,7 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
         }
     }
 
+    /// Optionally updates statistics, then normalizes and clips `obs` in place.
     pub fn apply_in_place(&self, obs: &mut [T]) {
         let mut inner = self.inner.lock().unwrap();
         match self.normalizer_mode {

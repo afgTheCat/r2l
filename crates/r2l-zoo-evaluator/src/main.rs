@@ -4,6 +4,8 @@
 //  -- with seeds not set
 // - generate statistics, generate figures etc
 
+//! Command-line evaluator for comparing `r2l` agents with RL Zoo configurations.
+
 mod zoo_parser;
 
 use std::{path::PathBuf, process::Command};
@@ -80,7 +82,12 @@ fn evaluate(envs: Vec<String>) -> anyhow::Result<()> {
     let zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
     for env in envs {
         let log_file = crate_dir.join(LOG_DIR).join(format!("{env}.csv"));
-        let env_config = zoo_config.supported_envs.get(&env).unwrap();
+        let Some(env_config) = zoo_config.supported_envs.get(&env) else {
+            if zoo_config.unsupported_envs.contains_key(&env) {
+                bail!("{env} uses an unsupported RL Zoo policy");
+            }
+            bail!("{env} is not present in the RL Zoo configuration");
+        };
         println!("Evaluating {env}");
         let mut algorithm = env_config
             .build_burn_ppo_algorithm(&env, log_file, SEED)

@@ -427,4 +427,5 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValu
     }
 }
 
-pub type PolicyValueModuleKind<B> = PolicyValueModule<B, PolicyKind<B>>;
+/// Burn learning module whose policy variant is selected from the action space.
+pub type ActionSpacePolicyValueModule<B> = PolicyValueModule<B, PolicyKind<B>>;

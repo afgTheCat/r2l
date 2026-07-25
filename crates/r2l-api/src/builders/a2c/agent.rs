@@ -14,7 +14,7 @@ use crate::{
         agent::{
             AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
         },
-        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
+        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
     },
     hooks::a2c::A2CStats,
 };
@@ -57,7 +57,7 @@ impl A2CAgentBuilder {
                 value_hidden_layers: vec![64, 64],
                 activation_function: ActivationFunction::default(),
                 log_std_init: 0.0,
-                learning_module_type: OnPolicyLearningModuleType::Joint {
+                optimizer_layout: OnPolicyOptimizerLayout::Joint {
                     max_grad_norm: None,
                     params: ParamsAdamW {
                         lr: 3e-4,

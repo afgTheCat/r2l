@@ -44,9 +44,9 @@ impl<'a, T: R2lTensor> TrajectoryViewsWrapper<'a, T> {
         view: &'b TrajectoryView<'b, S>,
     ) -> TrajectoryViewsWrapper<'b, T> {
         if TypeId::of::<S>() == TypeId::of::<T>() {
-            let states = unsafe { std::mem::transmute(view.states()) };
-            let next_states = unsafe { std::mem::transmute(view.next_states()) };
-            let actions = unsafe { std::mem::transmute(view.actions()) };
+            let states = unsafe { std::mem::transmute::<&[S], &[T]>(view.states()) };
+            let next_states = unsafe { std::mem::transmute::<&[S], &[T]>(view.next_states()) };
+            let actions = unsafe { std::mem::transmute::<&[S], &[T]>(view.actions()) };
             return TrajectoryViewsWrapper::Borrowed(TrajectoryView {
                 states,
                 next_states,

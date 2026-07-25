@@ -22,12 +22,16 @@ use crate::BestActorEvaluator;
 pub enum LearningSchedule {
     /// Stop after `total_rollouts` completed rollout collections.
     RolloutBound {
+        /// Number of rollout collections after which training stops.
         total_rollouts: usize,
+        /// Number of rollout collections completed so far.
         current_rollout: usize,
     },
     /// Stop after at least `total_steps` sampled environment steps.
     TotalStepBound {
+        /// Number of sampled steps after which training stops.
         total_steps: usize,
+        /// Number of sampled steps completed so far.
         current_step: usize,
     },
 }

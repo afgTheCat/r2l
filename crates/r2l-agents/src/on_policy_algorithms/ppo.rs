@@ -59,6 +59,7 @@ pub struct PPOBatchData<T: R2lTensor> {
 
 /// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
 pub trait PPOHook<M: OnPolicyLearningModule> {
+    /// Runs after advantages and returns are computed and before PPO epochs.
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -70,6 +71,7 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Continue)
     }
 
+    /// Runs after each PPO epoch and controls whether another epoch is performed.
     fn rollout_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -79,6 +81,7 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Break)
     }
 
+    /// Runs after minibatch losses are computed and before the optimizer update.
     fn batch_hook(
         &mut self,
         _params: &mut PPOParams,

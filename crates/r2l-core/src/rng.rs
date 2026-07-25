@@ -6,10 +6,12 @@ thread_local! {
     static RNG: RefCell<StdRng> = RefCell::new(StdRng::seed_from_u64(0));
 }
 
+/// Replaces the current thread's deterministic random stream with `seed`.
 pub fn set_seed(seed: u64) {
     RNG.with_borrow_mut(|rng| *rng = StdRng::seed_from_u64(seed));
 }
 
+/// Samples a `u64` from the current thread's random stream.
 pub fn sample_u64() -> u64 {
     RNG.with_borrow_mut(|rng| rng.random::<u64>())
 }
