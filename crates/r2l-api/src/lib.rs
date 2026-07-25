@@ -34,7 +34,6 @@ pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     models::ActivationFunction,
     on_policy::algorithm::OnPolicyAlgorithm,
-    on_policy::control::OnPolControl,
     tensor::TensorData,
 };
 pub use r2l_sampler::{R2lSampler, SamplerExecutionMode};

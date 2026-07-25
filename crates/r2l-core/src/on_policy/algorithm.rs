@@ -4,7 +4,6 @@ use crate::{
     HookResult, break_on_hook_result,
     buffers::{TrajectoryBatch, buffer::TrajectoryView},
     models::Actor,
-    on_policy::control::OnPolControl,
     return_on_hook_result,
     tensor::R2lTensor,
     utils::{actor_wrapper::ActorWrapper, buffer_wrapper::TrajectoryViewsWrapper},
@@ -44,9 +43,6 @@ pub trait Sampler {
 
     /// Releases sampler resources before the training loop exits.
     fn shutdown(&mut self) {}
-
-    /// Installs the control handle into this sampler's training environments.
-    fn set_on_policy_control(&mut self, _control: OnPolControl) {}
 }
 
 pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
@@ -187,7 +183,6 @@ pub struct OnPolicyAlgorithm<
     pub runtime: OnPolicyRuntime<A, S, C>,
     /// Lifecycle hooks.
     pub hooks: H,
-    control: OnPolControl,
 }
 
 impl<
@@ -198,17 +193,8 @@ impl<
 > OnPolicyAlgorithm<A, S, H, C>
 {
     /// Creates an on-policy algorithm with its external control handle.
-    pub fn new(runtime: OnPolicyRuntime<A, S, C>, hooks: H, control: OnPolControl) -> Self {
-        Self {
-            runtime,
-            hooks,
-            control,
-        }
-    }
-
-    /// Returns a handle that can serialize the current policy or stop training.
-    pub fn control(&self) -> OnPolControl {
-        self.control.clone()
+    pub fn new(runtime: OnPolicyRuntime<A, S, C>, hooks: H) -> Self {
+        Self { runtime, hooks }
     }
 
     pub fn train(&mut self) -> Result<()> {

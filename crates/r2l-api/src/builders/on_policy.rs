@@ -1,9 +1,8 @@
 use r2l_core::{
     env::{Env, EnvBuilder},
     on_policy::algorithm::{
-        Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime, Sampler,
+        Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime,
     },
-    on_policy::control::OnPolControl,
     rng::set_seed,
     tensor::R2lTensor,
 };
@@ -329,17 +328,14 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
             set_seed(seed);
         }
         let env_description = self.sampler_builder.env_builder.env_description()?;
-        let (control, commands) = OnPolControl::channel();
-        let mut sampler = self.sampler_builder.build();
-        sampler.set_on_policy_control(control.clone());
+        let sampler = self.sampler_builder.build();
         let observation_size = env_description.observation_size();
         let action_space = env_description.action_space;
         let agent = self
             .agent_builder
             .build(observation_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|eb| eb.build());
-        let mut hooks =
-            DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator, commands);
+        let mut hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator, None);
         if let Some(learning_rate_schedule) = self.learning_rate_schedule {
             hooks = hooks.with_learning_rate_schedule(learning_rate_schedule)
         }
@@ -348,7 +344,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
             agent,
             adapter: DefaultAdapter,
         };
-        Ok(OnPolicyAlgorithm::new(runtime, hooks, control))
+        Ok(OnPolicyAlgorithm::new(runtime, hooks))
     }
 }
 
@@ -372,14 +368,12 @@ impl<
         let env_description = self.sampler_builder.env_builder.env_description()?;
         let observation_size = env_description.observation_size();
         let action_space = env_description.action_space;
-        let (control, commands) = OnPolControl::channel();
-        let mut sampler = self.sampler_builder.build();
-        sampler.set_on_policy_control(control.clone());
-        let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);
+        let sampler = self.sampler_builder.build();
         let agent = self
             .agent_builder
             .build(observation_size, action_space, self.seed)?;
         let evaluator = self.evaluator_builder.map(|evaluator_builder| {
+            let eval_obs_normalizer = sampler.obs_normalizer(NormalizerMode::ReadOnly);
             let eval_sampler = R2lNormalizedSampler::build_with_obs_normalizer(
                 evaluator_builder.env_builder().clone(),
                 EpisodeBoundHook::new(evaluator_builder.n_episodes()),
@@ -389,16 +383,17 @@ impl<
             );
             evaluator_builder.build_with_sampler(eval_sampler)
         });
-        let mut hooks =
-            DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator, commands);
+        let mut hooks = DefaultOnPolicyAlgorithmHooks::new(self.learning_schedule, evaluator, None);
         if let Some(learning_rate_schedule) = self.learning_rate_schedule {
             hooks = hooks.with_learning_rate_schedule(learning_rate_schedule)
         }
-        let runtime = OnPolicyRuntime {
-            sampler,
-            agent,
-            adapter: DefaultAdapter,
-        };
-        Ok(OnPolicyAlgorithm::new(runtime, hooks, control))
+        Ok(OnPolicyAlgorithm::new(
+            OnPolicyRuntime {
+                sampler,
+                agent,
+                adapter: DefaultAdapter,
+            },
+            hooks,
+        ))
     }
 }

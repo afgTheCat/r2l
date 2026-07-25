@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use anyhow::Result;
 
-use crate::{on_policy::control::OnPolControl, tensor::R2lTensor};
+use crate::tensor::R2lTensor;
 
 /// Description of an observation or action space.
 #[derive(Debug, Clone)]
@@ -132,9 +132,6 @@ pub trait Env {
     fn step(&mut self, action: Self::Tensor) -> Result<Snapshot<Self::Tensor>>;
     /// Returns static observation/action space metadata.
     fn env_description(&self) -> EnvDescription<Self::Tensor>;
-
-    /// Installs the control handle for the training loop using this environment.
-    fn set_on_policy_control(&mut self, _control: OnPolControl) {}
 }
 // ANCHOR_END: env
 

@@ -6,7 +6,6 @@ use r2l_core::{
     buffers::{Memory, buffer::TrajectoryBuffer},
     env::{Env, EnvDescription, Snapshot},
     models::Actor,
-    on_policy::control::OnPolControl,
     rng::sample_u64,
     tensor::R2lTensor,
 };
@@ -52,7 +51,6 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
 
 pub enum WorkerCommand<T: R2lTensor> {
     SetPolicy(Box<dyn Actor<Tensor = T>>),
-    SetOnPolicyControl(OnPolControl),
     Collect(RolloutMode),
     ResetEnv(u64),
     ClearBuffer,
@@ -66,7 +64,6 @@ pub enum WorkerCommand<T: R2lTensor> {
 
 pub enum WorkerResult<T: R2lTensor> {
     PolicySet,
-    OnPolicyControlSet,
     Collected,
     EnvReset,
     BufferCleared,
@@ -222,10 +219,6 @@ impl<E: Env> ThreadWorker<E> {
                     self.worker.actor = Some(policy);
                     self.tx.send(WorkerResult::PolicySet).unwrap();
                 }
-                WorkerCommand::SetOnPolicyControl(control) => {
-                    self.worker.env.set_on_policy_control(control);
-                    self.tx.send(WorkerResult::OnPolicyControlSet).unwrap();
-                }
                 WorkerCommand::Collect(bound) => {
                     self.worker.collect(bound);
                     self.tx.send(WorkerResult::Collected).unwrap();
@@ -290,17 +283,6 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         }
         for worker_handle in self.worker_handles.iter() {
             worker_handle.recv();
-        }
-    }
-
-    pub fn set_on_policy_control(&self, control: OnPolControl) {
-        for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::SetOnPolicyControl(control.clone()));
-        }
-        for worker_handle in &self.worker_handles {
-            let WorkerResult::OnPolicyControlSet = worker_handle.recv() else {
-                unreachable!()
-            };
         }
     }
 
@@ -393,17 +375,6 @@ pub enum WorkerPool<E: Env> {
 }
 
 impl<E: Env> WorkerPool<E> {
-    pub fn set_on_policy_control(&mut self, control: OnPolControl) {
-        match self {
-            Self::Vec(workers) => {
-                for worker in workers {
-                    worker.env.set_on_policy_control(control.clone());
-                }
-            }
-            Self::Thread(workers) => workers.set_on_policy_control(control),
-        }
-    }
-
     pub fn clear_buffers(&mut self) {
         match self {
             Self::Vec(workers) => {

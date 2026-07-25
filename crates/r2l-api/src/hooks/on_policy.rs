@@ -1,14 +1,14 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, path::PathBuf};
 
 use anyhow::Result;
 use r2l_core::{
     HookResult,
     buffers::TrajectoryBatch,
     env::Env,
+    models::Actor,
     on_policy::algorithm::{
         Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
     },
-    on_policy::control::OnPolCommands,
     tensor::R2lTensor,
 };
 
@@ -72,6 +72,21 @@ impl LearningRateSchedule {
     }
 }
 
+pub enum OnPolicyCmd {
+    Shutdown,
+    SerializePolicy(String),
+}
+
+pub enum OnPolicyResult {
+    Shutdown,
+    PolicySerialized,
+}
+
+pub struct OnPolicyCommander {
+    rx: std::sync::mpsc::Receiver<OnPolicyCmd>,
+    tx: std::sync::mpsc::Sender<OnPolicyResult>,
+}
+
 /// Default outer-loop hooks used by high-level on-policy algorithm builders.
 ///
 /// This hook is responsible for lifecycle behavior around training rather than
@@ -90,7 +105,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     learning_rate_schedule: Option<LearningRateSchedule>,
     evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
     should_stop: bool,
-    commands: OnPolCommands,
+    commands: Option<OnPolicyCommander>,
     _phantom: PhantomData<(A, S, C, E)>,
 }
 
@@ -106,7 +121,7 @@ impl<
     pub fn new(
         learning_schedule: LearningSchedule,
         evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
-        commands: OnPolCommands,
+        commands: Option<OnPolicyCommander>,
     ) -> Self {
         Self {
             learning_schedule,
@@ -125,6 +140,25 @@ impl<
     ) -> Self {
         self.learning_rate_schedule = Some(learning_rate_schedule);
         self
+    }
+
+    pub fn try_process_command(&self, runtime: &mut OnPolicyRuntime<A, S, C>) -> HookResult {
+        let command = if let Some(commands) = &self.commands
+            && let Ok(command) = commands.rx.try_recv()
+        {
+            command
+        } else {
+            return HookResult::Continue;
+        };
+        match command {
+            OnPolicyCmd::Shutdown => HookResult::Break,
+            OnPolicyCmd::SerializePolicy(path) => {
+                let path = PathBuf::from(path);
+                let policy_serialized = runtime.actor().try_serialize().unwrap();
+                std::fs::write(path, policy_serialized).unwrap();
+                HookResult::Continue
+            }
+        }
     }
 }
 
@@ -180,28 +214,18 @@ impl<
                 .agent
                 .set_learning_rate(learning_rate_schedule.value(progress_remaining));
         }
-
-        HookResult::Continue
+        self.try_process_command(runtime)
     }
 
     fn post_training_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
-        let stop = self.commands.process(|| runtime.actor());
-        if let Some(evaluator) = &mut self.evaluator {
-            if stop {
-                let actor = runtime.actor();
-                let adapted_actor = runtime.adapted_actor();
-                evaluator.eval_adapted(adapted_actor, actor);
-            } else {
-                evaluator.eval(runtime);
-            }
-        }
-        if self.should_stop || stop {
+        let command_res = self.try_process_command(runtime);
+        if self.should_stop {
             HookResult::Break
         } else {
-            HookResult::Continue
+            command_res
         }
     }
 

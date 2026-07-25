@@ -14,7 +14,6 @@ use r2l_core::env::EnvBuilder;
 use r2l_core::env::EnvBuilderType;
 use r2l_core::models::Actor;
 use r2l_core::on_policy::algorithm::Sampler;
-use r2l_core::on_policy::control::OnPolControl;
 use r2l_core::rng::{sample_u64, set_seed};
 
 use crate::RolloutMode;
@@ -144,9 +143,5 @@ impl<E: Env, H: SamplerHook<E = E>> Sampler for R2lSampler<E, H> {
 
     fn shutdown(&mut self) {
         self.core.worker_pool.shutdown();
-    }
-
-    fn set_on_policy_control(&mut self, control: OnPolControl) {
-        self.core.worker_pool.set_on_policy_control(control);
     }
 }
