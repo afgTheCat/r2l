@@ -27,7 +27,10 @@ pub use builders::sampler::{EpisodeHookBound, StepHookBound};
 pub use evaluators::best_actor_evaluator::{BestActorEvaluator, BestActorEvaluatorBuilder};
 pub use evaluators::simple_evaluator::Evaluator;
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
-pub use hooks::on_policy::{DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule};
+pub use hooks::on_policy::{
+    DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule, OnPolicyCmd,
+    OnPolicyCommander, OnPolicyResult, get_policy_receiver_and_commander,
+};
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
 pub use r2l_core::{

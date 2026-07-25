@@ -1,4 +1,8 @@
-use std::{marker::PhantomData, path::PathBuf};
+use std::{
+    marker::PhantomData,
+    path::PathBuf,
+    sync::mpsc::{Receiver, Sender},
+};
 
 use anyhow::Result;
 use r2l_core::{
@@ -83,8 +87,34 @@ pub enum OnPolicyResult {
 }
 
 pub struct OnPolicyCommander {
-    rx: std::sync::mpsc::Receiver<OnPolicyCmd>,
-    tx: std::sync::mpsc::Sender<OnPolicyResult>,
+    pub rx: Receiver<OnPolicyCmd>,
+    pub tx: Sender<OnPolicyResult>,
+}
+
+impl OnPolicyCommander {
+    pub fn new(rx: Receiver<OnPolicyCmd>, tx: Sender<OnPolicyResult>) -> Self {
+        Self { rx, tx }
+    }
+}
+
+pub struct OnPolicyReciever {
+    pub rx: Receiver<OnPolicyResult>,
+    pub tx: Sender<OnPolicyCmd>,
+}
+
+impl OnPolicyReciever {
+    pub fn new(rx: Receiver<OnPolicyResult>, tx: Sender<OnPolicyCmd>) -> Self {
+        Self { rx, tx }
+    }
+}
+
+pub fn get_policy_receiver_and_commander() -> (OnPolicyCommander, OnPolicyReciever) {
+    let (command_tx, command_rx) = std::sync::mpsc::channel();
+    let (result_tx, result_rx) = std::sync::mpsc::channel();
+    (
+        OnPolicyCommander::new(command_rx, result_tx),
+        OnPolicyReciever::new(result_rx, command_tx),
+    )
 }
 
 /// Default outer-loop hooks used by high-level on-policy algorithm builders.
@@ -122,10 +152,11 @@ impl<
         learning_schedule: LearningSchedule,
         evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
         commands: Option<OnPolicyCommander>,
+        learning_rate_schedule: Option<LearningRateSchedule>,
     ) -> Self {
         Self {
             learning_schedule,
-            learning_rate_schedule: None,
+            learning_rate_schedule,
             evaluator,
             should_stop: false,
             commands,
@@ -143,19 +174,22 @@ impl<
     }
 
     pub fn try_process_command(&self, runtime: &mut OnPolicyRuntime<A, S, C>) -> HookResult {
-        let command = if let Some(commands) = &self.commands
-            && let Ok(command) = commands.rx.try_recv()
-        {
-            command
-        } else {
+        let Some(commands) = &self.commands else {
+            return HookResult::Continue;
+        };
+        let Ok(command) = commands.rx.try_recv() else {
             return HookResult::Continue;
         };
         match command {
-            OnPolicyCmd::Shutdown => HookResult::Break,
+            OnPolicyCmd::Shutdown => {
+                commands.tx.send(OnPolicyResult::Shutdown).unwrap();
+                HookResult::Break
+            }
             OnPolicyCmd::SerializePolicy(path) => {
                 let path = PathBuf::from(path);
                 let policy_serialized = runtime.actor().try_serialize().unwrap();
                 std::fs::write(path, policy_serialized).unwrap();
+                commands.tx.send(OnPolicyResult::PolicySerialized).unwrap();
                 HookResult::Continue
             }
         }

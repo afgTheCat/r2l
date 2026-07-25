@@ -5,6 +5,7 @@ use burn::backend::NdArray;
 use burn_store::SafetensorsStore;
 use r2l_api::{
     Evaluator, LearningSchedule, PPOAlgorithmBuilder, SamplerExecutionMode, StepHookBound,
+    get_policy_receiver_and_commander,
 };
 use r2l_burn::distributions::diagonal::DiagGaussianDistribution;
 
@@ -13,6 +14,7 @@ const ENV_NAME: &str = "Pendulum-v1";
 fn main() {
     let best_model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
     let hidden_layers = vec![64, 64];
+    let (on_policy_commander, _on_policy_receiver) = get_policy_receiver_and_commander();
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
         .with_seed(0)
@@ -25,6 +27,7 @@ fn main() {
         .with_rollout_bound(StepHookBound::new(1024))
         .with_total_epochs(10)
         .with_learning_schedule(LearningSchedule::rollout_bound(30))
+        .with_commander(on_policy_commander)
         .with_evaluator_best_actor_path(best_model_path.clone());
     let mut ppo = ppo_builder.build().unwrap();
     ppo.train().unwrap();
