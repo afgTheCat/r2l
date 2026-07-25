@@ -8,6 +8,7 @@ use r2l_core::{
     on_policy::algorithm::{
         Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
     },
+    on_policy::control::OnPolCommands,
     tensor::R2lTensor,
 };
 
@@ -89,6 +90,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     learning_rate_schedule: Option<LearningRateSchedule>,
     evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
     should_stop: bool,
+    commands: OnPolCommands,
     _phantom: PhantomData<(A, S, C, E)>,
 }
 
@@ -104,12 +106,14 @@ impl<
     pub fn new(
         learning_schedule: LearningSchedule,
         evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
+        commands: OnPolCommands,
     ) -> Self {
         Self {
             learning_schedule,
             learning_rate_schedule: None,
             evaluator,
             should_stop: false,
+            commands,
             _phantom: PhantomData,
         }
     }
@@ -184,10 +188,17 @@ impl<
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
+        let stop = self.commands.process(|| runtime.actor());
         if let Some(evaluator) = &mut self.evaluator {
-            evaluator.eval(runtime);
+            if stop {
+                let actor = runtime.actor();
+                let adapted_actor = runtime.adapted_actor();
+                evaluator.eval_adapted(adapted_actor, actor);
+            } else {
+                evaluator.eval(runtime);
+            }
         }
-        if self.should_stop {
+        if self.should_stop || stop {
             HookResult::Break
         } else {
             HookResult::Continue

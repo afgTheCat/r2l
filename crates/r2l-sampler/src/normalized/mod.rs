@@ -14,6 +14,7 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     models::Actor,
     on_policy::algorithm::Sampler,
+    on_policy::control::OnPolControl,
     rng::sample_u64,
     tensor::R2lTensor,
 };
@@ -293,5 +294,9 @@ impl<E: Env<Tensor: R2lTensor>, H: NormalizedSamplerHook<E = E>> Sampler
 
     fn shutdown(&mut self) {
         self.core.shutdown();
+    }
+
+    fn set_on_policy_control(&mut self, control: OnPolControl) {
+        self.core.pool.set_on_policy_control(control);
     }
 }

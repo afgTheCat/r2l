@@ -17,7 +17,6 @@ candle-nn = { workspace = true }
 burn = { workspace = true }
 r2l-candle = { workspace = true }
 r2l-burn = { workspace = true }
-crossbeam = { workspace = true }
 rand = "0.10.0"
 anyhow = { workspace = true }
 derive_more = "2.0.1"

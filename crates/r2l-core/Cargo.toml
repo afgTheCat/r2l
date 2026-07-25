@@ -13,6 +13,7 @@ rayon = "1.10.0"
 derive_more = { version = "2.0.1", features = ["full"] }
 either = {workspace = true}
 anyhow = { workspace = true }
+crossbeam = { workspace = true }
 candle-core = { workspace = true, optional = true }
 burn = { workspace = true, optional = true }
 itertools = "0.14.0"

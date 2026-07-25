@@ -4,6 +4,7 @@ use r2l_core::{
     buffers::{Memory, MultiMemory},
     env::{Env, EnvBuilder, Snapshot},
     models::Actor,
+    on_policy::control::OnPolControl,
     rng::{sample_u64, set_seed},
     tensor::R2lTensor,
 };
@@ -11,6 +12,7 @@ use r2l_core::{
 pub enum WorkerCommand<T: R2lTensor> {
     Step,
     SetPolicy(Box<dyn Actor<Tensor = T>>),
+    SetOnPolicyControl(OnPolControl),
     ResetEnv(u64),
     Stop,
 }
@@ -18,6 +20,7 @@ pub enum WorkerCommand<T: R2lTensor> {
 pub enum WorkerResult<T: R2lTensor> {
     Stepped(Memory<T>),
     PolicySet,
+    OnPolicyControlSet,
     EnvReset,
     Stopped,
 }
@@ -122,6 +125,12 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
         }
     }
 
+    fn set_on_policy_control(&mut self, control: OnPolControl) {
+        for worker in &mut self.workers {
+            worker.worker.env.set_on_policy_control(control.clone());
+        }
+    }
+
     fn reset_all(&mut self) {
         for worker in &mut self.workers {
             worker.reset();
@@ -162,6 +171,10 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
                 WorkerCommand::SetPolicy(policy) => {
                     self.worker.actor = Some(policy);
                     self.tx.send(WorkerResult::PolicySet).unwrap();
+                }
+                WorkerCommand::SetOnPolicyControl(control) => {
+                    self.worker.env.set_on_policy_control(control);
+                    self.tx.send(WorkerResult::OnPolicyControlSet).unwrap();
                 }
                 WorkerCommand::ResetEnv(seed) => {
                     let state = self.worker.env.reset(seed).unwrap();
@@ -282,6 +295,17 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         }
     }
 
+    fn set_on_policy_control(&self, control: OnPolControl) {
+        for worker_handle in &self.worker_handles {
+            worker_handle.send(WorkerCommand::SetOnPolicyControl(control.clone()));
+        }
+        for worker_handle in &self.worker_handles {
+            let WorkerResult::OnPolicyControlSet = worker_handle.recv() else {
+                unreachable!()
+            };
+        }
+    }
+
     fn reset_all(&self) {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
@@ -311,6 +335,13 @@ pub enum WorkerPool<E: Env<Tensor: R2lTensor>> {
 }
 
 impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
+    pub fn set_on_policy_control(&mut self, control: OnPolControl) {
+        match self {
+            Self::Vec(workers) => workers.set_on_policy_control(control),
+            Self::Thread(workers) => workers.set_on_policy_control(control),
+        }
+    }
+
     pub fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<E::Tensor> {
         match self {
             Self::Vec(workers) => workers.step_indexed(indices),
