@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use anyhow::Result;
 use r2l_core::{
     HookResult,
-    buffers::TrajectoryBatch,
     env::Env,
     on_policy::algorithm::{
         Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
@@ -92,7 +91,6 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     learning_schedule: LearningSchedule,
     learning_rate_schedule: Option<LearningRateSchedule>,
     evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
-    should_stop: bool,
     _phantom: PhantomData<(A, S, C, E)>,
 }
 
@@ -113,7 +111,6 @@ impl<
             learning_schedule,
             learning_rate_schedule: None,
             evaluator,
-            should_stop: false,
             _phantom: PhantomData,
         }
     }
@@ -125,6 +122,32 @@ impl<
     ) -> Self {
         self.learning_rate_schedule = Some(learning_rate_schedule);
         self
+    }
+
+    fn mark_progress(&mut self, runtime: &mut OnPolicyRuntime<A, S, C>) {
+        match &mut self.learning_schedule {
+            LearningSchedule::RolloutBound {
+                current_rollout, ..
+            } => *current_rollout += 1,
+            LearningSchedule::TotalStepBound { current_step, .. } => {
+                let rollouts = runtime.trajectory_containers();
+                let rollout_steps: usize = rollouts.as_ref().iter().map(|e| e.actions.len()).sum();
+                *current_step += rollout_steps;
+            }
+        }
+    }
+
+    fn progress_remaining(&self) -> f64 {
+        match self.learning_schedule {
+            LearningSchedule::RolloutBound {
+                total_rollouts,
+                current_rollout,
+            } => 1.0 - current_rollout as f64 / total_rollouts as f64,
+            LearningSchedule::TotalStepBound {
+                total_steps,
+                current_step,
+            } => 1.0 - current_step as f64 / total_steps as f64,
+        }
     }
 }
 
@@ -151,36 +174,17 @@ impl<
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
     ) -> HookResult {
-        let progress_remaining = match &mut self.learning_schedule {
-            LearningSchedule::RolloutBound {
-                total_rollouts,
-                current_rollout,
-            } => {
-                *current_rollout += 1;
-                self.should_stop = current_rollout >= total_rollouts;
-                let completed_rollouts = (*current_rollout).min(*total_rollouts);
-                1.0 - completed_rollouts as f64 / *total_rollouts as f64
-            }
-            LearningSchedule::TotalStepBound {
-                total_steps,
-                current_step,
-            } => {
-                let rollouts = runtime.trajectory_containers();
-                let rollout_steps: usize =
-                    rollouts.as_ref().iter().map(|e| e.actions().len()).sum();
-                *current_step += rollout_steps;
-                self.should_stop = current_step >= total_steps;
-                let completed_steps = (*current_step).min(*total_steps);
-                1.0 - completed_steps as f64 / *total_steps as f64
-            }
-        };
-
+        self.mark_progress(runtime);
         if let Some(learning_rate_schedule) = self.learning_rate_schedule {
-            runtime
-                .agent
-                .set_learning_rate(learning_rate_schedule.value(progress_remaining));
+            let learning_rate = match learning_rate_schedule {
+                LearningRateSchedule::Constant(learning_rate) => learning_rate,
+                LearningRateSchedule::Linear(initial_learning_rate) => {
+                    let progress_remaining = self.progress_remaining();
+                    initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
+                }
+            };
+            runtime.agent.set_learning_rate(learning_rate);
         }
-
         HookResult::Continue
     }
 
@@ -191,7 +195,7 @@ impl<
         if let Some(evaluator) = &mut self.evaluator {
             evaluator.eval(runtime);
         }
-        if self.should_stop {
+        if self.progress_remaining() <= 0. {
             HookResult::Break
         } else {
             HookResult::Continue
