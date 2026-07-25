@@ -112,4 +112,7 @@ mod test {
     fn pendulum_v1() {
         evaluate(vec!["Pendulum-v1".into()]).unwrap();
     }
+
+    #[test]
+    fn envs() {}
 }
