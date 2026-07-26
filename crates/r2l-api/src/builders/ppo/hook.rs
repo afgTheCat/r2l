@@ -1,5 +1,7 @@
 use std::{marker::PhantomData, sync::mpsc::Sender};
 
+use serde::{Deserialize, Serialize};
+
 use crate::hooks::ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPOStats, TargetKl};
 
 /// Builder for the default PPO training hook.
@@ -8,7 +10,7 @@ use crate::hooks::ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPOStats, Target
 /// [`PPOAgentBuilder`](crate::PPOAgentBuilder), including PPO epoch count,
 /// advantage normalization, target KL handling, gradient clipping, and
 /// optional reporting.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DefaultPPOHookBuilder {
     normalize_advantage: bool,
     log_progress: bool,
@@ -18,6 +20,7 @@ pub struct DefaultPPOHookBuilder {
     target_kl: Option<f32>,
     gradient_clipping: Option<f32>,
     n_envs: usize,
+    #[serde(skip)]
     tx: Option<Sender<PPOStats>>,
 }
 

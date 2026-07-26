@@ -13,4 +13,5 @@ bimodal-array = { workspace = true }
 r2l-core = { workspace = true }
 crossbeam = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true }
 itertools = "0.15.0"

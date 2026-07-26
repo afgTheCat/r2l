@@ -2,7 +2,6 @@ use std::sync::mpsc::Sender;
 
 use burn::prelude::Backend;
 use candle_core::Device;
-use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::a2c::{A2C, A2CParams};
 use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
 
@@ -14,7 +13,7 @@ use crate::{
         agent::{
             AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
         },
-        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
+        learning_module::{AdamWParams, OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
     },
     hooks::a2c::A2CStats,
 };
@@ -59,7 +58,7 @@ impl A2CAgentBuilder {
                 log_std_init: 0.0,
                 optimizer_layout: OnPolicyOptimizerLayout::Joint {
                     max_grad_norm: None,
-                    params: ParamsAdamW {
+                    params: AdamWParams {
                         lr: 3e-4,
                         beta1: 0.9,
                         beta2: 0.999,

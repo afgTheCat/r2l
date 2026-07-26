@@ -2,7 +2,6 @@ use std::sync::mpsc::Sender;
 
 use burn::prelude::Backend;
 use candle_core::Device;
-use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
 use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
 
@@ -13,7 +12,7 @@ use crate::{
         agent::{
             AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
         },
-        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
+        learning_module::{AdamWParams, OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
         ppo::hook::DefaultPPOHookBuilder,
     },
     hooks::ppo::PPOStats,
@@ -58,7 +57,7 @@ impl PPOAgentBuilder {
                 activation_function: ActivationFunction::default(),
                 log_std_init: 0.0,
                 optimizer_layout: OnPolicyOptimizerLayout::Joint {
-                    params: ParamsAdamW {
+                    params: AdamWParams {
                         lr: 3e-4,
                         beta1: 0.9,
                         beta2: 0.999,
@@ -181,5 +180,21 @@ impl AgentBuilder for PPOBurnAgentBuilder {
         let hooks = self.hook_builder.build();
         let params = self.params;
         Ok(PPOBurnAgent(PPO { lm, hooks, params }))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use yaml_serde::{from_str, to_string};
+
+    use crate::PPOAgentBuilder;
+
+    #[test]
+    fn serialize_agent_builder() {
+        let ppo_builder = PPOAgentBuilder::new(10);
+        let serialized = to_string(&ppo_builder).unwrap();
+        println!("{serialized}");
+        let ppo_builder: PPOAgentBuilder = from_str(&serialized).unwrap();
+        println!("{ppo_builder:#?}");
     }
 }

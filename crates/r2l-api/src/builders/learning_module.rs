@@ -11,29 +11,52 @@ use r2l_candle::{
     distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
 };
 use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AdamWParams {
+    pub lr: f64,
+    pub beta1: f64,
+    pub beta2: f64,
+    pub eps: f64,
+    pub weight_decay: f64,
+}
+
+impl AdamWParams {
+    fn to_candle_params(self) -> ParamsAdamW {
+        ParamsAdamW {
+            lr: self.lr,
+            beta1: self.beta1,
+            beta2: self.beta2,
+            eps: self.eps,
+            weight_decay: self.weight_decay,
+        }
+    }
+}
 
 /// Optimizer layout for on-policy policy/value learning modules.
 ///
 /// This controls whether policy and value learning share a single optimizer
 /// configuration or use separate optimizer configurations.
+#[derive(Debug, Serialize, Deserialize)]
 pub enum OnPolicyOptimizerLayout {
     /// Use one joint optimizer configuration for both policy and value updates.
     Joint {
         /// Optional global gradient-norm clipping threshold.
         max_grad_norm: Option<f32>,
         /// Shared AdamW optimizer parameters.
-        params: ParamsAdamW,
+        params: AdamWParams,
     },
     /// Use separate optimizer configurations for policy and value updates.
     Split {
         /// Optional policy gradient-norm clipping threshold.
         policy_max_grad_norm: Option<f32>,
         /// Policy AdamW optimizer parameters.
-        policy_params: ParamsAdamW,
+        policy_params: AdamWParams,
         /// Optional value-function gradient-norm clipping threshold.
         value_max_grad_norm: Option<f32>,
         /// Value-function AdamW optimizer parameters.
-        value_params: ParamsAdamW,
+        value_params: AdamWParams,
     },
 }
 
@@ -41,7 +64,7 @@ impl OnPolicyOptimizerLayout {
     /// Returns a copy with the learning rate updated everywhere it applies.
     fn map_params<F>(self, mut f: F) -> Self
     where
-        F: FnMut(&mut ParamsAdamW),
+        F: FnMut(&mut AdamWParams),
     {
         match self {
             Self::Joint {
@@ -98,6 +121,7 @@ impl OnPolicyOptimizerLayout {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct OnPolicyLearningModuleBuilder {
     pub(crate) policy_hidden_layers: Vec<usize>,
     pub(crate) value_hidden_layers: Vec<usize>,
@@ -132,7 +156,7 @@ impl OnPolicyLearningModuleBuilder {
                 &self.value_hidden_layers,
                 policy_varmap,
                 max_grad_norm,
-                params,
+                params.to_candle_params(),
                 self.activation_function,
             ),
             OnPolicyOptimizerLayout::Split {
@@ -146,8 +170,8 @@ impl OnPolicyLearningModuleBuilder {
                 policy_varmap,
                 policy_max_grad_norm,
                 value_max_grad_norm,
-                policy_params,
-                value_params,
+                policy_params.to_candle_params(),
+                value_params.to_candle_params(),
                 self.activation_function,
             ),
         }

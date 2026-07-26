@@ -1,10 +1,12 @@
-use candle_core::Device;
-use candle_nn::ParamsAdamW;
+use candle_core::{Device, DeviceLocation};
 use r2l_core::{
     env::Space, models::ActivationFunction, on_policy::algorithm::Agent, tensor::R2lTensor,
 };
+use serde::{Deserialize, Serialize, de::Error as _};
 
-use crate::builders::learning_module::{OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout};
+use crate::builders::learning_module::{
+    AdamWParams, OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout,
+};
 
 /// Trait implemented by concrete `Agent` builders.
 ///
@@ -24,6 +26,63 @@ pub trait AgentBuilder {
     ) -> anyhow::Result<Self::Agent>;
 }
 
+/// Marker type representing the Burn backend in `Agent` builders.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct BurnBackend;
+
+/// Candle backend configuration used by `Agent` builders.
+#[derive(Debug, Clone)]
+pub struct CandleBackend {
+    pub(crate) device: Device,
+}
+
+#[derive(Serialize, Deserialize)]
+enum CandleDeviceConfig {
+    Cpu,
+    Cuda { ordinal: usize },
+    Metal { ordinal: usize },
+}
+
+impl Serialize for CandleBackend {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let device = match self.device.location() {
+            DeviceLocation::Cpu => CandleDeviceConfig::Cpu,
+            DeviceLocation::Cuda { gpu_id } => CandleDeviceConfig::Cuda { ordinal: gpu_id },
+            DeviceLocation::Metal { gpu_id } => CandleDeviceConfig::Metal { ordinal: gpu_id },
+        };
+        device.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for CandleBackend {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let device = match CandleDeviceConfig::deserialize(deserializer)? {
+            CandleDeviceConfig::Cpu => Device::Cpu,
+            CandleDeviceConfig::Cuda { ordinal } => {
+                Device::new_cuda(ordinal).map_err(D::Error::custom)?
+            }
+            CandleDeviceConfig::Metal { ordinal } => {
+                Device::new_metal(ordinal).map_err(D::Error::custom)?
+            }
+        };
+        Ok(Self { device })
+    }
+}
+
+impl CandleBackend {
+    pub(crate) fn seed(&self, seed: u64) {
+        if !matches!(&self.device, Device::Cpu) {
+            self.device.set_seed(seed).unwrap();
+        }
+    }
+}
+
 /// Shared builder for on-policy `Agent` implementations.
 ///
 /// This type provides the common configuration surface used by the concrete
@@ -33,29 +92,12 @@ pub trait AgentBuilder {
 ///
 /// Most users should construct one of those aliases directly instead of naming
 /// this generic type.
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OnPolicyAgentBuilder<Params, HookBuilder, Backend> {
     pub(crate) params: Params,
     pub(crate) hook_builder: HookBuilder,
     pub(crate) learning_module_builder: OnPolicyLearningModuleBuilder,
     pub(crate) backend: Backend,
-}
-
-/// Marker type representing the Burn backend in `Agent` builders.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct BurnBackend;
-
-/// Candle backend configuration used by `Agent` builders.
-#[derive(Debug, Clone)]
-pub struct CandleBackend {
-    pub(crate) device: Device,
-}
-
-impl CandleBackend {
-    pub(crate) fn seed(&self, seed: u64) {
-        if !matches!(&self.device, Device::Cpu) {
-            self.device.set_seed(seed).unwrap();
-        }
-    }
 }
 
 impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Backend> {
@@ -158,7 +200,7 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
     }
 
     /// Uses a joint policy-value learning module configuration.
-    pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: ParamsAdamW) -> Self {
+    pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: AdamWParams) -> Self {
         self.learning_module_builder.optimizer_layout = OnPolicyOptimizerLayout::Joint {
             max_grad_norm,
             params,
@@ -170,9 +212,9 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
     pub fn with_split(
         mut self,
         policy_max_grad_norm: Option<f32>,
-        policy_params: ParamsAdamW,
+        policy_params: AdamWParams,
         value_max_grad_norm: Option<f32>,
-        value_params: ParamsAdamW,
+        value_params: AdamWParams,
     ) -> Self {
         self.learning_module_builder.optimizer_layout = OnPolicyOptimizerLayout::Split {
             policy_max_grad_norm,

@@ -8,15 +8,18 @@ use r2l_core::{
     on_policy::algorithm::{Agent, OnPolicyAdapters, OnPolicyRuntime, Sampler},
 };
 use r2l_sampler::{DirectSampler, SamplerExecutionMode};
+use serde::{Deserialize, Serialize};
 
 use crate::hooks::sampler::EpisodeBoundHook;
 
+#[derive(Serialize, Deserialize)]
 struct EvalState {
     avg_reward: f32,
     total_episodes: f32,
 }
 
 /// Builder for [`BestActorEvaluator`] instances.
+#[derive(Serialize, Deserialize)]
 pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     env_builder: EnvBuilderType<EB>,
     n_episodes: usize,

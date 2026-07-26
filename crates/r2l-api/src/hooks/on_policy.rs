@@ -14,6 +14,7 @@ use r2l_core::{
     },
     tensor::R2lTensor,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::BestActorEvaluator;
 
@@ -22,7 +23,7 @@ use crate::BestActorEvaluator;
 /// This determines when the outer on-policy training loop should terminate,
 /// either after a fixed number of rollouts or after a fixed number of sampled
 /// environment steps.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LearningSchedule {
     /// Stop after `total_rollouts` completed rollout collections.
     RolloutBound {
@@ -59,7 +60,7 @@ impl LearningSchedule {
 }
 
 /// Learning-rate policy applied over the progress of an on-policy training run.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LearningRateSchedule {
     /// Keep the learning rate fixed throughout training.
     Constant(f64),

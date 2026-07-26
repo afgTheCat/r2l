@@ -1,7 +1,6 @@
 use std::sync::mpsc::Sender;
 
 use candle_core::Device;
-use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::PPOParams;
 use r2l_core::{
     env::{Env, EnvBuilder},
@@ -13,7 +12,7 @@ use r2l_gym::GymEnvBuilder;
 use crate::{
     builders::{
         agent::{AgentBuilder, OnPolicyAgentBuilder},
-        learning_module::OnPolicyOptimizerLayout,
+        learning_module::{AdamWParams, OnPolicyOptimizerLayout},
         on_policy::OnPolicyAlgorithmBuilder,
         ppo::{
             agent::{PPOBurnAgentBuilder, PPOCandleAgentBuilder},
@@ -161,7 +160,7 @@ where
     }
 
     /// Uses a joint policy-value learning module configuration.
-    pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: ParamsAdamW) -> Self {
+    pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: AdamWParams) -> Self {
         self.agent_builder = self.agent_builder.with_joint(max_grad_norm, params);
         self
     }
@@ -170,9 +169,9 @@ where
     pub fn with_split(
         mut self,
         policy_max_grad_norm: Option<f32>,
-        policy_params: ParamsAdamW,
+        policy_params: AdamWParams,
         value_max_grad_norm: Option<f32>,
-        value_params: ParamsAdamW,
+        value_params: AdamWParams,
     ) -> Self {
         self.agent_builder = self.agent_builder.with_split(
             policy_max_grad_norm,
@@ -313,5 +312,19 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
             agent_builder: agent_builder.with_burn(),
             seed,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use yaml_serde::to_string;
+
+    use crate::PPOAlgorithmBuilder;
+
+    #[test]
+    fn serialize_ppo_algo_builder() {
+        let algo_builder = PPOAlgorithmBuilder::gym("", 4);
+        let algo_builder_serialized = to_string(&algo_builder).unwrap();
+        println!("{algo_builder_serialized}");
     }
 }

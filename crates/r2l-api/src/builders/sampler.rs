@@ -8,6 +8,7 @@ use r2l_sampler::{
     DirectSampler, DirectSamplerHook, NormalizerMode, SamplerExecutionMode, StagedSampler,
     StagedSamplerHook,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     hooks::sampler::{EpisodeBoundHook, StepBoundHook},
@@ -31,6 +32,7 @@ pub trait SamplerHookBuilder {
     fn build(self, n_envs: usize) -> Self::Target;
 }
 
+#[derive(Serialize, Deserialize)]
 struct RewardNormalizerParams {
     gamma: f32,
     clip_reward: f32,
@@ -46,9 +48,11 @@ impl RewardNormalizerParams {
 ///
 /// This hook builder configures rollout collection to stop after a fixed
 /// number of environment steps have been collected per active worker.
+#[derive(Serialize, Deserialize)]
 pub struct StepHookBound<E: Env<Tensor: R2lTensor>> {
     n_step: usize,
     reward_normalizer: Option<RewardNormalizerParams>,
+    #[serde(skip)]
     _phantom: PhantomData<E>,
 }
 
@@ -83,6 +87,7 @@ impl<E: Env<Tensor: R2lTensor>> SamplerHookBuilder for StepHookBound<E> {
 ///
 /// This hook builder configures rollout collection to stop after a fixed
 /// number of completed episodes have been collected per active worker.
+#[derive(Serialize, Deserialize)]
 pub struct EpisodeHookBound<E: Env> {
     n_episodes: usize,
     _phantom: PhantomData<E>,
@@ -108,9 +113,11 @@ impl<E: Env> SamplerHookBuilder for EpisodeHookBound<E> {
 }
 
 /// Marker selecting raw, unnormalized rollout storage.
+#[derive(Serialize, Deserialize)]
 pub struct DirectSamplerSelection;
 
 /// Marker selecting observation-normalized rollout storage.
+#[derive(Serialize, Deserialize)]
 pub struct StagedSamplerSelection {
     pub(crate) obs_clip: Option<f32>,
 }
@@ -120,6 +127,7 @@ pub struct StagedSamplerSelection {
 /// [`DefaultSamplerBuilder::new`] creates a homogeneous sampler using `n_envs`
 /// copies of one environment builder, a [`StepHookBound`] of `1024`, and
 /// [`SamplerExecutionMode::SingleThreaded`].
+#[derive(Serialize, Deserialize)]
 pub struct SamplerBuilder<
     EB: EnvBuilder,
     S: SamplerHookBuilder<Env = EB::Env>,
@@ -238,5 +246,19 @@ impl<
             NormalizerMode::Update,
             false,
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use r2l_gym::GymEnvBuilder;
+
+    use crate::builders::sampler::DefaultSamplerBuilder;
+
+    #[test]
+    fn serialize_sampler_builder() {
+        let sampler_builder = DefaultSamplerBuilder::<GymEnvBuilder>::new("", 10);
+        let serialized = yaml_serde::to_string(&sampler_builder).unwrap();
+        println!("{serialized}");
     }
 }

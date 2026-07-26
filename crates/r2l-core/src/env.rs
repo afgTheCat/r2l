@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::tensor::R2lTensor;
 
@@ -169,6 +170,7 @@ where
 }
 
 /// Collection of environment builders used to create rollout workers.
+#[derive(Serialize, Deserialize)]
 pub enum EnvBuilderType<EB: EnvBuilder> {
     /// Reuses one builder for `n_envs` homogeneous workers.
     Homogeneous {

@@ -9,6 +9,7 @@ use r2l_core::{
 use r2l_sampler::{
     DirectSampler, NormalizerMode, SamplerExecutionMode, StagedSampler, StagedSamplerHook,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     BestActorEvaluatorBuilder, DefaultOnPolicyAlgorithmHooks, OnPolicyCommandReceiver,
@@ -72,10 +73,12 @@ type NormalizedDefaultOnPolicyAlgorithmHooks<A, C, EB, H> = DefaultOnPolicyAlgor
 >;
 
 /// Internal builder for the default on-policy algorithm lifecycle hooks.
+#[derive(Serialize, Deserialize)]
 pub(crate) struct DefaultOnPolicyAlgorithmHooksBuilder<EB: EnvBuilder> {
     pub(crate) learning_rate_schedule: Option<LearningRateSchedule>,
     pub(crate) learning_schedule: LearningSchedule,
     pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
+    #[serde(skip)]
     pub(crate) command_rx: Option<OnPolicyCommandReceiver>,
 }
 
@@ -165,6 +168,7 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
 ///
 /// Algorithm-specific builders such as `PPOAlgorithmBuilder` and
 /// `A2CAlgorithmBuilder` build on top of this type.
+#[derive(Serialize, Deserialize)]
 pub struct OnPolicyAlgorithmBuilder<
     AB: AgentBuilder,
     EB: EnvBuilder,

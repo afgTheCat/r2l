@@ -6864,6 +6864,7 @@ dependencies = [
  "derive_more",
  "r2l-core",
  "rand 0.10.2",
+ "serde",
 ]
 
 [[package]]
@@ -6884,6 +6885,8 @@ dependencies = [
  "r2l-gym",
  "r2l-sampler",
  "rand 0.10.2",
+ "serde",
+ "yaml_serde",
 ]
 
 [[package]]
@@ -6924,6 +6927,7 @@ dependencies = [
  "itertools 0.14.0",
  "rand 0.10.2",
  "rayon",
+ "serde",
 ]
 
 [[package]]
@@ -6959,6 +6963,7 @@ dependencies = [
  "once_cell",
  "pyo3",
  "r2l-core",
+ "serde",
 ]
 
 [[package]]
@@ -6971,6 +6976,7 @@ dependencies = [
  "itertools 0.15.0",
  "r2l-core",
  "rand 0.10.2",
+ "serde",
 ]
 
 [[package]]

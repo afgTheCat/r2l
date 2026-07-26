@@ -17,7 +17,10 @@
 //! observations are one-hot encoded, while structured `Tuple` and `Dict`
 //! observations are flattened recursively.
 
+mod parse;
+
 use anyhow::Result;
+use parse::{parse_action, parse_gym_space, parse_obs};
 use pyo3::{
     PyObject, PyResult, Python,
     types::{PyAnyMethods, PyDict},
@@ -26,10 +29,7 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     tensor::TensorData,
 };
-
-mod parse;
-
-use parse::{parse_action, parse_gym_space, parse_obs};
+use serde::{Deserialize, Serialize};
 
 /// Python-backed Gymnasium environment implementing `r2l`'s [`Env`] trait.
 ///
@@ -118,6 +118,7 @@ impl Env for GymEnv {
 /// This is the standard way to plug Gymnasium environments into higher-level
 /// `r2l` builders such as `r2l_api::PPOAlgorithmBuilder` and
 /// `r2l_api::A2CAlgorithmBuilder`.
+#[derive(Serialize, Deserialize)]
 pub struct GymEnvBuilder(String);
 
 impl GymEnvBuilder {

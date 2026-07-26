@@ -1,7 +1,6 @@
 use std::sync::mpsc::Sender;
 
 use candle_core::Device;
-use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::a2c::A2CParams;
 use r2l_core::{
     env::{Env, EnvBuilder},
@@ -18,7 +17,7 @@ use crate::{
             hook::DefaultA2CHookBuilder,
         },
         agent::{AgentBuilder, OnPolicyAgentBuilder},
-        learning_module::OnPolicyOptimizerLayout,
+        learning_module::{AdamWParams, OnPolicyOptimizerLayout},
         on_policy::OnPolicyAlgorithmBuilder,
         sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
     },
@@ -140,7 +139,7 @@ where
     }
 
     /// Uses a joint policy-value learning module configuration.
-    pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: ParamsAdamW) -> Self {
+    pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: AdamWParams) -> Self {
         self.agent_builder = self.agent_builder.with_joint(max_grad_norm, params);
         self
     }
@@ -149,9 +148,9 @@ where
     pub fn with_split(
         mut self,
         policy_max_grad_norm: Option<f32>,
-        policy_params: ParamsAdamW,
+        policy_params: AdamWParams,
         value_max_grad_norm: Option<f32>,
-        value_params: ParamsAdamW,
+        value_params: AdamWParams,
     ) -> Self {
         self.agent_builder = self.agent_builder.with_split(
             policy_max_grad_norm,

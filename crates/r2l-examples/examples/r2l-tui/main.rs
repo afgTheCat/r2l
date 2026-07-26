@@ -274,7 +274,7 @@ pub fn train_ppo(
 ) -> anyhow::Result<()> {
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 4)
         .with_candle(candle_core::Device::Cpu)
-        .with_execution_mode(r2l_api::SamplerExecutionMode::Thread)
+        .with_execution_mode(r2l_api::SamplerExecutionMode::MultiThreaded)
         .with_clip_range(0.2)
         .with_entropy_coeff(0.)
         .with_lambda(0.95)
