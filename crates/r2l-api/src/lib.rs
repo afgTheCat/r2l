@@ -9,6 +9,7 @@ use burn::backend::{Autodiff, NdArray};
 // builders + hooks + higher level helpers
 mod agents;
 mod builders;
+mod builders2;
 mod evaluators;
 mod hooks;
 mod utils;
