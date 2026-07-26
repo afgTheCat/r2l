@@ -192,6 +192,11 @@ impl<
     C: OnPolicyAdapters<A::Actor, S>,
 > OnPolicyAlgorithm<A, S, H, C>
 {
+    /// Creates an on-policy algorithm from its runtime and lifecycle hooks.
+    pub fn new(runtime: OnPolicyRuntime<A, S, C>, hooks: H) -> Self {
+        Self { runtime, hooks }
+    }
+
     pub fn train(&mut self) -> Result<()> {
         return_on_hook_result!(self.hooks.init_hook(&mut self.runtime));
         loop {

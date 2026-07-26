@@ -10,17 +10,20 @@ use r2l_core::{
 };
 use r2l_gym::GymEnvBuilder;
 
-use crate::builders::{
-    a2c::{
-        agent::{A2CBurnAgentBuilder, A2CCandleAgentBuilder},
-        hook::DefaultA2CHookBuilder,
-    },
-    agent::{AgentBuilder, OnPolicyAgentBuilder},
-    learning_module::OnPolicyLearningModuleType,
-    on_policy::OnPolicyAlgorithmBuilder,
-    sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
-};
 use crate::hooks::a2c::A2CStats;
+use crate::{
+    builders::{
+        a2c::{
+            agent::{A2CBurnAgentBuilder, A2CCandleAgentBuilder},
+            hook::DefaultA2CHookBuilder,
+        },
+        agent::{AgentBuilder, OnPolicyAgentBuilder},
+        learning_module::OnPolicyLearningModuleType,
+        on_policy::OnPolicyAlgorithmBuilder,
+        sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
+    },
+    hooks::on_policy::LearningRateSchedule,
+};
 
 impl<B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     OnPolicyAlgorithmBuilder<OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>, EB, SH, ST>
@@ -108,7 +111,8 @@ where
     /// Sets the optimizer learning rate for all configured optimizers.
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.agent_builder = self.agent_builder.with_learning_rate(learning_rate);
-        self.learning_rate_schedule = Some(crate::LearningRateSchedule::Constant(learning_rate));
+        self.hooks_builder.learning_rate_schedule =
+            Some(LearningRateSchedule::Constant(learning_rate));
         self
     }
 
@@ -220,17 +224,13 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     pub fn with_candle(self, device: candle_core::Device) -> A2CCandleAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder,
             seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder: agent_builder.with_candle(device),
             seed,
         }
@@ -240,17 +240,13 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder,
             seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder: agent_builder.with_burn(),
             seed,
         }
@@ -273,17 +269,13 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder,
             seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder: agent_builder.with_candle(device),
             seed,
         }
@@ -293,17 +285,13 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder,
             seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder: agent_builder.with_burn(),
             seed,
         }

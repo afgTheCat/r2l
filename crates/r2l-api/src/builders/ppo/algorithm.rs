@@ -21,7 +21,7 @@ use crate::{
         },
         sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
     },
-    hooks::ppo::PPOStats,
+    hooks::{on_policy::LearningRateSchedule, ppo::PPOStats},
 };
 
 impl<B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
@@ -131,7 +131,8 @@ where
     /// Sets the optimizer learning rate for all configured optimizers.
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.agent_builder = self.agent_builder.with_learning_rate(learning_rate);
-        self.learning_rate_schedule = Some(crate::LearningRateSchedule::Constant(learning_rate));
+        self.hooks_builder.learning_rate_schedule =
+            Some(LearningRateSchedule::Constant(learning_rate));
         self
     }
 
@@ -246,17 +247,13 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     pub fn with_candle(self, device: candle_core::Device) -> PPOCandleAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder,
             seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder: agent_builder.with_candle(device),
             seed,
         }
@@ -266,17 +263,13 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     pub fn with_burn(self) -> PPOBurnAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder,
             seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder: agent_builder.with_burn(),
             seed,
         }
@@ -299,17 +292,13 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     pub fn with_candle(self, device: Device) -> PPOCandleAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder,
             seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder: agent_builder.with_candle(device),
             seed,
         }
@@ -319,17 +308,13 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     pub fn with_burn(self) -> PPOBurnAlgorithmBuilder<EB, SH, ST> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder,
             seed,
         } = self;
         OnPolicyAlgorithmBuilder {
             sampler_builder,
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator_builder,
+            hooks_builder,
             agent_builder: agent_builder.with_burn(),
             seed,
         }

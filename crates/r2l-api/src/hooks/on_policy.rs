@@ -1,10 +1,15 @@
-use std::marker::PhantomData;
+use std::{
+    marker::PhantomData,
+    path::PathBuf,
+    sync::mpsc::{Receiver, Sender},
+};
 
 use anyhow::Result;
 use r2l_core::{
     HookResult,
     buffers::TrajectoryBatch,
     env::Env,
+    models::Actor,
     on_policy::algorithm::{
         Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
     },
@@ -71,6 +76,72 @@ impl LearningRateSchedule {
     }
 }
 
+/// Commands processed by the default on-policy hooks at training boundaries.
+pub enum OnPolicyCommand {
+    /// Stops training before the next learning phase or after the current one.
+    Shutdown,
+    /// Serializes the current runtime actor to the given path.
+    SerializeCurrentPolicy(String),
+}
+
+/// Acknowledgements sent after an on-policy command has been processed.
+pub enum OnPolicyCommandResult {
+    /// Training is stopping and runtime cleanup will follow.
+    Stopping,
+    /// Training stopped completely, runtime cleanup has happened
+    Stopped,
+    /// The current runtime actor was serialized.
+    CurrentPolicySerialized,
+}
+
+/// Algorithm-side endpoint for receiving on-policy commands.
+pub struct OnPolicyCommandReceiver {
+    /// Receives commands from the user-side endpoint.
+    pub rx: Receiver<OnPolicyCommand>,
+    /// Sends command results to the user-side endpoint.
+    pub tx: Sender<OnPolicyCommandResult>,
+}
+
+impl OnPolicyCommandReceiver {
+    /// Creates an algorithm-side endpoint from its command and result channels.
+    pub fn new(rx: Receiver<OnPolicyCommand>, tx: Sender<OnPolicyCommandResult>) -> Self {
+        Self { rx, tx }
+    }
+}
+
+/// User-side endpoint for sending commands to an on-policy training loop.
+#[derive(Debug)]
+pub struct OnPolicyCommandSender {
+    /// Receives command results from the training loop.
+    pub rx: Receiver<OnPolicyCommandResult>,
+    /// Sends commands to the training loop.
+    pub tx: Sender<OnPolicyCommand>,
+}
+
+impl OnPolicyCommandSender {
+    /// Creates a user-side endpoint from its result and command channels.
+    pub fn new(rx: Receiver<OnPolicyCommandResult>, tx: Sender<OnPolicyCommand>) -> Self {
+        Self { rx, tx }
+    }
+
+    /// Shuts down the OnPolicyAlgorithm gracefully.
+    pub fn shutdown(&self) {
+        self.tx.send(OnPolicyCommand::Shutdown).unwrap();
+        // empty the response queue
+        while let Ok(_) = self.rx.recv() {}
+    }
+}
+
+/// Creates the algorithm-side receiver and user-side sender for on-policy commands.
+pub fn on_policy_command_channel() -> (OnPolicyCommandReceiver, OnPolicyCommandSender) {
+    let (command_tx, command_rx) = std::sync::mpsc::channel();
+    let (result_tx, result_rx) = std::sync::mpsc::channel();
+    (
+        OnPolicyCommandReceiver::new(command_rx, result_tx),
+        OnPolicyCommandSender::new(result_rx, command_tx),
+    )
+}
+
 /// Default outer-loop hooks used by high-level on-policy algorithm builders.
 ///
 /// This hook is responsible for lifecycle behavior around training rather than
@@ -89,6 +160,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     learning_rate_schedule: Option<LearningRateSchedule>,
     evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
     should_stop: bool,
+    command_rx: Option<OnPolicyCommandReceiver>,
     _phantom: PhantomData<(A, S, C, E)>,
 }
 
@@ -100,27 +172,45 @@ impl<
     S2: Sampler<Tensor = S::Tensor>,
 > DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
 {
-    /// Creates the default outer-loop hooks for the given learning schedule.
+    /// Creates the default hooks with their schedule, evaluator, and command receiver.
     pub fn new(
         learning_schedule: LearningSchedule,
         evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
+        learning_rate_schedule: Option<LearningRateSchedule>,
+        command_rx: Option<OnPolicyCommandReceiver>,
     ) -> Self {
         Self {
             learning_schedule,
-            learning_rate_schedule: None,
+            learning_rate_schedule,
             evaluator,
             should_stop: false,
+            command_rx,
             _phantom: PhantomData,
         }
     }
 
-    /// Applies a learning-rate schedule over the configured training duration.
-    pub fn with_learning_rate_schedule(
-        mut self,
-        learning_rate_schedule: LearningRateSchedule,
-    ) -> Self {
-        self.learning_rate_schedule = Some(learning_rate_schedule);
-        self
+    fn process_pending_commands(&self, runtime: &mut OnPolicyRuntime<A, S, C>) -> HookResult {
+        let Some(command_rx) = &self.command_rx else {
+            return HookResult::Continue;
+        };
+        while let Ok(command) = command_rx.rx.try_recv() {
+            match command {
+                OnPolicyCommand::Shutdown => {
+                    command_rx.tx.send(OnPolicyCommandResult::Stopping).unwrap();
+                    return HookResult::Break;
+                }
+                OnPolicyCommand::SerializeCurrentPolicy(path) => {
+                    let path = PathBuf::from(path);
+                    let policy_serialized = runtime.actor().try_serialize().unwrap();
+                    std::fs::write(path, policy_serialized).unwrap();
+                    command_rx
+                        .tx
+                        .send(OnPolicyCommandResult::CurrentPolicySerialized)
+                        .unwrap();
+                }
+            }
+        }
+        HookResult::Continue
     }
 }
 
@@ -176,8 +266,7 @@ impl<
                 .agent
                 .set_learning_rate(learning_rate_schedule.value(progress_remaining));
         }
-
-        HookResult::Continue
+        self.process_pending_commands(runtime)
     }
 
     fn post_training_hook(
@@ -187,10 +276,11 @@ impl<
         if let Some(evaluator) = &mut self.evaluator {
             evaluator.eval(runtime);
         }
+        let command_res = self.process_pending_commands(runtime);
         if self.should_stop {
             HookResult::Break
         } else {
-            HookResult::Continue
+            command_res
         }
     }
 
@@ -203,6 +293,9 @@ impl<
             evaluator.shutdown();
         }
         runtime.shutdown();
+        if let Some(command_rx) = &self.command_rx {
+            command_rx.tx.send(OnPolicyCommandResult::Stopped).unwrap();
+        }
         Ok(())
     }
 }

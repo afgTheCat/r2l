@@ -11,7 +11,7 @@ use r2l_burn::distributions::diagonal::DiagGaussianDistribution;
 const ENV_NAME: &str = "Pendulum-v1";
 
 fn main() {
-    let best_model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
+    let model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
     let hidden_layers = vec![64, 64];
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
@@ -24,13 +24,12 @@ fn main() {
         .with_learning_rate(0.001)
         .with_rollout_bound(StepHookBound::new(1024))
         .with_total_epochs(10)
-        .with_learning_schedule(LearningSchedule::rollout_bound(30))
-        .with_evaluator_best_actor_path(best_model_path.clone());
+        .with_learning_schedule(LearningSchedule::rollout_bound(30));
     let mut ppo = ppo_builder.build().unwrap();
     ppo.train().unwrap();
 
     // If we later decide to use the learned model, we can do so by importing it.
-    let mut store = SafetensorsStore::from_file(best_model_path);
+    let mut store = SafetensorsStore::from_file(model_path);
     let distribution = DiagGaussianDistribution::<NdArray>::from_store(&mut store);
     let (episodes, environments) = (10, 10);
     let mut evaluator = Evaluator::gym(ENV_NAME, episodes, environments, SamplerExecutionMode::Vec);

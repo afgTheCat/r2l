@@ -176,7 +176,7 @@ impl RlZooEnvironmentConfig {
             .with_total_epochs(self.n_epochs)
             .with_entropy_coeff(self.ent_coef)
             .with_sample_size(self.batch_size)
-            .with_learning_rate_schedule(self.learning_rate.into())
+            .with_learning_rate_schedule(Some(self.learning_rate.into()))
             .with_clip_range(self.clip_range.initial_value() as f32)
             .with_log_std_init(self.log_std_init)
             .with_vf_coeff(Some(self.vf_coef))

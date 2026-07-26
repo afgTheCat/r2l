@@ -2,7 +2,10 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::{f64, io, sync::mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats, StepHookBound};
+use r2l_api::{
+    LearningSchedule, OnPolicyCommandReceiver, OnPolicyCommandSender, PPOAlgorithmBuilder,
+    PPOStats, StepHookBound, on_policy_command_channel,
+};
 use r2l_examples::EventBox;
 use ratatui::layout::Alignment;
 use ratatui::widgets::Paragraph;
@@ -23,6 +26,7 @@ struct App {
     exit: bool,
     latest_update: Option<PPOStats>,
     rx: Receiver<EventBox>,
+    ppo_command: OnPolicyCommandSender,
     best_update: Option<PPOStats>,
     average_rollout_rewards: Vec<f32>,
     total_rollouts: usize,
@@ -60,7 +64,11 @@ impl Widget for &App {
 }
 
 impl App {
-    fn new(total_rollouts: usize, rx: Receiver<EventBox>) -> Self {
+    fn new(
+        total_rollouts: usize,
+        rx: Receiver<EventBox>,
+        ppo_command: OnPolicyCommandSender,
+    ) -> Self {
         Self {
             total_rollouts,
             rx,
@@ -69,6 +77,7 @@ impl App {
             average_rollout_rewards: vec![],
             current_rollout: 0,
             exit: false,
+            ppo_command,
         }
     }
 
@@ -120,6 +129,7 @@ impl App {
     // maybe something more eventually
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if let KeyCode::Char('q') = key_event.code {
+            self.ppo_command.shutdown();
             self.exit()
         }
     }
@@ -257,9 +267,14 @@ fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     });
 }
 
-pub fn train_ppo(tx: Sender<PPOStats>, total_rollouts: usize) -> anyhow::Result<()> {
+pub fn train_ppo(
+    tx: Sender<PPOStats>,
+    total_rollouts: usize,
+    command_rx: OnPolicyCommandReceiver,
+) -> anyhow::Result<()> {
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 4)
         .with_candle(candle_core::Device::Cpu)
+        .with_execution_mode(r2l_api::SamplerExecutionMode::Thread)
         .with_clip_range(0.2)
         .with_entropy_coeff(0.)
         .with_lambda(0.95)
@@ -269,7 +284,8 @@ pub fn train_ppo(tx: Sender<PPOStats>, total_rollouts: usize) -> anyhow::Result<
         .with_total_epochs(10)
         .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
         .with_log_progress(false)
-        .with_reporter(Some(tx));
+        .with_reporter(Some(tx))
+        .with_command_rx(command_rx);
     let mut ppo = ppo_builder.build()?;
     ppo.train()
 }
@@ -288,14 +304,17 @@ fn main() -> io::Result<()> {
     handle_input_events(event_tx.clone());
     adapt_ppo_events(update_rx, event_tx.clone());
     let total_rollouts = 30;
-    std::thread::spawn(move || match train_ppo(update_tx, total_rollouts) {
-        Ok(()) => {}
-        Err(err) => {
-            eprintln!("ppo was not trained normally, err: {err}")
-        }
-    });
+    let (command_rx, command_tx) = on_policy_command_channel();
+    std::thread::spawn(
+        move || match train_ppo(update_tx, total_rollouts, command_rx) {
+            Ok(()) => {}
+            Err(err) => {
+                eprintln!("ppo was not trained normally, err: {err}")
+            }
+        },
+    );
     let mut terminal = ratatui::init();
-    let app_result = App::new(total_rollouts, event_rx).run(&mut terminal);
+    let app_result = App::new(total_rollouts, event_rx, command_tx).run(&mut terminal);
     ratatui::restore();
     app_result
 }
