@@ -4,17 +4,17 @@ use std::path::PathBuf;
 use burn::backend::NdArray;
 use burn_store::SafetensorsStore;
 use r2l_api::{
-    Evaluator, LearningSchedule, PPOAlgorithmBuilder, SamplerExecutionMode, StepHookBound,
-    get_policy_receiver_and_commander,
+    Evaluator, LearningSchedule, OnPolicyCommand, PPOAlgorithmBuilder, SamplerExecutionMode,
+    StepHookBound, on_policy_command_channel,
 };
 use r2l_burn::distributions::diagonal::DiagGaussianDistribution;
 
 const ENV_NAME: &str = "Pendulum-v1";
 
 fn main() {
-    let best_model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
+    let model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
     let hidden_layers = vec![64, 64];
-    let (on_policy_commander, _on_policy_receiver) = get_policy_receiver_and_commander();
+    let (command_rx, command_tx) = on_policy_command_channel();
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
         .with_seed(0)
@@ -27,13 +27,19 @@ fn main() {
         .with_rollout_bound(StepHookBound::new(1024))
         .with_total_epochs(10)
         .with_learning_schedule(LearningSchedule::rollout_bound(30))
-        .with_commander(on_policy_commander)
-        .with_evaluator_best_actor_path(best_model_path.clone());
+        .with_command_rx(command_rx);
     let mut ppo = ppo_builder.build().unwrap();
+    command_tx
+        .tx
+        .send(OnPolicyCommand::SerializeCurrentPolicy(
+            model_path.display().to_string(),
+        ))
+        .unwrap();
     ppo.train().unwrap();
+    command_tx.rx.recv().unwrap();
 
     // If we later decide to use the learned model, we can do so by importing it.
-    let mut store = SafetensorsStore::from_file(best_model_path);
+    let mut store = SafetensorsStore::from_file(model_path);
     let distribution = DiagGaussianDistribution::<NdArray>::from_store(&mut store);
     let (episodes, environments) = (10, 10);
     let mut evaluator = Evaluator::gym(ENV_NAME, episodes, environments, SamplerExecutionMode::Vec);

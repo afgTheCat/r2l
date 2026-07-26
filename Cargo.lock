@@ -6919,7 +6919,6 @@ dependencies = [
  "anyhow",
  "burn",
  "candle-core 0.11.0",
- "crossbeam",
  "derive_more",
  "either",
  "itertools 0.14.0",

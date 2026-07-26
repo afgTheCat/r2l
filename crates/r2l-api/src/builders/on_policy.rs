@@ -11,7 +11,7 @@ use r2l_sampler::{
 };
 
 use crate::{
-    BestActorEvaluatorBuilder,
+    BestActorEvaluatorBuilder, DefaultOnPolicyAlgorithmHooks, OnPolicyCommandReceiver,
     builders::{
         agent::AgentBuilder,
         sampler::{
@@ -20,10 +20,7 @@ use crate::{
         },
     },
     hooks::{
-        on_policy::{
-            DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
-            OnPolicyCommander,
-        },
+        on_policy::{LearningRateSchedule, LearningSchedule},
         sampler::EpisodeBoundHook,
     },
 };
@@ -79,7 +76,7 @@ pub(crate) struct DefaultOnPolicyAlgorithmHooksBuilder<EB: EnvBuilder> {
     pub(crate) learning_rate_schedule: Option<LearningRateSchedule>,
     pub(crate) learning_schedule: LearningSchedule,
     pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
-    pub(crate) commander: Option<OnPolicyCommander>,
+    pub(crate) command_rx: Option<OnPolicyCommandReceiver>,
 }
 
 impl<EB: EnvBuilder> Default for DefaultOnPolicyAlgorithmHooksBuilder<EB> {
@@ -88,7 +85,7 @@ impl<EB: EnvBuilder> Default for DefaultOnPolicyAlgorithmHooksBuilder<EB> {
             learning_rate_schedule: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
             evaluator_builder: None,
-            commander: None,
+            command_rx: None,
         }
     }
 }
@@ -107,8 +104,8 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
     }
 
     /// Installs the external command receiver used during training.
-    fn with_commander(mut self, commander: OnPolicyCommander) -> Self {
-        self.commander = Some(commander);
+    fn with_command_rx(mut self, command_rx: OnPolicyCommandReceiver) -> Self {
+        self.command_rx = Some(command_rx);
         self
     }
 
@@ -124,8 +121,8 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
         DefaultOnPolicyAlgorithmHooks::new(
             self.learning_schedule,
             evaluator,
-            self.commander,
             self.learning_rate_schedule,
+            self.command_rx,
         )
     }
 
@@ -151,8 +148,8 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
         DefaultOnPolicyAlgorithmHooks::new(
             self.learning_schedule,
             evaluator,
-            self.commander,
             self.learning_rate_schedule,
+            self.command_rx,
         )
     }
 }
@@ -249,8 +246,8 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
     }
 
     /// Installs the external command receiver used during training.
-    pub fn with_commander(mut self, commander: OnPolicyCommander) -> Self {
-        self.hooks_builder = self.hooks_builder.with_commander(commander);
+    pub fn with_command_rx(mut self, command_rx: OnPolicyCommandReceiver) -> Self {
+        self.hooks_builder = self.hooks_builder.with_command_rx(command_rx);
         self
     }
 
@@ -344,16 +341,16 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
         self
     }
 
-    /// Sets the frequency with which the evaluator runs
-    pub fn with_evaluator_frequency(mut self, evauator_frequency: usize) -> Self {
-        assert!(evauator_frequency > 0);
+    /// Sets the frequency with which the evaluator runs.
+    pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
+        assert!(evaluator_frequency > 0);
         let evaluator_builder =
             if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-                evaluator_builder.with_evaluator_frequency(evauator_frequency)
+                evaluator_builder.with_evaluator_frequency(evaluator_frequency)
             } else {
                 let env_builder = self.sampler_builder.env_builder.clone();
                 BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
-                    .with_evaluator_frequency(evauator_frequency)
+                    .with_evaluator_frequency(evaluator_frequency)
             };
         self.hooks_builder.evaluator_builder = Some(evaluator_builder);
         self

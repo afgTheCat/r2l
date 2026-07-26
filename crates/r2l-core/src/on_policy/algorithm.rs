@@ -192,7 +192,7 @@ impl<
     C: OnPolicyAdapters<A::Actor, S>,
 > OnPolicyAlgorithm<A, S, H, C>
 {
-    /// Creates an on-policy algorithm with its external control handle.
+    /// Creates an on-policy algorithm from its runtime and lifecycle hooks.
     pub fn new(runtime: OnPolicyRuntime<A, S, C>, hooks: H) -> Self {
         Self { runtime, hooks }
     }

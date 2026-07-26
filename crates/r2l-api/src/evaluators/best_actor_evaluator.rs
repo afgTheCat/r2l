@@ -54,7 +54,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
         }
     }
 
-    /// Sets the frequency with which the evaluator runs
+    /// Sets the frequency with which the evaluator runs.
     pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
         self.evaluator_frequency = evaluator_frequency;
         self
@@ -213,17 +213,17 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
             (total_reward, total_episodes)
         };
         let avg_reward = total_reward / total_episodes;
-        if avg_reward > self.best_rewards {
-            self.best_rewards = avg_reward;
-            self.best_actor = Some(actor);
-            self.try_write_to_file()
-                .expect("failed to write improved actor checkpoint");
-        }
         if self.csv_states_path.is_some() {
             self.eval_states.push(EvalState {
                 avg_reward,
                 total_episodes,
             });
+        }
+        if avg_reward > self.best_rewards {
+            self.best_rewards = avg_reward;
+            self.best_actor = Some(actor);
+            self.try_write_to_file()
+                .expect("failed to write improved actor checkpoint");
         }
     }
 

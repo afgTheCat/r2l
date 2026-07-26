@@ -28,8 +28,9 @@ pub use evaluators::best_actor_evaluator::{BestActorEvaluator, BestActorEvaluato
 pub use evaluators::simple_evaluator::Evaluator;
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
 pub use hooks::on_policy::{
-    DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule, OnPolicyCmd,
-    OnPolicyCommander, OnPolicyResult, get_policy_receiver_and_commander,
+    DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule, OnPolicyCommand,
+    OnPolicyCommandReceiver, OnPolicyCommandResult, OnPolicyCommandSender,
+    on_policy_command_channel,
 };
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
