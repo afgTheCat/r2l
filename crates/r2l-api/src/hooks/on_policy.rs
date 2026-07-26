@@ -88,6 +88,8 @@ pub enum OnPolicyCommand {
 pub enum OnPolicyCommandResult {
     /// Training is stopping and runtime cleanup will follow.
     Stopping,
+    /// Training stopped completely, runtime cleanup has happened
+    Stopped,
     /// The current runtime actor was serialized.
     CurrentPolicySerialized,
 }
@@ -108,6 +110,7 @@ impl OnPolicyCommandReceiver {
 }
 
 /// User-side endpoint for sending commands to an on-policy training loop.
+#[derive(Debug)]
 pub struct OnPolicyCommandSender {
     /// Receives command results from the training loop.
     pub rx: Receiver<OnPolicyCommandResult>,
@@ -119,6 +122,13 @@ impl OnPolicyCommandSender {
     /// Creates a user-side endpoint from its result and command channels.
     pub fn new(rx: Receiver<OnPolicyCommandResult>, tx: Sender<OnPolicyCommand>) -> Self {
         Self { rx, tx }
+    }
+
+    /// Shuts down the OnPolicyAlgorithm gracefully.
+    pub fn shutdown(&self) {
+        self.tx.send(OnPolicyCommand::Shutdown).unwrap();
+        // empty the response queue
+        while let Ok(_) = self.rx.recv() {}
     }
 }
 
@@ -183,7 +193,6 @@ impl<
         let Some(command_rx) = &self.command_rx else {
             return HookResult::Continue;
         };
-
         while let Ok(command) = command_rx.rx.try_recv() {
             match command {
                 OnPolicyCommand::Shutdown => {
@@ -201,7 +210,6 @@ impl<
                 }
             }
         }
-
         HookResult::Continue
     }
 }
@@ -252,6 +260,7 @@ impl<
                 1.0 - completed_steps as f64 / *total_steps as f64
             }
         };
+
         if let Some(learning_rate_schedule) = self.learning_rate_schedule {
             runtime
                 .agent
@@ -284,6 +293,9 @@ impl<
             evaluator.shutdown();
         }
         runtime.shutdown();
+        if let Some(command_rx) = &self.command_rx {
+            command_rx.tx.send(OnPolicyCommandResult::Stopped).unwrap();
+        }
         Ok(())
     }
 }

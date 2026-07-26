@@ -254,9 +254,9 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST
     /// Sets the learning-rate schedule applied over the training duration.
     pub fn with_learning_rate_schedule(
         mut self,
-        learning_rate_schedule: LearningRateSchedule,
+        learning_rate_schedule: Option<LearningRateSchedule>,
     ) -> Self {
-        self.hooks_builder.learning_rate_schedule = Some(learning_rate_schedule);
+        self.hooks_builder.learning_rate_schedule = learning_rate_schedule;
         self
     }
 

@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use burn::backend::NdArray;
 use burn_store::SafetensorsStore;
 use r2l_api::{
-    Evaluator, LearningSchedule, OnPolicyCommand, PPOAlgorithmBuilder, SamplerExecutionMode,
-    StepHookBound, on_policy_command_channel,
+    Evaluator, LearningSchedule, PPOAlgorithmBuilder, SamplerExecutionMode, StepHookBound,
 };
 use r2l_burn::distributions::diagonal::DiagGaussianDistribution;
 
@@ -14,7 +13,6 @@ const ENV_NAME: &str = "Pendulum-v1";
 fn main() {
     let model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
     let hidden_layers = vec![64, 64];
-    let (command_rx, command_tx) = on_policy_command_channel();
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
         .with_seed(0)
@@ -26,17 +24,9 @@ fn main() {
         .with_learning_rate(0.001)
         .with_rollout_bound(StepHookBound::new(1024))
         .with_total_epochs(10)
-        .with_learning_schedule(LearningSchedule::rollout_bound(30))
-        .with_command_rx(command_rx);
+        .with_learning_schedule(LearningSchedule::rollout_bound(30));
     let mut ppo = ppo_builder.build().unwrap();
-    command_tx
-        .tx
-        .send(OnPolicyCommand::SerializeCurrentPolicy(
-            model_path.display().to_string(),
-        ))
-        .unwrap();
     ppo.train().unwrap();
-    command_tx.rx.recv().unwrap();
 
     // If we later decide to use the learned model, we can do so by importing it.
     let mut store = SafetensorsStore::from_file(model_path);
