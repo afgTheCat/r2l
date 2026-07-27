@@ -20,10 +20,9 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-use crate::{
+pub use crate::{
     RolloutMode, SamplerExecutionMode, SamplerHookResult,
     staged::{
-        // clipped_normalizer::ClippedNormalizer,
         worker::ThreadHandle,
         worker::{ThreadWorkerFactory, ThreadWorkers, VecWorkers, WorkerPool},
     },
@@ -42,7 +41,7 @@ pub trait StagedSamplerHook {
 }
 
 /// Mutable normalized-sampler state exposed to hook implementations.
-pub struct StagedSamplerCore<E: Env<Tensor: R2lTensor>> {
+pub struct StagedSamplerCore<E: Env> {
     /// Inline or threaded environment workers.
     pub pool: WorkerPool<E>,
     /// Optional shared observation normalizer.
@@ -53,7 +52,7 @@ pub struct StagedSamplerCore<E: Env<Tensor: R2lTensor>> {
     pub buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
 
-impl<E: Env<Tensor: R2lTensor>> StagedSamplerCore<E> {
+impl<E: Env> StagedSamplerCore<E> {
     /// Builds normalized sampler state and its environment workers.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
@@ -172,7 +171,7 @@ impl<E: Env<Tensor: R2lTensor>> StagedSamplerCore<E> {
         terminations
     }
 
-    fn step(&mut self) -> Vec<bool> {
+    fn step(&mut self) {
         let multi_memory = self.pool.step();
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
@@ -180,11 +179,9 @@ impl<E: Env<Tensor: R2lTensor>> StagedSamplerCore<E> {
         }
         let last_states = self.last_states.lock().unwrap();
         let memories = multi_memory.into_memories(&last_states);
-        let terminations = memories.iter().map(|memory| memory.is_done()).collect();
         for (idx, memory) in memories.into_iter().enumerate() {
             self.buffers[idx].push(memory);
         }
-        terminations
     }
 
     /// Clears all output trajectory buffers.

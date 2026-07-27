@@ -7,6 +7,7 @@
 
 mod direct;
 mod staged;
+pub mod staged2;
 
 pub use direct::worker::WorkerPool;
 pub use direct::{DirectSampler, DirectSamplerCore, DirectSamplerHook, SamplerHookResult};

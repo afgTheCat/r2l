@@ -27,71 +27,6 @@ impl<T: R2lTensor> Default for TrajectoryBuffer<T> {
     }
 }
 
-/// Borrowed view over the aligned fields of a [`TrajectoryBuffer`].
-pub struct TrajectoryView<'a, T: R2lTensor> {
-    /// Observations before each action.
-    pub states: &'a [T],
-    /// Observations after each action.
-    pub next_states: &'a [T],
-    /// Actions selected at each step.
-    pub actions: &'a [T],
-    /// Rewards produced at each step.
-    pub rewards: &'a [f32],
-    /// Terminal-state flags for each step.
-    pub terminated: &'a [bool],
-    /// Truncation flags for each step.
-    pub truncated: &'a [bool],
-}
-
-impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryView<'a, T> {
-    fn len(&self) -> usize {
-        self.states.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.states.is_empty()
-    }
-
-    fn states(&self) -> &[T] {
-        self.states
-    }
-
-    fn next_states(&self) -> &[T] {
-        self.next_states
-    }
-
-    fn actions(&self) -> &[T] {
-        self.actions
-    }
-
-    fn rewards(&self) -> &[f32] {
-        self.rewards
-    }
-
-    fn terminated(&self) -> &[bool] {
-        self.terminated
-    }
-
-    fn truncated(&self) -> &[bool] {
-        self.truncated
-    }
-}
-
-impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
-    /// Iterates over combined termination and truncation flags.
-    pub fn dones(&self) -> impl Iterator<Item = bool> {
-        self.terminated
-            .iter()
-            .zip(self.truncated.iter())
-            .map(|(terminated, truncated)| *terminated || *truncated)
-    }
-
-    /// Counts transitions that end an episode.
-    pub fn episode_terminations(&self) -> usize {
-        self.dones().filter(|x| *x).count()
-    }
-}
-
 impl<T: R2lTensor> TrajectoryBuffer<T> {
     /// Removes all stored transitions while retaining allocated capacity.
     pub fn clear(&mut self) {
@@ -168,5 +103,70 @@ impl<T: R2lTensor> TrajectoryBuffer<T> {
             terminated: &self.terminated,
             truncated: &self.truncated,
         }
+    }
+}
+
+/// Borrowed view over the aligned fields of a [`TrajectoryBuffer`].
+pub struct TrajectoryView<'a, T: R2lTensor> {
+    /// Observations before each action.
+    pub states: &'a [T],
+    /// Observations after each action.
+    pub next_states: &'a [T],
+    /// Actions selected at each step.
+    pub actions: &'a [T],
+    /// Rewards produced at each step.
+    pub rewards: &'a [f32],
+    /// Terminal-state flags for each step.
+    pub terminated: &'a [bool],
+    /// Truncation flags for each step.
+    pub truncated: &'a [bool],
+}
+
+impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryView<'a, T> {
+    fn len(&self) -> usize {
+        self.states.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.states.is_empty()
+    }
+
+    fn states(&self) -> &[T] {
+        self.states
+    }
+
+    fn next_states(&self) -> &[T] {
+        self.next_states
+    }
+
+    fn actions(&self) -> &[T] {
+        self.actions
+    }
+
+    fn rewards(&self) -> &[f32] {
+        self.rewards
+    }
+
+    fn terminated(&self) -> &[bool] {
+        self.terminated
+    }
+
+    fn truncated(&self) -> &[bool] {
+        self.truncated
+    }
+}
+
+impl<'a, T: R2lTensor> TrajectoryView<'a, T> {
+    /// Iterates over combined termination and truncation flags.
+    pub fn dones(&self) -> impl Iterator<Item = bool> {
+        self.terminated
+            .iter()
+            .zip(self.truncated.iter())
+            .map(|(terminated, truncated)| *terminated || *truncated)
+    }
+
+    /// Counts transitions that end an episode.
+    pub fn episode_terminations(&self) -> usize {
+        self.dones().filter(|x| *x).count()
     }
 }
