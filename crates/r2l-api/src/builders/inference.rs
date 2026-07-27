@@ -1,17 +1,19 @@
 use anyhow::{Result, bail};
 use burn::{backend::NdArray, prelude::Backend};
-use r2l_burn::distributions::BurnPolicyKind;
-use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     ActorWrapper,
     buffers::Memory,
     env::{
-        Env, EnvBuilder, Snapshot,
+        Env, EnvBuilder, EnvBuilderType,
         normalizer::{ClippedNormalizer, NormalizerMode},
     },
     models::{ActivationFunction, Actor},
-    rng::{sample_u64, set_seed},
+    rng::set_seed,
     tensor::R2lTensor,
+};
+use r2l_sampler::{
+    SamplerExecutionMode,
+    staged2::{NormalizedPool, WorkerPool2},
 };
 
 use crate::{
@@ -22,60 +24,77 @@ use crate::{
     },
 };
 
-/// Stateful coupling of one environment and one inference actor.
-pub struct InferenceRunner<E: Env, A: Actor<Tensor = E::Tensor>> {
-    env: E,
-    actor: A,
-    obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    current_observation: Option<E::Tensor>,
-    episode_done: bool,
-    initial_seed: Option<u64>,
+enum InferencePool<E: Env> {
+    Raw(WorkerPool2<E>),
+    Normalized(NormalizedPool<E>),
 }
 
-/// Candle-backed inference runner produced by [`InferenceRunnerBuilder`].
-pub type CandleInferenceRunner<EB> = InferenceRunner<
-    <EB as EnvBuilder>::Env,
-    ActorWrapper<CandlePolicyKind, <<EB as EnvBuilder>::Env as Env>::Tensor>,
->;
-
-/// Burn-backed inference runner produced by [`InferenceRunnerBuilder`].
-pub type BurnInferenceRunner<EB> = InferenceRunner<
-    <EB as EnvBuilder>::Env,
-    ActorWrapper<BurnPolicyKind<NdArray>, <<EB as EnvBuilder>::Env as Env>::Tensor>,
->;
-
-impl<E: Env<Tensor: R2lTensor>, A: Actor<Tensor = E::Tensor>> InferenceRunner<E, A> {
-    fn new(
-        env: E,
-        actor: A,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-        initial_seed: Option<u64>,
-    ) -> Self {
-        Self {
-            env,
-            actor,
-            obs_normalizer,
-            current_observation: None,
-            episode_done: false,
-            initial_seed,
+impl<E: Env> InferencePool<E> {
+    fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: A) {
+        match self {
+            Self::Raw(pool) => pool.set_policy(actor),
+            Self::Normalized(pool) => pool.set_policy(actor),
         }
     }
 
-    /// Resets the environment and returns its raw initial observation.
-    ///
-    /// The builder seed is used for the first reset. Later resets use a fresh
-    /// sampled seed unless [`reset_with_seed`](Self::reset_with_seed) is used.
-    pub fn reset(&mut self) -> Result<E::Tensor> {
-        let seed = self.initial_seed.take().unwrap_or_else(sample_u64);
-        self.reset_with_seed(seed)
+    fn step(&mut self) -> Memory<E::Tensor> {
+        let memories = match self {
+            Self::Raw(pool) => pool.step(),
+            Self::Normalized(pool) => pool.step(),
+        };
+        memories
+            .into_iter()
+            .next()
+            .expect("an inference pool always contains one environment")
     }
 
-    /// Resets the environment with an explicit seed.
-    pub fn reset_with_seed(&mut self, seed: u64) -> Result<E::Tensor> {
-        let observation = self.env.reset(seed)?;
-        self.current_observation = Some(observation.clone());
-        self.episode_done = false;
-        Ok(observation)
+    fn reset(&mut self) -> E::Tensor {
+        match self {
+            Self::Raw(pool) => {
+                pool.reset_all();
+                pool.current_states()
+            }
+            Self::Normalized(pool) => {
+                pool.reset_all();
+                pool.current_states()
+            }
+        }
+        .pop()
+        .expect("an inference pool always contains one environment")
+    }
+
+    fn current_observation(&mut self) -> E::Tensor {
+        match self {
+            Self::Raw(pool) => pool.current_states(),
+            Self::Normalized(pool) => pool.current_states(),
+        }
+        .pop()
+        .expect("an inference pool always contains one environment")
+    }
+}
+
+/// Stateful single-environment inference facade.
+///
+/// Environment interaction is delegated to the same raw or normalized pools
+/// used by staged sampling. Terminal observations remain available until the
+/// caller explicitly resets the runner.
+pub struct InferenceRunner<E: Env> {
+    pool: InferencePool<E>,
+    episode_done: bool,
+}
+
+/// Candle-backed inference runner produced by [`InferenceRunnerBuilder`].
+pub type CandleInferenceRunner<EB> = InferenceRunner<<EB as EnvBuilder>::Env>;
+
+/// Burn-backed inference runner produced by [`InferenceRunnerBuilder`].
+pub type BurnInferenceRunner<EB> = InferenceRunner<<EB as EnvBuilder>::Env>;
+
+impl<E: Env> InferenceRunner<E> {
+    fn new(pool: InferencePool<E>) -> Self {
+        Self {
+            pool,
+            episode_done: false,
+        }
     }
 
     /// Chooses an action and advances the environment by one step.
@@ -83,50 +102,33 @@ impl<E: Env<Tensor: R2lTensor>, A: Actor<Tensor = E::Tensor>> InferenceRunner<E,
         if self.episode_done {
             bail!("the episode has ended; reset the inference runner before stepping again");
         }
-        let observation = self
-            .current_observation
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("reset the inference runner before stepping"))?;
-        let mut actor_observation = vec![observation.clone()];
-        if let Some(normalizer) = &self.obs_normalizer {
-            normalizer.apply_in_place(&mut actor_observation);
-        }
-        let action = self.actor.action(actor_observation.pop().unwrap())?;
-        let Snapshot {
-            state: next_observation,
-            reward,
-            terminated,
-            truncated,
-        } = self.env.step(action.clone())?;
-        self.current_observation = Some(next_observation.clone());
-        self.episode_done = terminated || truncated;
-        Ok(Memory {
-            state: observation,
-            action,
-            next_state: next_observation,
-            reward,
-            terminated,
-            truncated,
-        })
+        let memory = self.pool.step();
+        self.episode_done = memory.is_done();
+        Ok(memory)
     }
 
-    /// Returns the current raw observation, if the runner has been reset.
-    pub fn current_observation(&self) -> Option<&E::Tensor> {
-        self.current_observation.as_ref()
+    /// Resets the environment and returns its current actor observation.
+    ///
+    /// The returned observation is normalized when the runner was built with
+    /// an observation normalizer.
+    pub fn reset(&mut self) -> E::Tensor {
+        let observation = self.pool.reset();
+        self.episode_done = false;
+        observation
     }
 
-    /// Returns the inference actor.
-    pub fn actor(&self) -> &A {
-        &self.actor
+    /// Clones the current actor observation.
+    pub fn current_observation(&mut self) -> E::Tensor {
+        self.pool.current_observation()
     }
 
-    /// Returns the environment.
-    pub fn env(&self) -> &E {
-        &self.env
+    /// Returns whether the current episode has ended.
+    pub fn episode_done(&self) -> bool {
+        self.episode_done
     }
 }
 
-/// Builds an [`InferenceRunner`] from an environment and policy configuration.
+/// Builds a single-environment [`InferenceRunner`].
 pub struct InferenceRunnerBuilder<
     EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>,
     Backend = CandleBackend,
@@ -187,7 +189,7 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>, Backend> InferenceRunnerBuilde
         self
     }
 
-    /// Sets the seed used for policy construction and the first environment reset.
+    /// Sets the seed used for policy construction and initial environment state.
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.seed = Some(seed);
         self
@@ -217,6 +219,21 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>, Backend> InferenceRunnerBuilde
             seed: self.seed,
         }
     }
+
+    fn build_pool(self) -> InferencePool<<EB as EnvBuilder>::Env> {
+        let env_builder = EnvBuilderType::homogeneous(self.env_builder, 1);
+        match self.obs_normalizer {
+            Some(obs_normalizer) => InferencePool::Normalized(NormalizedPool::build(
+                env_builder,
+                SamplerExecutionMode::SingleThreaded,
+                obs_normalizer,
+            )),
+            None => InferencePool::Raw(WorkerPool2::build(
+                env_builder,
+                SamplerExecutionMode::SingleThreaded,
+            )),
+        }
+    }
 }
 
 impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> InferenceRunnerBuilder<EB, CandleBackend> {
@@ -226,19 +243,15 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> InferenceRunnerBuilder<EB, Can
             set_seed(seed);
             self.backend.seed(seed);
         }
-        let env = self.env_builder.build_env()?;
-        let env_description = env.env_description();
+        let env_description = self.env_builder.env_description()?;
         let actor = self.policy_builder.build_candle(
             env_description.observation_space.size(),
             env_description.action_space,
             &self.backend.device,
         )?;
-        Ok(InferenceRunner::new(
-            env,
-            ActorWrapper::new(actor),
-            self.obs_normalizer,
-            self.seed,
-        ))
+        let mut pool = self.build_pool();
+        pool.set_policy(ActorWrapper::new(actor));
+        Ok(InferenceRunner::new(pool))
     }
 }
 
@@ -249,17 +262,13 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> InferenceRunnerBuilder<EB, Bur
             set_seed(seed);
             BurnBackend::seed(&Default::default(), seed);
         }
-        let env = self.env_builder.build_env()?;
-        let env_description = env.env_description();
+        let env_description = self.env_builder.env_description()?;
         let actor = self.policy_builder.build_burn::<NdArray, _>(
             env_description.observation_space.size(),
             env_description.action_space,
         );
-        Ok(InferenceRunner::new(
-            env,
-            ActorWrapper::new(actor),
-            self.obs_normalizer,
-            self.seed,
-        ))
+        let mut pool = self.build_pool();
+        pool.set_policy(ActorWrapper::new(actor));
+        Ok(InferenceRunner::new(pool))
     }
 }

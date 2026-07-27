@@ -41,14 +41,11 @@ impl<E: Env> Worker<E> {
         let state = state_handle.lock().unwrap().clone();
         let action = actor.action(state.clone()).unwrap();
         let Snapshot {
-            state: mut next_state,
+            state: next_state,
             reward,
             terminated,
             truncated,
         } = self.env.step(action.clone()).unwrap();
-        if terminated || truncated {
-            next_state = self.env.reset(sample_u64()).unwrap();
-        }
         *state_handle.lock().unwrap() = next_state.clone();
         Memory {
             state,

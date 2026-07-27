@@ -43,6 +43,9 @@ impl<E: Env> NormalizedPool<E> {
 
     /// Steps selected workers and returns transitions in `indices` order.
     pub fn step_indexed(&mut self, indices: &[usize]) -> Vec<Memory<E::Tensor>> {
+        if indices.is_empty() {
+            return Vec::new();
+        }
         let mut memories = self.pool.step_indexed(indices);
         let mut states = self.pool.last_state_mut();
         let mut next_states = indices
@@ -71,6 +74,9 @@ impl<E: Env> NormalizedPool<E> {
 
     /// Resets and normalizes selected environments.
     pub fn reset_indexed(&mut self, indices: &[usize]) {
+        if indices.is_empty() {
+            return;
+        }
         self.pool.reset_indexed(indices);
         let mut states = self.pool.last_state_mut();
         let mut reset_states = indices

@@ -2,6 +2,7 @@ mod normalized_pool;
 mod worker;
 
 use itertools::Itertools;
+pub use normalized_pool::NormalizedPool;
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
     env::{
@@ -13,9 +14,7 @@ use r2l_core::{
 };
 pub use worker::WorkerPool2;
 
-use crate::{
-    RolloutMode, SamplerExecutionMode, SamplerHookResult, staged2::normalized_pool::NormalizedPool,
-};
+use crate::{RolloutMode, SamplerExecutionMode, SamplerHookResult};
 
 /// Hook controlling rollout collection for [`StagedSampler2`].
 pub trait StagedSampler2Hook {
@@ -70,12 +69,15 @@ impl<E: Env> StagedSamplerCore2<E> {
                         break;
                     }
                     let memories = self.pool.step_indexed(&indices);
+                    let mut reset_indices = Vec::new();
                     for (idx, memory) in indices.into_iter().zip(memories) {
                         if memory.is_done() {
                             episode_counts[idx] += 1;
+                            reset_indices.push(idx);
                         }
                         self.buffers[idx].push(memory);
                     }
+                    self.pool.reset_indexed(&reset_indices);
                 }
             }
         }
@@ -83,9 +85,14 @@ impl<E: Env> StagedSamplerCore2<E> {
 
     fn step(&mut self) {
         let memories = self.pool.step();
+        let mut reset_indices = Vec::new();
         for (idx, memory) in memories.into_iter().enumerate() {
+            if memory.is_done() {
+                reset_indices.push(idx);
+            }
             self.buffers[idx].push(memory)
         }
+        self.pool.reset_indexed(&reset_indices);
     }
 
     /// Clears all output buffers.
