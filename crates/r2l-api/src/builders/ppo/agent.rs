@@ -3,16 +3,15 @@ use std::sync::mpsc::Sender;
 use burn::prelude::Backend;
 use candle_core::Device;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
-use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
+use r2l_core::{env::Space, tensor::R2lTensor};
 
 use crate::{
     BurnBackend,
     agents::ppo::{PPOBurnAgent, PPOCandleAgent},
     builders::{
-        agent::{
-            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
-        },
+        agent::{AgentBuilder, BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder},
         learning_module::{AdamWParams, OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
+        policy::PolicyBuilder,
         ppo::hook::DefaultPPOHookBuilder,
     },
     hooks::ppo::PPOStats,
@@ -29,7 +28,7 @@ pub type PPOCandleAgentBuilder = PPOAgentBuilder;
 
 /// PPO agent builder specialized to the Burn backend.
 pub type PPOBurnAgentBuilder =
-    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, BuilderBurnBackend>;
+    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, BurnBackendConfig>;
 
 impl PPOBurnAgentBuilder {
     fn seed(&self, seed: Option<u64>) {
@@ -52,10 +51,8 @@ impl PPOAgentBuilder {
             hook_builder: DefaultPPOHookBuilder::new(n_envs),
             params: PPOParams::default(),
             learning_module_builder: OnPolicyLearningModuleBuilder {
-                policy_hidden_layers: vec![64, 64],
+                policy_builder: PolicyBuilder::default(),
                 value_hidden_layers: vec![64, 64],
-                activation_function: ActivationFunction::default(),
-                log_std_init: 0.0,
                 optimizer_layout: OnPolicyOptimizerLayout::Joint {
                     params: AdamWParams {
                         lr: 3e-4,

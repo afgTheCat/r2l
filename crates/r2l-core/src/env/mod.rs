@@ -1,3 +1,5 @@
+pub mod normalizer;
+
 use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use anyhow::Result;

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize, de::Error as _};
 use crate::builders::learning_module::{
     AdamWParams, OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout,
 };
+use crate::builders::policy::PolicyBuilder;
 
 /// Trait implemented by concrete `Agent` builders.
 ///
@@ -28,7 +29,7 @@ pub trait AgentBuilder {
 
 /// Marker type representing the Burn backend in `Agent` builders.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct BurnBackend;
+pub struct BurnBackendConfig;
 
 /// Candle backend configuration used by `Agent` builders.
 #[derive(Debug, Clone)]
@@ -101,6 +102,12 @@ pub struct OnPolicyAgentBuilder<Params, HookBuilder, Backend> {
 }
 
 impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Backend> {
+    /// Replaces the policy architecture configuration.
+    pub fn with_policy_builder(mut self, policy_builder: PolicyBuilder) -> Self {
+        self.learning_module_builder.policy_builder = policy_builder;
+        self
+    }
+
     /// Switches the builder to the Candle backend.
     pub fn with_candle(
         self,
@@ -121,7 +128,7 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
     }
 
     /// Switches the builder to the Burn backend.
-    pub fn with_burn(self) -> OnPolicyAgentBuilder<Params, HookBuilder, BurnBackend> {
+    pub fn with_burn(self) -> OnPolicyAgentBuilder<Params, HookBuilder, BurnBackendConfig> {
         let OnPolicyAgentBuilder {
             params,
             hook_builder,
@@ -132,25 +139,27 @@ impl<Params, HookBuilder, Backend> OnPolicyAgentBuilder<Params, HookBuilder, Bac
             params,
             hook_builder,
             learning_module_builder,
-            backend: BurnBackend,
+            backend: BurnBackendConfig,
         }
     }
 
     /// Sets the hidden layer sizes used by the policy network.
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
-        self.learning_module_builder.policy_hidden_layers = policy_hidden_layers;
+        self.learning_module_builder.policy_builder.hidden_layers = policy_hidden_layers;
         self
     }
 
     /// Sets the hidden-layer activation function used by policy and value networks.
     pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
-        self.learning_module_builder.activation_function = activation_function;
+        self.learning_module_builder
+            .policy_builder
+            .activation_function = activation_function;
         self
     }
 
     /// Sets the initial log standard deviation for Gaussian policies.
     pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
-        self.learning_module_builder.log_std_init = log_std_init;
+        self.learning_module_builder.policy_builder.log_std_init = log_std_init;
         self
     }
 

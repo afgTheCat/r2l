@@ -1,12 +1,14 @@
 use std::marker::PhantomData;
 
 use r2l_core::{
-    env::{Env, EnvBuilder, EnvBuilderType},
+    env::{
+        Env, EnvBuilder, EnvBuilderType,
+        normalizer::{ClippedNormalizer, NormalizerMode},
+    },
     tensor::R2lTensor,
 };
 use r2l_sampler::{
-    DirectSampler, DirectSamplerHook, NormalizerMode, SamplerExecutionMode, StagedSampler,
-    StagedSamplerHook,
+    DirectSampler, DirectSamplerHook, SamplerExecutionMode, StagedSampler, StagedSamplerHook,
 };
 use serde::{Deserialize, Serialize};
 
@@ -238,13 +240,16 @@ impl<
     pub fn build(self) -> StagedSampler<EB::Env, S::Target> {
         let n_envs = self.env_builder.num_envs();
         let hook = self.hook_builder.build(n_envs);
-        StagedSampler::build(
+        let obs_normalizer = self.sampler_type.obs_clip.map(|clip| {
+            let env_description = self.env_builder.env_description().unwrap();
+            let obs_size = env_description.observation_space.size();
+            ClippedNormalizer::new(NormalizerMode::Update, clip, vec![obs_size])
+        });
+        StagedSampler::build_with_obs_normalizer(
             self.env_builder,
             hook,
             self.execution_mode,
-            self.sampler_type.obs_clip,
-            NormalizerMode::Update,
-            false,
+            obs_normalizer,
         )
     }
 }

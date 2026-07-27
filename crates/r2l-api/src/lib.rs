@@ -22,9 +22,13 @@ pub use builders::a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAg
 pub use builders::a2c::algorithm::{
     A2CAlgorithmBuilder, A2CBurnAlgorithmBuilder, A2CCandleAlgorithmBuilder,
 };
-pub use builders::agent::OnPolicyAgentBuilder;
+pub use builders::agent::{BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder};
+pub use builders::inference::{
+    BurnInferenceRunner, CandleInferenceRunner, InferenceRunner, InferenceRunnerBuilder,
+};
 pub use builders::learning_module::OnPolicyOptimizerLayout;
 pub use builders::on_policy::OnPolicyAlgorithmBuilder;
+pub use builders::policy::PolicyBuilder;
 pub use builders::ppo::agent::{PPOAgentBuilder, PPOBurnAgentBuilder, PPOCandleAgentBuilder};
 pub use builders::ppo::algorithm::{
     PPOAlgorithmBuilder, PPOBurnAlgorithmBuilder, PPOCandleAlgorithmBuilder,
@@ -42,7 +46,10 @@ pub use hooks::on_policy::{
 pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
 pub use r2l_core::{
-    env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
+    env::{
+        Env, EnvBuilder, EnvDescription, Snapshot, Space,
+        normalizer::{ClippedNormalizer, NormalizerMode},
+    },
     models::ActivationFunction,
     on_policy::algorithm::OnPolicyAlgorithm,
     tensor::TensorData,

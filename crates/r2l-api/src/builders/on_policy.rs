@@ -1,14 +1,12 @@
 use r2l_core::{
-    env::{Env, EnvBuilder},
+    env::{Env, EnvBuilder, normalizer::NormalizerMode},
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime, Sampler,
     },
     rng::set_seed,
     tensor::R2lTensor,
 };
-use r2l_sampler::{
-    DirectSampler, NormalizerMode, SamplerExecutionMode, StagedSampler, StagedSamplerHook,
-};
+use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler, StagedSamplerHook};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -144,7 +142,6 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
                 EpisodeBoundHook::new(evaluator_builder.n_episodes()),
                 evaluator_builder.execution_mode(),
                 sampler.obs_normalizer(NormalizerMode::ReadOnly),
-                false,
             );
             evaluator_builder.build_with_sampler::<A::Actor, _>(eval_sampler)
         });

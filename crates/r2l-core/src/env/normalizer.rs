@@ -2,9 +2,17 @@ use std::sync::{Arc, Mutex};
 
 // I think we should move this to a different crate eventually
 use itertools::izip;
-use r2l_core::{running_mean::RunningMeanStd, tensor::R2lTensor};
 
-use crate::NormalizerMode;
+use crate::{running_mean::RunningMeanStd, tensor::R2lTensor};
+
+/// Controls whether a normalized sampler mutates shared normalization stats.
+#[derive(Debug, Clone, Copy)]
+pub enum NormalizerMode {
+    /// Update running statistics before normalizing each batch.
+    Update,
+    /// Normalize using existing statistics without updating them.
+    ReadOnly,
+}
 
 const EPSILON: f32 = 1e-8;
 

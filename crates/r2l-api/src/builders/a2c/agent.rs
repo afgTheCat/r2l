@@ -3,17 +3,16 @@ use std::sync::mpsc::Sender;
 use burn::prelude::Backend;
 use candle_core::Device;
 use r2l_agents::on_policy_algorithms::a2c::{A2C, A2CParams};
-use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
+use r2l_core::{env::Space, tensor::R2lTensor};
 
 use crate::{
     BurnBackend,
     agents::a2c::{A2CBurnAgent, A2CCandleAgent},
     builders::{
         a2c::hook::DefaultA2CHookBuilder,
-        agent::{
-            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
-        },
+        agent::{AgentBuilder, BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder},
         learning_module::{AdamWParams, OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
+        policy::PolicyBuilder,
     },
     hooks::a2c::A2CStats,
 };
@@ -29,7 +28,7 @@ pub type A2CCandleAgentBuilder = A2CAgentBuilder;
 
 /// A2C agent builder specialized to the Burn backend.
 pub type A2CBurnAgentBuilder =
-    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, BuilderBurnBackend>;
+    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, BurnBackendConfig>;
 
 impl A2CBurnAgentBuilder {
     fn seed(&self, seed: Option<u64>) {
@@ -52,10 +51,8 @@ impl A2CAgentBuilder {
             hook_builder: DefaultA2CHookBuilder::new(n_envs),
             params: A2CParams::default(),
             learning_module_builder: OnPolicyLearningModuleBuilder {
-                policy_hidden_layers: vec![64, 64],
+                policy_builder: PolicyBuilder::default(),
                 value_hidden_layers: vec![64, 64],
-                activation_function: ActivationFunction::default(),
-                log_std_init: 0.0,
                 optimizer_layout: OnPolicyOptimizerLayout::Joint {
                     max_grad_norm: None,
                     params: AdamWParams {

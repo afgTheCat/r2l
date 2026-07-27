@@ -11,10 +11,7 @@ mod staged;
 pub use direct::worker::WorkerPool;
 pub use direct::{DirectSampler, DirectSamplerCore, DirectSamplerHook, SamplerHookResult};
 use serde::{Deserialize, Serialize};
-pub use staged::{
-    NormalizerMode, StagedSampler, StagedSamplerCore, StagedSamplerHook,
-    clipped_normalizer::ClippedNormalizer,
-};
+pub use staged::{StagedSampler, StagedSamplerCore, StagedSamplerHook};
 
 /// Execution strategy used by the sampler.
 ///

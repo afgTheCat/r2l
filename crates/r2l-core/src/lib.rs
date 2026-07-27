@@ -52,6 +52,8 @@ pub mod running_mean;
 pub mod tensor;
 mod utils;
 
+pub use utils::actor_wrapper::ActorWrapper;
+
 /// Control-flow result returned by training hooks.
 ///
 /// Hook implementations use this to signal whether the surrounding training

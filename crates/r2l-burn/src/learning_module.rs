@@ -17,7 +17,7 @@ use r2l_core::{
     on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
 };
 
-use crate::{distributions::PolicyKind, sequential::Sequential};
+use crate::{distributions::BurnPolicyKind, sequential::Sequential};
 
 // A series constraints that we need for the policy to work nicely with AdamW
 /// Trait alias-like bound for Burn policies used by on-policy learning modules.
@@ -428,4 +428,4 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValu
 }
 
 /// Burn learning module whose policy variant is selected from the action space.
-pub type ActionSpacePolicyValueModule<B> = PolicyValueModule<B, PolicyKind<B>>;
+pub type ActionSpacePolicyValueModule<B> = PolicyValueModule<B, BurnPolicyKind<B>>;

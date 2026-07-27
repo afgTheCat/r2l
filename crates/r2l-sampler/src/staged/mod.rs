@@ -4,14 +4,16 @@
 // Normalization happens
 // afterwards.
 
-pub mod clipped_normalizer;
 mod worker;
 
 use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
 use itertools::Itertools;
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
-    env::{Env, EnvBuilder, EnvBuilderType},
+    env::{
+        Env, EnvBuilder, EnvBuilderType,
+        normalizer::{ClippedNormalizer, NormalizerMode},
+    },
     models::Actor,
     on_policy::algorithm::Sampler,
     rng::sample_u64,
@@ -21,7 +23,7 @@ use r2l_core::{
 use crate::{
     RolloutMode, SamplerExecutionMode, SamplerHookResult,
     staged::{
-        clipped_normalizer::ClippedNormalizer,
+        // clipped_normalizer::ClippedNormalizer,
         worker::ThreadHandle,
         worker::{ThreadWorkerFactory, ThreadWorkers, VecWorkers, WorkerPool},
     },
@@ -37,15 +39,6 @@ pub trait StagedSamplerHook {
 
     /// Resets hook state before a new training or evaluation run.
     fn reset(&mut self) {}
-}
-
-/// Controls whether a normalized sampler mutates shared normalization stats.
-#[derive(Debug, Clone, Copy)]
-pub enum NormalizerMode {
-    /// Update running statistics before normalizing each batch.
-    Update,
-    /// Normalize using existing statistics without updating them.
-    ReadOnly,
 }
 
 /// Mutable normalized-sampler state exposed to hook implementations.
@@ -66,7 +59,6 @@ impl<E: Env<Tensor: R2lTensor>> StagedSamplerCore<E> {
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-        _with_reward_normalizer: bool,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
@@ -226,48 +218,15 @@ pub struct StagedSampler<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>>
 }
 
 impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H> {
-    /// Builds a sampler and optionally creates an observation normalizer.
-    ///
-    /// `with_obs_normalizer` is the absolute clipping limit when provided.
-    pub fn build<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
-        hook: H,
-        execution_mode: SamplerExecutionMode,
-        with_obs_normalizer: Option<f32>,
-        obs_normalizer_mode: NormalizerMode,
-        with_reward_normalizer: bool,
-    ) -> Self {
-        let env_description = env_builder.env_description().unwrap();
-        let obs_normalizer = with_obs_normalizer.map(|clip| {
-            let obs_size = env_description.observation_space.size();
-            ClippedNormalizer::new(obs_normalizer_mode, clip, vec![obs_size])
-        });
-        Self {
-            core: StagedSamplerCore::build(
-                env_builder,
-                execution_mode,
-                obs_normalizer,
-                with_reward_normalizer,
-            ),
-            hook,
-        }
-    }
-
     /// Builds a sampler with an existing shared observation normalizer.
     pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-        with_reward_normalizer: bool,
     ) -> Self {
         Self {
-            core: StagedSamplerCore::build(
-                env_builder,
-                execution_mode,
-                obs_normalizer,
-                with_reward_normalizer,
-            ),
+            core: StagedSamplerCore::build(env_builder, execution_mode, obs_normalizer),
             hook,
         }
     }

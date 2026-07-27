@@ -1,7 +1,7 @@
 //! Burn policy distributions used by the on-policy stack.
 //!
 //! This module exposes concrete policy implementations for discrete and
-//! Box action spaces together with [`crate::distributions::PolicyKind`],
+//! Box action spaces together with [`crate::distributions::BurnPolicyKind`],
 //! an enum that erases the concrete policy type behind one Burn-facing policy
 //! interface.
 
@@ -36,7 +36,7 @@ pub mod recurrent_categorical;
 /// modules. It dispatches to a categorical policy for discrete action spaces
 /// and to a diagonal-Gaussian policy for Box action spaces.
 #[derive(Debug, Module)]
-pub enum PolicyKind<B: Backend> {
+pub enum BurnPolicyKind<B: Backend> {
     /// Policy for discrete action spaces.
     Categorical(CategoricalDistribution<B>),
     /// Policy for Box action spaces.
@@ -49,9 +49,9 @@ pub enum PolicyKind<B: Backend> {
     Composite(CompositeDistribution<B>),
 }
 
-impl<B: Backend> PolicyKind<B> {
+impl<B: Backend> BurnPolicyKind<B> {
     fn categorical(policy_layers: &[usize], activation: ActivationFunction) -> Self {
-        PolicyKind::Categorical(CategoricalDistribution::<B>::build(
+        BurnPolicyKind::Categorical(CategoricalDistribution::<B>::build(
             policy_layers,
             activation,
         ))
@@ -62,7 +62,7 @@ impl<B: Backend> PolicyKind<B> {
         activation: ActivationFunction,
         log_std_init: f32,
     ) -> Self {
-        PolicyKind::Diag(DiagGaussianDistribution::build(
+        BurnPolicyKind::Diag(DiagGaussianDistribution::build(
             policy_layers,
             activation,
             log_std_init,
@@ -74,7 +74,7 @@ impl<B: Backend> PolicyKind<B> {
         nvec: Vec<usize>,
         activation: ActivationFunction,
     ) -> Self {
-        PolicyKind::MultiCategorical(MultiCategoricalDistribution::build(
+        BurnPolicyKind::MultiCategorical(MultiCategoricalDistribution::build(
             policy_layers[0],
             &policy_layers[1..policy_layers.len() - 1],
             nvec,
@@ -87,7 +87,7 @@ impl<B: Backend> PolicyKind<B> {
         action_size: usize,
         activation: ActivationFunction,
     ) -> Self {
-        PolicyKind::Bernoulli(BernoulliDistribution::build(
+        BurnPolicyKind::Bernoulli(BernoulliDistribution::build(
             policy_layers[0],
             &policy_layers[1..policy_layers.len() - 1],
             action_size,
@@ -113,13 +113,13 @@ impl<B: Backend> PolicyKind<B> {
                 let size = shape.iter().product();
                 Self::bernoulli(policy_layers, size, activation)
             }
-            Space::Tuple(spaces) => PolicyKind::Composite(CompositeDistribution::build(
+            Space::Tuple(spaces) => BurnPolicyKind::Composite(CompositeDistribution::build(
                 spaces,
                 policy_layers,
                 activation,
                 log_std_init,
             )),
-            Space::Dict(spaces) => PolicyKind::Composite(CompositeDistribution::build(
+            Space::Dict(spaces) => BurnPolicyKind::Composite(CompositeDistribution::build(
                 spaces.into_values().collect(),
                 policy_layers,
                 activation,
@@ -129,7 +129,7 @@ impl<B: Backend> PolicyKind<B> {
     }
 }
 
-impl<B: Backend> Actor for PolicyKind<B> {
+impl<B: Backend> Actor for BurnPolicyKind<B> {
     type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
@@ -153,7 +153,7 @@ impl<B: Backend> Actor for PolicyKind<B> {
     }
 }
 
-impl<B: Backend> Policy for PolicyKind<B> {
+impl<B: Backend> Policy for BurnPolicyKind<B> {
     fn log_probs(
         &self,
         observations: &[Self::Tensor],
