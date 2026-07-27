@@ -16,24 +16,18 @@ pub struct NormalizedPool<E: Env> {
 }
 
 impl<E: Env> NormalizedPool<E> {
-    /// Wraps a raw worker pool and normalizes its current observations.
-    pub fn new(pool: WorkerPool2<E>, obs_normalizer: ClippedNormalizer<E::Tensor>) -> Self {
-        Self {
-            pool,
-            obs_normalizer,
-        }
-    }
-
     /// Builds a worker pool and normalizes its initial observations.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: ClippedNormalizer<E::Tensor>,
     ) -> Self {
-        Self::new(
-            WorkerPool2::build(env_builder, execution_mode),
+        let mut pool = WorkerPool2::build(env_builder, execution_mode);
+        obs_normalizer.apply_in_place(&mut pool.last_state_mut());
+        Self {
+            pool,
             obs_normalizer,
-        )
+        }
     }
 
     /// Steps every worker and returns transitions with normalized observations.

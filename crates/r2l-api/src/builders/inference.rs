@@ -31,6 +31,7 @@ pub struct InferenceRunner<E: Env, A: Actor<Tensor = E::Tensor>> {
     episode_done: bool,
     initial_seed: Option<u64>,
 }
+
 /// Candle-backed inference runner produced by [`InferenceRunnerBuilder`].
 pub type CandleInferenceRunner<EB> = InferenceRunner<
     <EB as EnvBuilder>::Env,
