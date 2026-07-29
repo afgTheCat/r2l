@@ -23,7 +23,7 @@ impl<E: Env> NormalizedPool<E> {
         obs_normalizer: ClippedNormalizer<E::Tensor>,
     ) -> Self {
         let mut pool = WorkerPool2::build(env_builder, execution_mode);
-        obs_normalizer.apply_in_place(&mut pool.last_state_mut());
+        obs_normalizer.apply_slice_in_place(&mut pool.last_state_mut());
         Self {
             pool,
             obs_normalizer,
@@ -34,7 +34,7 @@ impl<E: Env> NormalizedPool<E> {
     pub fn step(&mut self) -> Vec<Memory<E::Tensor>> {
         let mut memories = self.pool.step();
         let mut states = self.pool.last_state_mut();
-        self.obs_normalizer.apply_in_place(&mut states);
+        self.obs_normalizer.apply_slice_in_place(&mut states);
         for (memory, state) in memories.iter_mut().zip(states.iter()) {
             memory.next_state = state.clone()
         }
@@ -52,7 +52,7 @@ impl<E: Env> NormalizedPool<E> {
             .iter()
             .map(|idx| states[*idx].clone())
             .collect::<Vec<_>>();
-        self.obs_normalizer.apply_in_place(&mut next_states);
+        self.obs_normalizer.apply_slice_in_place(&mut next_states);
         for ((idx, memory), next_state) in indices.iter().zip(&mut memories).zip(next_states) {
             states[*idx] = next_state.clone();
             memory.next_state = next_state;
@@ -69,7 +69,7 @@ impl<E: Env> NormalizedPool<E> {
     pub fn reset_all(&mut self) {
         self.pool.reset_all();
         let mut states = self.pool.last_state_mut();
-        self.obs_normalizer.apply_in_place(&mut states)
+        self.obs_normalizer.apply_slice_in_place(&mut states)
     }
 
     /// Resets and normalizes selected environments.
@@ -83,7 +83,7 @@ impl<E: Env> NormalizedPool<E> {
             .iter()
             .map(|idx| states[*idx].clone())
             .collect::<Vec<_>>();
-        self.obs_normalizer.apply_in_place(&mut reset_states);
+        self.obs_normalizer.apply_slice_in_place(&mut reset_states);
         for (idx, state) in indices.iter().zip(reset_states) {
             states[*idx] = state
         }
@@ -102,11 +102,6 @@ impl<E: Env> NormalizedPool<E> {
     /// Returns whether the pool contains no environments.
     pub fn is_empty(&self) -> bool {
         self.pool.is_empty()
-    }
-
-    /// Clones the shared normalizer with the requested access mode.
-    pub fn obs_normalizer(&self, mode: NormalizerMode) -> ClippedNormalizer<E::Tensor> {
-        self.obs_normalizer.with_mode(mode)
     }
 
     /// Stops threaded workers.

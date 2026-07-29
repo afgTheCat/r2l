@@ -1,19 +1,10 @@
-// This is similar to VecNormalize in SB3.
-//
-// Workers do not write directly to the output buffer; they return observations and rewards.
-// Normalization happens
-// afterwards.
-
 mod worker;
 
 use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
 use itertools::Itertools;
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
-    env::{
-        Env, EnvBuilder, EnvBuilderType,
-        normalizer::{ClippedNormalizer, NormalizerMode},
-    },
+    env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
     models::Actor,
     on_policy::algorithm::Sampler,
     rng::sample_u64,
@@ -69,7 +60,7 @@ impl<E: Env> StagedSamplerCore<E> {
         };
         if let Some(obs_normalizer) = &obs_normalizer {
             let mut last_states = last_states.lock().unwrap();
-            obs_normalizer.apply_in_place(&mut last_states);
+            obs_normalizer.apply_slice_in_place(&mut last_states);
         }
         Self {
             buffers,
@@ -153,7 +144,7 @@ impl<E: Env> StagedSamplerCore<E> {
                 .iter()
                 .map(|idx| last_states[*idx].clone())
                 .collect::<Vec<_>>();
-            obs_normalizer.apply_in_place(&mut next_states);
+            obs_normalizer.apply_slice_in_place(&mut next_states);
             for (idx, next_state) in indices.iter().zip(next_states) {
                 last_states[*idx] = next_state;
             }
@@ -175,7 +166,7 @@ impl<E: Env> StagedSamplerCore<E> {
         let multi_memory = self.pool.step();
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
-            obs_normalizer.apply_in_place(&mut last_states)
+            obs_normalizer.apply_slice_in_place(&mut last_states)
         }
         let last_states = self.last_states.lock().unwrap();
         let memories = multi_memory.into_memories(&last_states);
@@ -210,8 +201,8 @@ impl<E: Env> StagedSamplerCore<E> {
 
 /// Observation-normalizing rollout sampler controlled by a hook.
 pub struct StagedSampler<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> {
-    core: StagedSamplerCore<E>,
-    hook: H,
+    pub core: StagedSamplerCore<E>,
+    pub hook: H,
 }
 
 impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H> {
@@ -227,14 +218,6 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
             hook,
         }
     }
-
-    /// Clones the shared observation normalizer with the requested access mode.
-    pub fn obs_normalizer(&self, mode: NormalizerMode) -> Option<ClippedNormalizer<E::Tensor>> {
-        self.core
-            .obs_normalizer
-            .as_ref()
-            .map(|normalizer| normalizer.with_mode(mode))
-    }
 }
 
 impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedSampler<E, H> {
@@ -244,7 +227,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
         self.core.pool.reset_all();
         if let Some(obs_normalizer) = &self.core.obs_normalizer {
             let mut last_states = self.core.last_states.lock().unwrap();
-            obs_normalizer.apply_in_place(&mut last_states);
+            obs_normalizer.apply_slice_in_place(&mut last_states);
         }
         self.core.clear_buffers();
         self.hook.reset();

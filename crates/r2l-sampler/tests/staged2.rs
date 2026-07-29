@@ -127,7 +127,7 @@ fn staged_sampler_resets_after_buffering_terminal_observation() {
         SamplerExecutionMode::MultiThreaded,
     ] {
         let reset_count = Arc::new(AtomicUsize::new(0));
-        let normalizer = ClippedNormalizer::new(NormalizerMode::ReadOnly, 100.0, vec![1]);
+        let normalizer = ClippedNormalizer::build(NormalizerMode::ReadOnly, 100.0, vec![1]);
         let mut sampler = StagedSampler2::build(
             env_builder(reset_count.clone()),
             OneStepHook(false),

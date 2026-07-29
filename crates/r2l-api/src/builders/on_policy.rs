@@ -1,5 +1,8 @@
 use r2l_core::{
-    env::{Env, EnvBuilder, normalizer::NormalizerMode},
+    env::{
+        Env, EnvBuilder,
+        normalizer::{ClippedNormalizer, NormalizerMode},
+    },
     on_policy::algorithm::{
         Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime, Sampler,
     },
@@ -130,6 +133,7 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
     fn build_normalized<A, C, H>(
         self,
         sampler: &StagedSampler<EB::Env, H>,
+        obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
     ) -> NormalizedDefaultOnPolicyAlgorithmHooks<A, C, EB, H>
     where
         A: Agent,
@@ -141,7 +145,7 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
                 evaluator_builder.env_builder().clone(),
                 EpisodeBoundHook::new(evaluator_builder.n_episodes()),
                 evaluator_builder.execution_mode(),
-                sampler.obs_normalizer(NormalizerMode::ReadOnly),
+                obs_normalizer,
             );
             evaluator_builder.build_with_sampler::<A::Actor, _>(eval_sampler)
         });
@@ -466,7 +470,17 @@ impl<
         let agent = self
             .agent_builder
             .build(observation_size, action_space, self.seed)?;
-        let hooks = self.hooks_builder.build_normalized(&sampler);
+        let hook_normalizer = sampler
+            .core
+            .obs_normalizer
+            .as_ref()
+            .map(|n| ClippedNormalizer {
+                normalizer_mode: NormalizerMode::ReadOnly,
+                inner: n.inner.clone(),
+            });
+        let hooks = self
+            .hooks_builder
+            .build_normalized(&sampler, hook_normalizer);
         Ok(OnPolicyAlgorithm::new(
             OnPolicyRuntime {
                 sampler,

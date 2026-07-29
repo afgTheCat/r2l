@@ -1,13 +1,15 @@
+use serde::{Deserialize, Serialize};
+
 use crate::tensor::R2lTensor;
 
 /// Online per-element mean and variance for tensor samples.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct RunningMeanStd<T: R2lTensor> {
     /// Current per-element mean.
     pub mean: T,
     /// Current per-element population variance.
     pub var: T,
-    count: f32,
+    pub count: f32,
 }
 
 // mega simplified view
@@ -21,6 +23,10 @@ impl<T: R2lTensor> RunningMeanStd<T> {
             var,
             count: 0.,
         }
+    }
+
+    pub fn build(mean: T, var: T, count: f32) -> Self {
+        Self { mean, var, count }
     }
 
     fn update_from_moments(

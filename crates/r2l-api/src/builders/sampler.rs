@@ -243,7 +243,7 @@ impl<
         let obs_normalizer = self.sampler_type.obs_clip.map(|clip| {
             let env_description = self.env_builder.env_description().unwrap();
             let obs_size = env_description.observation_space.size();
-            ClippedNormalizer::new(NormalizerMode::Update, clip, vec![obs_size])
+            ClippedNormalizer::build(NormalizerMode::Update, clip, vec![obs_size])
         });
         StagedSampler::build_with_obs_normalizer(
             self.env_builder,

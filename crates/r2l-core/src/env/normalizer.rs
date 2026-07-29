@@ -2,11 +2,12 @@ use std::sync::{Arc, Mutex};
 
 // I think we should move this to a different crate eventually
 use itertools::izip;
+use serde::{Deserialize, Serialize};
 
 use crate::{running_mean::RunningMeanStd, tensor::R2lTensor};
 
 /// Controls whether a normalized sampler mutates shared normalization stats.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum NormalizerMode {
     /// Update running statistics before normalizing each batch.
     Update,
@@ -16,10 +17,10 @@ pub enum NormalizerMode {
 
 const EPSILON: f32 = 1e-8;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ClippedNormalizerInner<T: R2lTensor> {
-    rm: RunningMeanStd<T>,
-    clip: f32,
+    pub rm: RunningMeanStd<T>,
+    pub clip: f32,
 }
 
 impl<T: R2lTensor> ClippedNormalizerInner<T> {
@@ -43,15 +44,23 @@ impl<T: R2lTensor> ClippedNormalizerInner<T> {
 }
 
 /// Shared, clipped observation normalizer backed by running statistics.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ClippedNormalizer<T: R2lTensor> {
-    normalizer_mode: NormalizerMode,
-    inner: Arc<Mutex<ClippedNormalizerInner<T>>>,
+    pub normalizer_mode: NormalizerMode,
+    pub inner: Arc<Mutex<ClippedNormalizerInner<T>>>,
 }
 
 impl<T: R2lTensor> ClippedNormalizer<T> {
+    pub fn new(normalizer_mode: NormalizerMode, rm: RunningMeanStd<T>, clip: f32) -> Self {
+        let inner = ClippedNormalizerInner { clip, rm };
+        Self {
+            normalizer_mode,
+            inner: Arc::new(Mutex::new(inner)),
+        }
+    }
+
     /// Creates a normalizer for observations of `shape`.
-    pub fn new(normalizer_mode: NormalizerMode, clip: f32, shape: Vec<usize>) -> Self {
+    pub fn build(normalizer_mode: NormalizerMode, clip: f32, shape: Vec<usize>) -> Self {
         let rm = RunningMeanStd::new(shape);
         let inner = ClippedNormalizerInner { clip, rm };
         Self {
@@ -60,16 +69,8 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
         }
     }
 
-    /// Clones this normalizer while changing whether it updates shared statistics.
-    pub fn with_mode(&self, normalizer_mode: NormalizerMode) -> Self {
-        Self {
-            normalizer_mode,
-            inner: self.inner.clone(),
-        }
-    }
-
     /// Optionally updates statistics, then normalizes and clips `obs` in place.
-    pub fn apply_in_place(&self, obs: &mut [T]) {
+    pub fn apply_slice_in_place(&self, obs: &mut [T]) {
         let mut inner = self.inner.lock().unwrap();
         match self.normalizer_mode {
             NormalizerMode::ReadOnly => inner.normalize_in_place(obs),
@@ -78,5 +79,9 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
                 inner.normalize_in_place(obs);
             }
         }
+    }
+
+    pub fn apply_tensor_in_place(&self, obs: &mut T) {
+        self.apply_slice_in_place(std::slice::from_mut(obs));
     }
 }

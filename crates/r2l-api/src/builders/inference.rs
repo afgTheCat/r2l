@@ -3,10 +3,7 @@ use burn::{backend::NdArray, prelude::Backend};
 use r2l_core::{
     ActorWrapper,
     buffers::Memory,
-    env::{
-        Env, EnvBuilder, EnvBuilderType,
-        normalizer::{ClippedNormalizer, NormalizerMode},
-    },
+    env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
     models::{ActivationFunction, Actor},
     rng::set_seed,
     tensor::R2lTensor,
@@ -177,15 +174,6 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>, Backend> InferenceRunnerBuilde
     /// Sets the initial log standard deviation for Gaussian policies.
     pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
         self.policy_builder.log_std_init = log_std_init;
-        self
-    }
-
-    /// Installs trained observation statistics in read-only mode.
-    pub fn with_obs_normalizer(
-        mut self,
-        obs_normalizer: ClippedNormalizer<<<EB as EnvBuilder>::Env as Env>::Tensor>,
-    ) -> Self {
-        self.obs_normalizer = Some(obs_normalizer.with_mode(NormalizerMode::ReadOnly));
         self
     }
 

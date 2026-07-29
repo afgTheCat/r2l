@@ -5,10 +5,7 @@ use itertools::Itertools;
 pub use normalized_pool::NormalizedPool;
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
-    env::{
-        Env, EnvBuilder, EnvBuilderType,
-        normalizer::{ClippedNormalizer, NormalizerMode},
-    },
+    env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
     models::Actor,
     on_policy::algorithm::Sampler,
 };
@@ -137,11 +134,6 @@ impl<E: Env, H: StagedSampler2Hook<E = E>> StagedSampler2<E, H> {
             core: StagedSamplerCore2::build(env_builder, execution_mode, obs_normalizer),
             hook,
         }
-    }
-
-    /// Clones the shared observation normalizer with the requested access mode.
-    pub fn obs_normalizer(&self, mode: NormalizerMode) -> ClippedNormalizer<E::Tensor> {
-        self.core.pool.obs_normalizer(mode)
     }
 }
 
