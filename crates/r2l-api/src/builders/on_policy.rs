@@ -3,9 +3,7 @@ use r2l_core::{
         Env, EnvBuilder,
         normalizer::{ClippedNormalizer, NormalizerMode},
     },
-    on_policy::algorithm::{
-        Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyRuntime, Sampler,
-    },
+    on_policy::algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime, Sampler},
     rng::set_seed,
     tensor::R2lTensor,
 };
@@ -33,7 +31,6 @@ type DefaultOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
     DefaultOnPolicyAlgorithmHooks<
         A,
         DirectSampler<<EB as EnvBuilder>::Env, <SH as SamplerHookBuilder>::Target>,
-        DefaultAdapter,
         <EB as EnvBuilder>::Env,
         DirectSampler<<EB as EnvBuilder>::Env, EpisodeBoundHook<<EB as EnvBuilder>::Env>>,
     >,
@@ -48,7 +45,6 @@ type StagedOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
     DefaultOnPolicyAlgorithmHooks<
         A,
         StagedSampler<<EB as EnvBuilder>::Env, <SH as SamplerHookBuilder>::Target>,
-        DefaultAdapter,
         <EB as EnvBuilder>::Env,
         StagedSampler<<EB as EnvBuilder>::Env, EpisodeBoundHook<<EB as EnvBuilder>::Env>>,
     >,
@@ -57,18 +53,16 @@ type StagedOnPolicyAlgorithm<A, EB, SH> = OnPolicyAlgorithm<
 type StagedOnPolicyAlgorithmFor<AB, EB, SH> =
     StagedOnPolicyAlgorithm<<AB as AgentBuilder>::Agent, EB, SH>;
 
-type DirectDefaultOnPolicyAlgorithmHooks<A, S, C, EB> = DefaultOnPolicyAlgorithmHooks<
+type DirectDefaultOnPolicyAlgorithmHooks<A, S, EB> = DefaultOnPolicyAlgorithmHooks<
     A,
     S,
-    C,
     <EB as EnvBuilder>::Env,
     DirectSampler<<EB as EnvBuilder>::Env, EpisodeBoundHook<<EB as EnvBuilder>::Env>>,
 >;
 
-type NormalizedDefaultOnPolicyAlgorithmHooks<A, C, EB, H> = DefaultOnPolicyAlgorithmHooks<
+type NormalizedDefaultOnPolicyAlgorithmHooks<A, EB, H> = DefaultOnPolicyAlgorithmHooks<
     A,
     StagedSampler<<EB as EnvBuilder>::Env, H>,
-    C,
     <EB as EnvBuilder>::Env,
     StagedSampler<<EB as EnvBuilder>::Env, EpisodeBoundHook<<EB as EnvBuilder>::Env>>,
 >;
@@ -113,11 +107,10 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
         self
     }
 
-    fn build_direct<A, S, C>(self) -> DirectDefaultOnPolicyAlgorithmHooks<A, S, C, EB>
+    fn build_direct<A, S>(self) -> DirectDefaultOnPolicyAlgorithmHooks<A, S, EB>
     where
         A: Agent,
         S: Sampler<Tensor = <EB::Env as Env>::Tensor>,
-        C: OnPolicyAdapters<A::Actor, S>,
     {
         let evaluator = self
             .evaluator_builder
@@ -130,15 +123,14 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
         )
     }
 
-    fn build_normalized<A, C, H>(
+    fn build_normalized<A, H>(
         self,
-        sampler: &StagedSampler<EB::Env, H>,
+        _sampler: &StagedSampler<EB::Env, H>,
         obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
-    ) -> NormalizedDefaultOnPolicyAlgorithmHooks<A, C, EB, H>
+    ) -> NormalizedDefaultOnPolicyAlgorithmHooks<A, EB, H>
     where
         A: Agent,
         H: StagedSamplerHook<E = EB::Env>,
-        C: OnPolicyAdapters<A::Actor, StagedSampler<EB::Env, H>>,
     {
         let evaluator = self.evaluator_builder.map(|evaluator_builder| {
             let eval_sampler = StagedSampler::build_with_obs_normalizer(
@@ -417,13 +409,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
     OnPolicyAlgorithmBuilder<AB, EB, SH, DirectSamplerSelection>
 {
     /// Builds the configured on-policy algorithm runtime.
-    pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithmFor<AB, EB, SH>>
-    where
-        DefaultAdapter: OnPolicyAdapters<
-                <<AB as AgentBuilder>::Agent as Agent>::Actor,
-                DirectSampler<<EB as EnvBuilder>::Env, SH::Target>,
-            >,
-    {
+    pub fn build(self) -> anyhow::Result<DefaultOnPolicyAlgorithmFor<AB, EB, SH>> {
         if let Some(seed) = self.seed {
             set_seed(seed);
         }
@@ -436,11 +422,7 @@ impl<AB: AgentBuilder, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>>
             .build(observation_size, action_space, self.seed)?;
         let hooks = self.hooks_builder.build_direct();
         Ok(OnPolicyAlgorithm::new(
-            OnPolicyRuntime {
-                sampler,
-                agent,
-                adapter: DefaultAdapter,
-            },
+            OnPolicyRuntime { sampler, agent },
             hooks,
         ))
     }
@@ -453,13 +435,7 @@ impl<
 > OnPolicyAlgorithmBuilder<AB, EB, SH, StagedSamplerSelection>
 {
     /// Builds the configured on-policy algorithm runtime using staged sampling.
-    pub fn build(self) -> anyhow::Result<StagedOnPolicyAlgorithmFor<AB, EB, SH>>
-    where
-        DefaultAdapter: OnPolicyAdapters<
-                <<AB as AgentBuilder>::Agent as Agent>::Actor,
-                StagedSampler<<EB as EnvBuilder>::Env, SH::Target>,
-            >,
-    {
+    pub fn build(self) -> anyhow::Result<StagedOnPolicyAlgorithmFor<AB, EB, SH>> {
         if let Some(seed) = self.seed {
             set_seed(seed);
         }
@@ -482,11 +458,7 @@ impl<
             .hooks_builder
             .build_normalized(&sampler, hook_normalizer);
         Ok(OnPolicyAlgorithm::new(
-            OnPolicyRuntime {
-                sampler,
-                agent,
-                adapter: DefaultAdapter,
-            },
+            OnPolicyRuntime { sampler, agent },
             hooks,
         ))
     }

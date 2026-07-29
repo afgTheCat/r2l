@@ -19,7 +19,7 @@ pub trait OnPolicyLearningModule:
     type LearningTensor: R2lTensor;
 
     /// Policy type used for rollout/inference.
-    type InferencePolicy: Policy<Tensor = Self::InferenceTensor>;
+    type InferencePolicy: Policy<Tensor = Self::InferenceTensor> + Clone;
     /// Policy type used while computing losses.
     type Policy: Policy<Tensor = Self::LearningTensor>;
 

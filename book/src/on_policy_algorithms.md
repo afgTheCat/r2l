@@ -1,18 +1,18 @@
 ## On-policy algorithms
 
-`r2l` separates an on-policy training run into four components:
+`r2l` separates an on-policy training run into three components:
 
 - an `Agent` owns the trainable policy and learns from trajectory batches;
 - a `Sampler` collects trajectories with a snapshot of the current actor;
-- an `OnPolicyAdapters` implementation bridges backend tensor types when
-  necessary;
 - `OnPolicyAlgorithmHooks` controls initialization, stopping, evaluation, and
   shutdown.
 
 `OnPolicyAlgorithm` holds a runtime and a hook implementation. Its training
 loop repeatedly collects rollouts, invokes the post-rollout hook, updates the
 agent, and invokes the post-training hook. A hook can stop the loop by returning
-`HookResult::Break`.
+`HookResult::Break`. The runtime converts actor and trajectory tensors through
+the common `R2lTensor` representation when the agent and sampler use different
+tensor types.
 
 ![On-policy algorithm overview](./images/on_policy_algo.png)
 

@@ -15,7 +15,7 @@ pub trait Agent {
     type Tensor: R2lTensor;
 
     /// Actor type used by samplers to collect new rollouts.
-    type Actor: Actor<Tensor = Self::Tensor>;
+    type Actor: Actor<Tensor = Self::Tensor> + Clone;
 
     /// Returns an actor snapshot for rollout collection.
     fn actor(&self) -> Self::Actor;
@@ -48,76 +48,19 @@ pub trait Sampler {
     fn shutdown(&mut self) {}
 }
 
-/// Converts actors and trajectory buffers between sampler and agent tensor types.
-pub trait OnPolicyAdapters<A: Actor, S: Sampler> {
-    /// Actor representation accepted by the sampler.
-    type SamplerActor: Actor<Tensor = S::Tensor> + Clone;
-    /// Agent-facing view of one sampler trajectory.
-    type AgentBuffer<'a>: TrajectoryBatch<A::Tensor>
-    where
-        Self: 'a,
-        S: 'a;
-
-    /// Converts an agent actor into the sampler representation.
-    fn adapt_actor(&self, actor: A) -> Self::SamplerActor;
-
-    /// Converts sampler trajectory views into agent-facing batches.
-    fn adapt_buffer<'a>(
-        &self,
-        buffers: &'a [TrajectoryView<'a, S::Tensor>],
-    ) -> impl AsRef<[Self::AgentBuffer<'a>]>
-    where
-        Self: 'a,
-        S: 'a;
-}
-
-/// Default adapter that converts tensors through [`R2lTensor`].
-pub struct DefaultAdapter;
-
-impl<A: Actor + Clone, S: Sampler> OnPolicyAdapters<A, S> for DefaultAdapter {
-    type SamplerActor = ActorWrapper<A, S::Tensor>;
-    type AgentBuffer<'a>
-        = TrajectoryViewsWrapper<'a, A::Tensor>
-    where
-        Self: 'a,
-        S: 'a;
-
-    fn adapt_actor(&self, actor: A) -> Self::SamplerActor {
-        ActorWrapper::new(actor)
-    }
-
-    fn adapt_buffer<'a>(
-        &self,
-        buffers: &'a [TrajectoryView<'a, S::Tensor>],
-    ) -> impl AsRef<[Self::AgentBuffer<'a>]>
-    where
-        Self: 'a,
-        S: 'a,
-    {
-        let views: Vec<TrajectoryViewsWrapper<'a, A::Tensor>> = buffers
-            .iter()
-            .map(TrajectoryViewsWrapper::from_view::<S::Tensor>)
-            .collect();
-        views
-    }
-}
-
-/// Coupled runtime unit that binds an agent, sampler, and adapter together.
-pub struct OnPolicyRuntime<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S> = DefaultAdapter>
-{
+/// Coupled runtime unit that binds an agent and sampler together.
+pub struct OnPolicyRuntime<A: Agent, S: Sampler> {
     /// Trainable agent.
     pub agent: A,
     /// Rollout collector.
     pub sampler: S,
-    /// Adapter bridging sampler and agent types.
-    pub adapter: C,
 }
 
-impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>> OnPolicyRuntime<A, S, C> {
-    /// Collects a fresh set of rollouts using the adapted actor.
+impl<A: Agent, S: Sampler> OnPolicyRuntime<A, S> {
+    /// Collects a fresh set of rollouts using the sampler-facing actor.
     pub fn collect(&mut self) {
         let actor = self.agent.actor();
-        let actor = self.adapter.adapt_actor(actor);
+        let actor = ActorWrapper::new(actor);
         self.sampler.collect_rollouts(actor);
     }
 
@@ -129,19 +72,17 @@ impl<A: Agent, S: Sampler, C: OnPolicyAdapters<A::Actor, S>> OnPolicyRuntime<A, 
     /// Adapts the sampler buffers and runs an agent update.
     pub fn learn(&mut self) -> Result<()> {
         let views = self.sampler.trajectory_views();
-        let buffers = self.adapter.adapt_buffer(views.as_ref());
-        self.agent.learn(buffers.as_ref())
+        let buffers = views
+            .as_ref()
+            .iter()
+            .map(TrajectoryViewsWrapper::from_view)
+            .collect::<Vec<_>>();
+        self.agent.learn(&buffers)
     }
 
     /// Returns the agent-facing actor snapshot.
     pub fn actor(&self) -> A::Actor {
         self.agent.actor()
-    }
-
-    /// Returns the sampler-facing adapted actor snapshot.
-    pub fn adapted_actor(&self) -> C::SamplerActor {
-        let actor = self.agent.actor();
-        self.adapter.adapt_actor(actor)
     }
 
     /// Releases agent and sampler resources.
@@ -157,54 +98,32 @@ pub trait OnPolicyAlgorithmHooks {
     type A: Agent;
     /// Sampler type controlled by the training loop.
     type S: Sampler;
-    /// Adapter used to bridge agent and sampler types.
-    type C: OnPolicyAdapters<<Self::A as Agent>::Actor, Self::S>;
 
     /// Called once before rollout/training starts.
-    fn init_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>)
-    -> HookResult;
+    fn init_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult;
 
     /// Called after rollouts are collected and before agent learning.
-    fn post_rollout_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> HookResult;
+    fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult;
 
     /// Called after the agent has learned from the latest rollouts.
-    fn post_training_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> HookResult;
+    fn post_training_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>)
+    -> HookResult;
 
     /// Called once when the loop exits.
-    fn shutdown_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> Result<()>;
+    fn shutdown_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> Result<()>;
 }
 
 /// Generic on-policy training loop combining a runtime with lifecycle hooks.
-pub struct OnPolicyAlgorithm<
-    A: Agent,
-    S: Sampler,
-    H: OnPolicyAlgorithmHooks<A = A, S = S, C = C>,
-    C: OnPolicyAdapters<A::Actor, S> = DefaultAdapter,
-> {
+pub struct OnPolicyAlgorithm<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> {
     /// Coupled training runtime.
-    pub runtime: OnPolicyRuntime<A, S, C>,
+    pub runtime: OnPolicyRuntime<A, S>,
     /// Lifecycle hooks.
     pub hooks: H,
 }
 
-impl<
-    A: Agent,
-    S: Sampler,
-    H: OnPolicyAlgorithmHooks<A = A, S = S, C = C>,
-    C: OnPolicyAdapters<A::Actor, S>,
-> OnPolicyAlgorithm<A, S, H, C>
-{
+impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgorithm<A, S, H> {
     /// Creates an on-policy algorithm from its runtime and lifecycle hooks.
-    pub fn new(runtime: OnPolicyRuntime<A, S, C>, hooks: H) -> Self {
+    pub fn new(runtime: OnPolicyRuntime<A, S>, hooks: H) -> Self {
         Self { runtime, hooks }
     }
 

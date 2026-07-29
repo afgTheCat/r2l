@@ -2,10 +2,11 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use r2l_core::{
+    ActorWrapper,
     buffers::TrajectoryBatch,
     env::{EnvBuilder, EnvBuilderType},
     models::Actor,
-    on_policy::algorithm::{Agent, OnPolicyAdapters, OnPolicyRuntime, Sampler},
+    on_policy::algorithm::{Agent, OnPolicyRuntime, Sampler},
 };
 use r2l_sampler::{DirectSampler, SamplerExecutionMode};
 use serde::{Deserialize, Serialize};
@@ -96,7 +97,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     }
 
     /// Builds a best-actor evaluator for the requested actor type.
-    pub fn build<A: Actor>(
+    pub fn build<A: Actor + Clone>(
         self,
     ) -> BestActorEvaluator<A, DirectSampler<EB::Env, EpisodeBoundHook<EB::Env>>> {
         let sampler = DirectSampler::build(
@@ -117,7 +118,10 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     }
 
     /// Builds a best-actor evaluator around an already-constructed sampler.
-    pub fn build_with_sampler<A: Actor, S: Sampler>(self, sampler: S) -> BestActorEvaluator<A, S> {
+    pub fn build_with_sampler<A: Actor + Clone, S: Sampler>(
+        self,
+        sampler: S,
+    ) -> BestActorEvaluator<A, S> {
         BestActorEvaluator {
             current_evaluator_step: 0,
             evaluator_frequency: self.evaluator_frequency,
@@ -173,15 +177,11 @@ pub struct BestActorEvaluator<A: Actor, S: Sampler> {
     eval_states: Vec<EvalState>,
 }
 
-impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
+impl<A: Actor + Clone, ES: Sampler> BestActorEvaluator<A, ES> {
     /// Evaluates the runtime actor when the configured evaluation interval elapses.
-    pub fn eval<
-        AG: Agent<Actor = A>,
-        TS: Sampler<Tensor = ES::Tensor>,
-        C: OnPolicyAdapters<AG::Actor, TS>,
-    >(
+    pub fn eval<AG: Agent<Actor = A>, TS: Sampler<Tensor = ES::Tensor>>(
         &mut self,
-        rt: &mut OnPolicyRuntime<AG, TS, C>,
+        rt: &mut OnPolicyRuntime<AG, TS>,
     ) {
         self.current_evaluator_step += 1;
         if self
@@ -189,7 +189,7 @@ impl<A: Actor, ES: Sampler> BestActorEvaluator<A, ES> {
             .is_multiple_of(self.evaluator_frequency)
         {
             let actor = rt.actor();
-            let adapted_actor = rt.adapted_actor();
+            let adapted_actor = ActorWrapper::new(rt.actor());
             self.eval_adapted(adapted_actor, actor);
         }
     }

@@ -9,9 +9,7 @@ use r2l_core::{
     HookResult,
     env::Env,
     models::Actor,
-    on_policy::algorithm::{
-        Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
-    },
+    on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
 use serde::{Deserialize, Serialize};
@@ -156,7 +154,6 @@ pub fn on_policy_command_channel() -> (OnPolicyCommandReceiver, OnPolicyCommandS
 pub struct DefaultOnPolicyAlgorithmHooks<
     A: Agent,
     S: Sampler,
-    C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
     S2: Sampler<Tensor = S::Tensor>,
 > {
@@ -164,16 +161,15 @@ pub struct DefaultOnPolicyAlgorithmHooks<
     learning_rate_schedule: Option<LearningRateSchedule>,
     evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
     command_rx: Option<OnPolicyCommandReceiver>,
-    _phantom: PhantomData<(A, S, C, E)>,
+    _phantom: PhantomData<(A, S, E)>,
 }
 
 impl<
     A: Agent,
     S: Sampler<Tensor: R2lTensor>,
-    C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
     S2: Sampler<Tensor = S::Tensor>,
-> DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
+> DefaultOnPolicyAlgorithmHooks<A, S, E, S2>
 {
     /// Creates the default hooks with their schedule, evaluator, and command receiver.
     pub fn new(
@@ -191,7 +187,7 @@ impl<
         }
     }
 
-    fn process_pending_commands(&self, runtime: &mut OnPolicyRuntime<A, S, C>) -> HookResult {
+    fn process_pending_commands(&self, runtime: &mut OnPolicyRuntime<A, S>) -> HookResult {
         let Some(command_rx) = &self.command_rx else {
             return HookResult::Continue;
         };
@@ -215,7 +211,7 @@ impl<
         HookResult::Continue
     }
 
-    fn mark_progress(&mut self, runtime: &mut OnPolicyRuntime<A, S, C>) {
+    fn mark_progress(&mut self, runtime: &mut OnPolicyRuntime<A, S>) {
         match &mut self.learning_schedule {
             LearningSchedule::RolloutBound {
                 current_rollout, ..
@@ -245,26 +241,18 @@ impl<
 impl<
     A: Agent,
     S: Sampler<Tensor: R2lTensor>,
-    C: OnPolicyAdapters<A::Actor, S>,
     E: Env<Tensor = S::Tensor>,
     S2: Sampler<Tensor = S::Tensor>,
-> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
+> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, E, S2>
 {
     type A = A;
     type S = S;
-    type C = C;
 
-    fn init_hook(
-        &mut self,
-        _runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> HookResult {
+    fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
         HookResult::Continue
     }
 
-    fn post_rollout_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> HookResult {
+    fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
         self.mark_progress(runtime);
         if let Some(learning_rate_schedule) = self.learning_rate_schedule {
             let learning_rate = match learning_rate_schedule {
@@ -281,7 +269,7 @@ impl<
 
     fn post_training_hook(
         &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> HookResult {
         if let Some(evaluator) = &mut self.evaluator {
             evaluator.eval(runtime);
@@ -294,10 +282,7 @@ impl<
         }
     }
 
-    fn shutdown_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> Result<()> {
+    fn shutdown_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> Result<()> {
         if let Some(evaluator) = &mut self.evaluator {
             evaluator.try_write_to_file()?;
             evaluator.shutdown();

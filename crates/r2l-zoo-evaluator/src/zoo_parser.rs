@@ -4,7 +4,7 @@ use r2l_api::{
     BurnBackend, DefaultOnPolicyAlgorithmHooks, EpisodeBoundHook, LearningRateSchedule,
     LearningSchedule, PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
 };
-use r2l_core::on_policy::algorithm::{DefaultAdapter, OnPolicyAlgorithm};
+use r2l_core::on_policy::algorithm::OnPolicyAlgorithm;
 use r2l_gym::GymEnv;
 use r2l_sampler::StagedSampler;
 use serde::{Deserialize, Deserializer, Serialize, de};
@@ -16,7 +16,6 @@ pub type RlZooPpoAlgorithm = OnPolicyAlgorithm<
     DefaultOnPolicyAlgorithmHooks<
         PPOBurnAgent<BurnBackend>,
         StagedSampler<GymEnv, StepBoundHook<GymEnv>>,
-        DefaultAdapter,
         GymEnv,
         StagedSampler<GymEnv, EpisodeBoundHook<GymEnv>>,
     >,

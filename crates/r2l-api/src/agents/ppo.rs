@@ -1,3 +1,5 @@
+use std::intrinsics::type_id;
+
 use burn::{module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::ppo::PPO;
 use r2l_burn::{
@@ -7,7 +9,7 @@ use r2l_burn::{
 use r2l_candle::{
     distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
 };
-use r2l_core::{buffers::TrajectoryBatch, on_policy::algorithm::Agent};
+use r2l_core::{buffers::TrajectoryBatch, models::ActivationFunction, on_policy::algorithm::Agent};
 
 use crate::hooks::ppo::DefaultPPOHook;
 
