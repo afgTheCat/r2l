@@ -1,6 +1,5 @@
 pub(crate) mod a2c;
 pub(crate) mod agent;
-// pub(crate) mod inference;
 pub(crate) mod inference2;
 pub(crate) mod learning_module;
 pub(crate) mod normalizer;
