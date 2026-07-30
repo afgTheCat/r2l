@@ -151,30 +151,21 @@ pub fn on_policy_command_channel() -> (OnPolicyCommandReceiver, OnPolicyCommandS
 /// configured [`LearningSchedule`] to decide when training should stop,
 /// optionally evaluates the current actor, and shuts down the runtime when the
 /// algorithm exits.
-pub struct DefaultOnPolicyAlgorithmHooks<
-    A: Agent,
-    S: Sampler,
-    E: Env<Tensor = S::Tensor>,
-    S2: Sampler<Tensor = S::Tensor>,
-> {
+pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     learning_schedule: LearningSchedule,
     learning_rate_schedule: Option<LearningRateSchedule>,
-    evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
+    evaluator: Option<BestActorEvaluator<A::Actor, E>>,
     command_rx: Option<OnPolicyCommandReceiver>,
     _phantom: PhantomData<(A, S, E)>,
 }
 
-impl<
-    A: Agent,
-    S: Sampler<Tensor: R2lTensor>,
-    E: Env<Tensor = S::Tensor>,
-    S2: Sampler<Tensor = S::Tensor>,
-> DefaultOnPolicyAlgorithmHooks<A, S, E, S2>
+impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
+    DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
     /// Creates the default hooks with their schedule, evaluator, and command receiver.
     pub fn new(
         learning_schedule: LearningSchedule,
-        evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
+        evaluator: Option<BestActorEvaluator<A::Actor, E>>,
         learning_rate_schedule: Option<LearningRateSchedule>,
         command_rx: Option<OnPolicyCommandReceiver>,
     ) -> Self {
@@ -238,12 +229,8 @@ impl<
     }
 }
 
-impl<
-    A: Agent,
-    S: Sampler<Tensor: R2lTensor>,
-    E: Env<Tensor = S::Tensor>,
-    S2: Sampler<Tensor = S::Tensor>,
-> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, E, S2>
+impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPolicyAlgorithmHooks
+    for DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
     type A = A;
     type S = S;

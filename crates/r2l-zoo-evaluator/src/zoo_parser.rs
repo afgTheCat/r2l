@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use r2l_api::{
-    BurnBackend, DefaultOnPolicyAlgorithmHooks, EpisodeBoundHook, LearningRateSchedule,
-    LearningSchedule, PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
+    BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
+    PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
 };
 use r2l_core::on_policy::algorithm::OnPolicyAlgorithm;
 use r2l_gym::GymEnv;
@@ -17,7 +17,6 @@ pub type RlZooPpoAlgorithm = OnPolicyAlgorithm<
         PPOBurnAgent<BurnBackend>,
         StagedSampler<GymEnv, StepBoundHook<GymEnv>>,
         GymEnv,
-        StagedSampler<GymEnv, EpisodeBoundHook<GymEnv>>,
     >,
 >;
 

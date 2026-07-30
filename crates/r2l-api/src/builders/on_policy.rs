@@ -4,7 +4,7 @@ use r2l_core::{
     rng::set_seed,
     tensor::R2lTensor,
 };
-use r2l_sampler::{SamplerExecutionMode, StagedSampler, StagedSamplerHook};
+use r2l_sampler::{SamplerExecutionMode, StagedSamplerHook};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -16,10 +16,7 @@ use crate::{
             StagedSamplerSelection, StepHookBound,
         },
     },
-    hooks::{
-        on_policy::{LearningRateSchedule, LearningSchedule},
-        sampler::EpisodeBoundHook,
-    },
+    hooks::on_policy::{LearningRateSchedule, LearningSchedule},
 };
 
 type EnvOfSamplerBuilder<SB> = <<SB as SamplerBuilder>::EnvBuilder as EnvBuilder>::Env;
@@ -31,16 +28,11 @@ type DefaultOnPolicyAlgorithmFor<AB, SB> = OnPolicyAlgorithm<
         <AB as AgentBuilder>::Agent,
         <SB as SamplerBuilder>::Sampler,
         EnvOfSamplerBuilder<SB>,
-        StagedSampler<EnvOfSamplerBuilder<SB>, EpisodeBoundHook<EnvOfSamplerBuilder<SB>>>,
     >,
 >;
 
-type DefaultOnPolicyAlgorithmHooksFor<A, S, EB> = DefaultOnPolicyAlgorithmHooks<
-    A,
-    S,
-    <EB as EnvBuilder>::Env,
-    StagedSampler<<EB as EnvBuilder>::Env, EpisodeBoundHook<<EB as EnvBuilder>::Env>>,
->;
+type DefaultOnPolicyAlgorithmHooksFor<A, S, EB> =
+    DefaultOnPolicyAlgorithmHooks<A, S, <EB as EnvBuilder>::Env>;
 
 /// Internal builder for the default on-policy algorithm lifecycle hooks.
 #[derive(Serialize, Deserialize)]
@@ -90,15 +82,9 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
         A: Agent,
         S: Sampler<Tensor = <EB::Env as Env>::Tensor>,
     {
-        let evaluator = self.evaluator_builder.map(|evaluator_builder| {
-            let eval_sampler = StagedSampler::build_with_obs_normalizer(
-                evaluator_builder.env_builder().clone(),
-                EpisodeBoundHook::new(evaluator_builder.n_episodes()),
-                evaluator_builder.execution_mode(),
-                obs_normalizer,
-            );
-            evaluator_builder.build_with_sampler::<A::Actor, _>(eval_sampler)
-        });
+        let evaluator = self
+            .evaluator_builder
+            .map(|evaluator_builder| evaluator_builder.build::<A::Actor>(obs_normalizer));
         DefaultOnPolicyAlgorithmHooks::new(
             self.learning_schedule,
             evaluator,
