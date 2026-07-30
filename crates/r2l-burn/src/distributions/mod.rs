@@ -6,6 +6,7 @@
 //! interface.
 
 use burn::{Tensor, module::Module, prelude::Backend};
+use burn_store::{ModuleSnapshot, SafetensorsStore};
 use r2l_core::{
     env::Space,
     models::{ActivationFunction, Actor, Policy},
@@ -50,6 +51,19 @@ pub enum BurnPolicyKind<B: Backend> {
 }
 
 impl<B: Backend> BurnPolicyKind<B> {
+    /// Loads policy parameters from safetensors bytes.
+    pub fn load_from_bytes(mut self, bytes: Vec<u8>) -> anyhow::Result<Self> {
+        let mut store = SafetensorsStore::from_bytes(Some(bytes));
+        match &mut self {
+            Self::Categorical(policy) => policy.load_from(&mut store)?,
+            Self::Diag(policy) => policy.load_from(&mut store)?,
+            Self::MultiCategorical(policy) => policy.load_from(&mut store)?,
+            Self::Bernoulli(policy) => policy.load_from(&mut store)?,
+            Self::Composite(policy) => policy.load_from(&mut store)?,
+        };
+        Ok(self)
+    }
+
     fn categorical(policy_layers: &[usize], activation: ActivationFunction) -> Self {
         BurnPolicyKind::Categorical(CategoricalDistribution::<B>::build(
             policy_layers,

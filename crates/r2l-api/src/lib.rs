@@ -24,7 +24,7 @@ pub use builders::a2c::algorithm::{
 };
 pub use builders::agent::{BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder};
 pub use builders::inference::{
-    CandleInferenceRunner, InferenceArtifacts, InferenceBackend, InferenceConfig,
+    InferenceActor, InferenceArtifacts, InferenceBackend, InferenceConfig,
     InferenceObservationMode, InferenceRunner,
 };
 pub use builders::learning_module::OnPolicyOptimizerLayout;

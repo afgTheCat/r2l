@@ -1,12 +1,14 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, ensure};
+use burn::backend::NdArray;
+use r2l_burn::distributions::BurnPolicyKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     ActorWrapper,
     env::{Env, Snapshot, normalizer::ClippedNormalizer},
     models::Actor,
     rng::sample_u64,
+    tensor::R2lTensor,
 };
 use serde::{Deserialize, Serialize};
 
@@ -75,63 +77,6 @@ impl InferenceConfig {
             std::fs::read_to_string(inference_dir.as_ref().join(INFERENCE_CONFIG_FILE))?;
         Ok(yaml_serde::from_str(&serialized)?)
     }
-
-    /// Builds a Candle inference runtime for `env`.
-    pub fn build_candle<E: Env>(
-        self,
-        env: E,
-        normalizer_builder: Option<NormalizerBuilder>,
-    ) -> anyhow::Result<CandleInferenceRunner<E>> {
-        let backend = match self.backend {
-            InferenceBackend::Candle(backend) => backend,
-            InferenceBackend::Burn(_) => bail!("inference configuration uses the Burn backend"),
-        };
-        let obs_normalizer = match self.observation_mode {
-            InferenceObservationMode::Raw => {
-                ensure!(
-                    normalizer_builder.is_none(),
-                    "raw inference does not use an observation normalizer"
-                );
-                None
-            }
-            InferenceObservationMode::Normalized => {
-                let normalizer_builder = normalizer_builder
-                    .ok_or_else(|| anyhow::anyhow!("normalized inference requires a normalizer"))?;
-                Some(normalizer_builder.into_normalizer())
-            }
-        };
-        let env_description = env.env_description();
-        let actor = self.policy_builder.build_candle(
-            env_description.observation_space.size(),
-            env_description.action_space,
-            &backend.device,
-        )?;
-        InferenceRunner::new(env, obs_normalizer, ActorWrapper::new(actor))
-    }
-
-    /// Loads learned artifacts and builds a Candle inference runtime for `env`.
-    pub fn build_candle_from_dir<E: Env>(
-        self,
-        env: E,
-        inference_dir: impl AsRef<Path>,
-    ) -> anyhow::Result<CandleInferenceRunner<E>> {
-        let inference_dir = inference_dir.as_ref();
-        let backend = match self.backend {
-            InferenceBackend::Candle(backend) => backend,
-            InferenceBackend::Burn(_) => bail!("inference configuration uses the Burn backend"),
-        };
-        let obs_normalizer = match self.observation_mode {
-            InferenceObservationMode::Raw => None,
-            InferenceObservationMode::Normalized => {
-                let serialized = std::fs::read_to_string(inference_dir.join(NORMALIZER_FILE))?;
-                let normalizer_builder: NormalizerBuilder = yaml_serde::from_str(&serialized)?;
-                Some(normalizer_builder.into_normalizer())
-            }
-        };
-        let actor_bytes = std::fs::read(inference_dir.join(ACTOR_FILE))?;
-        let actor = CandlePolicyKind::from_bytes(&actor_bytes, backend.device);
-        InferenceRunner::new(env, obs_normalizer, ActorWrapper::new(actor))
-    }
 }
 
 /// An inference configuration bound to its learned artifact directory.
@@ -154,29 +99,72 @@ impl InferenceArtifacts {
         &self.config
     }
 
-    /// Builds a Candle inference runtime using the bound learned artifacts.
-    pub fn build_candle<E: Env>(self, env: E) -> anyhow::Result<CandleInferenceRunner<E>> {
-        self.config.build_candle_from_dir(env, self.directory)
+    /// Builds an inference runtime using the configured backend and learned artifacts.
+    pub fn build<E: Env>(self, env: E) -> anyhow::Result<InferenceRunner<E>> {
+        let obs_normalizer = match self.config.observation_mode {
+            InferenceObservationMode::Raw => None,
+            InferenceObservationMode::Normalized => {
+                let serialized = std::fs::read_to_string(self.directory.join(NORMALIZER_FILE))?;
+                let normalizer_builder: NormalizerBuilder = yaml_serde::from_str(&serialized)?;
+                Some(normalizer_builder.into_normalizer())
+            }
+        };
+        let actor_bytes = std::fs::read(self.directory.join(ACTOR_FILE))?;
+        let actor = match self.config.backend {
+            InferenceBackend::Candle(backend) => {
+                let actor = CandlePolicyKind::from_bytes(&actor_bytes, backend.device);
+                InferenceActor::Candle(ActorWrapper::new(actor))
+            }
+            InferenceBackend::Burn(_) => {
+                let env_description = env.env_description();
+                let actor = self
+                    .config
+                    .policy_builder
+                    .build_burn::<NdArray, _>(
+                        env_description.observation_space.size(),
+                        env_description.action_space,
+                    )
+                    .load_from_bytes(actor_bytes)?;
+                InferenceActor::Burn(ActorWrapper::new(actor))
+            }
+        };
+        InferenceRunner::new(env, obs_normalizer, actor)
+    }
+}
+
+/// Backend-independent actor adapted to an environment tensor type.
+#[derive(Debug, Clone)]
+pub enum InferenceActor<T: R2lTensor> {
+    /// Candle-backed inference actor.
+    Candle(ActorWrapper<CandlePolicyKind, T>),
+    /// Burn-backed inference actor.
+    Burn(ActorWrapper<BurnPolicyKind<NdArray>, T>),
+}
+
+impl<T: R2lTensor> Actor for InferenceActor<T> {
+    type Tensor = T;
+
+    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+        match self {
+            Self::Candle(actor) => actor.action(observation),
+            Self::Burn(actor) => actor.action(observation),
+        }
     }
 }
 
 /// Stateful, single-environment inference runtime.
-pub struct InferenceRunner<E: Env, A: Actor<Tensor = E::Tensor>> {
+pub struct InferenceRunner<E: Env> {
     env: E,
     obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    actor: A,
+    actor: InferenceActor<E::Tensor>,
     last_state: E::Tensor,
 }
 
-/// Candle-backed inference runtime.
-pub type CandleInferenceRunner<E> =
-    InferenceRunner<E, ActorWrapper<CandlePolicyKind, <E as Env>::Tensor>>;
-
-impl<E: Env, A: Actor<Tensor = E::Tensor>> InferenceRunner<E, A> {
+impl<E: Env> InferenceRunner<E> {
     fn new(
         mut env: E,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-        actor: A,
+        actor: InferenceActor<E::Tensor>,
     ) -> anyhow::Result<Self> {
         let mut last_state = env.reset(sample_u64())?;
         if let Some(obs_normalizer) = &obs_normalizer {

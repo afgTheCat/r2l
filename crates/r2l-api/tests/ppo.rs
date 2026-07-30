@@ -27,7 +27,7 @@ fn ppo_inference() {
 
     let inference_artifacts = InferenceArtifacts::load(inference_dir).unwrap();
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
-    let mut inference = inference_artifacts.build_candle(env).unwrap();
+    let mut inference = inference_artifacts.build(env).unwrap();
     for _ in 0..10 {
         loop {
             let snapshot = inference.step().unwrap();
