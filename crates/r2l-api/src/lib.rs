@@ -26,7 +26,11 @@ pub use builders::agent::{BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder
 // pub use builders::inference::{
 //     BurnInferenceRunner, CandleInferenceRunner, InferenceRunner, InferenceRunnerBuilder,
 // };
+pub use builders::inference2::{
+    CandleInference2, DirectInferenceBuilder, Inference2, Inference2Builder, StagedInferenceBuilder,
+};
 pub use builders::learning_module::OnPolicyOptimizerLayout;
+pub use builders::normalizer::NormalizerBuilder;
 pub use builders::on_policy::OnPolicyAlgorithmBuilder;
 pub use builders::policy::PolicyBuilder;
 pub use builders::ppo::agent::{PPOAgentBuilder, PPOBurnAgentBuilder, PPOCandleAgentBuilder};
