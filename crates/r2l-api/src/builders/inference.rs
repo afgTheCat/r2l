@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, ensure};
 use r2l_candle::distributions::CandlePolicyKind;
@@ -106,7 +106,6 @@ impl InferenceConfig {
             env_description.action_space,
             &backend.device,
         )?;
-        // TODO: load actor weights from the inference artifact directory.
         InferenceRunner::new(env, obs_normalizer, ActorWrapper::new(actor))
     }
 
@@ -132,6 +131,32 @@ impl InferenceConfig {
         let actor_bytes = std::fs::read(inference_dir.join(ACTOR_FILE))?;
         let actor = CandlePolicyKind::from_bytes(&actor_bytes, backend.device);
         InferenceRunner::new(env, obs_normalizer, ActorWrapper::new(actor))
+    }
+}
+
+/// An inference configuration bound to its learned artifact directory.
+#[derive(Debug, Clone)]
+pub struct InferenceArtifacts {
+    config: InferenceConfig,
+    directory: PathBuf,
+}
+
+impl InferenceArtifacts {
+    /// Loads an inference configuration and binds it to `directory`.
+    pub fn load(directory: impl Into<PathBuf>) -> anyhow::Result<Self> {
+        let directory = directory.into();
+        let config = InferenceConfig::load_from_dir(&directory)?;
+        Ok(Self { config, directory })
+    }
+
+    /// Returns the loaded inference configuration.
+    pub fn config(&self) -> &InferenceConfig {
+        &self.config
+    }
+
+    /// Builds a Candle inference runtime using the bound learned artifacts.
+    pub fn build_candle<E: Env>(self, env: E) -> anyhow::Result<CandleInferenceRunner<E>> {
+        self.config.build_candle_from_dir(env, self.directory)
     }
 }
 

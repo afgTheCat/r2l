@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use r2l_api::{InferenceConfig, LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
+use r2l_api::{InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
 use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";
@@ -25,11 +25,9 @@ fn ppo_inference() {
     let mut ppo = ppo_builder.build().unwrap();
     ppo.train().unwrap();
 
-    let inference_config = InferenceConfig::load_from_dir(&inference_dir).unwrap();
+    let inference_artifacts = InferenceArtifacts::load(inference_dir).unwrap();
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
-    let mut inference = inference_config
-        .build_candle_from_dir(env, &inference_dir)
-        .unwrap();
+    let mut inference = inference_artifacts.build_candle(env).unwrap();
     for _ in 0..10 {
         loop {
             let snapshot = inference.step().unwrap();
