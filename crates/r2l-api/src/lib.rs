@@ -18,7 +18,7 @@ pub type BurnBackend = Autodiff<NdArray>;
 
 pub use agents::a2c::{A2CBurnAgent, A2CCandleAgent};
 pub use agents::ppo::{PPOBurnAgent, PPOCandleAgent};
-pub use builders::a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder};
+pub use builders::a2c::agent::{A2CBurnAgentBuilder, A2CCandleAgentBuilder};
 pub use builders::a2c::algorithm::{
     A2CAlgorithmBuilder, A2CBurnAlgorithmBuilder, A2CCandleAlgorithmBuilder,
 };

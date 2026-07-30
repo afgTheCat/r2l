@@ -21,10 +21,8 @@ use crate::{
 ///
 /// This is the main entry point for configuring A2C-specific agent behavior,
 /// such as advantage normalization and A2C hook settings.
-pub type A2CAgentBuilder = OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, CandleBackend>;
-
-/// A2C agent builder specialized to the Candle backend.
-pub type A2CCandleAgentBuilder = A2CAgentBuilder;
+pub type A2CCandleAgentBuilder =
+    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, CandleBackend>;
 
 /// A2C agent builder specialized to the Burn backend.
 pub type A2CBurnAgentBuilder =
@@ -38,7 +36,7 @@ impl A2CBurnAgentBuilder {
     }
 }
 
-impl A2CAgentBuilder {
+impl A2CCandleAgentBuilder {
     fn seed(&self, seed: Option<u64>) {
         if let Some(seed) = seed {
             self.backend.seed(seed);
@@ -129,7 +127,7 @@ impl<Backend> OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, Backend> {
     }
 }
 
-impl AgentBuilder for A2CAgentBuilder {
+impl AgentBuilder for A2CCandleAgentBuilder {
     type Agent = A2CCandleAgent;
 
     fn build<T: R2lTensor>(

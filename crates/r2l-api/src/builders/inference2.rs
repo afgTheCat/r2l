@@ -9,7 +9,8 @@ use r2l_core::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CandleBackend, PPOCandleAgent, PolicyBuilder, builders::normalizer::NormalizerBuilder,
+    CandleBackend, OnPolicyAgentBuilder, PPOCandleAgent, PolicyBuilder,
+    builders::normalizer::NormalizerBuilder,
 };
 
 pub struct Inference2<E: Env, A: Actor<Tensor = E::Tensor>> {
@@ -68,6 +69,7 @@ impl Inference2Builder<CandleBackend> {
                 &self.backend.device,
             )
             .unwrap();
+        // TODO: load actor weights in here!
         let actor = ActorWrapper::new(actor);
         Inference2::new(env, obs_normalizer, actor)
     }
@@ -76,5 +78,9 @@ impl Inference2Builder<CandleBackend> {
     fn from_algo<S: Sampler, H: OnPolicyAlgorithmHooks<A = PPOCandleAgent, S = S>>(
         _algo: OnPolicyAlgorithm<PPOCandleAgent, S, H>,
     ) {
+    }
+
+    fn from_builder<P, H>(builder: OnPolicyAgentBuilder<P, H, CandleBackend>) {
+        let policy_builder = builder.learning_module_builder.policy_builder;
     }
 }
