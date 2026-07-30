@@ -6,7 +6,7 @@ use r2l_gym::GymEnv;
 const ENV_NAME: &str = "Pendulum-v1";
 
 #[test]
-fn ppo() {
+fn ppo_inference() {
     let inference_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo-inference");
     let hidden_layers = vec![64, 64];
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)

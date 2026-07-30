@@ -1,0 +1,10 @@
+policy_builder:
+  hidden_layers:
+  - 64
+  - 64
+  activation_function: Tanh
+  log_std_init: 0.0
+observation_mode: normalized
+backend:
+  type: Candle
+  config: Cpu
