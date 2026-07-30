@@ -198,4 +198,15 @@ impl<E: Env> InferenceRunner<E> {
         self.last_state = snapshot.state.clone();
         Ok(snapshot)
     }
+
+    /// Runs the environment to completion and then resets it.
+    pub fn run_episode(&mut self) {
+        loop {
+            let snapshot = self.step().unwrap();
+            if snapshot.terminated || snapshot.truncated {
+                break;
+            }
+        }
+        self.reset().unwrap();
+    }
 }
