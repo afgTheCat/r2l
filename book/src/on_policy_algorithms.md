@@ -49,8 +49,9 @@ schedules.
 
 Most applications should construct a complete run with
 `PPOAlgorithmBuilder` or `A2CAlgorithmBuilder`. The lower-level
-`PPOAgentBuilder`, `A2CAgentBuilder`, and `SamplerBuilder` are intended for
-custom compositions.
+`PPOAgentBuilder`, `A2CAgentBuilder`, and `ConfiguredSamplerBuilder` are
+intended for custom compositions. Custom sampler builders can implement the
+`SamplerBuilder` trait to plug into `OnPolicyAlgorithmBuilder`.
 
 ## PPO hooks
 

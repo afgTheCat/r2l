@@ -1,9 +1,6 @@
 use r2l_core::{
     buffers::Memory,
-    env::{
-        Env, EnvBuilder, EnvBuilderType,
-        normalizer::{ClippedNormalizer, NormalizerMode},
-    },
+    env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
     models::Actor,
 };
 

@@ -33,7 +33,10 @@ pub use builders::ppo::agent::{PPOAgentBuilder, PPOBurnAgentBuilder, PPOCandleAg
 pub use builders::ppo::algorithm::{
     PPOAlgorithmBuilder, PPOBurnAlgorithmBuilder, PPOCandleAlgorithmBuilder,
 };
-pub use builders::sampler::{DirectSamplerSelection, SamplerBuilder, StagedSamplerSelection};
+pub use builders::sampler::{
+    BuiltSampler, ConfiguredSamplerBuilder, DefaultSamplerBuilder, DirectSamplerSelection,
+    SamplerBuilder, StagedSamplerSelection,
+};
 pub use builders::sampler::{EpisodeHookBound, StepHookBound};
 pub use evaluators::best_actor_evaluator::{BestActorEvaluator, BestActorEvaluatorBuilder};
 pub use evaluators::simple_evaluator::Evaluator;

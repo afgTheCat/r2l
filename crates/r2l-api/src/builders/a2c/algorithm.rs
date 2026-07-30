@@ -19,12 +19,15 @@ use crate::{
         agent::{AgentBuilder, OnPolicyAgentBuilder},
         learning_module::{AdamWParams, OnPolicyOptimizerLayout},
         on_policy::OnPolicyAlgorithmBuilder,
-        sampler::{SamplerBuilder, SamplerHookBuilder, StepHookBound},
+        sampler::{
+            ConfiguredSamplerBuilder, DefaultSamplerBuilder, DirectSamplerSelection,
+            SamplerBuilder, StepHookBound,
+        },
     },
 };
 
-impl<B, EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
-    OnPolicyAlgorithmBuilder<OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>, EB, SH, ST>
+impl<B, SB: SamplerBuilder>
+    OnPolicyAlgorithmBuilder<OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>, SB>
 where
     OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, B>: AgentBuilder,
 {
@@ -180,14 +183,14 @@ where
 pub type A2CCandleAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
-    ST = crate::builders::sampler::DirectSamplerSelection,
-> = OnPolicyAlgorithmBuilder<A2CCandleAgentBuilder, EB, SH, ST>;
+    ST = DirectSamplerSelection,
+> = OnPolicyAlgorithmBuilder<A2CCandleAgentBuilder, ConfiguredSamplerBuilder<EB, SH, ST>>;
 
 impl A2CCandleAlgorithmBuilder<GymEnvBuilder> {
     /// Creates an A2C algorithm builder for a Gym environment.
     pub fn gym<EB: Into<GymEnvBuilder>>(builder: EB, n_envs: usize) -> Self {
         Self::from_sampler_and_agent_builder(
-            SamplerBuilder::new(builder, n_envs),
+            DefaultSamplerBuilder::new(builder, n_envs),
             A2CCandleAgentBuilder::new(n_envs),
         )
     }
@@ -197,7 +200,7 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> A2CCandleAlgorithmBuilder<EB> 
     /// Creates an A2C algorithm builder for a custom environment builder.
     pub fn new(builder: EB, n_envs: usize) -> Self {
         Self::from_sampler_and_agent_builder(
-            SamplerBuilder::new(builder, n_envs),
+            DefaultSamplerBuilder::new(builder, n_envs),
             A2CCandleAgentBuilder::new(n_envs),
         )
     }
@@ -207,14 +210,15 @@ impl<EB: EnvBuilder<Env: Env<Tensor: R2lTensor>>> A2CCandleAlgorithmBuilder<EB> 
 pub type A2CBurnAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
-    ST = crate::builders::sampler::DirectSamplerSelection,
-> = OnPolicyAlgorithmBuilder<A2CBurnAgentBuilder, EB, SH, ST>;
+    ST = DirectSamplerSelection,
+> = OnPolicyAlgorithmBuilder<A2CBurnAgentBuilder, ConfiguredSamplerBuilder<EB, SH, ST>>;
 
-impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
-    A2CBurnAlgorithmBuilder<EB, SH, ST>
-{
+impl<SB: SamplerBuilder> OnPolicyAlgorithmBuilder<A2CBurnAgentBuilder, SB> {
     /// Switches the algorithm builder to the Candle backend.
-    pub fn with_candle(self, device: candle_core::Device) -> A2CCandleAlgorithmBuilder<EB, SH, ST> {
+    pub fn with_candle(
+        self,
+        device: candle_core::Device,
+    ) -> OnPolicyAlgorithmBuilder<A2CCandleAgentBuilder, SB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             hooks_builder,
@@ -230,7 +234,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     }
 
     /// Keeps the algorithm builder on the Burn backend.
-    pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB, SH, ST> {
+    pub fn with_burn(self) -> OnPolicyAlgorithmBuilder<A2CBurnAgentBuilder, SB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             hooks_builder,
@@ -252,14 +256,15 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
 pub type A2CAlgorithmBuilder<
     EB,
     SH = StepHookBound<<EB as EnvBuilder>::Env>,
-    ST = crate::builders::sampler::DirectSamplerSelection,
+    ST = DirectSamplerSelection,
 > = A2CCandleAlgorithmBuilder<EB, SH, ST>;
 
-impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
-    A2CCandleAlgorithmBuilder<EB, SH, ST>
-{
+impl<SB: SamplerBuilder> OnPolicyAlgorithmBuilder<A2CCandleAgentBuilder, SB> {
     /// Switches the algorithm builder to the Candle backend.
-    pub fn with_candle(self, device: Device) -> A2CCandleAlgorithmBuilder<EB, SH, ST> {
+    pub fn with_candle(
+        self,
+        device: Device,
+    ) -> OnPolicyAlgorithmBuilder<A2CCandleAgentBuilder, SB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             hooks_builder,
@@ -275,7 +280,7 @@ impl<EB: EnvBuilder, SH: SamplerHookBuilder<Env = EB::Env>, ST>
     }
 
     /// Switches the algorithm builder to the Burn backend.
-    pub fn with_burn(self) -> A2CBurnAlgorithmBuilder<EB, SH, ST> {
+    pub fn with_burn(self) -> OnPolicyAlgorithmBuilder<A2CBurnAgentBuilder, SB> {
         let OnPolicyAlgorithmBuilder {
             sampler_builder,
             hooks_builder,

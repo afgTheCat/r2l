@@ -3,7 +3,7 @@ use r2l_core::{
     ActorWrapper,
     env::{Env, Snapshot, normalizer::ClippedNormalizer},
     models::Actor,
-    on_policy::algorithm::{Agent, OnPolicyAlgorithm, OnPolicyAlgorithmHooks, Sampler},
+    on_policy::algorithm::{OnPolicyAlgorithm, OnPolicyAlgorithmHooks, Sampler},
     rng::sample_u64,
 };
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,7 @@ impl Inference2Builder<CandleBackend> {
 
     // maybe we do not want to do this? maybe we want to use a builder for this?
     fn from_algo<S: Sampler, H: OnPolicyAlgorithmHooks<A = PPOCandleAgent, S = S>>(
-        algo: OnPolicyAlgorithm<PPOCandleAgent, S, H>,
+        _algo: OnPolicyAlgorithm<PPOCandleAgent, S, H>,
     ) {
     }
 }
