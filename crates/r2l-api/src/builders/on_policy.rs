@@ -209,18 +209,15 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
         self
     }
 
-    /// Sets the filesystem path used to persist the best-performing actor.
-    pub fn with_evaluator_best_actor_path<P: Into<std::path::PathBuf>>(
-        mut self,
-        eval_path: P,
-    ) -> Self {
+    /// Sets the directory used to persist inference artifacts.
+    pub fn with_inference_dir<P: Into<std::path::PathBuf>>(mut self, inference_dir: P) -> Self {
         let evaluator_builder =
             if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-                evaluator_builder.with_best_actor_path(eval_path)
+                evaluator_builder.with_inference_dir(inference_dir)
             } else {
                 let env_builder = self.sampler_builder.env_builder().clone();
                 BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
-                    .with_best_actor_path(eval_path)
+                    .with_inference_dir(inference_dir)
             };
         self.hooks_builder.evaluator_builder = Some(evaluator_builder);
         self
@@ -267,6 +264,22 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
             set_seed(seed);
         }
         let env_description = self.sampler_builder.env_description()?;
+        let inference_dir = self
+            .hooks_builder
+            .evaluator_builder
+            .as_ref()
+            .and_then(BestActorEvaluatorBuilder::inference_dir);
+        if let Some(inference_dir) = inference_dir {
+            let inference_config = self
+                .agent_builder
+                .inference_config(self.sampler_builder.inference_observation_mode())
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "the configured agent builder does not support inference artifacts"
+                    )
+                })?;
+            inference_config.write_to_dir(inference_dir)?;
+        }
         let BuiltSampler {
             sampler,
             obs_normalizer,

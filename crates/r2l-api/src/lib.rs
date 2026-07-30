@@ -23,11 +23,9 @@ pub use builders::a2c::algorithm::{
     A2CAlgorithmBuilder, A2CBurnAlgorithmBuilder, A2CCandleAlgorithmBuilder,
 };
 pub use builders::agent::{BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder};
-// pub use builders::inference::{
-//     BurnInferenceRunner, CandleInferenceRunner, InferenceRunner, InferenceRunnerBuilder,
-// };
-pub use builders::inference2::{
-    CandleInference2, DirectInferenceBuilder, Inference2, Inference2Builder, StagedInferenceBuilder,
+pub use builders::inference::{
+    CandleInferenceRunner, InferenceBackend, InferenceConfig, InferenceObservationMode,
+    InferenceRunner,
 };
 pub use builders::learning_module::OnPolicyOptimizerLayout;
 pub use builders::normalizer::NormalizerBuilder;

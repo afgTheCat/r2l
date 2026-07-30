@@ -271,7 +271,7 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPoli
 
     fn shutdown_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> Result<()> {
         if let Some(evaluator) = &mut self.evaluator {
-            evaluator.try_write_to_file()?;
+            evaluator.try_write_artifacts()?;
             evaluator.shutdown();
         }
         runtime.shutdown();

@@ -8,6 +8,7 @@ use crate::builders::learning_module::{
     AdamWParams, OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout,
 };
 use crate::builders::policy::PolicyBuilder;
+use crate::{InferenceConfig, InferenceObservationMode};
 
 /// Trait implemented by concrete `Agent` builders.
 ///
@@ -17,6 +18,17 @@ use crate::builders::policy::PolicyBuilder;
 pub trait AgentBuilder {
     /// Agent type produced by this builder.
     type Agent: Agent;
+
+    /// Returns the inference configuration represented by this builder.
+    ///
+    /// Custom agent builders that do not support inference artifact export may
+    /// retain the default `None`.
+    fn inference_config(
+        &self,
+        _observation_mode: InferenceObservationMode,
+    ) -> Option<InferenceConfig> {
+        None
+    }
 
     /// Builds the configured agent for the provided environment dimensions.
     fn build<T: R2lTensor>(

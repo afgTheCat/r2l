@@ -6,7 +6,7 @@ use r2l_agents::on_policy_algorithms::a2c::{A2C, A2CParams};
 use r2l_core::{env::Space, tensor::R2lTensor};
 
 use crate::{
-    BurnBackend,
+    BurnBackend, InferenceBackend, InferenceConfig, InferenceObservationMode,
     agents::a2c::{A2CBurnAgent, A2CCandleAgent},
     builders::{
         a2c::hook::DefaultA2CHookBuilder,
@@ -130,6 +130,17 @@ impl<Backend> OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, Backend> {
 impl AgentBuilder for A2CCandleAgentBuilder {
     type Agent = A2CCandleAgent;
 
+    fn inference_config(
+        &self,
+        observation_mode: InferenceObservationMode,
+    ) -> Option<InferenceConfig> {
+        Some(InferenceConfig::new(
+            self.learning_module_builder.policy_builder.clone(),
+            observation_mode,
+            InferenceBackend::Candle(self.backend.clone()),
+        ))
+    }
+
     fn build<T: R2lTensor>(
         self,
         observation_size: usize,
@@ -149,6 +160,17 @@ impl AgentBuilder for A2CCandleAgentBuilder {
 
 impl AgentBuilder for A2CBurnAgentBuilder {
     type Agent = A2CBurnAgent<BurnBackend>;
+
+    fn inference_config(
+        &self,
+        observation_mode: InferenceObservationMode,
+    ) -> Option<InferenceConfig> {
+        Some(InferenceConfig::new(
+            self.learning_module_builder.policy_builder.clone(),
+            observation_mode,
+            InferenceBackend::Burn(self.backend),
+        ))
+    }
 
     fn build<T: R2lTensor>(
         self,

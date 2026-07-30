@@ -1,15 +1,16 @@
 use std::path::PathBuf;
 
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
+use r2l_api::{InferenceConfig, LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
+use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";
 
 #[test]
 fn ppo() {
-    let model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
+    let inference_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo-inference");
     let hidden_layers = vec![64, 64];
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
-        .with_burn()
+        .with_inference_dir(&inference_dir)
         .with_seed(0)
         .with_policy_hidden_layers(hidden_layers.clone())
         .with_clip_range(0.2)
@@ -18,8 +19,24 @@ fn ppo() {
         .with_gamma(0.9)
         .with_learning_rate(0.001)
         .with_rollout_bound(StepHookBound::new(1024))
+        .with_observation_normalizer(Some(10.0))
         .with_total_epochs(10)
         .with_learning_schedule(LearningSchedule::rollout_bound(30));
     let mut ppo = ppo_builder.build().unwrap();
     ppo.train().unwrap();
+
+    let inference_config = InferenceConfig::load_from_dir(&inference_dir).unwrap();
+    let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
+    let mut inference = inference_config
+        .build_candle_from_dir(env, &inference_dir)
+        .unwrap();
+    for _ in 0..10 {
+        loop {
+            let snapshot = inference.step().unwrap();
+            if snapshot.terminated || snapshot.truncated {
+                break;
+            }
+        }
+        inference.reset().unwrap();
+    }
 }

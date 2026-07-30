@@ -14,6 +14,7 @@ use r2l_sampler::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    InferenceObservationMode,
     hooks::sampler::{EpisodeBoundHook, StepBoundHook},
     utils::RewardNormalizer,
 };
@@ -58,6 +59,11 @@ pub trait SamplerBuilder {
         &self,
     ) -> anyhow::Result<EnvDescription<<Self::Sampler as Sampler>::Tensor>> {
         self.env_builder().env_description()
+    }
+
+    /// Returns how observations must be processed during inference.
+    fn inference_observation_mode(&self) -> InferenceObservationMode {
+        InferenceObservationMode::Raw
     }
 
     /// Sets where sampler workers execute.
@@ -295,6 +301,14 @@ impl<
     fn with_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
         self.execution_mode = execution_mode;
         self
+    }
+
+    fn inference_observation_mode(&self) -> InferenceObservationMode {
+        if self.sampler_type.obs_clip.is_some() {
+            InferenceObservationMode::Normalized
+        } else {
+            InferenceObservationMode::Raw
+        }
     }
 
     /// Builds the configured normalized sampler instance.

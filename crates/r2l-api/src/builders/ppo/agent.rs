@@ -6,7 +6,7 @@ use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
 use r2l_core::{env::Space, tensor::R2lTensor};
 
 use crate::{
-    BurnBackend,
+    BurnBackend, InferenceBackend, InferenceConfig, InferenceObservationMode,
     agents::ppo::{PPOBurnAgent, PPOCandleAgent},
     builders::{
         agent::{AgentBuilder, BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder},
@@ -144,6 +144,17 @@ impl<Backend> OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, Backend> {
 impl AgentBuilder for PPOAgentBuilder {
     type Agent = PPOCandleAgent;
 
+    fn inference_config(
+        &self,
+        observation_mode: InferenceObservationMode,
+    ) -> Option<InferenceConfig> {
+        Some(InferenceConfig::new(
+            self.learning_module_builder.policy_builder.clone(),
+            observation_mode,
+            InferenceBackend::Candle(self.backend.clone()),
+        ))
+    }
+
     fn build<T: R2lTensor>(
         self,
         observation_size: usize,
@@ -163,6 +174,17 @@ impl AgentBuilder for PPOAgentBuilder {
 
 impl AgentBuilder for PPOBurnAgentBuilder {
     type Agent = PPOBurnAgent<BurnBackend>;
+
+    fn inference_config(
+        &self,
+        observation_mode: InferenceObservationMode,
+    ) -> Option<InferenceConfig> {
+        Some(InferenceConfig::new(
+            self.learning_module_builder.policy_builder.clone(),
+            observation_mode,
+            InferenceBackend::Burn(self.backend),
+        ))
+    }
 
     fn build<T: R2lTensor>(
         self,

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use r2l_core::{
@@ -12,7 +12,13 @@ use r2l_core::{
 use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
 use serde::{Deserialize, Serialize};
 
-use crate::{builders::normalizer::NormalizerBuilder, hooks::sampler::EpisodeBoundHook};
+use crate::{
+    builders::{
+        inference::{ACTOR_FILE, NORMALIZER_FILE},
+        normalizer::NormalizerBuilder,
+    },
+    hooks::sampler::EpisodeBoundHook,
+};
 
 enum EvaluationSampler<E: Env> {
     Direct(DirectSampler<E, EpisodeBoundHook<E>>),
@@ -97,7 +103,7 @@ pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     env_builder: EnvBuilderType<EB>,
     n_episodes: usize,
     execution_mode: SamplerExecutionMode,
-    eval_path: Option<PathBuf>,
+    inference_dir: Option<PathBuf>,
     evaluator_frequency: usize,
     csv_states_path: Option<PathBuf>,
     eval_states: Vec<EvalState>,
@@ -111,7 +117,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             evaluator_frequency: 1,
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::MultiThreaded,
-            eval_path: None,
+            inference_dir: None,
             csv_states_path: None,
             eval_states: vec![],
         }
@@ -124,7 +130,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             env_builder: EnvBuilderType::homogeneous(env_builder, 10),
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::MultiThreaded,
-            eval_path: None,
+            inference_dir: None,
             csv_states_path: None,
             eval_states: vec![],
         }
@@ -154,10 +160,10 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
         self
     }
 
-    /// Sets the optional file path used to persist the best actor.
-    pub fn with_best_actor_path<P: Into<PathBuf>>(mut self, eval_path: P) -> Self {
-        let eval_path = assert_file_path_is_valid(eval_path.into());
-        self.eval_path = Some(eval_path);
+    /// Sets the directory used to persist inference artifacts.
+    pub fn with_inference_dir<P: Into<PathBuf>>(mut self, inference_dir: P) -> Self {
+        let inference_dir = normalize_inference_dir(inference_dir.into());
+        self.inference_dir = Some(inference_dir);
         self
     }
 
@@ -183,7 +189,7 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             current_evaluator_step: 0,
             evaluator_frequency: self.evaluator_frequency,
             sampler,
-            best_actor_path: self.eval_path,
+            inference_dir: self.inference_dir,
             best_rewards: f32::MIN,
             best_actor: None,
             best_obs_normalizer: None,
@@ -191,6 +197,20 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             eval_states: self.eval_states,
         }
     }
+
+    pub(crate) fn inference_dir(&self) -> Option<&Path> {
+        self.inference_dir.as_deref()
+    }
+}
+
+fn normalize_inference_dir(path: PathBuf) -> PathBuf {
+    let path = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir().unwrap().join(path)
+    };
+    assert!(!path.is_file());
+    path
 }
 
 fn assert_file_path_is_valid(path: PathBuf) -> PathBuf {
@@ -214,7 +234,7 @@ fn assert_file_path_is_valid(path: PathBuf) -> PathBuf {
 /// observed so far.
 pub struct BestActorEvaluator<A: Actor, E: Env<Tensor: R2lTensor>> {
     sampler: EvaluationSampler<E>,
-    best_actor_path: Option<PathBuf>,
+    inference_dir: Option<PathBuf>,
     best_actor: Option<A>,
     best_obs_normalizer: Option<NormalizerBuilder>,
     best_rewards: f32,
@@ -259,19 +279,20 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
             self.best_rewards = avg_reward;
             self.best_actor = Some(actor);
             self.best_obs_normalizer = self.sampler.normalizer_snapshot();
-            self.try_write_to_file()
+            self.try_write_artifacts()
                 .expect("failed to write improved actor checkpoint");
         }
     }
 
-    /// Serializes the current best actor and writes eval stats next to it.
-    pub fn try_write_to_file(&self) -> Result<()> {
-        if let (Some(actor), Some(path)) = (&self.best_actor, &self.best_actor_path)
+    /// Writes the current best inference artifacts and evaluation statistics.
+    pub fn try_write_artifacts(&self) -> Result<()> {
+        if let (Some(actor), Some(inference_dir)) = (&self.best_actor, &self.inference_dir)
             && let Some(bytes) = actor.try_serialize()
         {
-            std::fs::write(path, bytes)?;
+            std::fs::create_dir_all(inference_dir)?;
+            std::fs::write(inference_dir.join(ACTOR_FILE), bytes)?;
             if let Some(normalizer) = &self.best_obs_normalizer {
-                let normalizer_path = path.with_extension("normalizer.yaml");
+                let normalizer_path = inference_dir.join(NORMALIZER_FILE);
                 std::fs::write(normalizer_path, yaml_serde::to_string(normalizer)?)?;
             }
         }
