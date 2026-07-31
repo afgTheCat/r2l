@@ -6,5 +6,6 @@ sb3/runs
 *.safetensors
 .codex
 logs/
+runs/
 inference.yaml
 normalizer.yaml

@@ -56,19 +56,13 @@ impl Default for DefaultOnPolicyAlgorithmHooksBuilder {
 }
 
 impl DefaultOnPolicyAlgorithmHooksBuilder {
-    fn try_write_inference_config<AB: AgentBuilder>(&self) {
-        let Some(BestActorEvaluatorConfig { output_dir, .. }) = &self.evaluator_config else {
-            return;
-        };
-    }
-
     /// Replaces the learning schedule that controls training termination.
     fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
         self.learning_schedule = learning_schedule;
         self
     }
 
-    /// Installs or clears the evaluator used during training.
+    /// Installs the evaluator used during training.
     fn with_evaluator(mut self, evaluator_builder: BestActorEvaluatorConfig) -> Self {
         self.evaluator_config = Some(evaluator_builder);
         self
@@ -136,7 +130,7 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
         }
     }
 
-    /// Installs or clears the evaluator used during training.
+    /// Installs the evaluator used during training.
     pub fn with_evaluator(mut self, evaluator_builder: BestActorEvaluatorConfig) -> Self {
         self.hooks_builder = self.hooks_builder.with_evaluator(evaluator_builder);
         self
