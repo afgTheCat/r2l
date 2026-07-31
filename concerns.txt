@@ -1,0 +1,88 @@
+# Concerns for `feat/serialize-builders`
+
+Reviewed from the merge base with `main` (`fb727b0`) through `6d35e78`.
+
+## Agreed action
+
+### PPO inference test is a manual example
+
+`crates/r2l-api/tests/ppo.rs` performs a substantial training run, writes persistent
+artifacts, opens a Gym environment with `render_mode = "human"`, and runs ten
+rendered episodes. This makes it dependent on a working graphical/Pygame setup and
+unsuitable for an ordinary automated integration test.
+
+Move this workflow into an example. A separate automated artifact round-trip test
+can be added later using no renderer, a temporary output directory, and minimal
+training.
+
+The change also replaced the previous collection of PPO environment integration
+tests with this one Pendulum workflow. We should decide separately which of that
+coverage should remain as automated or ignored integration tests.
+
+## To discuss
+
+### Candle artifact support is incomplete
+
+`CandlePolicyKind` supports categorical, diagonal-Gaussian, multi-categorical,
+Bernoulli, and composite policies, but only categorical and diagonal-Gaussian
+currently serialize themselves. `BestActorEvaluator::try_write_artifacts` silently
+does not write `actor.safetensors` when `Actor::try_serialize` returns `None`, even
+though `inference.yaml` has already been written.
+
+`CandlePolicyKind::from_bytes` also only distinguishes diagonal Gaussian from
+categorical. We should either explicitly limit inference artifact generation to
+Discrete and Box action spaces for now, or encode and restore every supported
+policy kind.
+
+### Non-CPU Candle inference tensor placement
+
+`CandleBackend` can preserve CUDA and Metal devices, but `ActorWrapper` converts
+environment observations through `R2lTensor`, whose Candle tensor constructors
+currently create tensors on the CPU. A policy restored on CUDA or Metal may
+therefore receive a CPU observation. CPU Candle and Burn/NDArray are unaffected.
+
+### Inference convenience methods panic on runtime errors
+
+`InferenceRunner::run_episode` and `mode_run_episode` unwrap failures from `step`
+and `reset`, even though those lower-level operations return `anyhow::Result`.
+Malformed Candle safetensor data and metadata are also unwrapped by
+`CandlePolicyKind::from_bytes`, despite `InferenceArtifacts::build` exposing a
+fallible API. These errors should probably propagate instead of becoming panics.
+
+### Artifact directories can temporarily contain mixed generations
+
+`OnPolicyAlgorithmBuilder::build` writes `inference.yaml` before the agent is built
+or trained. The actor and normalizer are written later when evaluation finds a new
+best actor. Reusing an output directory can consequently pair a new configuration
+with old weights or normalization statistics if construction/training fails or the
+directory is read while training is in progress.
+
+Writing the configuration together with a successful checkpoint, ideally using
+temporary files followed by renames, would make an artifact generation internally
+consistent.
+
+## Addressed
+
+### `A2CAgentBuilder` alias was removed inconsistently
+
+Addressed: `A2CAgentBuilder` was restored as the default Candle alias, with
+`A2CCandleAgentBuilder` retained as its explicit synonym. This also repairs the
+existing rustdoc references.
+
+### `staged2` was not compiled
+
+Addressed: `staged2` was an unsuccessful experiment that moved the normalizer and
+worker pool closer together. The unused prototype has been removed.
+
+## Validation notes
+
+- `cargo test --workspace --no-run` passed.
+- `cargo fmt --check` passed.
+- `cargo clippy --workspace --all-targets -- -D warnings` failed on the large
+  `InferenceActor` enum variant and a redundant `while let Ok(_)` pattern.
+- The original rustdoc validation failed on three broken `A2CAgentBuilder` links.
+  After restoring the alias, `RUSTDOCFLAGS="-D warnings" cargo doc -p r2l-api
+  --no-deps` passed.
+- `git diff --check` found trailing whitespace in `crates/r2l-api/Cargo.toml` and
+  `crates/r2l-zoo-evaluator/Cargo.toml`.
+- The PPO inference test was not executed.

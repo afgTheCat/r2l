@@ -17,12 +17,14 @@ use crate::{
     hooks::a2c::A2CStats,
 };
 
-/// Builder for A2C agents.
+/// Builder for A2C agents using the default Candle backend.
 ///
 /// This is the main entry point for configuring A2C-specific agent behavior,
 /// such as advantage normalization and A2C hook settings.
-pub type A2CCandleAgentBuilder =
-    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, CandleBackend>;
+pub type A2CAgentBuilder = OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, CandleBackend>;
+
+/// A2C agent builder specialized to the Candle backend.
+pub type A2CCandleAgentBuilder = A2CAgentBuilder;
 
 /// A2C agent builder specialized to the Burn backend.
 pub type A2CBurnAgentBuilder =
