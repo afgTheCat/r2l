@@ -30,6 +30,6 @@ particular:
   implemented and how to work with the higher level APIs. Most users should
   start here. Some basic examples are also shown.
 - [On policy algorithms](./on_policy_algorithms.md): A detailed architectural
-  overview on what components on policy algorithms consists of, how the pieces
+  overview of the components of on-policy algorithms, how the pieces
   fit together, and how to create your own custom hook system.
 - [Off-policy algorithms](./off_policy_algorithms.md): Current support status.

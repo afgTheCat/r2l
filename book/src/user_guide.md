@@ -30,7 +30,7 @@ observation from `reset`, accepts one action in `step`, and describes its
 observation and action spaces.
 
 ```rust,noplayground
-{{#include ../../crates/r2l-core/src/env.rs:env}}
+{{#include ../../crates/r2l-core/src/env/mod.rs:env}}
 ```
 
 Algorithms receive an `EnvBuilder` rather than a concrete environment so that

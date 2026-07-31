@@ -2,8 +2,8 @@
 
 Runnable examples for the `r2l` workspace.
 
-Examples cover custom environment construction, direct sampler use, PPO and
-A2C training, a minimal Pendulum run, and terminal/desktop user interfaces.
+Examples cover custom environment construction, PPO and A2C training, and
+terminal/desktop user interfaces.
 Run one from the workspace root, for example:
 
 ```text

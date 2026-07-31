@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{running_mean::RunningMeanStd, tensor::R2lTensor};
 
-/// Controls whether a normalized sampler mutates shared normalization stats.
+/// Controls whether an observation normalizer mutates shared statistics.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum NormalizerMode {
     /// Update running statistics before normalizing each batch.

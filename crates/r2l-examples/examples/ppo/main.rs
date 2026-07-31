@@ -11,10 +11,12 @@ use r2l_burn::distributions::diagonal::DiagGaussianDistribution;
 const ENV_NAME: &str = "Pendulum-v1";
 
 fn main() {
-    let model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo.safetensor");
+    let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo");
+    let model_path = output_dir.join("actor.safetensors");
     let hidden_layers = vec![64, 64];
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
+        .with_output_dir(output_dir)
         .with_seed(0)
         .with_policy_hidden_layers(hidden_layers.clone())
         .with_clip_range(0.2)

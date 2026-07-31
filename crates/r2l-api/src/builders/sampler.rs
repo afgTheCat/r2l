@@ -311,7 +311,7 @@ impl<
         }
     }
 
-    /// Builds the configured normalized sampler instance.
+    /// Builds the configured staged sampler instance.
     fn build(self) -> BuiltSampler<Self::Sampler> {
         let n_envs = self.env_builder.num_envs();
         let hook = self.hook_builder.build(n_envs);

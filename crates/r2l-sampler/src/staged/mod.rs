@@ -19,7 +19,7 @@ pub use crate::{
     },
 };
 
-/// Hook that controls the sequence of collection bounds for a normalized sampler.
+/// Hook that controls the sequence of collection bounds for a staged sampler.
 pub trait StagedSamplerHook {
     /// Environment type sampled by the hook's sampler.
     type E: Env<Tensor: R2lTensor>;
@@ -31,7 +31,7 @@ pub trait StagedSamplerHook {
     fn reset(&mut self) {}
 }
 
-/// Mutable normalized-sampler state exposed to hook implementations.
+/// Mutable staged-sampler state exposed to hook implementations.
 pub struct StagedSamplerCore<E: Env> {
     /// Inline or threaded environment workers.
     pub pool: WorkerPool<E>,
@@ -44,7 +44,7 @@ pub struct StagedSamplerCore<E: Env> {
 }
 
 impl<E: Env> StagedSamplerCore<E> {
-    /// Builds normalized sampler state and its environment workers.
+    /// Builds staged sampler state and its environment workers.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,

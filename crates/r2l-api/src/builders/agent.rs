@@ -99,7 +99,7 @@ impl CandleBackend {
 /// Shared builder for on-policy `Agent` implementations.
 ///
 /// This type provides the common configuration surface used by the concrete
-/// `*2` agent builder aliases such as
+/// agent builder aliases such as
 /// [`PPOAgentBuilder`](crate::PPOAgentBuilder) and
 /// [`A2CAgentBuilder`](crate::A2CAgentBuilder).
 ///
