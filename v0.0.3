@@ -7,3 +7,5 @@
 [ ] We need the r2l-api to be simplified. What we should probably do is a bunch of type erasures so that the builders can be more easily passed around
 [ ] Reconsider wether TrajectoryBatch is still neeeded
 [ ] DiagGaussianDistribution::from_store is brittle. We def want to revisit the whole serialization fiasco. Same goes for RecurrentCategoricalDistribution::from_store. Also for CategoricalDistribution::from_store.
+[ ] Actor for the sampler is currently a Box<dyn Actor>. Can we do better?
+[ ] Subprocessing samplers

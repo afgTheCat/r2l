@@ -15,7 +15,8 @@ either = {workspace = true}
 anyhow = { workspace = true }
 candle-core = { workspace = true, optional = true }
 burn = { workspace = true, optional = true }
-itertools = "0.14.0"
+itertools = { workspace = true }
+serde = { workspace = true }
 
 [features]
 candle = ["dep:candle-core"]

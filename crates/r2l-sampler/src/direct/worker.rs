@@ -224,9 +224,9 @@ impl<E: Env> ThreadWorker<E> {
                     self.tx.send(WorkerResult::Collected).unwrap();
                 }
                 WorkerCommand::GetEnvDescription => {
-                    let environment_descriotion = self.worker.env.env_description();
+                    let environment_description = self.worker.env.env_description();
                     self.tx
-                        .send(WorkerResult::EnvDescription(environment_descriotion))
+                        .send(WorkerResult::EnvDescription(environment_description))
                         .unwrap();
                 }
                 WorkerCommand::Shutdown => {
@@ -369,12 +369,16 @@ impl<T: R2lTensor> ThreadWorkers<T> {
     }
 }
 
+/// Pool of inline or threaded environment workers.
 pub enum WorkerPool<E: Env> {
+    /// Workers stepped sequentially on the calling thread.
     Vec(Vec<Worker<E>>),
+    /// Workers stepped on dedicated background threads.
     Thread(ThreadWorkers<E::Tensor>),
 }
 
 impl<E: Env> WorkerPool<E> {
+    /// Clears every worker's trajectory buffer.
     pub fn clear_buffers(&mut self) {
         match self {
             Self::Vec(workers) => {
@@ -386,6 +390,7 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
+    /// Returns the environment-space description reported by the first worker.
     pub fn env_description(&self) -> EnvDescription<E::Tensor> {
         match self {
             Self::Vec(workers) => workers[0].env.env_description(),
@@ -393,6 +398,7 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
+    /// Installs a clone of `policy` on every worker.
     pub fn set_actor<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
         match self {
             Self::Vec(workers) => {
@@ -406,6 +412,7 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
+    /// Collects one bounded rollout on every worker.
     pub fn collect(&mut self, bound: RolloutMode) {
         match self {
             Self::Vec(workers) => {
@@ -419,10 +426,12 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
+    /// Steps every worker once.
     pub fn single_step(&mut self) {
         self.collect(RolloutMode::StepBound { n_steps: 1 });
     }
 
+    /// Stops and joins threaded workers.
     pub fn shutdown(&mut self) {
         match self {
             Self::Vec(_) => {
@@ -434,6 +443,7 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
+    /// Resets all worker environments with fresh seeds.
     pub fn reset_all_envs(&mut self) {
         match self {
             Self::Vec(workers) => {
@@ -447,6 +457,7 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
+    /// Returns each worker's current observation, or `None` if any is unset.
     pub fn get_last_states(&mut self) -> Option<Vec<E::Tensor>> {
         match self {
             Self::Vec(workers) => {
@@ -460,6 +471,7 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
+    /// Replaces current worker observations in worker order.
     pub fn set_last_states(&mut self, states: Vec<E::Tensor>) {
         match self {
             Self::Vec(workers) => {
@@ -473,6 +485,7 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
+    /// Replaces the final next state in each worker buffer.
     pub fn replace_last_next_states(&mut self, states: Vec<E::Tensor>) {
         match self {
             Self::Vec(workers) => {
@@ -484,6 +497,7 @@ impl<E: Env> WorkerPool<E> {
         }
     }
 
+    /// Resets every environment without changing its stored current observation.
     pub fn reset_envs_uninserted(&mut self) -> Vec<E::Tensor> {
         match self {
             Self::Vec(workers) => {

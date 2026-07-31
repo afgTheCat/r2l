@@ -115,6 +115,24 @@ impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
         ))
     }
 
+    fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+        let device = Default::default();
+        let observation: Tensor<B, 2> = observation.unsqueeze();
+        let logits: Vec<f32> = self.logits(observation).to_data().to_vec().unwrap();
+        let action = logits
+            .iter()
+            .enumerate()
+            .max_by(|(_, left), (_, right)| left.total_cmp(right))
+            .map(|(index, _)| index)
+            .unwrap();
+        let mut action_mask = vec![0.0; self.action_size];
+        action_mask[action] = 1.0;
+        Ok(Tensor::from_data(
+            TensorData::new(action_mask, vec![self.action_size]),
+            &device,
+        ))
+    }
+
     fn try_serialize(&self) -> Option<Vec<u8>> {
         let mut store = SafetensorsStore::default();
         store.collect_from(self).unwrap();

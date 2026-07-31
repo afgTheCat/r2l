@@ -30,8 +30,8 @@ pub struct Advantages(pub Vec<Vec<f32>>);
 
 impl Advantages {
     /// Samples advantage values at the provided `(buffer_index, step_index)` pairs.
-    pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
-        indicies
+    pub fn sample(&self, indices: &[(usize, usize)]) -> Vec<f32> {
+        indices
             .iter()
             .map(|(buff_idx, idx)| self.0[*buff_idx][*idx])
             .collect()
@@ -63,8 +63,8 @@ pub struct Returns(pub Vec<Vec<f32>>);
 
 impl Returns {
     /// Samples return values at the provided `(buffer_index, step_index)` pairs.
-    pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
-        indicies
+    pub fn sample(&self, indices: &[(usize, usize)]) -> Vec<f32> {
+        indices
             .iter()
             .map(|(buff_idx, idx)| self.0[*buff_idx][*idx])
             .collect()
@@ -77,8 +77,8 @@ pub struct Logps(pub Vec<Vec<f32>>);
 
 impl Logps {
     /// Samples log-probability values at the provided `(buffer_index, step_index)` pairs.
-    pub fn sample(&self, indicies: &[(usize, usize)]) -> Vec<f32> {
-        indicies
+    pub fn sample(&self, indices: &[(usize, usize)]) -> Vec<f32> {
+        indices
             .iter()
             .map(|(buff_idx, idx)| self.0[*buff_idx][*idx])
             .collect()
@@ -122,6 +122,7 @@ fn batch_advantages_and_returns<
     Ok((advantages, returns))
 }
 
+/// Computes generalized advantage estimates and return targets for each batch.
 pub fn batches_advantages_and_returns<
     T1: R2lTensor,
     T2: R2lTensor,
@@ -145,6 +146,7 @@ pub fn batches_advantages_and_returns<
     Ok((Advantages(advantage_vec), Returns(returns_vec)))
 }
 
+/// Samples and converts observations and actions at the supplied batch indices.
 pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -> T2>(
     batches: &[B],
     indices: &[(usize, usize)],
@@ -159,6 +161,7 @@ pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -
     (observations, actions)
 }
 
+/// Computes action log-probabilities for every transition in each batch.
 pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
     batches: &[B],
     policy: &impl Policy<Tensor = T>,
@@ -173,13 +176,15 @@ pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
     Ok(Logps(logps))
 }
 
-pub struct BatchIndexIterator {
+/// Shuffled minibatch-index cursor spanning multiple trajectory batches.
+pub struct ShuffledBatchIndices {
     indices: Vec<(usize, usize)>,
     sample_size: usize,
     current: usize,
 }
 
-impl BatchIndexIterator {
+impl ShuffledBatchIndices {
+    /// Creates a shuffled index cursor whose chunks contain at most `sample_size` items.
     pub fn new<T: R2lTensor, B: TrajectoryBatch<T>>(batches: &[B], sample_size: usize) -> Self {
         let mut indices = (0..batches.len())
             .flat_map(|i| {
@@ -195,7 +200,8 @@ impl BatchIndexIterator {
         }
     }
 
-    pub fn iter(&mut self) -> Option<Vec<(usize, usize)>> {
+    /// Returns the next minibatch of `(batch_index, step_index)` pairs.
+    pub fn next_batch(&mut self) -> Option<Vec<(usize, usize)>> {
         let total_size = self.indices.len();
         if self.current >= total_size {
             return None;

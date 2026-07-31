@@ -1,24 +1,22 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use r2l_api::{
-    BurnBackend, DefaultOnPolicyAlgorithmHooks, EpisodeBoundHook, LearningRateSchedule,
-    LearningSchedule, PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
+    BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
+    PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
 };
-use r2l_core::on_policy::algorithm::{DefaultAdapter, OnPolicyAlgorithm};
+use r2l_core::on_policy::algorithm::OnPolicyAlgorithm;
 use r2l_gym::GymEnv;
-use r2l_sampler::R2lNormalizedSampler;
+use r2l_sampler::StagedSampler;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use yaml_serde::Value;
 
 pub type RlZooPpoAlgorithm = OnPolicyAlgorithm<
     PPOBurnAgent<BurnBackend>,
-    R2lNormalizedSampler<GymEnv, StepBoundHook<GymEnv>>,
+    StagedSampler<GymEnv, StepBoundHook<GymEnv>>,
     DefaultOnPolicyAlgorithmHooks<
         PPOBurnAgent<BurnBackend>,
-        R2lNormalizedSampler<GymEnv, StepBoundHook<GymEnv>>,
-        DefaultAdapter,
+        StagedSampler<GymEnv, StepBoundHook<GymEnv>>,
         GymEnv,
-        R2lNormalizedSampler<GymEnv, EpisodeBoundHook<GymEnv>>,
     >,
 >;
 
@@ -154,14 +152,14 @@ pub struct RlZooEnvironmentConfig {
 }
 
 impl RlZooEnvironmentConfig {
-    fn suppoerted(&self) -> bool {
+    fn supported(&self) -> bool {
         self.policy == "MlpPolicy"
     }
 
     pub fn build_burn_ppo_algorithm(
         &self,
         env_name: &str,
-        csv_path: PathBuf,
+        output_dir: PathBuf,
         seed: u64,
     ) -> anyhow::Result<RlZooPpoAlgorithm> {
         let obs_clip = self.normalize.norm_obs().then_some(10.0);
@@ -169,7 +167,7 @@ impl RlZooEnvironmentConfig {
             .with_burn()
             .with_rollout_bound(StepHookBound::new(self.n_steps))
             .with_learning_schedule(LearningSchedule::total_step_bound(self.n_timesteps))
-            .with_csv_states(csv_path)
+            .with_output_dir(output_dir)
             .with_observation_normalizer(obs_clip)
             .with_lambda(self.gae_lambda)
             .with_gamma(self.gamma)
@@ -204,7 +202,7 @@ impl ZooConfig {
         let mut unsupported_envs = BTreeMap::new();
         for (env_name, val) in parsed_content {
             let rl_zoo_config = yaml_serde::from_value::<RlZooEnvironmentConfig>(val).unwrap();
-            if rl_zoo_config.suppoerted() {
+            if rl_zoo_config.supported() {
                 supported_envs.insert(env_name, rl_zoo_config);
             } else {
                 unsupported_envs.insert(env_name, rl_zoo_config);

@@ -3,5 +3,8 @@ target
 sb3/__pycache__
 sb3/runs
 *.safetensor
+*.safetensors
 .codex
 logs/
+inference.yaml
+normalizer.yaml

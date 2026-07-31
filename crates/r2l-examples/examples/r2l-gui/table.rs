@@ -62,8 +62,8 @@ impl UpdateTable {
             3 => select_row_or_col!("value_losses".to_owned(), format!("{:?}", value_losses)),
             4 => select_row_or_col!("clip_range".to_owned(), format!("{:?}", self.clip_range)),
             5 => select_row_or_col!("approx_kl".to_owned(), format!("{:?}", approx_kl)),
-            6 => select_row_or_col!("explained_variance".to_owned(), format!("To be added")),
-            7 => select_row_or_col!("progress".to_owned(), format!("To be added")),
+            6 => select_row_or_col!("explained_variance".to_owned(), "To be added".to_owned()),
+            7 => select_row_or_col!("progress".to_owned(), "To be added".to_owned()),
             8 => select_row_or_col!(
                 "std".to_owned(),
                 self.progress

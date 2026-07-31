@@ -5,6 +5,7 @@ edition.workspace = true
 description.workspace = true
 repository.workspace = true
 license.workspace = true
+readme = "README.md"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -12,4 +13,5 @@ bimodal-array = { workspace = true }
 r2l-core = { workspace = true }
 crossbeam = { workspace = true }
 rand = { workspace = true }
-itertools = "0.15.0"
+serde = { workspace = true }
+itertools = { workspace = true }

@@ -2,18 +2,16 @@ use std::sync::mpsc::Sender;
 
 use burn::prelude::Backend;
 use candle_core::Device;
-use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::ppo::{PPO, PPOParams};
-use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
+use r2l_core::{env::Space, tensor::R2lTensor};
 
 use crate::{
-    BurnBackend,
+    BurnBackend, InferenceBackend, InferenceConfig, InferenceObservationMode,
     agents::ppo::{PPOBurnAgent, PPOCandleAgent},
     builders::{
-        agent::{
-            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
-        },
-        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
+        agent::{AgentBuilder, BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder},
+        learning_module::{AdamWParams, OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
+        policy::PolicyBuilder,
         ppo::hook::DefaultPPOHookBuilder,
     },
     hooks::ppo::PPOStats,
@@ -30,7 +28,7 @@ pub type PPOCandleAgentBuilder = PPOAgentBuilder;
 
 /// PPO agent builder specialized to the Burn backend.
 pub type PPOBurnAgentBuilder =
-    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, BuilderBurnBackend>;
+    OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, BurnBackendConfig>;
 
 impl PPOBurnAgentBuilder {
     fn seed(&self, seed: Option<u64>) {
@@ -53,12 +51,10 @@ impl PPOAgentBuilder {
             hook_builder: DefaultPPOHookBuilder::new(n_envs),
             params: PPOParams::default(),
             learning_module_builder: OnPolicyLearningModuleBuilder {
-                policy_hidden_layers: vec![64, 64],
+                policy_builder: PolicyBuilder::default(),
                 value_hidden_layers: vec![64, 64],
-                activation_function: ActivationFunction::default(),
-                log_std_init: 0.0,
-                learning_module_type: OnPolicyLearningModuleType::Joint {
-                    params: ParamsAdamW {
+                optimizer_layout: OnPolicyOptimizerLayout::Joint {
+                    params: AdamWParams {
                         lr: 3e-4,
                         beta1: 0.9,
                         beta2: 0.999,
@@ -148,6 +144,17 @@ impl<Backend> OnPolicyAgentBuilder<PPOParams, DefaultPPOHookBuilder, Backend> {
 impl AgentBuilder for PPOAgentBuilder {
     type Agent = PPOCandleAgent;
 
+    fn inference_config(
+        &self,
+        observation_mode: InferenceObservationMode,
+    ) -> Option<InferenceConfig> {
+        Some(InferenceConfig::new(
+            self.learning_module_builder.policy_builder.clone(),
+            observation_mode,
+            InferenceBackend::Candle(self.backend.clone()),
+        ))
+    }
+
     fn build<T: R2lTensor>(
         self,
         observation_size: usize,
@@ -168,6 +175,17 @@ impl AgentBuilder for PPOAgentBuilder {
 impl AgentBuilder for PPOBurnAgentBuilder {
     type Agent = PPOBurnAgent<BurnBackend>;
 
+    fn inference_config(
+        &self,
+        observation_mode: InferenceObservationMode,
+    ) -> Option<InferenceConfig> {
+        Some(InferenceConfig::new(
+            self.learning_module_builder.policy_builder.clone(),
+            observation_mode,
+            InferenceBackend::Burn(self.backend),
+        ))
+    }
+
     fn build<T: R2lTensor>(
         self,
         observation_size: usize,
@@ -181,5 +199,21 @@ impl AgentBuilder for PPOBurnAgentBuilder {
         let hooks = self.hook_builder.build();
         let params = self.params;
         Ok(PPOBurnAgent(PPO { lm, hooks, params }))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use yaml_serde::{from_str, to_string};
+
+    use crate::PPOAgentBuilder;
+
+    #[test]
+    fn serialize_agent_builder() {
+        let ppo_builder = PPOAgentBuilder::new(10);
+        let serialized = to_string(&ppo_builder).unwrap();
+        println!("{serialized}");
+        let ppo_builder: PPOAgentBuilder = from_str(&serialized).unwrap();
+        println!("{ppo_builder:#?}");
     }
 }

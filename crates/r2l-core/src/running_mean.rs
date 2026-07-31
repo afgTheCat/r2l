@@ -1,14 +1,20 @@
+use serde::{Deserialize, Serialize};
+
 use crate::tensor::R2lTensor;
 
-#[derive(Clone)]
+/// Online per-element mean and variance for tensor samples.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct RunningMeanStd<T: R2lTensor> {
+    /// Current per-element mean.
     pub mean: T,
+    /// Current per-element population variance.
     pub var: T,
-    count: f32,
+    pub count: f32,
 }
 
 // mega simplified view
 impl<T: R2lTensor> RunningMeanStd<T> {
+    /// Creates zero-count statistics for tensors with `shape`.
     pub fn new(shape: Vec<usize>) -> Self {
         let mean = T::zeros(shape.clone());
         let var = T::zeros(shape);
@@ -17,6 +23,10 @@ impl<T: R2lTensor> RunningMeanStd<T> {
             var,
             count: 0.,
         }
+    }
+
+    pub fn build(mean: T, var: T, count: f32) -> Self {
+        Self { mean, var, count }
     }
 
     fn update_from_moments(
@@ -52,12 +62,14 @@ impl<T: R2lTensor> RunningMeanStd<T> {
         Ok(())
     }
 
+    /// Updates the statistics from a batch of tensors.
     pub fn update(&mut self, t: &[T]) {
         let mean = T::mean_tensors(t);
         let var = T::var_tensors(t);
         self.update_from_moments(mean, var, t.len() as f32).unwrap();
     }
 
+    /// Converts flat samples to tensors and updates the statistics.
     pub fn update_from_vec(&mut self, t: &[Vec<f32>]) {
         let mean_size = self.mean.size();
         assert!(t.iter().all(|t| t.len() == mean_size));
@@ -72,7 +84,9 @@ impl<T: R2lTensor> RunningMeanStd<T> {
 /// Running mean and variance for scalar `f32` samples.
 #[derive(Clone, Debug)]
 pub struct RunningMeanStdF32 {
+    /// Current scalar mean.
     pub mean: f32,
+    /// Current scalar population variance.
     pub var: f32,
     count: f32,
 }
@@ -158,7 +172,9 @@ mod test {
             0.538_540_4,
         ];
         let tensors = data
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|chunk| Tensor::from_slice(chunk, 3, &device))
             .collect::<candle_core::Result<Vec<_>>>()?;
         let var = Tensor::var_tensors(&tensors);

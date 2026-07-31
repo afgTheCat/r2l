@@ -2,6 +2,7 @@ use itertools::izip;
 
 use crate::tensor::R2lTensor;
 
+/// Owned and borrowed trajectory buffer types.
 pub mod buffer;
 
 /// One transition collected from an environment.
@@ -29,6 +30,7 @@ impl<T> Memory<T> {
 }
 
 #[derive(Debug)]
+/// A set of transitions collected from multiple environments in one step.
 pub struct MultiMemory<T: R2lTensor> {
     last_states: Vec<T>,
     actions: Vec<T>,
@@ -38,6 +40,7 @@ pub struct MultiMemory<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> MultiMemory<T> {
+    /// Creates empty transition storage for up to `capacity` environments.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             last_states: Vec::with_capacity(capacity),
@@ -48,6 +51,7 @@ impl<T: R2lTensor> MultiMemory<T> {
         }
     }
 
+    /// Adds one environment transition.
     pub fn push_memory(&mut self, memory: Memory<T>) {
         let Memory {
             state,
@@ -64,6 +68,9 @@ impl<T: R2lTensor> MultiMemory<T> {
         self.truncateds.push(truncated);
     }
 
+    /// Completes the stored transitions with their corresponding next states.
+    ///
+    /// Extra values on either side are ignored.
     pub fn into_memories(self, next_states: &[T]) -> Vec<Memory<T>> {
         let mut memories = Vec::with_capacity(self.last_states.len());
         let Self {
@@ -94,20 +101,29 @@ impl<T: R2lTensor> MultiMemory<T> {
     }
 }
 
+/// Read-only access to a batch of aligned trajectory values.
 pub trait TrajectoryBatch<T: R2lTensor> {
+    /// Returns the number of transitions in the batch.
     fn len(&self) -> usize;
 
+    /// Returns `true` when the batch contains no transitions.
     fn is_empty(&self) -> bool;
 
+    /// Returns observations before each action.
     fn states(&self) -> &[T];
 
+    /// Returns observations after each action.
     fn next_states(&self) -> &[T];
 
+    /// Returns actions selected at each step.
     fn actions(&self) -> &[T];
 
+    /// Returns rewards produced at each step.
     fn rewards(&self) -> &[f32];
 
+    /// Returns terminal-state flags for each step.
     fn terminated(&self) -> &[bool];
 
+    /// Returns truncation flags for each step.
     fn truncated(&self) -> &[bool];
 }

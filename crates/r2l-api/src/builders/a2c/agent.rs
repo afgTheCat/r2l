@@ -2,24 +2,22 @@ use std::sync::mpsc::Sender;
 
 use burn::prelude::Backend;
 use candle_core::Device;
-use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::a2c::{A2C, A2CParams};
-use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
+use r2l_core::{env::Space, tensor::R2lTensor};
 
 use crate::{
-    BurnBackend,
+    BurnBackend, InferenceBackend, InferenceConfig, InferenceObservationMode,
     agents::a2c::{A2CBurnAgent, A2CCandleAgent},
     builders::{
         a2c::hook::DefaultA2CHookBuilder,
-        agent::{
-            AgentBuilder, BurnBackend as BuilderBurnBackend, CandleBackend, OnPolicyAgentBuilder,
-        },
-        learning_module::{OnPolicyLearningModuleBuilder, OnPolicyLearningModuleType},
+        agent::{AgentBuilder, BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder},
+        learning_module::{AdamWParams, OnPolicyLearningModuleBuilder, OnPolicyOptimizerLayout},
+        policy::PolicyBuilder,
     },
     hooks::a2c::A2CStats,
 };
 
-/// Builder for A2C agents.
+/// Builder for A2C agents using the default Candle backend.
 ///
 /// This is the main entry point for configuring A2C-specific agent behavior,
 /// such as advantage normalization and A2C hook settings.
@@ -30,7 +28,7 @@ pub type A2CCandleAgentBuilder = A2CAgentBuilder;
 
 /// A2C agent builder specialized to the Burn backend.
 pub type A2CBurnAgentBuilder =
-    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, BuilderBurnBackend>;
+    OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, BurnBackendConfig>;
 
 impl A2CBurnAgentBuilder {
     fn seed(&self, seed: Option<u64>) {
@@ -40,7 +38,7 @@ impl A2CBurnAgentBuilder {
     }
 }
 
-impl A2CAgentBuilder {
+impl A2CCandleAgentBuilder {
     fn seed(&self, seed: Option<u64>) {
         if let Some(seed) = seed {
             self.backend.seed(seed);
@@ -53,13 +51,11 @@ impl A2CAgentBuilder {
             hook_builder: DefaultA2CHookBuilder::new(n_envs),
             params: A2CParams::default(),
             learning_module_builder: OnPolicyLearningModuleBuilder {
-                policy_hidden_layers: vec![64, 64],
+                policy_builder: PolicyBuilder::default(),
                 value_hidden_layers: vec![64, 64],
-                activation_function: ActivationFunction::default(),
-                log_std_init: 0.0,
-                learning_module_type: OnPolicyLearningModuleType::Joint {
+                optimizer_layout: OnPolicyOptimizerLayout::Joint {
                     max_grad_norm: None,
-                    params: ParamsAdamW {
+                    params: AdamWParams {
                         lr: 3e-4,
                         beta1: 0.9,
                         beta2: 0.999,
@@ -133,8 +129,19 @@ impl<Backend> OnPolicyAgentBuilder<A2CParams, DefaultA2CHookBuilder, Backend> {
     }
 }
 
-impl AgentBuilder for A2CAgentBuilder {
+impl AgentBuilder for A2CCandleAgentBuilder {
     type Agent = A2CCandleAgent;
+
+    fn inference_config(
+        &self,
+        observation_mode: InferenceObservationMode,
+    ) -> Option<InferenceConfig> {
+        Some(InferenceConfig::new(
+            self.learning_module_builder.policy_builder.clone(),
+            observation_mode,
+            InferenceBackend::Candle(self.backend.clone()),
+        ))
+    }
 
     fn build<T: R2lTensor>(
         self,
@@ -155,6 +162,17 @@ impl AgentBuilder for A2CAgentBuilder {
 
 impl AgentBuilder for A2CBurnAgentBuilder {
     type Agent = A2CBurnAgent<BurnBackend>;
+
+    fn inference_config(
+        &self,
+        observation_mode: InferenceObservationMode,
+    ) -> Option<InferenceConfig> {
+        Some(InferenceConfig::new(
+            self.learning_module_builder.policy_builder.clone(),
+            observation_mode,
+            InferenceBackend::Burn(self.backend),
+        ))
+    }
 
     fn build<T: R2lTensor>(
         self,

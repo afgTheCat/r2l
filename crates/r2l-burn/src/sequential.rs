@@ -5,6 +5,7 @@ use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::models::ActivationFunction;
 
 #[derive(Debug, Module)]
+#[allow(clippy::large_enum_variant)]
 pub enum Layer<B: Backend> {
     Activation(Activation<B>),
     LinearLayer(Linear<B>),

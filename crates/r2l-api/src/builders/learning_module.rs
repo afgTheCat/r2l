@@ -1,40 +1,67 @@
 use burn::{
     grad_clipping::GradientClippingConfig, optim::AdamWConfig, tensor::backend::AutodiffBackend,
 };
-use candle_core::{DType, Device};
-use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
-use r2l_burn::{
-    distributions::PolicyKind, learning_module::PolicyValueModuleKind as BurnPolicyValueModule,
-};
-use r2l_candle::{
-    distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
-};
-use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
+use candle_core::Device;
+use candle_nn::ParamsAdamW;
+use r2l_burn::learning_module::ActionSpacePolicyValueModule as BurnPolicyValueModule;
+use r2l_candle::learning_module::PolicyValueModule as CandlePolicyValueModule;
+use r2l_core::{env::Space, tensor::R2lTensor};
+use serde::{Deserialize, Serialize};
+
+use crate::builders::policy::PolicyBuilder;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AdamWParams {
+    pub lr: f64,
+    pub beta1: f64,
+    pub beta2: f64,
+    pub eps: f64,
+    pub weight_decay: f64,
+}
+
+impl AdamWParams {
+    fn into_candle_params(self) -> ParamsAdamW {
+        ParamsAdamW {
+            lr: self.lr,
+            beta1: self.beta1,
+            beta2: self.beta2,
+            eps: self.eps,
+            weight_decay: self.weight_decay,
+        }
+    }
+}
 
 /// Optimizer layout for on-policy policy/value learning modules.
 ///
 /// This controls whether policy and value learning share a single optimizer
 /// configuration or use separate optimizer configurations.
-pub enum OnPolicyLearningModuleType {
+#[derive(Debug, Serialize, Deserialize)]
+pub enum OnPolicyOptimizerLayout {
     /// Use one joint optimizer configuration for both policy and value updates.
     Joint {
+        /// Optional global gradient-norm clipping threshold.
         max_grad_norm: Option<f32>,
-        params: ParamsAdamW,
+        /// Shared AdamW optimizer parameters.
+        params: AdamWParams,
     },
     /// Use separate optimizer configurations for policy and value updates.
     Split {
+        /// Optional policy gradient-norm clipping threshold.
         policy_max_grad_norm: Option<f32>,
-        policy_params: ParamsAdamW,
+        /// Policy AdamW optimizer parameters.
+        policy_params: AdamWParams,
+        /// Optional value-function gradient-norm clipping threshold.
         value_max_grad_norm: Option<f32>,
-        value_params: ParamsAdamW,
+        /// Value-function AdamW optimizer parameters.
+        value_params: AdamWParams,
     },
 }
 
-impl OnPolicyLearningModuleType {
+impl OnPolicyOptimizerLayout {
     /// Returns a copy with the learning rate updated everywhere it applies.
     fn map_params<F>(self, mut f: F) -> Self
     where
-        F: FnMut(&mut ParamsAdamW),
+        F: FnMut(&mut AdamWParams),
     {
         match self {
             Self::Joint {
@@ -91,12 +118,11 @@ impl OnPolicyLearningModuleType {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct OnPolicyLearningModuleBuilder {
-    pub(crate) policy_hidden_layers: Vec<usize>,
+    pub(crate) policy_builder: PolicyBuilder,
     pub(crate) value_hidden_layers: Vec<usize>,
-    pub(crate) activation_function: ActivationFunction,
-    pub(crate) log_std_init: f32,
-    pub(crate) learning_module_type: OnPolicyLearningModuleType,
+    pub(crate) optimizer_layout: OnPolicyOptimizerLayout,
 }
 
 impl OnPolicyLearningModuleBuilder {
@@ -106,18 +132,12 @@ impl OnPolicyLearningModuleBuilder {
         action_space: Space<T>,
         device: &Device,
     ) -> anyhow::Result<CandlePolicyValueModule> {
-        let policy_varmap = VarMap::new();
-        let policy_vb = VarBuilder::from_varmap(&policy_varmap, DType::F32, device);
-        let policy = CandlePolicyKind::build(
-            action_space,
-            &policy_vb,
-            &self.policy_hidden_layers,
-            observation_size,
-            self.activation_function,
-            self.log_std_init,
-        )?;
-        match self.learning_module_type {
-            OnPolicyLearningModuleType::Joint {
+        let (policy, policy_varmap) =
+            self.policy_builder
+                .build_candle_with_varmap(observation_size, action_space, device)?;
+        let activation_function = self.policy_builder.activation_function;
+        match self.optimizer_layout {
+            OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
                 params,
             } => CandlePolicyValueModule::build_joint(
@@ -125,10 +145,10 @@ impl OnPolicyLearningModuleBuilder {
                 &self.value_hidden_layers,
                 policy_varmap,
                 max_grad_norm,
-                params,
-                self.activation_function,
+                params.into_candle_params(),
+                activation_function,
             ),
-            OnPolicyLearningModuleType::Split {
+            OnPolicyOptimizerLayout::Split {
                 policy_max_grad_norm,
                 policy_params,
                 value_max_grad_norm,
@@ -139,9 +159,9 @@ impl OnPolicyLearningModuleBuilder {
                 policy_varmap,
                 policy_max_grad_norm,
                 value_max_grad_norm,
-                policy_params,
-                value_params,
-                self.activation_function,
+                policy_params.into_candle_params(),
+                value_params.into_candle_params(),
+                activation_function,
             ),
         }
     }
@@ -151,21 +171,12 @@ impl OnPolicyLearningModuleBuilder {
         observation_size: usize,
         action_space: Space<T>,
     ) -> anyhow::Result<BurnPolicyValueModule<B>> {
-        let action_size = action_space.size();
-        let policy_layers = &[
-            &[observation_size][..],
-            &self.policy_hidden_layers[..],
-            &[action_size],
-        ]
-        .concat();
-        let policy = PolicyKind::build(
-            action_space,
-            policy_layers,
-            self.activation_function,
-            self.log_std_init,
-        );
-        let learning_module = match self.learning_module_type {
-            OnPolicyLearningModuleType::Joint {
+        let policy = self
+            .policy_builder
+            .build_burn::<B, _>(observation_size, action_space);
+        let activation_function = self.policy_builder.activation_function;
+        let learning_module = match self.optimizer_layout {
+            OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
                 params,
             } => {
@@ -183,12 +194,12 @@ impl OnPolicyLearningModuleBuilder {
                 BurnPolicyValueModule::joint(
                     policy,
                     value_layers,
-                    self.activation_function,
+                    activation_function,
                     optimizer_config,
                     params.lr,
                 )
             }
-            OnPolicyLearningModuleType::Split {
+            OnPolicyOptimizerLayout::Split {
                 policy_max_grad_norm,
                 policy_params,
                 value_max_grad_norm,
@@ -219,7 +230,7 @@ impl OnPolicyLearningModuleBuilder {
                 BurnPolicyValueModule::split(
                     policy,
                     value_layers,
-                    self.activation_function,
+                    activation_function,
                     policy_optimizer,
                     policy_params.lr,
                     value_optimizer,

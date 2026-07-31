@@ -1,7 +1,8 @@
 use burn::{module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::a2c::A2C;
 use r2l_burn::{
-    distributions::PolicyKind, learning_module::PolicyValueModuleKind as BurnPolicyValueModuleKind,
+    distributions::BurnPolicyKind,
+    learning_module::ActionSpacePolicyValueModule as BurnActionSpacePolicyValueModule,
 };
 use r2l_candle::{
     distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
@@ -21,12 +22,15 @@ use crate::hooks::a2c::DefaultA2CHook;
 /// Use this type when you want an [`Agent`](r2l_core::on_policy::algorithm::Agent)
 /// backed by Burn instead of the default Candle backend.
 pub struct A2CBurnAgent<B: AutodiffBackend>(
-    pub A2C<BurnPolicyValueModuleKind<B>, DefaultA2CHook<BurnPolicyValueModuleKind<B>>>,
+    pub  A2C<
+        BurnActionSpacePolicyValueModule<B>,
+        DefaultA2CHook<BurnActionSpacePolicyValueModule<B>>,
+    >,
 );
 
 impl<B: AutodiffBackend> Agent for A2CBurnAgent<B> {
     type Tensor = burn::Tensor<B::InnerBackend, 1>;
-    type Actor = <PolicyKind<B> as AutodiffModule<B>>::InnerModule;
+    type Actor = <BurnPolicyKind<B> as AutodiffModule<B>>::InnerModule;
 
     fn actor(&self) -> Self::Actor {
         self.0.actor()

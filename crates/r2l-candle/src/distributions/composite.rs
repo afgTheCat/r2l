@@ -73,6 +73,14 @@ impl Actor for CompositeDistribution {
         }
         Ok(Tensor::cat(&actions, 0)?.detach())
     }
+
+    fn mode_action(&self, observation: Tensor) -> Result<Tensor> {
+        let mut actions = Vec::new();
+        for policy in &self.policies {
+            actions.push(policy.mode_action(observation.clone())?);
+        }
+        Ok(Tensor::cat(&actions, 0)?.detach())
+    }
 }
 
 impl Policy for CompositeDistribution {

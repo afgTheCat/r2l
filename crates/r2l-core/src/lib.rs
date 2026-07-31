@@ -19,8 +19,7 @@
 //!   and learning code.
 //! - [`Actor`], [`Policy`], [`ValueFunction`], and [`LearningModule`] for model
 //!   and optimizer components.
-//! - [`TrajectoryContainer`] and [`ExpandableTrajectoryContainer`] for rollout
-//!   storage.
+//! - [`TrajectoryBuffer`] and [`TrajectoryView`] for rollout storage.
 //! - [`Agent`], [`Sampler`], and [`OnPolicyAlgorithm`] for on-policy training
 //!   loops.
 //!
@@ -28,23 +27,32 @@
 //! [`Agent`]: crate::on_policy::algorithm::Agent
 //! [`Env`]: crate::env::Env
 //! [`EnvBuilder`]: crate::env::EnvBuilder
-//! [`ExpandableTrajectoryContainer`]: crate::buffers::ExpandableTrajectoryContainer
 //! [`LearningModule`]: crate::models::LearningModule
 //! [`OnPolicyAlgorithm`]: crate::on_policy::algorithm::OnPolicyAlgorithm
 //! [`Policy`]: crate::models::Policy
 //! [`R2lTensor`]: crate::tensor::R2lTensor
 //! [`Sampler`]: crate::on_policy::algorithm::Sampler
-//! [`TrajectoryContainer`]: crate::buffers::TrajectoryContainer
+//! [`TrajectoryBuffer`]: crate::buffers::buffer::TrajectoryBuffer
+//! [`TrajectoryView`]: crate::buffers::buffer::TrajectoryView
 //! [`ValueFunction`]: crate::models::ValueFunction
 
+/// Rollout transition and trajectory storage.
 pub mod buffers;
+/// Environment traits and space descriptions.
 pub mod env;
+/// Actor, policy, value-function, and learning-module traits.
 pub mod models;
+/// Shared interfaces for on-policy training loops.
 pub mod on_policy;
+/// Reproducible random-number utilities.
 pub mod rng;
+/// Online mean and variance estimators.
 pub mod running_mean;
+/// Backend-neutral tensor interfaces and adapters.
 pub mod tensor;
 mod utils;
+
+pub use utils::actor_wrapper::ActorWrapper;
 
 /// Control-flow result returned by training hooks.
 ///
@@ -58,6 +66,7 @@ pub enum HookResult {
 }
 
 #[macro_export]
+/// Breaks out of the surrounding loop when a hook requests [`HookResult::Break`].
 macro_rules! break_on_hook_result {
     ($hook_res:expr) => {
         match $hook_res {
@@ -68,6 +77,8 @@ macro_rules! break_on_hook_result {
 }
 
 #[macro_export]
+/// Returns `Ok(())` from the surrounding function when a hook requests
+/// [`HookResult::Break`].
 macro_rules! return_on_hook_result {
     ($hook_res:expr) => {
         match $hook_res {
@@ -81,19 +92,9 @@ macro_rules! return_on_hook_result {
 /// and learning modules.
 pub mod prelude {
     pub use crate::HookResult;
-    pub use crate::buffers::{
-        // EditableTrajectoryContainer, ExpandableTrajectoryContainer,
-        Memory,
-        // TrajectoryContainer,
-        // fix_sized::FixedSizeStateBuffer,
-        // variable_sized::VariableSizedStateBuffer,
-    };
+    pub use crate::buffers::Memory;
     pub use crate::env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Space};
     pub use crate::models::{ActivationFunction, Actor, LearningModule, Policy, ValueFunction};
-    // pub use crate::on_policy::algorithm::{
-    //     Agent, DefaultAdapter, OnPolicyAdapters, OnPolicyAlgorithm, OnPolicyAlgorithmHooks,
-    //     OnPolicyRuntime, Sampler,
-    // };
     pub use crate::on_policy::learning_module::OnPolicyLearningModule;
     pub use crate::on_policy::losses::FromPolicyValueLosses;
     pub use crate::tensor::{R2lTensor, TensorData};

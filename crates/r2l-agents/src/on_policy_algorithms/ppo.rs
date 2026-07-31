@@ -9,16 +9,18 @@ use r2l_core::{
     },
     tensor::R2lTensor,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     HookResult,
     on_policy_algorithms::{
-        Advantages, BatchIndexIterator, Logps, Returns, batches_advantages_and_returns, logps,
+        Advantages, Logps, Returns, ShuffledBatchIndices, batches_advantages_and_returns, logps,
         sample,
     },
 };
 
 /// Hyperparameters controlling PPO training behavior.
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PPOParams {
     /// Clipping range applied to the PPO policy ratio.
     pub clip_range: f32,
@@ -59,6 +61,7 @@ pub struct PPOBatchData<T: R2lTensor> {
 
 /// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
 pub trait PPOHook<M: OnPolicyLearningModule> {
+    /// Runs after advantages and returns are computed and before PPO epochs.
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -70,6 +73,7 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Continue)
     }
 
+    /// Runs after each PPO epoch and controls whether another epoch is performed.
     fn rollout_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -79,6 +83,7 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
         Ok(HookResult::Break)
     }
 
+    /// Runs after minibatch losses are computed and before the optimizer update.
     fn batch_hook(
         &mut self,
         _params: &mut PPOParams,
@@ -108,10 +113,10 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
         logps: &Logps,
         returns: &Returns,
     ) -> anyhow::Result<()> {
-        let mut index_iterator = BatchIndexIterator::new(batches, self.params.sample_size);
+        let mut batch_indices = ShuffledBatchIndices::new(batches, self.params.sample_size);
         let lm = &mut self.lm;
         loop {
-            let Some(indices) = index_iterator.iter() else {
+            let Some(indices) = batch_indices.next_batch() else {
                 return Ok(());
             };
             let (observations, actions) = sample(batches, &indices, Module::lifter);

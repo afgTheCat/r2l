@@ -71,6 +71,16 @@ impl Actor for BernoulliDistribution {
             .collect();
         Ok(Tensor::from_vec(actions, self.action_size, &self.device)?.detach())
     }
+
+    fn mode_action(&self, observation: Tensor) -> Result<Tensor> {
+        let logits = self.logits.forward(&observation.unsqueeze(0)?)?;
+        let probs: Vec<f32> = sigmoid(&logits.squeeze(0)?)?.to_vec1()?;
+        let actions = probs
+            .into_iter()
+            .map(|probability| f32::from(probability >= 0.5))
+            .collect();
+        Ok(Tensor::from_vec(actions, self.action_size, &self.device)?.detach())
+    }
 }
 
 impl Policy for BernoulliDistribution {

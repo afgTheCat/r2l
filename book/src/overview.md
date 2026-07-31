@@ -1,7 +1,6 @@
 > [!WARNING]  
-> **Pre-Alpha:** This library is under active development. Current APIs are
-> almost surely going to change in the future and documentation might not be up
-> to date. On top of **r2l**, this book is also heavily under construction.
+> **Pre-alpha:** This library is under active development. APIs may change
+> between releases, and some planned features are not implemented yet.
 > Basic familiarity with reinforcement learning concepts and rust knowledge is
 > assumed.
 
@@ -10,19 +9,13 @@
 The goal of **r2l** is to be a customizable, ergonomic and easily embeddable
 library. To be more exact:
 
-- **Customizable**: the user has great control influencing _how_ agents are
-  trained. While **r2l** defines how different components interact with each
-  other, and the core logic of they implement, it also exposes the internals
-  through a hook system for the user.
+- **Customizable**: users have control over _how_ agents are trained. **r2l**
+  defines how components interact and exposes lifecycle hooks for custom
+  behavior.
 - **Ergonomic**: most users are not necessarily concerned with implementation
-  details. In order to alleviate the burden of implementing a complete
-  algorithm, building on the core components, **r2l** aims to implement commonly
-  setups.
-- **Embeddable**: my goal with **r2l** is to be able to use it within a diverse
-  set of applications/environments. Instead of choosing a single deep learning
-  framework, **r2l** uses traits to describe it's needs. In practice, we
-  currently support **candle** and **burn**. If you have a deep learning
-  framework, and would like to have **r2l** support it, open a PR/make an issue.
+  details. High-level builders provide common configurations.
+- **Embeddable**: **r2l** describes its backend requirements with traits.
+  Candle and Burn implementations are currently available.
 
 The scope of **r2l** is what Stable Baselines3 covers (by version 0.1.0) and
 Tianshou (by version 1.0.0). On top of core algorithms, a hyperparameter tuning
@@ -37,6 +30,6 @@ particular:
   implemented and how to work with the higher level APIs. Most users should
   start here. Some basic examples are also shown.
 - [On policy algorithms](./on_policy_algorithms.md): A detailed architectural
-  overview on what components on policy algorithms consists of, how the pieces
+  overview of the components of on-policy algorithms, how the pieces
   fit together, and how to create your own custom hook system.
-- [Off policy algorithms](./off_policy_algorithms.md): To be added in v0.0.4.
+- [Off-policy algorithms](./off_policy_algorithms.md): Current support status.

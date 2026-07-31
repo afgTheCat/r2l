@@ -1,7 +1,8 @@
 use burn::{module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::ppo::PPO;
 use r2l_burn::{
-    distributions::PolicyKind, learning_module::PolicyValueModuleKind as BurnPolicyValueModuleKind,
+    distributions::BurnPolicyKind,
+    learning_module::ActionSpacePolicyValueModule as BurnActionSpacePolicyValueModule,
 };
 use r2l_candle::{
     distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
@@ -12,12 +13,15 @@ use crate::hooks::ppo::DefaultPPOHook;
 
 /// PPO agent specialized to the Burn backend.
 pub struct PPOBurnAgent<B: AutodiffBackend>(
-    pub PPO<BurnPolicyValueModuleKind<B>, DefaultPPOHook<BurnPolicyValueModuleKind<B>>>,
+    pub  PPO<
+        BurnActionSpacePolicyValueModule<B>,
+        DefaultPPOHook<BurnActionSpacePolicyValueModule<B>>,
+    >,
 );
 
 impl<B: AutodiffBackend> Agent for PPOBurnAgent<B> {
     type Tensor = burn::Tensor<B::InnerBackend, 1>;
-    type Actor = <PolicyKind<B> as AutodiffModule<B>>::InnerModule;
+    type Actor = <BurnPolicyKind<B> as AutodiffModule<B>>::InnerModule;
 
     fn actor(&self) -> Self::Actor {
         self.0.actor()

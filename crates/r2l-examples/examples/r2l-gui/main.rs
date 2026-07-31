@@ -120,7 +120,7 @@ pub fn train_ppo(
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
         .with_rollout_bound(StepHookBound::new(2048))
-        .with_execution_mode(SamplerExecutionMode::Vec)
+        .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_clip_range(clip_range)
         .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
         .with_reporter(Some(tx));

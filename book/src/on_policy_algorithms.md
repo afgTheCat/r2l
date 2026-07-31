@@ -1,111 +1,73 @@
-> [!WARNING]  
-> This is a bit of a dumping ground on how **r2l** is architected. Not always
-> coherent.
+## On-policy algorithms
 
-## On policy algorithms
+`r2l` separates an on-policy training run into three components:
 
-The `OnPolicyAlgorithm` struct is intentionally kept minimal. It consists of the
-following components:
+- an `Agent` owns the trainable policy and learns from trajectory batches;
+- a `Sampler` collects trajectories with a snapshot of the current actor;
+- `OnPolicyAlgorithmHooks` controls initialization, stopping, evaluation, and
+  shutdown.
 
-- The `sampler` collects the trajectories
-- The `agent` updates the policy
-- The `hooks` orchestrate the training loop through an `init_hook`, a
-  `post_rollout_hook`, a `post_training_hook` and a `shutdown_hook`
+`OnPolicyAlgorithm` holds a runtime and a hook implementation. Its training
+loop repeatedly collects rollouts, invokes the post-rollout hook, updates the
+agent, and invokes the post-training hook. A hook can stop the loop by returning
+`HookResult::Break`. The runtime converts actor and trajectory tensors through
+the common `R2lTensor` representation when the agent and sampler use different
+tensor types.
 
-<details open>
-<summary>On policy algorithm</summary>
+![On-policy algorithm overview](./images/on_policy_algo.png)
 
-```rust
-{{#include ../../crates/r2l-core/src/on_policy/algorithm.rs:on_policy_algorithm}}
-```
+The public traits and their method contracts are documented in the
+[`r2l-core` API](https://docs.rs/r2l-core/0.0.2/r2l_core/on_policy/algorithm/).
 
-</details>
+## Samplers
 
-Supported algorithms and capabilities are defined by a combination of these
-components. An illustrative example of how different components could work
-together:
+`r2l-sampler` provides two sampler implementations:
 
-1. The `init_hook` sets up the pre requisits for the algorithm, such as setting
-   up a log file or spawning a progress bar in a gui
-2. The `sampler` receives the current policy, runs multiple environments in
-   paralell or sequentially, and fills up the trajectory buffers
-3. The `post_rollout_hook` updates the progress bar, checks whether a target
-   rollout count has been achieved, if so it jumps to step 6
-4. The `agent` receives the trajectory buffers and updates the policy
-5. The `post_training_hook` checks how the policy performs in a newly spawned
-   environment, logs the results, updates a progress bar, and if the policy does
-   well enough, jumps to step 6, otherwise jumps to step 2.
-6. The `shutdown_hook` shuts down the worker threads, saves the best performing
-   `policy`, runs a final evaluation and prints the results
+- `DirectSampler` lets workers write transitions directly to output buffers;
+- `StagedSampler` receives transitions from workers and can update and apply
+  clipped observation normalization before committing trajectories.
 
-Below is a schematic overview of the training loop and the actual implementation
-of the training loop.
+Both samplers support `SamplerExecutionMode::SingleThreaded`, which steps
+environments on the current thread, and
+`SamplerExecutionMode::MultiThreaded`, which assigns each environment to a
+worker thread. Gymnasium environments still execute Python code under Python's
+interpreter lock, so threaded sampling should not be assumed to improve
+Gymnasium throughput.
 
-![On policy algo overview](./images/on_policy_algo.png)
-
-<details open>
-<summary>Training loop implementation</summary>
-
-```rust
-{{#include ../../crates/r2l-core/src/on_policy/algorithm.rs:train_loop}}
-```
-
-</details>
-
-Another important thing here is that both `Sampler` and `Agent` defines a
-`Tensor` type. The `OnPolicyAlgorithm` can be used so long as the `Tensor` types
-can be converted using the `From` trait.
-
-## The sampler
-
-The sampler is responsible for collecting the rollouts. Samplers need to
-implement the sampler trait.
-
-<details open>
-<summary>Sampler trait</summary>
-
-```rust
-{{#include ../../crates/r2l-core/src/on_policy/algorithm.rs:sampler}}
-```
-
-</details>
-
-While `r2l-core` does not give an implementation, `r2l-sampler` does provide
-one. The current `R2lSampler` provided can run the environments on a single
-thread, or using multiple threads in paralell. The current sampler does not
-implement hooks, but that is going to change soonish.
+Rollout collection is hook-driven. `StepHookBound` and `EpisodeHookBound`
+provide the standard fixed-step and fixed-episode policies through the
+high-level API.
 
 ![Sampler overview](./images/sampler.png)
 
-What is important here to note, is that trajectory containers lives inside an
-`ArrayHandle` that contains all the trajectory buffers, while the individual
-workers are only allowed to touch their own buffer through an `ElementHandle`.
+## Agents
 
-```rust
-{{#include ../../crates/r2l-sampler/src/lib.rs:r2l_sampler}}
-```
+`r2l-agents` contains the lower-level PPO, A2C, and VPG learning logic.
+`r2l-api` composes those agents with Candle or Burn learning modules and
+provides defaults for loss configuration, reporting, evaluation, and learning
+schedules.
 
-## The agents
+Most applications should construct a complete run with
+`PPOAlgorithmBuilder` or `A2CAlgorithmBuilder`. The lower-level
+`PPOAgentBuilder`, `A2CAgentBuilder`, and `ConfiguredSamplerBuilder` are
+intended for custom compositions. Custom sampler builders can implement the
+`SamplerBuilder` trait to plug into `OnPolicyAlgorithmBuilder`.
 
-The agents is responsible for coordinating the training.
+## PPO hooks
 
-<details open>
-<summary>Sampler trait</summary>
+The PPO agent exposes hooks at three points:
 
-```rust
-{{#include ../../crates/r2l-core/src/on_policy/algorithm.rs:sampler}}
-```
+1. after advantages and return targets are computed;
+2. after each PPO epoch, where the hook decides whether another epoch runs;
+3. after a minibatch loss is computed and before the optimizer update.
 
-</details>
+The default `r2l-api` hook uses these points for advantage normalization,
+entropy and value-loss coefficients, target-KL stopping, progress reporting,
+and statistics.
 
-## PPO
+## A2C hooks
 
-The idea of the PPO is not explained here. For that, check the paper.
-
-Within **r2l**, PPO is hookable at three separate points:
-
-1. Before learning begins
-2. After the minibatching, before moving forward to the next rollout
-3. During minibatching, before the update has been called
-
-Within **r2l-api**, a default implementation of the hook system is provided.
+The A2C agent exposes hooks before minibatching, before each optimizer update,
+and after all minibatches have been processed. The default hook provides
+advantage normalization, entropy and value-loss coefficients, reporting, and
+statistics.

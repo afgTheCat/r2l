@@ -7,14 +7,12 @@ use std::{
 use anyhow::Result;
 use r2l_core::{
     HookResult,
-    buffers::TrajectoryBatch,
     env::Env,
     models::Actor,
-    on_policy::algorithm::{
-        Agent, OnPolicyAdapters, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
-    },
+    on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::BestActorEvaluator;
 
@@ -23,16 +21,20 @@ use crate::BestActorEvaluator;
 /// This determines when the outer on-policy training loop should terminate,
 /// either after a fixed number of rollouts or after a fixed number of sampled
 /// environment steps.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LearningSchedule {
     /// Stop after `total_rollouts` completed rollout collections.
     RolloutBound {
+        /// Number of rollout collections after which training stops.
         total_rollouts: usize,
+        /// Number of rollout collections completed so far.
         current_rollout: usize,
     },
     /// Stop after at least `total_steps` sampled environment steps.
     TotalStepBound {
+        /// Number of sampled steps after which training stops.
         total_steps: usize,
+        /// Number of sampled steps completed so far.
         current_step: usize,
     },
 }
@@ -56,7 +58,7 @@ impl LearningSchedule {
 }
 
 /// Learning-rate policy applied over the progress of an on-policy training run.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LearningRateSchedule {
     /// Keep the learning rate fixed throughout training.
     Constant(f64),
@@ -149,33 +151,21 @@ pub fn on_policy_command_channel() -> (OnPolicyCommandReceiver, OnPolicyCommandS
 /// configured [`LearningSchedule`] to decide when training should stop,
 /// optionally evaluates the current actor, and shuts down the runtime when the
 /// algorithm exits.
-pub struct DefaultOnPolicyAlgorithmHooks<
-    A: Agent,
-    S: Sampler,
-    C: OnPolicyAdapters<A::Actor, S>,
-    E: Env<Tensor = S::Tensor>,
-    S2: Sampler<Tensor = S::Tensor>,
-> {
+pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     learning_schedule: LearningSchedule,
     learning_rate_schedule: Option<LearningRateSchedule>,
-    evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
-    should_stop: bool,
+    evaluator: Option<BestActorEvaluator<A::Actor, E>>,
     command_rx: Option<OnPolicyCommandReceiver>,
-    _phantom: PhantomData<(A, S, C, E)>,
+    _phantom: PhantomData<(A, S, E)>,
 }
 
-impl<
-    A: Agent,
-    S: Sampler<Tensor: R2lTensor>,
-    C: OnPolicyAdapters<A::Actor, S>,
-    E: Env<Tensor = S::Tensor>,
-    S2: Sampler<Tensor = S::Tensor>,
-> DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
+impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
+    DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
     /// Creates the default hooks with their schedule, evaluator, and command receiver.
     pub fn new(
         learning_schedule: LearningSchedule,
-        evaluator: Option<BestActorEvaluator<A::Actor, S2>>,
+        evaluator: Option<BestActorEvaluator<A::Actor, E>>,
         learning_rate_schedule: Option<LearningRateSchedule>,
         command_rx: Option<OnPolicyCommandReceiver>,
     ) -> Self {
@@ -183,13 +173,12 @@ impl<
             learning_schedule,
             learning_rate_schedule,
             evaluator,
-            should_stop: false,
             command_rx,
             _phantom: PhantomData,
         }
     }
 
-    fn process_pending_commands(&self, runtime: &mut OnPolicyRuntime<A, S, C>) -> HookResult {
+    fn process_pending_commands(&self, runtime: &mut OnPolicyRuntime<A, S>) -> HookResult {
         let Some(command_rx) = &self.command_rx else {
             return HookResult::Continue;
         };
@@ -212,84 +201,77 @@ impl<
         }
         HookResult::Continue
     }
-}
 
-impl<
-    A: Agent,
-    S: Sampler<Tensor: R2lTensor>,
-    C: OnPolicyAdapters<A::Actor, S>,
-    E: Env<Tensor = S::Tensor>,
-    S2: Sampler<Tensor = S::Tensor>,
-> OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, C, E, S2>
-{
-    type A = A;
-    type S = S;
-    type C = C;
-
-    fn init_hook(
-        &mut self,
-        _runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> HookResult {
-        HookResult::Continue
+    fn mark_progress(&mut self, runtime: &mut OnPolicyRuntime<A, S>) {
+        match &mut self.learning_schedule {
+            LearningSchedule::RolloutBound {
+                current_rollout, ..
+            } => *current_rollout += 1,
+            LearningSchedule::TotalStepBound { current_step, .. } => {
+                let rollouts = runtime.trajectory_containers();
+                let rollout_steps: usize = rollouts.as_ref().iter().map(|e| e.actions.len()).sum();
+                *current_step += rollout_steps;
+            }
+        }
     }
 
-    fn post_rollout_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> HookResult {
-        let progress_remaining = match &mut self.learning_schedule {
+    fn progress_remaining(&self) -> f64 {
+        match self.learning_schedule {
             LearningSchedule::RolloutBound {
                 total_rollouts,
                 current_rollout,
-            } => {
-                *current_rollout += 1;
-                self.should_stop = current_rollout >= total_rollouts;
-                let completed_rollouts = (*current_rollout).min(*total_rollouts);
-                1.0 - completed_rollouts as f64 / *total_rollouts as f64
-            }
+            } => 1.0 - current_rollout as f64 / total_rollouts as f64,
             LearningSchedule::TotalStepBound {
                 total_steps,
                 current_step,
-            } => {
-                let rollouts = runtime.trajectory_containers();
-                let rollout_steps: usize =
-                    rollouts.as_ref().iter().map(|e| e.actions().len()).sum();
-                *current_step += rollout_steps;
-                self.should_stop = current_step >= total_steps;
-                let completed_steps = (*current_step).min(*total_steps);
-                1.0 - completed_steps as f64 / *total_steps as f64
-            }
-        };
+            } => 1.0 - current_step as f64 / total_steps as f64,
+        }
+    }
+}
 
+impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPolicyAlgorithmHooks
+    for DefaultOnPolicyAlgorithmHooks<A, S, E>
+{
+    type A = A;
+    type S = S;
+
+    fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
+        HookResult::Continue
+    }
+
+    fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
+        self.mark_progress(runtime);
         if let Some(learning_rate_schedule) = self.learning_rate_schedule {
-            runtime
-                .agent
-                .set_learning_rate(learning_rate_schedule.value(progress_remaining));
+            let learning_rate = match learning_rate_schedule {
+                LearningRateSchedule::Constant(learning_rate) => learning_rate,
+                LearningRateSchedule::Linear(initial_learning_rate) => {
+                    let progress_remaining = self.progress_remaining();
+                    initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
+                }
+            };
+            runtime.agent.set_learning_rate(learning_rate);
         }
         self.process_pending_commands(runtime)
     }
 
     fn post_training_hook(
         &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> HookResult {
         if let Some(evaluator) = &mut self.evaluator {
             evaluator.eval(runtime);
         }
         let command_res = self.process_pending_commands(runtime);
-        if self.should_stop {
+        if self.progress_remaining() <= 0. {
             HookResult::Break
         } else {
             command_res
         }
     }
 
-    fn shutdown_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S, Self::C>,
-    ) -> Result<()> {
+    fn shutdown_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> Result<()> {
         if let Some(evaluator) = &mut self.evaluator {
-            evaluator.try_write_to_file()?;
+            evaluator.try_write_artifacts()?;
             evaluator.shutdown();
         }
         runtime.shutdown();
