@@ -166,89 +166,62 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
     }
 
     /// Sets the number of evaluation episodes used by the best-actor
-    /// evaluator.
+    /// evaluator. Does nothing until evaluation has been enabled with
+    /// [`Self::with_output_dir`].
     pub fn with_evaluator_n_episodes(mut self, n_episodes: usize) -> Self {
-        let evaluator_builder =
-            if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-                evaluator_builder.with_n_episodes(n_episodes)
-            } else {
-                let env_builder = self.sampler_builder.env_builder().clone();
-                BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
-                    .with_n_episodes(n_episodes)
-            };
-        self.hooks_builder.evaluator_builder = Some(evaluator_builder);
+        // TODO(v0.0.3): Preserve evaluator settings configured before the output directory.
+        if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
+            self.hooks_builder.evaluator_builder =
+                Some(evaluator_builder.with_n_episodes(n_episodes));
+        }
         self
     }
 
-    /// Replaces the environment builder used by the evaluator.
+    /// Replaces the environment builder used by the evaluator. Does nothing
+    /// until evaluation has been enabled with [`Self::with_output_dir`].
     pub fn with_evaluator_env_builder(
         mut self,
         env_builder: r2l_core::env::EnvBuilderType<SB::EnvBuilder>,
     ) -> Self {
-        let evaluator_builder =
-            if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-                evaluator_builder.with_env_builder(env_builder)
-            } else {
-                BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
-            };
-        self.hooks_builder.evaluator_builder = Some(evaluator_builder);
+        if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
+            self.hooks_builder.evaluator_builder =
+                Some(evaluator_builder.with_env_builder(env_builder));
+        }
         self
     }
 
-    /// Sets how evaluation environments are executed.
+    /// Sets how evaluation environments are executed. Does nothing until
+    /// evaluation has been enabled with [`Self::with_output_dir`].
     pub fn with_evaluator_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
+        if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
+            self.hooks_builder.evaluator_builder =
+                Some(evaluator_builder.with_execution_mode(execution_mode));
+        }
+        self
+    }
+
+    /// Enables evaluation and sets its output directory.
+    pub fn with_output_dir(mut self, output_dir: impl Into<std::path::PathBuf>) -> Self {
+        let output_dir = output_dir.into();
         let evaluator_builder =
             if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-                evaluator_builder.with_execution_mode(execution_mode)
+                evaluator_builder.with_output_dir(output_dir)
             } else {
                 let env_builder = self.sampler_builder.env_builder().clone();
-                BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
-                    .with_execution_mode(execution_mode)
+                BestActorEvaluatorBuilder::from_env_builder_type(env_builder, output_dir)
             };
         self.hooks_builder.evaluator_builder = Some(evaluator_builder);
         self
     }
 
-    /// Sets the directory used to persist inference artifacts.
-    pub fn with_inference_dir<P: Into<std::path::PathBuf>>(mut self, inference_dir: P) -> Self {
-        let evaluator_builder =
-            if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-                evaluator_builder.with_inference_dir(inference_dir)
-            } else {
-                let env_builder = self.sampler_builder.env_builder().clone();
-                BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
-                    .with_inference_dir(inference_dir)
-            };
-        self.hooks_builder.evaluator_builder = Some(evaluator_builder);
-        self
-    }
-
-    /// Sets the filesystem path used to persist evaluation states as CSV.
-    pub fn with_csv_states<P: Into<std::path::PathBuf>>(mut self, csv_states_path: P) -> Self {
-        let evaluator_builder =
-            if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-                evaluator_builder.with_csv_states(csv_states_path)
-            } else {
-                let env_builder = self.sampler_builder.env_builder().clone();
-                BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
-                    .with_csv_states(csv_states_path)
-            };
-        self.hooks_builder.evaluator_builder = Some(evaluator_builder);
-        self
-    }
-
-    /// Sets the frequency with which the evaluator runs
+    /// Sets the frequency with which the evaluator runs. Does nothing until
+    /// evaluation has been enabled with [`Self::with_output_dir`].
     pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
-        assert!(evaluator_frequency > 0);
-        let evaluator_builder =
-            if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-                evaluator_builder.with_evaluator_frequency(evaluator_frequency)
-            } else {
-                let env_builder = self.sampler_builder.env_builder().clone();
-                BestActorEvaluatorBuilder::from_env_builder_type(env_builder)
-                    .with_evaluator_frequency(evaluator_frequency)
-            };
-        self.hooks_builder.evaluator_builder = Some(evaluator_builder);
+        if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
+            assert!(evaluator_frequency > 0);
+            self.hooks_builder.evaluator_builder =
+                Some(evaluator_builder.with_evaluator_frequency(evaluator_frequency));
+        }
         self
     }
 
@@ -264,12 +237,12 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
             set_seed(seed);
         }
         let env_description = self.sampler_builder.env_description()?;
-        let inference_dir = self
+        let output_dir = self
             .hooks_builder
             .evaluator_builder
             .as_ref()
-            .and_then(BestActorEvaluatorBuilder::inference_dir);
-        if let Some(inference_dir) = inference_dir {
+            .map(BestActorEvaluatorBuilder::output_dir);
+        if let Some(output_dir) = output_dir {
             let inference_config = self
                 .agent_builder
                 .inference_config(self.sampler_builder.inference_observation_mode())
@@ -278,7 +251,7 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
                         "the configured agent builder does not support inference artifacts"
                     )
                 })?;
-            inference_config.write_to_dir(inference_dir)?;
+            inference_config.write_to_dir(output_dir)?;
         }
         let BuiltSampler {
             sampler,

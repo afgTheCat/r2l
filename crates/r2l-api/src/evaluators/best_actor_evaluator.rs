@@ -20,6 +20,18 @@ use crate::{
     hooks::sampler::EpisodeBoundHook,
 };
 
+fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
+    let path = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir().unwrap().join(path)
+    };
+    assert!(!path.is_file());
+    path
+}
+
+const EVALUATIONS_FILE: &str = "evaluations.csv";
+
 enum EvaluationSampler<E: Env> {
     Direct(DirectSampler<E, EpisodeBoundHook<E>>),
     Staged(StagedSampler<E, EpisodeBoundHook<E>>),
@@ -103,35 +115,35 @@ pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
     env_builder: EnvBuilderType<EB>,
     n_episodes: usize,
     execution_mode: SamplerExecutionMode,
-    inference_dir: Option<PathBuf>,
+    output_dir: PathBuf,
     evaluator_frequency: usize,
-    csv_states_path: Option<PathBuf>,
     eval_states: Vec<EvalState>,
 }
 
 impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
     /// Creates an evaluator builder from an already-prepared environment builder type.
-    pub fn from_env_builder_type(env_builder: EnvBuilderType<EB>) -> Self {
+    pub fn from_env_builder_type(
+        env_builder: EnvBuilderType<EB>,
+        output_dir: impl Into<PathBuf>,
+    ) -> Self {
         Self {
             env_builder,
             evaluator_frequency: 1,
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::MultiThreaded,
-            inference_dir: None,
-            csv_states_path: None,
+            output_dir: resolve_and_validate_output_dir(output_dir.into()),
             eval_states: vec![],
         }
     }
 
     /// Creates an evaluator builder from a homogeneous environment builder.
-    pub fn new(env_builder: EB) -> Self {
+    pub fn new(env_builder: EB, output_dir: impl Into<PathBuf>) -> Self {
         Self {
             evaluator_frequency: 1,
             env_builder: EnvBuilderType::homogeneous(env_builder, 10),
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::MultiThreaded,
-            inference_dir: None,
-            csv_states_path: None,
+            output_dir: resolve_and_validate_output_dir(output_dir.into()),
             eval_states: vec![],
         }
     }
@@ -160,17 +172,9 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
         self
     }
 
-    /// Sets the directory used to persist inference artifacts.
-    pub fn with_inference_dir<P: Into<PathBuf>>(mut self, inference_dir: P) -> Self {
-        let inference_dir = normalize_inference_dir(inference_dir.into());
-        self.inference_dir = Some(inference_dir);
-        self
-    }
-
-    /// Sets the optional CSV path used to persist evaluation states.
-    pub fn with_csv_states<P: Into<PathBuf>>(mut self, csv_states_path: P) -> Self {
-        let csv_states_path = assert_file_path_is_valid(csv_states_path.into());
-        self.csv_states_path = Some(csv_states_path);
+    /// Sets the directory used to persist evaluation output and inference artifacts.
+    pub fn with_output_dir(mut self, output_dir: impl Into<PathBuf>) -> Self {
+        self.output_dir = resolve_and_validate_output_dir(output_dir.into());
         self
     }
 
@@ -189,42 +193,17 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             current_evaluator_step: 0,
             evaluator_frequency: self.evaluator_frequency,
             sampler,
-            inference_dir: self.inference_dir,
+            output_dir: self.output_dir,
             best_rewards: f32::MIN,
             best_actor: None,
             best_obs_normalizer: None,
-            csv_states_path: self.csv_states_path,
             eval_states: self.eval_states,
         }
     }
 
-    pub(crate) fn inference_dir(&self) -> Option<&Path> {
-        self.inference_dir.as_deref()
+    pub(crate) fn output_dir(&self) -> &Path {
+        &self.output_dir
     }
-}
-
-fn normalize_inference_dir(path: PathBuf) -> PathBuf {
-    let path = if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir().unwrap().join(path)
-    };
-    assert!(!path.is_file());
-    path
-}
-
-fn assert_file_path_is_valid(path: PathBuf) -> PathBuf {
-    let path = if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir().unwrap().join(path)
-    };
-    let Some(parent) = path.parent() else {
-        panic!("Path has to have a parent existing");
-    };
-    assert!(parent.is_dir());
-    assert!(!path.is_dir());
-    path
 }
 
 /// Evaluates an actor through the sampler path and keeps the best one seen.
@@ -234,13 +213,12 @@ fn assert_file_path_is_valid(path: PathBuf) -> PathBuf {
 /// observed so far.
 pub struct BestActorEvaluator<A: Actor, E: Env<Tensor: R2lTensor>> {
     sampler: EvaluationSampler<E>,
-    inference_dir: Option<PathBuf>,
+    output_dir: PathBuf,
     best_actor: Option<A>,
     best_obs_normalizer: Option<NormalizerBuilder>,
     best_rewards: f32,
     current_evaluator_step: usize,
     evaluator_frequency: usize,
-    csv_states_path: Option<PathBuf>,
     eval_states: Vec<EvalState>,
 }
 
@@ -269,12 +247,10 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
     ) {
         let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor);
         let avg_reward = total_reward / total_episodes;
-        if self.csv_states_path.is_some() {
-            self.eval_states.push(EvalState {
-                avg_reward,
-                total_episodes,
-            });
-        }
+        self.eval_states.push(EvalState {
+            avg_reward,
+            total_episodes,
+        });
         if avg_reward > self.best_rewards {
             self.best_rewards = avg_reward;
             self.best_actor = Some(actor);
@@ -286,26 +262,24 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
 
     /// Writes the current best inference artifacts and evaluation statistics.
     pub fn try_write_artifacts(&self) -> Result<()> {
-        if let (Some(actor), Some(inference_dir)) = (&self.best_actor, &self.inference_dir)
+        std::fs::create_dir_all(&self.output_dir)?;
+        if let Some(actor) = &self.best_actor
             && let Some(bytes) = actor.try_serialize()
         {
-            std::fs::create_dir_all(inference_dir)?;
-            std::fs::write(inference_dir.join(ACTOR_FILE), bytes)?;
+            std::fs::write(self.output_dir.join(ACTOR_FILE), bytes)?;
             if let Some(normalizer) = &self.best_obs_normalizer {
-                let normalizer_path = inference_dir.join(NORMALIZER_FILE);
+                let normalizer_path = self.output_dir.join(NORMALIZER_FILE);
                 std::fs::write(normalizer_path, yaml_serde::to_string(normalizer)?)?;
             }
         }
-        if let Some(path) = &self.csv_states_path {
-            let mut csv = String::from("average_reward,total_episodes\n");
-            for eval_state in &self.eval_states {
-                csv.push_str(&format!(
-                    "{},{}\n",
-                    eval_state.avg_reward, eval_state.total_episodes
-                ));
-            }
-            std::fs::write(path, csv)?;
+        let mut csv = String::from("average_reward,total_episodes\n");
+        for eval_state in &self.eval_states {
+            csv.push_str(&format!(
+                "{},{}\n",
+                eval_state.avg_reward, eval_state.total_episodes
+            ));
         }
+        std::fs::write(self.output_dir.join(EVALUATIONS_FILE), csv)?;
         Ok(())
     }
 

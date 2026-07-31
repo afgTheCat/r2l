@@ -159,7 +159,7 @@ impl RlZooEnvironmentConfig {
     pub fn build_burn_ppo_algorithm(
         &self,
         env_name: &str,
-        csv_path: PathBuf,
+        output_dir: PathBuf,
         seed: u64,
     ) -> anyhow::Result<RlZooPpoAlgorithm> {
         let obs_clip = self.normalize.norm_obs().then_some(10.0);
@@ -167,7 +167,7 @@ impl RlZooEnvironmentConfig {
             .with_burn()
             .with_rollout_bound(StepHookBound::new(self.n_steps))
             .with_learning_schedule(LearningSchedule::total_step_bound(self.n_timesteps))
-            .with_csv_states(csv_path)
+            .with_output_dir(output_dir)
             .with_observation_normalizer(obs_clip)
             .with_lambda(self.gae_lambda)
             .with_gamma(self.gamma)

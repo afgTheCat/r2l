@@ -8,9 +8,9 @@ const ENV_NAME: &str = "Pendulum-v1";
 #[test]
 fn ppo_inference() {
     // build stage
-    let inference_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo-inference");
+    let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo-inference");
     let mut ppo = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
-        .with_inference_dir(&inference_dir)
+        .with_output_dir(&output_dir)
         .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)
         .with_gamma(0.9)
@@ -23,7 +23,7 @@ fn ppo_inference() {
     ppo.train().unwrap();
 
     // inference stage
-    let inference_artifacts = InferenceArtifacts::load(inference_dir).unwrap();
+    let inference_artifacts = InferenceArtifacts::load(output_dir).unwrap();
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
     let mut inference = inference_artifacts.build(env).unwrap();
     for _ in 0..10 {
