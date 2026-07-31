@@ -150,6 +150,13 @@ impl<T: R2lTensor> Actor for InferenceActor<T> {
             Self::Burn(actor) => actor.action(observation),
         }
     }
+
+    fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+        match self {
+            Self::Candle(actor) => actor.mode_action(observation),
+            Self::Burn(actor) => actor.mode_action(observation),
+        }
+    }
 }
 
 /// Stateful, single-environment inference runtime.

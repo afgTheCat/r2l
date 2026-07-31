@@ -61,6 +61,11 @@ impl<B: Backend> Actor for DiagGaussianDistribution<B> {
         Ok(action.squeeze_dims(&[0]))
     }
 
+    fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
+        let observation: Tensor<B, 2> = observation.unsqueeze();
+        Ok(self.mu_net.forward(observation).squeeze_dims(&[0]))
+    }
+
     // This will serialize the model to safetesnors
     fn try_serialize(&self) -> Option<Vec<u8>> {
         let mut store = SafetensorsStore::default();

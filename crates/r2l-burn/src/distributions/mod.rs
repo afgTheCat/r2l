@@ -156,6 +156,16 @@ impl<B: Backend> Actor for BurnPolicyKind<B> {
         }
     }
 
+    fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+        match self {
+            Self::Categorical(cat) => cat.mode_action(observation),
+            Self::Diag(diag) => diag.mode_action(observation),
+            Self::MultiCategorical(multi) => multi.mode_action(observation),
+            Self::Bernoulli(bernoulli) => bernoulli.mode_action(observation),
+            Self::Composite(composite) => composite.mode_action(observation),
+        }
+    }
+
     fn try_serialize(&self) -> Option<Vec<u8>> {
         match self {
             Self::Categorical(cat) => cat.try_serialize(),

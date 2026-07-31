@@ -62,6 +62,21 @@ impl<B: Backend> Actor for BernoulliDistribution<B> {
         ))
     }
 
+    fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+        let device = Default::default();
+        let observation: Tensor<B, 2> = observation.unsqueeze();
+        let logits = self.logits.forward(observation).squeeze::<1>();
+        let probs: Vec<f32> = sigmoid(logits).to_data().to_vec().unwrap();
+        let actions = probs
+            .into_iter()
+            .map(|probability| if probability >= 0.5 { 1.0 } else { 0.0 })
+            .collect();
+        Ok(Tensor::from_data(
+            TensorData::new(actions, vec![self.action_size]),
+            &device,
+        ))
+    }
+
     fn try_serialize(&self) -> Option<Vec<u8>> {
         let mut store = SafetensorsStore::default();
         store.collect_from(self).unwrap();

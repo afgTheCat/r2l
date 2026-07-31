@@ -30,6 +30,15 @@ impl<B: Backend> CompositePolicyChildren<B> {
         }
     }
 
+    fn mode_action(&self, observation: Tensor<B, 1>) -> anyhow::Result<Tensor<B, 1>> {
+        match self {
+            Self::Categorical(policy) => policy.mode_action(observation),
+            Self::Diag(policy) => policy.mode_action(observation),
+            Self::MultiCategorical(policy) => policy.mode_action(observation),
+            Self::Bernoulli(policy) => policy.mode_action(observation),
+        }
+    }
+
     fn log_probs(
         &self,
         states: &[Tensor<B, 1>],
@@ -186,6 +195,14 @@ impl<B: Backend> Actor for CompositeDistribution<B> {
         let mut actions = Vec::new();
         for policy in &self.policies {
             actions.push(policy.action(observation.clone())?);
+        }
+        Ok(Tensor::cat(actions, 0))
+    }
+
+    fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+        let mut actions = Vec::new();
+        for policy in &self.policies {
+            actions.push(policy.mode_action(observation.clone())?);
         }
         Ok(Tensor::cat(actions, 0))
     }

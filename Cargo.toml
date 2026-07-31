@@ -34,6 +34,7 @@ bimodal-array = { version = "0.1.4" }
 safetensors = { version = "0.8.0" }
 serde = { version = "1.0.229", features = ["derive"] }
 yaml_serde = "0.10.4"
+itertools = "0.15.0"
 
 [workspace.package]
 version = "0.0.2"

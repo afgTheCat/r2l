@@ -74,6 +74,23 @@ impl Actor for MultiCategoricalDistribution {
         }
         Ok(Tensor::from_vec(actions, self.nvec.len(), &self.device)?.detach())
     }
+
+    fn mode_action(&self, observation: Tensor) -> Result<Tensor> {
+        let logits = self.logits.forward(&observation.unsqueeze(0)?)?;
+        let logits = logits.squeeze(0)?;
+        let mut actions = Vec::with_capacity(self.nvec.len());
+        for (offset, choices) in action_ranges(&self.nvec) {
+            let logits: Vec<f32> = logits.narrow(0, offset, choices)?.to_vec1()?;
+            let action = logits
+                .iter()
+                .enumerate()
+                .max_by(|(_, left), (_, right)| left.total_cmp(right))
+                .map(|(index, _)| index)
+                .unwrap();
+            actions.push(action as f32);
+        }
+        Ok(Tensor::from_vec(actions, self.nvec.len(), &self.device)?.detach())
+    }
 }
 
 impl Policy for MultiCategoricalDistribution {

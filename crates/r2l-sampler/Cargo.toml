@@ -14,4 +14,4 @@ r2l-core = { workspace = true }
 crossbeam = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-itertools = "0.15.0"
+itertools = { workspace = true }

@@ -64,6 +64,32 @@ impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
         ))
     }
 
+    fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+        let device = Default::default();
+        let observation: Tensor<B, 2> = observation.unsqueeze();
+        let logits = self.logits.forward(observation).squeeze::<1>();
+        let actions = action_ranges(&self.nvec)
+            .map(|(offset, choices)| {
+                let logits: Vec<f32> = logits
+                    .clone()
+                    .narrow(0, offset, choices)
+                    .to_data()
+                    .to_vec()
+                    .unwrap();
+                logits
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, left), (_, right)| left.total_cmp(right))
+                    .map(|(index, _)| index as f32)
+                    .unwrap()
+            })
+            .collect();
+        Ok(Tensor::from_data(
+            TensorData::new(actions, vec![self.nvec.len()]),
+            &device,
+        ))
+    }
+
     fn try_serialize(&self) -> Option<Vec<u8>> {
         let mut store = SafetensorsStore::default();
         store.collect_from(self).unwrap();

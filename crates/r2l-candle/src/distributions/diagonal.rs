@@ -93,6 +93,11 @@ impl Actor for DiagGaussianDistribution {
         Ok(action)
     }
 
+    fn mode_action(&self, observation: Tensor) -> Result<Tensor> {
+        let observation = observation.unsqueeze(0)?;
+        Ok(self.mu_net.forward(&observation)?.squeeze(0)?.detach())
+    }
+
     fn try_serialize(&self) -> Option<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.mu_net.activation(),

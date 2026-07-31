@@ -5,6 +5,7 @@ use candle_core::{DType, Device, Error, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
+use itertools::Itertools;
 use r2l_core::{
     models::{ActivationFunction, Actor, Policy, PolicyMetadata},
     rng::with_rng,
@@ -94,6 +95,18 @@ impl Actor for CategoricalDistribution {
         action_mask[action] = 1.;
         let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
         Ok(action)
+    }
+
+    fn mode_action(&self, observation: Tensor) -> Result<Tensor> {
+        let logits = self.logits.forward(&observation.unsqueeze(0)?)?;
+        let logits: Vec<f32> = logits.squeeze(0)?.to_vec1()?;
+        let action = logits
+            .iter()
+            .position_max_by(|a, b| a.total_cmp(b))
+            .unwrap();
+        let mut action_mask = vec![0.0; self.action_size];
+        action_mask[action] = 1.0;
+        Ok(Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach())
     }
 
     fn try_serialize(&self) -> Option<Vec<u8>> {
