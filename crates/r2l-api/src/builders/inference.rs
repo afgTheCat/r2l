@@ -195,6 +195,17 @@ impl<E: Env> InferenceRunner<E> {
         Ok(())
     }
 
+    /// Selects the modal action and advances the environment by one step.
+    pub fn mode_step(&mut self) -> anyhow::Result<Snapshot<E::Tensor>> {
+        let action = self.actor.mode_action(self.last_state.clone())?;
+        let mut snapshot = self.env.step(action)?;
+        if let Some(obs_normalizer) = &self.obs_normalizer {
+            obs_normalizer.apply_tensor_in_place(&mut snapshot.state);
+        }
+        self.last_state = snapshot.state.clone();
+        Ok(snapshot)
+    }
+
     /// Chooses an action and advances the environment by one step.
     pub fn step(&mut self) -> anyhow::Result<Snapshot<E::Tensor>> {
         let action = self.actor.action(self.last_state.clone())?;
@@ -210,6 +221,17 @@ impl<E: Env> InferenceRunner<E> {
     pub fn run_episode(&mut self) {
         loop {
             let snapshot = self.step().unwrap();
+            if snapshot.terminated || snapshot.truncated {
+                break;
+            }
+        }
+        self.reset().unwrap();
+    }
+
+    /// Runs the environment to completion using modal actions only and then resets it.
+    pub fn mode_run_episode(&mut self) {
+        loop {
+            let snapshot = self.mode_step().unwrap();
             if snapshot.terminated || snapshot.truncated {
                 break;
             }
