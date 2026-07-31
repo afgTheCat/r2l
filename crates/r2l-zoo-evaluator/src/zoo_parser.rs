@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use r2l_api::{
-    BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
-    PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
+    BestActorEvaluatorConfig, BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule,
+    LearningSchedule, PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
 };
 use r2l_core::on_policy::algorithm::OnPolicyAlgorithm;
 use r2l_gym::GymEnv;
@@ -163,11 +163,12 @@ impl RlZooEnvironmentConfig {
         seed: u64,
     ) -> anyhow::Result<RlZooPpoAlgorithm> {
         let obs_clip = self.normalize.norm_obs().then_some(10.0);
+        let evaluator_config = BestActorEvaluatorConfig::new(&output_dir);
         let mut builder = PPOAlgorithmBuilder::gym(env_name, self.n_envs)
             .with_burn()
             .with_rollout_bound(StepHookBound::new(self.n_steps))
             .with_learning_schedule(LearningSchedule::total_step_bound(self.n_timesteps))
-            .with_output_dir(output_dir)
+            .with_evaluator(evaluator_config)
             .with_observation_normalizer(obs_clip)
             .with_lambda(self.gae_lambda)
             .with_gamma(self.gamma)

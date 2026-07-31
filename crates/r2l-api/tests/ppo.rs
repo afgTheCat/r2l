@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use r2l_api::{InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder};
+use r2l_api::{
+    BestActorEvaluatorConfig, InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder,
+};
 use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";
@@ -9,8 +11,9 @@ const ENV_NAME: &str = "Pendulum-v1";
 fn ppo_inference() {
     // build stage
     let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo-inference");
+    let evaluator_config = BestActorEvaluatorConfig::new(&output_dir);
     let mut ppo = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
-        .with_output_dir(&output_dir)
+        .with_evaluator(evaluator_config)
         .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)
         .with_gamma(0.9)
