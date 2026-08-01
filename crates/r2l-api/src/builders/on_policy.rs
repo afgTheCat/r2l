@@ -169,17 +169,17 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
         self
     }
 
-    pub fn try_write_inference_config(&self) {
+    pub fn try_write_inference_config(&self) -> anyhow::Result<()> {
         let Some(BestActorEvaluatorConfig { output_dir, .. }) =
             &self.hooks_builder.evaluator_config
         else {
-            return;
+            return Ok(());
         };
         let observation_mode = self.sampler_builder.inference_observation_mode();
         let Some(inference_config) = self.agent_builder.inference_config(observation_mode) else {
-            return;
+            return Ok(());
         };
-        inference_config.write_to_dir(output_dir).unwrap();
+        inference_config.write_to_dir(output_dir)
     }
 
     /// Builds the configured on-policy algorithm runtime.
@@ -188,7 +188,7 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
             set_seed(seed);
         }
         let env_description = self.sampler_builder.env_description()?;
-        self.try_write_inference_config();
+        self.try_write_inference_config()?;
         let sampler_builder = self.sampler_builder.env_builder().clone();
         let BuiltSampler {
             sampler,
