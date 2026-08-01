@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use burn::backend::NdArray;
 use burn_store::SafetensorsStore;
 use r2l_api::{
-    Evaluator, LearningSchedule, PPOAlgorithmBuilder, SamplerExecutionMode, StepHookBound,
+    BestActorEvaluatorConfig, Evaluator, LearningSchedule, PPOAlgorithmBuilder,
+    SamplerExecutionMode, StepHookBound,
 };
 use r2l_burn::distributions::diagonal::DiagGaussianDistribution;
 
@@ -12,11 +13,12 @@ const ENV_NAME: &str = "Pendulum-v1";
 
 fn main() {
     let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo");
+    let evaluator_config = BestActorEvaluatorConfig::new(&output_dir);
     let model_path = output_dir.join("actor.safetensors");
     let hidden_layers = vec![64, 64];
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_burn()
-        .with_output_dir(output_dir)
+        .with_evaluator(evaluator_config)
         .with_seed(0)
         .with_policy_hidden_layers(hidden_layers.clone())
         .with_clip_range(0.2)

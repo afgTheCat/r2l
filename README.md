@@ -24,24 +24,50 @@ library is to be included in the future.
 
 ## Getting started
 
-You can get started if you have `gymnasium` like so:
+With `gymnasium` installed, a complete training and inference workflow looks
+like this:
 
 ```rust,no_run
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
+use r2l_api::{
+    BestActorEvaluatorConfig, InferenceArtifacts, LearningSchedule,
+    PPOAlgorithmBuilder,
+};
+use r2l_gym::GymEnv;
+
+const ENV_NAME: &str = "Pendulum-v1";
+const ARTIFACT_DIR: &str = "runs/pendulum";
 
 fn main() {
-    let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
-        .with_burn()
-        .with_clip_range(0.2)
+    // Train the agent and persist the best policy for inference.
+    let evaluator_config = BestActorEvaluatorConfig::new(ARTIFACT_DIR);
+    let mut ppo = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
+        .with_evaluator(evaluator_config)
+        .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
-        .with_total_epochs(10)
-        .with_rollout_bound(StepHookBound::new(1024))
-        .with_learning_schedule(LearningSchedule::total_step_bound(100_000));
-    let mut algo = builder.build().unwrap();
-    algo.train().unwrap();
+        .with_learning_schedule(LearningSchedule::rollout_bound(30))
+        .build()
+        .unwrap();
+    ppo.train().unwrap();
+
+    // Reload the artifacts later without rebuilding the policy by hand.
+    let inference_artifacts = InferenceArtifacts::load(ARTIFACT_DIR).unwrap();
+    let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
+    let mut inference = inference_artifacts.build(env).unwrap();
+    for _ in 0..10 {
+        inference.run_episode();
+    }
 }
+```
+
+The evaluator periodically measures the current policy and persists the best
+one as an inference-ready bundle. The bundle contains the policy configuration,
+SafeTensors weights, and observation-normalizer state when normalization is
+enabled. Run this example from the workspace root with:
+
+```text
+cargo run -p r2l-examples --example ppo-inference
 ```
 
 For more information, read the [book](https://afgthecat.github.io/r2l/).

@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use r2l_core::{
@@ -103,88 +103,60 @@ impl<E: Env> EvaluationSampler<E> {
     }
 }
 
+/// Config for [`BestActorEvaluator`] instances.
 #[derive(Serialize, Deserialize)]
-struct EvalState {
-    avg_reward: f32,
-    total_episodes: f32,
+pub struct BestActorEvaluatorConfig {
+    pub(crate) output_dir: PathBuf,
+    pub(crate) n_episodes: usize,
+    pub(crate) execution_mode: SamplerExecutionMode,
+    pub(crate) evaluator_frequency: usize,
 }
 
-/// Builder for [`BestActorEvaluator`] instances.
-#[derive(Serialize, Deserialize)]
-pub struct BestActorEvaluatorBuilder<EB: EnvBuilder> {
-    env_builder: EnvBuilderType<EB>,
-    n_episodes: usize,
-    execution_mode: SamplerExecutionMode,
-    output_dir: PathBuf,
-    evaluator_frequency: usize,
-    eval_states: Vec<EvalState>,
-}
-
-impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
-    /// Creates an evaluator builder from an already-prepared environment builder type.
-    pub fn from_env_builder_type(
-        env_builder: EnvBuilderType<EB>,
-        output_dir: impl Into<PathBuf>,
-    ) -> Self {
+impl BestActorEvaluatorConfig {
+    /// Creates a best-actor evaluator configuration with default evaluation settings.
+    pub fn new(output_dir: impl Into<PathBuf>) -> Self {
         Self {
-            env_builder,
             evaluator_frequency: 1,
             n_episodes: 5,
             execution_mode: SamplerExecutionMode::MultiThreaded,
             output_dir: resolve_and_validate_output_dir(output_dir.into()),
-            eval_states: vec![],
         }
-    }
-
-    /// Creates an evaluator builder from a homogeneous environment builder.
-    pub fn new(env_builder: EB, output_dir: impl Into<PathBuf>) -> Self {
-        Self {
-            evaluator_frequency: 1,
-            env_builder: EnvBuilderType::homogeneous(env_builder, 10),
-            n_episodes: 5,
-            execution_mode: SamplerExecutionMode::MultiThreaded,
-            output_dir: resolve_and_validate_output_dir(output_dir.into()),
-            eval_states: vec![],
-        }
-    }
-
-    /// Sets the frequency with which the evaluator runs.
-    pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
-        self.evaluator_frequency = evaluator_frequency;
-        self
-    }
-
-    /// Replaces the environment builder used for evaluation.
-    pub fn with_env_builder(mut self, env_builder: EnvBuilderType<EB>) -> Self {
-        self.env_builder = env_builder;
-        self
     }
 
     /// Sets the number of episodes collected during each evaluation pass.
     pub fn with_n_episodes(mut self, n_episodes: usize) -> Self {
+        assert!(
+            n_episodes > 0,
+            "evaluation episode count must be greater than zero"
+        );
         self.n_episodes = n_episodes;
         self
     }
 
-    /// Sets how evaluation workers are executed.
+    /// Sets how evaluation environments are executed.
     pub fn with_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
         self.execution_mode = execution_mode;
         self
     }
 
-    /// Sets the directory used to persist evaluation output and inference artifacts.
-    pub fn with_output_dir(mut self, output_dir: impl Into<PathBuf>) -> Self {
-        self.output_dir = resolve_and_validate_output_dir(output_dir.into());
+    /// Sets the number of training rollouts between evaluation passes.
+    pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
+        assert!(
+            evaluator_frequency > 0,
+            "evaluation frequency must be greater than zero"
+        );
+        self.evaluator_frequency = evaluator_frequency;
         self
     }
 
     /// Builds an evaluator with an optional observation normalizer.
-    pub fn build<A: Actor + Clone>(
+    pub fn build<A: Actor + Clone, EB: EnvBuilder>(
         self,
         obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
+        env_builder: EnvBuilderType<EB>,
     ) -> BestActorEvaluator<A, EB::Env> {
         let sampler = EvaluationSampler::build(
-            self.env_builder,
+            env_builder,
             self.n_episodes,
             self.execution_mode,
             obs_normalizer,
@@ -197,13 +169,15 @@ impl<EB: EnvBuilder> BestActorEvaluatorBuilder<EB> {
             best_rewards: f32::MIN,
             best_actor: None,
             best_obs_normalizer: None,
-            eval_states: self.eval_states,
+            eval_states: vec![],
         }
     }
+}
 
-    pub(crate) fn output_dir(&self) -> &Path {
-        &self.output_dir
-    }
+#[derive(Serialize, Deserialize)]
+struct EvalState {
+    avg_reward: f32,
+    total_episodes: f32,
 }
 
 /// Evaluates an actor through the sampler path and keeps the best one seen.

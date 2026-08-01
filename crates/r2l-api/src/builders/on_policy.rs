@@ -1,5 +1,5 @@
 use r2l_core::{
-    env::{Env, EnvBuilder, normalizer::ClippedNormalizer},
+    env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
     on_policy::algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime, Sampler},
     rng::set_seed,
     tensor::R2lTensor,
@@ -8,7 +8,7 @@ use r2l_sampler::{SamplerExecutionMode, StagedSamplerHook};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BestActorEvaluatorBuilder, DefaultOnPolicyAlgorithmHooks, OnPolicyCommandReceiver,
+    BestActorEvaluatorConfig, DefaultOnPolicyAlgorithmHooks, OnPolicyCommandReceiver,
     builders::{
         agent::AgentBuilder,
         sampler::{
@@ -36,35 +36,35 @@ type DefaultOnPolicyAlgorithmHooksFor<A, S, EB> =
 
 /// Internal builder for the default on-policy algorithm lifecycle hooks.
 #[derive(Serialize, Deserialize)]
-pub(crate) struct DefaultOnPolicyAlgorithmHooksBuilder<EB: EnvBuilder> {
+pub(crate) struct DefaultOnPolicyAlgorithmHooksBuilder {
     pub(crate) learning_rate_schedule: Option<LearningRateSchedule>,
     pub(crate) learning_schedule: LearningSchedule,
-    pub(crate) evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>,
+    pub(crate) evaluator_config: Option<BestActorEvaluatorConfig>,
     #[serde(skip)]
     pub(crate) command_rx: Option<OnPolicyCommandReceiver>,
 }
 
-impl<EB: EnvBuilder> Default for DefaultOnPolicyAlgorithmHooksBuilder<EB> {
+impl Default for DefaultOnPolicyAlgorithmHooksBuilder {
     fn default() -> Self {
         Self {
             learning_rate_schedule: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
-            evaluator_builder: None,
+            evaluator_config: None,
             command_rx: None,
         }
     }
 }
 
-impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
+impl DefaultOnPolicyAlgorithmHooksBuilder {
     /// Replaces the learning schedule that controls training termination.
     fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
         self.learning_schedule = learning_schedule;
         self
     }
 
-    /// Installs or clears the evaluator used during training.
-    fn with_evaluator(mut self, evaluator_builder: Option<BestActorEvaluatorBuilder<EB>>) -> Self {
-        self.evaluator_builder = evaluator_builder;
+    /// Installs the evaluator used during training.
+    fn with_evaluator(mut self, evaluator_builder: BestActorEvaluatorConfig) -> Self {
+        self.evaluator_config = Some(evaluator_builder);
         self
     }
 
@@ -74,17 +74,18 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
         self
     }
 
-    fn build<A, S>(
+    fn build<A, S, EB: EnvBuilder>(
         self,
         obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
+        env_builder: EnvBuilderType<EB>,
     ) -> DefaultOnPolicyAlgorithmHooksFor<A, S, EB>
     where
         A: Agent,
         S: Sampler<Tensor = <EB::Env as Env>::Tensor>,
     {
-        let evaluator = self
-            .evaluator_builder
-            .map(|evaluator_builder| evaluator_builder.build::<A::Actor>(obs_normalizer));
+        let evaluator = self.evaluator_config.map(|evaluator_builder| {
+            evaluator_builder.build::<A::Actor, EB>(obs_normalizer, env_builder)
+        });
         DefaultOnPolicyAlgorithmHooks::new(
             self.learning_schedule,
             evaluator,
@@ -112,7 +113,7 @@ impl<EB: EnvBuilder> DefaultOnPolicyAlgorithmHooksBuilder<EB> {
 ))]
 pub struct OnPolicyAlgorithmBuilder<AB: AgentBuilder, SB: SamplerBuilder> {
     pub(crate) sampler_builder: SB,
-    pub(crate) hooks_builder: DefaultOnPolicyAlgorithmHooksBuilder<SB::EnvBuilder>,
+    pub(crate) hooks_builder: DefaultOnPolicyAlgorithmHooksBuilder,
     pub(crate) agent_builder: AB,
     pub(crate) seed: Option<u64>,
 }
@@ -129,11 +130,8 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
         }
     }
 
-    /// Installs or clears the evaluator used during training.
-    pub fn with_evaluator(
-        mut self,
-        evaluator_builder: Option<BestActorEvaluatorBuilder<SB::EnvBuilder>>,
-    ) -> Self {
+    /// Installs the evaluator used during training.
+    pub fn with_evaluator(mut self, evaluator_builder: BestActorEvaluatorConfig) -> Self {
         self.hooks_builder = self.hooks_builder.with_evaluator(evaluator_builder);
         self
     }
@@ -165,70 +163,23 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
         self
     }
 
-    /// Sets the number of evaluation episodes used by the best-actor
-    /// evaluator. Does nothing until evaluation has been enabled with
-    /// [`Self::with_output_dir`].
-    pub fn with_evaluator_n_episodes(mut self, n_episodes: usize) -> Self {
-        // TODO(v0.0.3): Preserve evaluator settings configured before the output directory.
-        if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-            self.hooks_builder.evaluator_builder =
-                Some(evaluator_builder.with_n_episodes(n_episodes));
-        }
-        self
-    }
-
-    /// Replaces the environment builder used by the evaluator. Does nothing
-    /// until evaluation has been enabled with [`Self::with_output_dir`].
-    pub fn with_evaluator_env_builder(
-        mut self,
-        env_builder: r2l_core::env::EnvBuilderType<SB::EnvBuilder>,
-    ) -> Self {
-        if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-            self.hooks_builder.evaluator_builder =
-                Some(evaluator_builder.with_env_builder(env_builder));
-        }
-        self
-    }
-
-    /// Sets how evaluation environments are executed. Does nothing until
-    /// evaluation has been enabled with [`Self::with_output_dir`].
-    pub fn with_evaluator_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
-        if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-            self.hooks_builder.evaluator_builder =
-                Some(evaluator_builder.with_execution_mode(execution_mode));
-        }
-        self
-    }
-
-    /// Enables evaluation and sets its output directory.
-    pub fn with_output_dir(mut self, output_dir: impl Into<std::path::PathBuf>) -> Self {
-        let output_dir = output_dir.into();
-        let evaluator_builder =
-            if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-                evaluator_builder.with_output_dir(output_dir)
-            } else {
-                let env_builder = self.sampler_builder.env_builder().clone();
-                BestActorEvaluatorBuilder::from_env_builder_type(env_builder, output_dir)
-            };
-        self.hooks_builder.evaluator_builder = Some(evaluator_builder);
-        self
-    }
-
-    /// Sets the frequency with which the evaluator runs. Does nothing until
-    /// evaluation has been enabled with [`Self::with_output_dir`].
-    pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
-        if let Some(evaluator_builder) = self.hooks_builder.evaluator_builder.take() {
-            assert!(evaluator_frequency > 0);
-            self.hooks_builder.evaluator_builder =
-                Some(evaluator_builder.with_evaluator_frequency(evaluator_frequency));
-        }
-        self
-    }
-
     /// Sets how training environments are executed.
     pub fn with_execution_mode(mut self, location: SamplerExecutionMode) -> Self {
         self.sampler_builder = self.sampler_builder.with_execution_mode(location);
         self
+    }
+
+    pub fn try_write_inference_config(&self) -> anyhow::Result<()> {
+        let Some(BestActorEvaluatorConfig { output_dir, .. }) =
+            &self.hooks_builder.evaluator_config
+        else {
+            return Ok(());
+        };
+        let observation_mode = self.sampler_builder.inference_observation_mode();
+        let Some(inference_config) = self.agent_builder.inference_config(observation_mode) else {
+            return Ok(());
+        };
+        inference_config.write_to_dir(output_dir)
     }
 
     /// Builds the configured on-policy algorithm runtime.
@@ -237,22 +188,8 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
             set_seed(seed);
         }
         let env_description = self.sampler_builder.env_description()?;
-        let output_dir = self
-            .hooks_builder
-            .evaluator_builder
-            .as_ref()
-            .map(BestActorEvaluatorBuilder::output_dir);
-        if let Some(output_dir) = output_dir {
-            let inference_config = self
-                .agent_builder
-                .inference_config(self.sampler_builder.inference_observation_mode())
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "the configured agent builder does not support inference artifacts"
-                    )
-                })?;
-            inference_config.write_to_dir(output_dir)?;
-        }
+        self.try_write_inference_config()?;
+        let sampler_builder = self.sampler_builder.env_builder().clone();
         let BuiltSampler {
             sampler,
             obs_normalizer,
@@ -264,7 +201,7 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
             .build(observation_size, action_space, self.seed)?;
         let hooks = self
             .hooks_builder
-            .build::<AB::Agent, SB::Sampler>(obs_normalizer);
+            .build::<AB::Agent, SB::Sampler, SB::EnvBuilder>(obs_normalizer, sampler_builder);
         Ok(OnPolicyAlgorithm::new(
             OnPolicyRuntime { sampler, agent },
             hooks,
