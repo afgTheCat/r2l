@@ -12,13 +12,14 @@ use std::{path::PathBuf, process::Command};
 
 use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
+use pyo3::Python;
 
 use crate::zoo_parser::ZooConfig;
 
 const SEED: u64 = 0;
 const CONFIG_PATH: &str = "../../assets/ppo.yaml";
 const LOG_DIR: &str = "../../logs";
-const SMALL_ENVIRONMENTS: [&str; 8] = [
+const SMALL_ENVIRONMENTS: [&str; 10] = [
     "MountainCarContinuous-v0",
     "CartPole-v1",
     "Pendulum-v1",
@@ -27,6 +28,8 @@ const SMALL_ENVIRONMENTS: [&str; 8] = [
     "BipedalWalker-v3",
     "LunarLander-v3",
     "LunarLanderContinuous-v3",
+    "VizdoomBasic-MultiBinary-v1",
+    "popgym-BattleshipEasy-v0",
 ];
 
 #[derive(Parser)]
@@ -81,6 +84,14 @@ fn evaluate(envs: Vec<String>) -> anyhow::Result<()> {
     let config_path = crate_dir.join(CONFIG_PATH);
     let zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
     for env in envs {
+        let registration_module = match env.as_str() {
+            "VizdoomBasic-MultiBinary-v1" => Some("vizdoom.gymnasium_wrapper"),
+            "popgym-BattleshipEasy-v0" => Some("popgym"),
+            _ => None,
+        };
+        if let Some(module) = registration_module {
+            Python::with_gil(|py| py.import(module).map(|_| ()))?;
+        }
         let output_dir = crate_dir.join(LOG_DIR).join(&env);
         let Some(env_config) = zoo_config.supported_envs.get(&env) else {
             if zoo_config.unsupported_envs.contains_key(&env) {
