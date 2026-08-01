@@ -6,6 +6,8 @@ use candle_nn::{Activation, Init, Linear, Module, VarBuilder};
 use either::Either;
 use r2l_core::models::ActivationFunction;
 
+use crate::random::overwrite_uniform;
+
 #[derive(Debug, Clone)]
 struct LinearLayer {
     layer: Linear,
@@ -24,6 +26,7 @@ impl LinearLayer {
             },
         )?;
         let bound = 1. / (in_dim as f64).sqrt();
+        overwrite_uniform(&weight, bound as f32)?;
         let bias = layer_vb.get_with_hints(
             out_dim,
             "bias",
@@ -32,6 +35,7 @@ impl LinearLayer {
                 up: bound,
             },
         )?;
+        overwrite_uniform(&bias, bound as f32)?;
         let layer = Linear::new(weight, Some(bias));
         Ok(Self { layer })
     }
