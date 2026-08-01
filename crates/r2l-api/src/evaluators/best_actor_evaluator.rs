@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Instant};
 
 use anyhow::Result;
 use r2l_core::{
@@ -207,9 +207,14 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
             .current_evaluator_step
             .is_multiple_of(self.evaluator_frequency)
         {
+            let evaluation_started = Instant::now();
             let actor = rt.actor();
             let adapted_actor = ActorWrapper::new(rt.actor());
             self.eval_adapted(adapted_actor, actor);
+            eprintln!(
+                "Evaluate - duration_ms={:.3}",
+                evaluation_started.elapsed().as_secs_f64() * 1000.0,
+            );
         }
     }
 
