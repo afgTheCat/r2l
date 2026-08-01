@@ -76,6 +76,10 @@ impl CategoricalDistribution {
     pub fn observation_size(&self) -> usize {
         self.logits.input_size()
     }
+
+    pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        self.logits.named_tensors(prefix)
+    }
 }
 
 impl Actor for CategoricalDistribution {

@@ -72,6 +72,12 @@ impl DiagGaussianDistribution {
     pub fn observation_size(&self) -> usize {
         self.mu_net.input_size()
     }
+
+    pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        let mut tensors = self.mu_net.named_tensors(prefix);
+        tensors.push((format!("{prefix}.log_std"), self.log_std.clone()));
+        tensors
+    }
 }
 
 impl Actor for DiagGaussianDistribution {

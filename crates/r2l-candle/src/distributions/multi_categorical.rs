@@ -6,11 +6,12 @@ use candle_nn::{
 };
 use r2l_core::{
     env::action_ranges,
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistribution;
 use rand::distr::weighted::WeightedIndex;
+use safetensors::serialize as st_serialize;
 
 use crate::sequential::{Sequential, build_sequential};
 
@@ -52,6 +53,10 @@ impl MultiCategoricalDistribution {
     pub fn observation_size(&self) -> usize {
         self.logits.input_size()
     }
+
+    pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        self.logits.named_tensors(prefix)
+    }
 }
 
 impl Actor for MultiCategoricalDistribution {
@@ -90,6 +95,14 @@ impl Actor for MultiCategoricalDistribution {
             actions.push(action as f32);
         }
         Ok(Tensor::from_vec(actions, self.nvec.len(), &self.device)?.detach())
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        let metadata = PolicyMetadata {
+            activation: self.logits.activation(),
+        }
+        .to_safetensors_metadata();
+        st_serialize(self.named_tensors("policy"), Some(metadata)).ok()
     }
 }
 
