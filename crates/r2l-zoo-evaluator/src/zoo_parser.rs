@@ -1,24 +1,11 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use r2l_api::{
-    BestActorEvaluatorConfig, BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule,
-    LearningSchedule, PPOAlgorithmBuilder, PPOBurnAgent, StepBoundHook, StepHookBound,
+    BestActorEvaluatorConfig, LearningRateSchedule, LearningSchedule, PPOAlgorithmBuilder,
+    StepHookBound,
 };
-use r2l_core::on_policy::algorithm::OnPolicyAlgorithm;
-use r2l_gym::GymEnv;
-use r2l_sampler::StagedSampler;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use yaml_serde::Value;
-
-pub type RlZooPpoAlgorithm = OnPolicyAlgorithm<
-    PPOBurnAgent<BurnBackend>,
-    StagedSampler<GymEnv, StepBoundHook<GymEnv>>,
-    DefaultOnPolicyAlgorithmHooks<
-        PPOBurnAgent<BurnBackend>,
-        StagedSampler<GymEnv, StepBoundHook<GymEnv>>,
-        GymEnv,
-    >,
->;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum RlZooSchedule {
@@ -156,16 +143,16 @@ impl RlZooEnvironmentConfig {
         self.policy == "MlpPolicy"
     }
 
-    pub fn build_burn_ppo_algorithm(
+    pub fn train_ppo_algorithm(
         &self,
+        backend: &str,
         env_name: &str,
         output_dir: PathBuf,
         seed: u64,
-    ) -> anyhow::Result<RlZooPpoAlgorithm> {
+    ) -> anyhow::Result<()> {
         let obs_clip = self.normalize.norm_obs().then_some(10.0);
-        let evaluator_config = BestActorEvaluatorConfig::new(&output_dir);
+        let evaluator_config = BestActorEvaluatorConfig::new(output_dir);
         let mut builder = PPOAlgorithmBuilder::gym(env_name, self.n_envs)
-            .with_burn()
             .with_rollout_bound(StepHookBound::new(self.n_steps))
             .with_learning_schedule(LearningSchedule::total_step_bound(self.n_timesteps))
             .with_evaluator(evaluator_config)
@@ -184,7 +171,11 @@ impl RlZooEnvironmentConfig {
         if self.normalize.norm_reward() {
             builder = builder.with_reward_normalizer(self.gamma, 10.0);
         }
-        builder.build()
+        if backend == "burn" {
+            builder.with_burn().build()?.train()
+        } else {
+            builder.build()?.train()
+        }
     }
 }
 

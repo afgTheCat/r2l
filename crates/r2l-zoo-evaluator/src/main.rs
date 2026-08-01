@@ -45,6 +45,10 @@ enum Cli {
     Evaluate {
         /// Gymnasium environment ID.
         env: Vec<String>,
+
+        /// Evaluation backend.
+        #[arg(long, default_value = "burn")]
+        backend: String,
     },
 }
 
@@ -79,7 +83,7 @@ fn evaluate_all() -> anyhow::Result<()> {
     }
 }
 
-fn evaluate(envs: Vec<String>) -> anyhow::Result<()> {
+fn evaluate(envs: Vec<String>, backend: String) -> anyhow::Result<()> {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let config_path = crate_dir.join(CONFIG_PATH);
     let zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
@@ -92,25 +96,22 @@ fn evaluate(envs: Vec<String>) -> anyhow::Result<()> {
         if let Some(module) = registration_module {
             Python::with_gil(|py| py.import(module).map(|_| ()))?;
         }
-        let output_dir = crate_dir.join(LOG_DIR).join(&env);
         let Some(env_config) = zoo_config.supported_envs.get(&env) else {
             if zoo_config.unsupported_envs.contains_key(&env) {
                 bail!("{env} uses an unsupported RL Zoo policy");
             }
             bail!("{env} is not present in the RL Zoo configuration");
         };
-        println!("Evaluating {env}");
-        let mut algorithm = env_config
-            .build_burn_ppo_algorithm(&env, output_dir, SEED)
-            .unwrap();
-        algorithm.train().unwrap();
+        let output_dir = crate_dir.join(LOG_DIR).join(&backend).join(&env);
+        println!("Evaluating {env} with {backend}");
+        env_config.train_ppo_algorithm(&backend, &env, output_dir, SEED)?;
     }
     Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
     match Args::parse().command {
-        Some(Cli::Evaluate { env }) => evaluate(env),
+        Some(Cli::Evaluate { env, backend }) => evaluate(env, backend),
         None => evaluate_all(),
     }
 }
