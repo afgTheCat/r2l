@@ -1,58 +1,84 @@
-use candle_core::{Device, Result, Shape, Tensor, Var};
-use rand::RngExt;
+use std::collections::hash_map::Entry;
 
-pub(crate) fn overwrite_uniform(tensor: &Tensor, bound: f32) -> Result<()> {
-    if !matches!(tensor.device(), Device::Cpu) || !tensor.is_variable() {
-        return Ok(());
+use candle_core::{DType, Device, Result, Shape, Tensor, Var};
+use candle_nn::{Init, VarBuilder, VarMap, init::NormalOrUniform, var_builder::SimpleBackend};
+use rand::distr::{Distribution, Uniform};
+use rand_distr::{Normal, StandardNormal};
+
+struct R2lVarMap(VarMap);
+
+impl SimpleBackend for R2lVarMap {
+    fn get(
+        &self,
+        shape: Shape,
+        name: &str,
+        init: Init,
+        dtype: DType,
+        device: &Device,
+    ) -> Result<Tensor> {
+        let mut variables = self.0.data().lock().unwrap();
+        let variable = match variables.entry(name.to_string()) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(initialized_var(&shape, init, dtype, device)?),
+        };
+        if variable.shape() != &shape {
+            candle_core::bail!(
+                "shape mismatch on {name}: {shape:?} <> {:?}",
+                variable.shape()
+            );
+        }
+        Ok(variable.as_tensor().clone())
     }
-    let values = r2l_core::rng::with_rng(|rng| {
-        (0..tensor.elem_count())
-            .map(|_| rng.random_range(-bound..bound))
-            .collect::<Vec<f32>>()
-    });
-    let values = Tensor::from_vec(values, tensor.shape().clone(), tensor.device())?;
-    Var::from_tensor(tensor)?.set(&values)
+
+    fn get_unchecked(&self, _name: &str, _dtype: DType, _device: &Device) -> Result<Tensor> {
+        candle_core::bail!("r2l variable initialization requires a shape");
+    }
+
+    fn contains_tensor(&self, name: &str) -> bool {
+        self.0.data().lock().unwrap().contains_key(name)
+    }
+}
+
+pub fn var_builder(varmap: &VarMap, dtype: DType, device: &Device) -> VarBuilder<'static> {
+    VarBuilder::from_backend(Box::new(R2lVarMap(varmap.clone())), dtype, device.clone())
 }
 
 pub(crate) fn standard_normal(shape: &Shape, device: &Device) -> Result<Tensor> {
-    if !matches!(device, Device::Cpu) {
-        return Tensor::randn(0f32, 1f32, shape, device);
-    }
-    let values = r2l_core::rng::with_rng(|rng| {
-        let mut values = Vec::with_capacity(shape.elem_count());
-        while values.len() < shape.elem_count() {
-            let radius = (-2.0 * (1.0 - rng.random::<f32>()).ln()).sqrt();
-            let angle = 2.0 * std::f32::consts::PI * rng.random::<f32>();
-            values.push(radius * angle.cos());
-            if values.len() < shape.elem_count() {
-                values.push(radius * angle.sin());
-            }
-        }
-        values
-    });
+    let values = random_values(shape.elem_count(), StandardNormal);
     Tensor::from_vec(values, shape.clone(), device)
 }
 
-#[cfg(test)]
-mod tests {
-    use candle_core::{DType, Device, Var};
+fn initialized_var(shape: &Shape, init: Init, dtype: DType, device: &Device) -> Result<Var> {
+    let count = shape.elem_count();
+    let values = match init {
+        Init::Const(_) => return init.var(shape.clone(), dtype, device),
+        Init::Uniform { lo, up } => {
+            random_values(count, Uniform::new(lo as f32, up as f32).unwrap())
+        }
+        Init::Randn { mean, stdev } => {
+            random_values(count, Normal::new(mean as f32, stdev as f32).unwrap())
+        }
+        Init::Kaiming {
+            dist,
+            fan,
+            non_linearity,
+        } => {
+            let std = non_linearity.gain() / (fan.for_shape(shape) as f64).sqrt();
+            match dist {
+                NormalOrUniform::Normal => {
+                    random_values(count, Normal::new(0.0, std as f32).unwrap())
+                }
+                NormalOrUniform::Uniform => {
+                    let bound = (3f64.sqrt() * std) as f32;
+                    random_values(count, Uniform::new(-bound, bound).unwrap())
+                }
+            }
+        }
+    };
+    let tensor = Tensor::from_vec(values, shape.clone(), device)?.to_dtype(dtype)?;
+    Var::from_tensor(&tensor)
+}
 
-    use super::{overwrite_uniform, standard_normal};
-
-    fn sample() -> (Vec<f32>, Vec<f32>) {
-        r2l_core::rng::set_seed(42);
-        let variable = Var::zeros(4, DType::F32, &Device::Cpu).unwrap();
-        overwrite_uniform(variable.as_tensor(), 1.0).unwrap();
-        let variable = variable.as_tensor().to_vec1().unwrap();
-        let noise = standard_normal(&4.into(), &Device::Cpu)
-            .unwrap()
-            .to_vec1()
-            .unwrap();
-        (variable, noise)
-    }
-
-    #[test]
-    fn cpu_randomness_uses_r2l_seed() {
-        assert_eq!(sample(), sample());
-    }
+fn random_values<D: Distribution<f32>>(count: usize, distribution: D) -> Vec<f32> {
+    r2l_core::rng::with_rng(|rng| distribution.sample_iter(rng).take(count).collect())
 }

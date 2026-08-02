@@ -1,7 +1,10 @@
 use std::{
+    fs::File,
+    io::Write,
     marker::PhantomData,
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
+    time::Instant,
 };
 
 use anyhow::Result;
@@ -15,6 +18,21 @@ use r2l_core::{
 use serde::{Deserialize, Serialize};
 
 use crate::BestActorEvaluator;
+
+const PERFORMANCE_FILE: &str = "performance.csv";
+
+struct PerformanceLog {
+    file: File,
+    training_started: Instant,
+    rollout_started: Instant,
+    phase_started: Instant,
+    collect_ms: f64,
+    rollout: usize,
+}
+
+fn elapsed_ms(started: Instant) -> f64 {
+    started.elapsed().as_secs_f64() * 1000.0
+}
 
 /// Training-stop policy for [`DefaultOnPolicyAlgorithmHooks`].
 ///
@@ -155,6 +173,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S
     learning_schedule: LearningSchedule,
     learning_rate_schedule: Option<LearningRateSchedule>,
     evaluator: Option<BestActorEvaluator<A::Actor, E>>,
+    performance_log: Option<PerformanceLog>,
     command_rx: Option<OnPolicyCommandReceiver>,
     _phantom: PhantomData<(A, S, E)>,
 }
@@ -169,10 +188,30 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
         learning_rate_schedule: Option<LearningRateSchedule>,
         command_rx: Option<OnPolicyCommandReceiver>,
     ) -> Self {
+        let performance_log = evaluator.as_ref().map(|evaluator| {
+            let output_dir = evaluator.output_dir();
+            std::fs::create_dir_all(output_dir).unwrap();
+            let mut file = File::create(output_dir.join(PERFORMANCE_FILE)).unwrap();
+            writeln!(
+                file,
+                "rollout,collect_ms,learn_ms,evaluate_ms,rollout_ms,total_ms"
+            )
+            .unwrap();
+            let now = Instant::now();
+            PerformanceLog {
+                file,
+                training_started: now,
+                rollout_started: now,
+                phase_started: now,
+                collect_ms: 0.0,
+                rollout: 0,
+            }
+        });
         Self {
             learning_schedule,
             learning_rate_schedule,
             evaluator,
+            performance_log,
             command_rx,
             _phantom: PhantomData,
         }
@@ -236,10 +275,19 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPoli
     type S = S;
 
     fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
+        if let Some(performance_log) = &mut self.performance_log {
+            let now = Instant::now();
+            performance_log.training_started = now;
+            performance_log.rollout_started = now;
+            performance_log.phase_started = now;
+        }
         HookResult::Continue
     }
 
     fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
+        if let Some(performance_log) = &mut self.performance_log {
+            performance_log.collect_ms = elapsed_ms(performance_log.phase_started);
+        }
         self.mark_progress(runtime);
         if let Some(learning_rate_schedule) = self.learning_rate_schedule {
             let learning_rate = match learning_rate_schedule {
@@ -251,22 +299,53 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPoli
             };
             runtime.agent.set_learning_rate(learning_rate);
         }
-        self.process_pending_commands(runtime)
+        let command_result = self.process_pending_commands(runtime);
+        if let Some(performance_log) = &mut self.performance_log {
+            performance_log.phase_started = Instant::now();
+        }
+        command_result
     }
 
     fn post_training_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> HookResult {
-        if let Some(evaluator) = &mut self.evaluator {
-            evaluator.eval(runtime);
-        }
+        let learn_ms = self
+            .performance_log
+            .as_ref()
+            .map_or(0.0, |log| elapsed_ms(log.phase_started));
+        let evaluate_ms = self.evaluator.as_mut().and_then(|evaluator| {
+            let evaluation_started = Instant::now();
+            evaluator
+                .eval(runtime)
+                .then(|| elapsed_ms(evaluation_started))
+        });
         let command_res = self.process_pending_commands(runtime);
-        if self.progress_remaining() <= 0. {
+        let hook_result = if self.progress_remaining() <= 0. {
             HookResult::Break
         } else {
             command_res
+        };
+        if let Some(performance_log) = &mut self.performance_log {
+            performance_log.rollout += 1;
+            let evaluate_ms = evaluate_ms
+                .map(|duration| format!("{duration:.3}"))
+                .unwrap_or_default();
+            writeln!(
+                performance_log.file,
+                "{},{:.3},{:.3},{},{:.3},{:.3}",
+                performance_log.rollout,
+                performance_log.collect_ms,
+                learn_ms,
+                evaluate_ms,
+                elapsed_ms(performance_log.rollout_started),
+                elapsed_ms(performance_log.training_started),
+            )
+            .unwrap();
+            performance_log.rollout_started = Instant::now();
+            performance_log.phase_started = performance_log.rollout_started;
         }
+        hook_result
     }
 
     fn shutdown_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> Result<()> {

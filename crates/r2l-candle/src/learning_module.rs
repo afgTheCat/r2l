@@ -293,7 +293,7 @@ impl PolicyValueModule {
         activation: ActivationFunction,
     ) -> Result<Self> {
         let device = policy.device();
-        let policy_vb = VarBuilder::from_varmap(&policy_varmap, DType::F32, &device);
+        let policy_vb = crate::random::var_builder(&policy_varmap, DType::F32, &device);
         let observation_size = policy.observation_size();
         let value_layers = &[value_hidden_layers, &[1]].concat();
         let value_function = SequentialValueFunction::new(
@@ -327,7 +327,7 @@ impl PolicyValueModule {
         let device = policy.device();
         let observation_size = policy.observation_size();
         let critic_varmap = VarMap::new();
-        let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, &device);
+        let critic_vb = crate::random::var_builder(&critic_varmap, DType::F32, &device);
         let value_layers = &[value_hidden_layers, &[1]].concat();
         let value_function = SequentialValueFunction::new(
             observation_size,

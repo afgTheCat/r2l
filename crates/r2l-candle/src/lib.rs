@@ -15,6 +15,8 @@
 pub mod distributions;
 /// Candle policy/value learning modules and associated loss types.
 pub mod learning_module;
+#[doc(hidden)]
+pub use random::var_builder as r2l_var_builder;
 
 mod optimizer;
 mod random;

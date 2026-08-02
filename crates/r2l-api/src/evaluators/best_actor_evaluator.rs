@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Instant};
+use std::{path::Path, path::PathBuf};
 
 use anyhow::Result;
 use r2l_core::{
@@ -197,25 +197,28 @@ pub struct BestActorEvaluator<A: Actor, E: Env<Tensor: R2lTensor>> {
 }
 
 impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
-    /// Evaluates the runtime actor when the configured evaluation interval elapses.
+    /// Evaluates the runtime actor when the configured interval elapses.
+    /// Returns whether an evaluation was performed.
     pub fn eval<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
         &mut self,
         rt: &mut OnPolicyRuntime<AG, TS>,
-    ) {
+    ) -> bool {
         self.current_evaluator_step += 1;
         if self
             .current_evaluator_step
             .is_multiple_of(self.evaluator_frequency)
         {
-            let evaluation_started = Instant::now();
             let actor = rt.actor();
             let adapted_actor = ActorWrapper::new(rt.actor());
             self.eval_adapted(adapted_actor, actor);
-            eprintln!(
-                "Evaluate - duration_ms={:.3}",
-                evaluation_started.elapsed().as_secs_f64() * 1000.0,
-            );
+            true
+        } else {
+            false
         }
+    }
+
+    pub(crate) fn output_dir(&self) -> &Path {
+        &self.output_dir
     }
 
     /// Evaluates the actor and persists it if it outperforms the current best actor.

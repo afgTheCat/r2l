@@ -1,6 +1,6 @@
 use burn::prelude::Backend;
 use candle_core::{DType, Device};
-use candle_nn::{VarBuilder, VarMap};
+use candle_nn::VarMap;
 use r2l_burn::distributions::BurnPolicyKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
@@ -69,7 +69,7 @@ impl PolicyBuilder {
         device: &Device,
     ) -> anyhow::Result<(CandlePolicyKind, VarMap)> {
         let varmap = VarMap::new();
-        let var_builder = VarBuilder::from_varmap(&varmap, DType::F32, device);
+        let var_builder = r2l_candle::r2l_var_builder(&varmap, DType::F32, device);
         let policy = CandlePolicyKind::build(
             action_space,
             &var_builder,

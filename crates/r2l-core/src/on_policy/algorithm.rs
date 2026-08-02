@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use anyhow::Result;
 
 use crate::{
@@ -131,33 +129,13 @@ impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgo
 
     /// Runs training until a hook requests termination.
     pub fn train(&mut self) -> Result<()> {
-        let training_started = Instant::now();
         return_on_hook_result!(self.hooks.init_hook(&mut self.runtime));
         loop {
-            let rollout_started = Instant::now();
-            let phase_started = Instant::now();
             self.runtime.collect();
-            eprintln!(
-                "Collect - duration_ms={:.3} total_ms={:.3}",
-                phase_started.elapsed().as_secs_f64() * 1000.0,
-                training_started.elapsed().as_secs_f64() * 1000.0,
-            );
             break_on_hook_result!(self.hooks.post_rollout_hook(&mut self.runtime));
 
-            let phase_started = Instant::now();
             self.runtime.learn()?;
-            eprintln!(
-                "Learn - duration_ms={:.3} total_ms={:.3}",
-                phase_started.elapsed().as_secs_f64() * 1000.0,
-                training_started.elapsed().as_secs_f64() * 1000.0,
-            );
-
             let hook_result = self.hooks.post_training_hook(&mut self.runtime);
-            eprintln!(
-                "Total - duration_ms={:.3} total_ms={:.3}",
-                rollout_started.elapsed().as_secs_f64() * 1000.0,
-                training_started.elapsed().as_secs_f64() * 1000.0,
-            );
             break_on_hook_result!(hook_result);
         }
 
