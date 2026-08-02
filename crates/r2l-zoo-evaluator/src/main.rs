@@ -32,6 +32,21 @@ const SMALL_ENVIRONMENTS: [&str; 10] = [
     "popgym-BattleshipEasy-v0",
 ];
 
+#[derive(Clone, Copy)]
+pub(crate) enum Backend {
+    Burn,
+    Candle,
+}
+
+impl Backend {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Burn => "burn",
+            Self::Candle => "candle",
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(about = "Evaluate r2l against Stable Baselines3 Zoo configurations")]
 struct Args {
@@ -43,12 +58,8 @@ struct Args {
 enum Cli {
     /// Trains and evaluates one environment in this process.
     Evaluate {
-        /// Gymnasium environment ID.
-        env: Vec<String>,
-
-        /// Evaluation backend.
-        #[arg(long, default_value = "burn")]
-        backend: String,
+        /// Gymnasium environment IDs and backend (`burn` or `candle`) in any order.
+        args: Vec<String>,
     },
 }
 
@@ -56,7 +67,9 @@ fn evaluate_all() -> anyhow::Result<()> {
     let executable = std::env::current_exe().context("failed to locate evaluator executable")?;
     let mut children = Vec::with_capacity(SMALL_ENVIRONMENTS.len());
     for env in SMALL_ENVIRONMENTS {
-        let command = Command::new(&executable).args(["evaluate", env]).spawn();
+        let command = Command::new(&executable)
+            .args(["evaluate", "burn", env])
+            .spawn();
         match command {
             Ok(child) => children.push((env, child)),
             Err(error) => {
@@ -83,7 +96,7 @@ fn evaluate_all() -> anyhow::Result<()> {
     }
 }
 
-fn evaluate(envs: Vec<String>, backend: String) -> anyhow::Result<()> {
+fn evaluate(envs: Vec<String>, backend: Backend) -> anyhow::Result<()> {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let config_path = crate_dir.join(CONFIG_PATH);
     let zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
@@ -102,16 +115,27 @@ fn evaluate(envs: Vec<String>, backend: String) -> anyhow::Result<()> {
             }
             bail!("{env} is not present in the RL Zoo configuration");
         };
-        let output_dir = crate_dir.join(LOG_DIR).join(&backend).join(&env);
-        println!("Evaluating {env} with {backend}");
-        env_config.train_ppo_algorithm(&backend, &env, output_dir, SEED)?;
+        let output_dir = crate_dir.join(LOG_DIR).join(backend.name()).join(&env);
+        println!("Evaluating {env} with {}", backend.name());
+        env_config.train_ppo_algorithm(backend, &env, output_dir, SEED)?;
     }
     Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
     match Args::parse().command {
-        Some(Cli::Evaluate { env, backend }) => evaluate(env, backend),
+        Some(Cli::Evaluate { mut args }) => {
+            let backend_index = args
+                .iter()
+                .position(|arg| arg == "burn" || arg == "candle")
+                .unwrap();
+            let backend = match args.remove(backend_index).as_str() {
+                "burn" => Backend::Burn,
+                "candle" => Backend::Candle,
+                _ => unreachable!(),
+            };
+            evaluate(args, backend)
+        }
         None => evaluate_all(),
     }
 }

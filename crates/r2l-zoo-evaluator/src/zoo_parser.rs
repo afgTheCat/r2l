@@ -7,6 +7,8 @@ use r2l_api::{
 use serde::{Deserialize, Deserializer, Serialize, de};
 use yaml_serde::Value;
 
+use crate::Backend;
+
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum RlZooSchedule {
     Constant(f64),
@@ -143,9 +145,9 @@ impl RlZooEnvironmentConfig {
         self.policy == "MlpPolicy"
     }
 
-    pub fn train_ppo_algorithm(
+    pub(crate) fn train_ppo_algorithm(
         &self,
-        backend: &str,
+        backend: Backend,
         env_name: &str,
         output_dir: PathBuf,
         seed: u64,
@@ -171,10 +173,9 @@ impl RlZooEnvironmentConfig {
         if self.normalize.norm_reward() {
             builder = builder.with_reward_normalizer(self.gamma, 10.0);
         }
-        if backend == "burn" {
-            builder.with_burn().build()?.train()
-        } else {
-            builder.build()?.train()
+        match backend {
+            Backend::Burn => builder.with_burn().build()?.train(),
+            Backend::Candle => builder.build()?.train(),
         }
     }
 }
