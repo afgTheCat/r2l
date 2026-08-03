@@ -69,7 +69,7 @@ impl PolicyBuilder {
         device: &Device,
     ) -> anyhow::Result<(CandlePolicyKind, VarMap)> {
         let varmap = VarMap::new();
-        let var_builder = r2l_candle::r2l_var_builder(&varmap, DType::F32, device);
+        let var_builder = r2l_candle::seeded_var_builder(&varmap, DType::F32, device);
         let policy = CandlePolicyKind::build(
             action_space,
             &var_builder,

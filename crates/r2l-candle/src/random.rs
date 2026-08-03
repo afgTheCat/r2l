@@ -5,9 +5,9 @@ use candle_nn::{Init, VarBuilder, VarMap, init::NormalOrUniform, var_builder::Si
 use rand::distr::{Distribution, Uniform};
 use rand_distr::{Normal, StandardNormal};
 
-struct R2lVarMap(VarMap);
+struct SeededVarMap(VarMap);
 
-impl SimpleBackend for R2lVarMap {
+impl SimpleBackend for SeededVarMap {
     fn get(
         &self,
         shape: Shape,
@@ -30,17 +30,22 @@ impl SimpleBackend for R2lVarMap {
         Ok(variable.as_tensor().clone())
     }
 
-    fn get_unchecked(&self, _name: &str, _dtype: DType, _device: &Device) -> Result<Tensor> {
-        candle_core::bail!("r2l variable initialization requires a shape");
+    fn get_unchecked(&self, name: &str, dtype: DType, dev: &Device) -> Result<Tensor> {
+        self.0.get_unchecked(name, dtype, dev)
     }
 
     fn contains_tensor(&self, name: &str) -> bool {
-        self.0.data().lock().unwrap().contains_key(name)
+        self.0.contains_tensor(name)
     }
 }
 
-pub fn var_builder(varmap: &VarMap, dtype: DType, device: &Device) -> VarBuilder<'static> {
-    VarBuilder::from_backend(Box::new(R2lVarMap(varmap.clone())), dtype, device.clone())
+/// Creates a variable builder that initializes new variables with r2l's seeded RNG.
+pub fn seeded_var_builder(varmap: &VarMap, dtype: DType, device: &Device) -> VarBuilder<'static> {
+    VarBuilder::from_backend(
+        Box::new(SeededVarMap(varmap.clone())),
+        dtype,
+        device.clone(),
+    )
 }
 
 pub(crate) fn standard_normal(shape: &Shape, device: &Device) -> Result<Tensor> {
