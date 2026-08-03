@@ -7,7 +7,10 @@ use candle_nn::{Module, VarBuilder};
 use r2l_core::models::{ActivationFunction, Actor, Policy, PolicyMetadata};
 use safetensors::serialize as st_serialize;
 
-use crate::sequential::{Sequential, build_sequential, network_shape};
+use crate::{
+    random::standard_normal,
+    sequential::{Sequential, build_sequential, network_shape},
+};
 
 /// Diagonal-Gaussian Candle policy for Box action spaces.
 ///
@@ -33,7 +36,7 @@ impl DiagGaussianDistribution {
         activation: ActivationFunction,
     ) -> Result<Self> {
         let mu_net = build_sequential(observation_size, layers, vb, prefix, activation)?;
-        let noise = Tensor::randn(0f32, 1., log_std.shape(), log_std.device()).unwrap();
+        let noise = standard_normal(log_std.shape(), log_std.device())?;
         let device = vb.device().clone();
         Ok(Self {
             log_std,
@@ -72,6 +75,12 @@ impl DiagGaussianDistribution {
     pub fn observation_size(&self) -> usize {
         self.mu_net.input_size()
     }
+
+    pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        let mut tensors = self.mu_net.named_tensors(prefix);
+        tensors.push((format!("{prefix}.log_std"), self.log_std.clone()));
+        tensors
+    }
 }
 
 impl Actor for DiagGaussianDistribution {
@@ -88,7 +97,7 @@ impl Actor for DiagGaussianDistribution {
             .forward(&observation.unsqueeze(0)?)?
             .squeeze(0)?;
         let std = self.log_std.exp()?.unsqueeze(0)?;
-        let noise = Tensor::randn(0f32, 1., self.log_std.shape(), self.log_std.device())?;
+        let noise = standard_normal(self.log_std.shape(), self.log_std.device())?;
         let action = (mu + std.mul(&noise.unsqueeze(0)?)?)?.squeeze(0)?.detach();
         Ok(action)
     }
@@ -141,7 +150,7 @@ impl Policy for DiagGaussianDistribution {
     }
 
     fn resample_noise(&mut self) -> Result<()> {
-        self.noise = Tensor::randn(0f32, 1., self.noise.shape(), self.noise.device())?;
+        self.noise = standard_normal(self.noise.shape(), self.noise.device())?;
         Ok(())
     }
 }

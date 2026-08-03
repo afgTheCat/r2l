@@ -3,9 +3,10 @@ use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use r2l_core::{
     env::Space,
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
     tensor::R2lTensor,
 };
+use safetensors::serialize as st_serialize;
 
 use crate::distributions::CandlePolicyKind;
 
@@ -16,6 +17,7 @@ pub struct CompositeDistribution {
     action_sizes: Vec<usize>,
     observation_size: usize,
     device: Device,
+    activation: ActivationFunction,
 }
 
 impl CompositeDistribution {
@@ -50,6 +52,7 @@ impl CompositeDistribution {
             action_sizes,
             observation_size,
             device: policy_varbuilder.device().clone(),
+            activation,
         })
     }
 
@@ -61,6 +64,14 @@ impl CompositeDistribution {
     /// Returns the flattened observation size expected by this policy.
     pub fn observation_size(&self) -> usize {
         self.observation_size
+    }
+
+    pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        self.policies
+            .iter()
+            .enumerate()
+            .flat_map(|(index, policy)| policy.named_tensors(&format!("{prefix}.{index}")))
+            .collect()
     }
 }
 
@@ -80,6 +91,14 @@ impl Actor for CompositeDistribution {
             actions.push(policy.mode_action(observation.clone())?);
         }
         Ok(Tensor::cat(&actions, 0)?.detach())
+    }
+
+    fn try_serialize(&self) -> Option<Vec<u8>> {
+        let metadata = PolicyMetadata {
+            activation: self.activation,
+        }
+        .to_safetensors_metadata();
+        st_serialize(self.named_tensors("policy"), Some(metadata)).ok()
     }
 }
 

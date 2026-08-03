@@ -135,7 +135,8 @@ impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgo
             break_on_hook_result!(self.hooks.post_rollout_hook(&mut self.runtime));
 
             self.runtime.learn()?;
-            break_on_hook_result!(self.hooks.post_training_hook(&mut self.runtime));
+            let hook_result = self.hooks.post_training_hook(&mut self.runtime);
+            break_on_hook_result!(hook_result);
         }
 
         self.hooks.shutdown_hook(&mut self.runtime)

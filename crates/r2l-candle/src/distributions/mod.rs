@@ -196,6 +196,16 @@ impl CandlePolicyKind {
             )?)),
         }
     }
+
+    pub(crate) fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {
+        match self {
+            Self::Categorical(policy) => policy.named_tensors(prefix),
+            Self::DiagGaussian(policy) => policy.named_tensors(prefix),
+            Self::MultiCategorical(policy) => policy.named_tensors(prefix),
+            Self::Bernoulli(policy) => policy.named_tensors(prefix),
+            Self::Composite(policy) => policy.named_tensors(prefix),
+        }
+    }
 }
 
 impl Actor for CandlePolicyKind {

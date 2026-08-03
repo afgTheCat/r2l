@@ -6914,6 +6914,7 @@ dependencies = [
  "itertools 0.15.0",
  "r2l-core",
  "rand 0.10.2",
+ "rand_distr 0.6.0",
  "safetensors 0.8.0",
 ]
 
@@ -6987,6 +6988,7 @@ version = "0.0.2"
 dependencies = [
  "anyhow",
  "clap",
+ "pyo3",
  "r2l-api",
  "r2l-core",
  "r2l-gym",

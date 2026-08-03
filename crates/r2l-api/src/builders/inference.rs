@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use burn::backend::NdArray;
+use candle_core::DType;
+use candle_nn::{VarBuilder, VarMap, var_builder};
 use r2l_burn::distributions::BurnPolicyKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
@@ -109,14 +111,24 @@ impl InferenceArtifacts {
                 Some(normalizer_builder.into_normalizer())
             }
         };
-        let actor_bytes = std::fs::read(self.directory.join(ACTOR_FILE))?;
+        let env_description = env.env_description();
         let actor = match self.config.backend {
             InferenceBackend::Candle(backend) => {
-                let actor = CandlePolicyKind::from_bytes(&actor_bytes, backend.device);
+                let mut varmap = VarMap::new();
+                varmap.load(self.directory.join(ACTOR_FILE));
+                let var_builder = VarBuilder::from_varmap(&varmap, DType::F32, &backend.device);
+                let actor = CandlePolicyKind::build(
+                    env_description.action_space.clone(),
+                    &var_builder,
+                    &self.config.policy_builder.hidden_layers,
+                    env_description.observation_space.size(),
+                    self.config.policy_builder.activation_function,
+                    self.config.policy_builder.log_std_init,
+                )?;
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
             InferenceBackend::Burn(_) => {
-                let env_description = env.env_description();
+                let actor_bytes = std::fs::read(self.directory.join(ACTOR_FILE))?;
                 let actor = self
                     .config
                     .policy_builder
