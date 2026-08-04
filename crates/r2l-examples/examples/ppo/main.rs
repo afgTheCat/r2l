@@ -1,56 +1,30 @@
 // ANCHOR: ppo
-use std::path::PathBuf;
-
-use burn::backend::NdArray;
-use burn_store::SafetensorsStore;
-use r2l_api::{
-    Evaluator, LearningSchedule, PPOAlgorithmBuilder, SamplerExecutionMode, StepHookBound,
-    TrainingArtifactsConfig,
-};
-use r2l_burn::distributions::diagonal::DiagGaussianDistribution;
+use r2l_api::{InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
+use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";
+const ARTIFACT_DIR: &str = "runs/pendulum";
 
 fn main() {
-    let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ppo");
-    let artifacts_config = TrainingArtifactsConfig::new(&output_dir);
-    let model_path = output_dir.join("actor.safetensors");
-    let hidden_layers = vec![64, 64];
-    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
-        .with_burn()
+    // Train the agent and persist the best policy for inference.
+    let artifacts_config = TrainingArtifactsConfig::new(ARTIFACT_DIR);
+    let mut ppo = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
         .with_training_artifacts(artifacts_config)
-        .with_seed(0)
-        .with_policy_hidden_layers(hidden_layers.clone())
-        .with_clip_range(0.2)
-        .with_entropy_coeff(0.)
+        .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
-        .with_rollout_bound(StepHookBound::new(1024))
-        .with_total_epochs(10)
-        .with_learning_schedule(LearningSchedule::rollout_bound(30));
-    let mut ppo = ppo_builder.build().unwrap();
+        .with_learning_schedule(LearningSchedule::rollout_bound(30))
+        .build()
+        .unwrap();
     ppo.train().unwrap();
 
-    // If we later decide to use the learned model, we can do so by importing it.
-    let mut store = SafetensorsStore::from_file(model_path);
-    let distribution = DiagGaussianDistribution::<NdArray>::from_store(&mut store);
-    let (episodes, environments) = (10, 10);
-    let mut evaluator = Evaluator::gym(
-        ENV_NAME,
-        episodes,
-        environments,
-        SamplerExecutionMode::SingleThreaded,
-    );
-    let results = evaluator.eval(distribution);
-    let total_rewards = results
-        .as_ref()
-        .iter()
-        .map(|tr| tr.rewards.iter().sum::<f32>())
-        .sum::<f32>();
-    println!(
-        "Average rewards received: {}",
-        total_rewards / (episodes * environments) as f32
-    );
+    // Reload the artifacts later without rebuilding the policy by hand.
+    let inference_artifacts = InferenceArtifacts::load(ARTIFACT_DIR).unwrap();
+    let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
+    let mut inference = inference_artifacts.build(env).unwrap();
+    for _ in 0..4 {
+        inference.run_episode();
+    }
 }
 // ANCHOR_END: ppo

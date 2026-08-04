@@ -2,7 +2,12 @@
 
 For most applications, `r2l-api` is the main dependency. It provides complete
 PPO and A2C builders while the lower-level workspace crates define environments,
-samplers, agents, and backend integrations.
+samplers, agents, and backend integrations. This getting started guide will be
+solely using the `r2l-api` crate, which itself builds on lower-level crates. If
+the current setup does not satisfy you, the lower level hooks allow for a lot of
+hackability.
+
+## Shortest setup
 
 The shortest Gymnasium-based PPO setup is:
 
@@ -92,31 +97,37 @@ how the policy was trained.
 
 # Environments
 
-Native environments implement `Env`. An environment returns an initial
-observation from `reset`, accepts one action in `step`, and describes its
-observation and action spaces.
+Environments implement the `Env` trait.
 
 ```rust,noplayground
 {{#include ../../crates/r2l-core/src/env/mod.rs:env}}
 ```
 
-Algorithms receive an `EnvBuilder` rather than a concrete environment so that
-each sampler worker can construct its environment in the place where it runs. A
-closure or function returning `anyhow::Result<E>` automatically implements
-`EnvBuilder`.
-
-The complete workspace example demonstrates a custom environment, a custom
-builder, a function builder, a closure builder, and `GymEnvBuilder`:
+Algorithm builders receive an `EnvBuilder` rather than a concrete environment so
+that each sampler worker can construct its environment in the place where it
+runs.
 
 ```rust,noplayground
-{{#include ../../crates/r2l-examples/examples/env_building/main.rs:env_builders}}
+{{#include ../../crates/r2l-core/src/env/mod.rs:env_builder}}
 ```
 
-`r2l-gym` currently maps `Discrete`, `Box`, `MultiDiscrete`, `MultiBinary`,
-`Tuple`, and `Dict` spaces. Structured observations are flattened into
-`TensorData`; discrete observations are one-hot encoded.
+A closure or function returning `anyhow::Result<E>` automatically implements
+`EnvBuilder`.
+
+```rust
+let env_builder = || Ok(MyEnv);
+let ppo_builder = PPOAlgorithmBuilder::new(env_builder, 10);
+let ppo = ppo_builder.build().unwrap();
+```
+
+For a more detailed example of how to implement the `Env` trait and the
+`EnvBuilder` traits, see the
+[environment building example](./examples/env_building.md).
 
 # Hyperparameters
+
+Both the PPO and A2C builders expose a great deal of hyperparameters that can be
+tuned.
 
 ## Backends
 
@@ -161,22 +172,6 @@ environment steps across all workers.
 `LearningRateSchedule::Constant(rate)` keeps the configured rate fixed.
 `LearningRateSchedule::Linear(rate)` decays it from `rate` to zero over the
 configured training schedule.
-
-## Complete examples
-
-The PPO example covers Burn training, rollout configuration, saving the best
-actor, loading it from SafeTensors, and evaluation:
-
-```rust,noplayground
-{{#include ../../crates/r2l-examples/examples/ppo/main.rs:ppo}}
-```
-
-The A2C example covers backend selection, statistics reporting, and a Candle
-configuration:
-
-```rust,noplayground
-{{#include ../../crates/r2l-examples/examples/a2c/main.rs:a2c}}
-```
 
 For the underlying traits and hook points, continue with
 [On-policy algorithms](./on_policy_algorithms.md). For exact builder methods,
