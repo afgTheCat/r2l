@@ -1,4 +1,4 @@
-use std::{path::Path, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use r2l_core::{
@@ -103,49 +103,103 @@ impl<E: Env> EvaluationSampler<E> {
     }
 }
 
-/// Config for [`BestActorEvaluator`] instances.
+/// Configures how policies are evaluated during training.
 #[derive(Serialize, Deserialize)]
-pub struct BestActorEvaluatorConfig {
-    pub(crate) output_dir: PathBuf,
-    pub(crate) n_episodes: usize,
-    pub(crate) execution_mode: SamplerExecutionMode,
-    pub(crate) evaluator_frequency: usize,
+pub struct EvaluationSettings {
+    pub(crate) episodes_per_evaluation: usize,
+    pub(crate) evaluation_execution_mode: SamplerExecutionMode,
+    pub(crate) rollouts_per_evaluation: usize,
 }
 
-impl BestActorEvaluatorConfig {
-    /// Creates a best-actor evaluator configuration with default evaluation settings.
-    pub fn new(output_dir: impl Into<PathBuf>) -> Self {
+impl Default for EvaluationSettings {
+    fn default() -> Self {
         Self {
-            evaluator_frequency: 1,
-            n_episodes: 5,
-            execution_mode: SamplerExecutionMode::MultiThreaded,
-            output_dir: resolve_and_validate_output_dir(output_dir.into()),
+            rollouts_per_evaluation: 1,
+            episodes_per_evaluation: 5,
+            evaluation_execution_mode: SamplerExecutionMode::MultiThreaded,
         }
+    }
+}
+
+impl EvaluationSettings {
+    /// Creates evaluation settings with the default episode count, interval, and execution mode.
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Sets the number of episodes collected during each evaluation pass.
-    pub fn with_n_episodes(mut self, n_episodes: usize) -> Self {
+    pub fn with_episodes_per_evaluation(mut self, episodes_per_evaluation: usize) -> Self {
         assert!(
-            n_episodes > 0,
+            episodes_per_evaluation > 0,
             "evaluation episode count must be greater than zero"
         );
-        self.n_episodes = n_episodes;
+        self.episodes_per_evaluation = episodes_per_evaluation;
         self
     }
 
     /// Sets how evaluation environments are executed.
-    pub fn with_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
-        self.execution_mode = execution_mode;
+    pub fn with_evaluation_execution_mode(
+        mut self,
+        evaluation_execution_mode: SamplerExecutionMode,
+    ) -> Self {
+        self.evaluation_execution_mode = evaluation_execution_mode;
         self
     }
 
     /// Sets the number of training rollouts between evaluation passes.
-    pub fn with_evaluator_frequency(mut self, evaluator_frequency: usize) -> Self {
+    pub fn with_rollouts_per_evaluation(mut self, rollouts_per_evaluation: usize) -> Self {
         assert!(
-            evaluator_frequency > 0,
-            "evaluation frequency must be greater than zero"
+            rollouts_per_evaluation > 0,
+            "rollouts per evaluation must be greater than zero"
         );
-        self.evaluator_frequency = evaluator_frequency;
+        self.rollouts_per_evaluation = rollouts_per_evaluation;
+        self
+    }
+}
+
+/// Selects the artifacts produced during training and where they are written.
+#[derive(Serialize, Deserialize)]
+pub struct TrainingArtifactsConfig {
+    pub(crate) output_dir: PathBuf,
+    pub(crate) evaluation_results: bool,
+    pub(crate) performance_metrics: bool,
+    pub(crate) inference_artifacts: bool,
+    pub(crate) evaluation_settings: EvaluationSettings,
+}
+
+impl TrainingArtifactsConfig {
+    /// Creates a configuration that writes all supported training artifacts.
+    pub fn new(output_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            output_dir: resolve_and_validate_output_dir(output_dir.into()),
+            evaluation_results: true,
+            performance_metrics: true,
+            inference_artifacts: true,
+            evaluation_settings: EvaluationSettings::default(),
+        }
+    }
+
+    /// Sets whether evaluation results are written during training.
+    pub fn with_evaluation_results(mut self, enabled: bool) -> Self {
+        self.evaluation_results = enabled;
+        self
+    }
+
+    /// Sets whether training performance metrics are written.
+    pub fn with_performance_metrics(mut self, enabled: bool) -> Self {
+        self.performance_metrics = enabled;
+        self
+    }
+
+    /// Sets whether the best policy is saved as inference-ready artifacts.
+    pub fn with_inference_artifacts(mut self, enabled: bool) -> Self {
+        self.inference_artifacts = enabled;
+        self
+    }
+
+    /// Sets the evaluation behavior used by evaluation results and inference artifacts.
+    pub fn with_evaluation_settings(mut self, evaluation_settings: EvaluationSettings) -> Self {
+        self.evaluation_settings = evaluation_settings;
         self
     }
 
@@ -155,17 +209,24 @@ impl BestActorEvaluatorConfig {
         obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
         env_builder: EnvBuilderType<EB>,
     ) -> BestActorEvaluator<A, EB::Env> {
+        let EvaluationSettings {
+            episodes_per_evaluation,
+            evaluation_execution_mode,
+            rollouts_per_evaluation,
+        } = self.evaluation_settings;
         let sampler = EvaluationSampler::build(
             env_builder,
-            self.n_episodes,
-            self.execution_mode,
+            episodes_per_evaluation,
+            evaluation_execution_mode,
             obs_normalizer,
         );
         BestActorEvaluator {
             current_evaluator_step: 0,
-            evaluator_frequency: self.evaluator_frequency,
+            rollouts_per_evaluation,
             sampler,
             output_dir: self.output_dir,
+            write_evaluation_results: self.evaluation_results,
+            write_inference_artifacts: self.inference_artifacts,
             best_rewards: f32::MIN,
             best_actor: None,
             best_obs_normalizer: None,
@@ -188,11 +249,13 @@ struct EvalState {
 pub struct BestActorEvaluator<A: Actor, E: Env<Tensor: R2lTensor>> {
     sampler: EvaluationSampler<E>,
     output_dir: PathBuf,
+    write_evaluation_results: bool,
+    write_inference_artifacts: bool,
     best_actor: Option<A>,
     best_obs_normalizer: Option<NormalizerBuilder>,
     best_rewards: f32,
     current_evaluator_step: usize,
-    evaluator_frequency: usize,
+    rollouts_per_evaluation: usize,
     eval_states: Vec<EvalState>,
 }
 
@@ -206,7 +269,7 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
         self.current_evaluator_step += 1;
         if self
             .current_evaluator_step
-            .is_multiple_of(self.evaluator_frequency)
+            .is_multiple_of(self.rollouts_per_evaluation)
         {
             let actor = rt.actor();
             let adapted_actor = ActorWrapper::new(rt.actor());
@@ -217,10 +280,6 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
         }
     }
 
-    pub(crate) fn output_dir(&self) -> &Path {
-        &self.output_dir
-    }
-
     /// Evaluates the actor and persists it if it outperforms the current best actor.
     pub fn eval_adapted(
         &mut self,
@@ -229,23 +288,28 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
     ) {
         let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor);
         let avg_reward = total_reward / total_episodes;
-        self.eval_states.push(EvalState {
-            avg_reward,
-            total_episodes,
-        });
+        if self.write_evaluation_results {
+            self.eval_states.push(EvalState {
+                avg_reward,
+                total_episodes,
+            });
+        }
         if avg_reward > self.best_rewards {
             self.best_rewards = avg_reward;
-            self.best_actor = Some(actor);
-            self.best_obs_normalizer = self.sampler.normalizer_snapshot();
+            if self.write_inference_artifacts {
+                self.best_actor = Some(actor);
+                self.best_obs_normalizer = self.sampler.normalizer_snapshot();
+            }
             self.try_write_artifacts()
-                .expect("failed to write improved actor checkpoint");
+                .expect("failed to write training artifacts");
         }
     }
 
-    /// Writes the current best inference artifacts and evaluation statistics.
+    /// Writes the enabled inference artifacts and evaluation results.
     pub fn try_write_artifacts(&self) -> Result<()> {
         std::fs::create_dir_all(&self.output_dir)?;
-        if let Some(actor) = &self.best_actor
+        if self.write_inference_artifacts
+            && let Some(actor) = &self.best_actor
             && let Some(bytes) = actor.try_serialize()
         {
             std::fs::write(self.output_dir.join(ACTOR_FILE), bytes)?;
@@ -254,14 +318,16 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
                 std::fs::write(normalizer_path, yaml_serde::to_string(normalizer)?)?;
             }
         }
-        let mut csv = String::from("average_reward,total_episodes\n");
-        for eval_state in &self.eval_states {
-            csv.push_str(&format!(
-                "{},{}\n",
-                eval_state.avg_reward, eval_state.total_episodes
-            ));
+        if self.write_evaluation_results {
+            let mut csv = String::from("average_reward,total_episodes\n");
+            for eval_state in &self.eval_states {
+                csv.push_str(&format!(
+                    "{},{}\n",
+                    eval_state.avg_reward, eval_state.total_episodes
+                ));
+            }
+            std::fs::write(self.output_dir.join(EVALUATIONS_FILE), csv)?;
         }
-        std::fs::write(self.output_dir.join(EVALUATIONS_FILE), csv)?;
         Ok(())
     }
 

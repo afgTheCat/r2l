@@ -40,7 +40,9 @@ pub use builders::sampler::{
     SamplerBuilder, StagedSamplerSelection,
 };
 pub use builders::sampler::{EpisodeHookBound, StepHookBound};
-pub use evaluators::best_actor_evaluator::{BestActorEvaluator, BestActorEvaluatorConfig};
+pub use evaluators::best_actor_evaluator::{
+    BestActorEvaluator, EvaluationSettings, TrainingArtifactsConfig,
+};
 pub use evaluators::simple_evaluator::Evaluator;
 pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
 pub use hooks::on_policy::{

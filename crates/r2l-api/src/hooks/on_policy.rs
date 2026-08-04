@@ -185,12 +185,12 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
     pub fn new(
         learning_schedule: LearningSchedule,
         evaluator: Option<BestActorEvaluator<A::Actor, E>>,
+        performance_output_dir: Option<PathBuf>,
         learning_rate_schedule: Option<LearningRateSchedule>,
         command_rx: Option<OnPolicyCommandReceiver>,
     ) -> Self {
-        let performance_log = evaluator.as_ref().map(|evaluator| {
-            let output_dir = evaluator.output_dir();
-            std::fs::create_dir_all(output_dir).unwrap();
+        let performance_log = performance_output_dir.map(|output_dir| {
+            std::fs::create_dir_all(&output_dir).unwrap();
             let mut file = File::create(output_dir.join(PERFORMANCE_FILE)).unwrap();
             writeln!(
                 file,

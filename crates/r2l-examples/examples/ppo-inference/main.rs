@@ -1,6 +1,4 @@
-use r2l_api::{
-    BestActorEvaluatorConfig, InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder,
-};
+use r2l_api::{InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
 use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";
@@ -8,9 +6,9 @@ const ARTIFACT_DIR: &str = "runs/pendulum";
 
 fn main() {
     // Train the agent and persist the best policy for inference.
-    let evaluator_config = BestActorEvaluatorConfig::new(ARTIFACT_DIR);
+    let artifacts_config = TrainingArtifactsConfig::new(ARTIFACT_DIR);
     let mut ppo = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
-        .with_evaluator(evaluator_config)
+        .with_training_artifacts(artifacts_config)
         .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)
         .with_gamma(0.9)

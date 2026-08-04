@@ -8,7 +8,7 @@ use r2l_sampler::{SamplerExecutionMode, StagedSamplerHook};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BestActorEvaluatorConfig, DefaultOnPolicyAlgorithmHooks, OnPolicyCommandReceiver,
+    DefaultOnPolicyAlgorithmHooks, OnPolicyCommandReceiver, TrainingArtifactsConfig,
     builders::{
         agent::AgentBuilder,
         sampler::{
@@ -39,7 +39,7 @@ type DefaultOnPolicyAlgorithmHooksFor<A, S, EB> =
 pub(crate) struct DefaultOnPolicyAlgorithmHooksBuilder {
     pub(crate) learning_rate_schedule: Option<LearningRateSchedule>,
     pub(crate) learning_schedule: LearningSchedule,
-    pub(crate) evaluator_config: Option<BestActorEvaluatorConfig>,
+    pub(crate) training_artifacts_config: Option<TrainingArtifactsConfig>,
     #[serde(skip)]
     pub(crate) command_rx: Option<OnPolicyCommandReceiver>,
 }
@@ -49,7 +49,7 @@ impl Default for DefaultOnPolicyAlgorithmHooksBuilder {
         Self {
             learning_rate_schedule: None,
             learning_schedule: LearningSchedule::rollout_bound(300),
-            evaluator_config: None,
+            training_artifacts_config: None,
             command_rx: None,
         }
     }
@@ -62,9 +62,9 @@ impl DefaultOnPolicyAlgorithmHooksBuilder {
         self
     }
 
-    /// Installs the evaluator used during training.
-    fn with_evaluator(mut self, evaluator_builder: BestActorEvaluatorConfig) -> Self {
-        self.evaluator_config = Some(evaluator_builder);
+    /// Enables training evaluation and artifact collection.
+    fn with_training_artifacts(mut self, config: TrainingArtifactsConfig) -> Self {
+        self.training_artifacts_config = Some(config);
         self
     }
 
@@ -83,12 +83,21 @@ impl DefaultOnPolicyAlgorithmHooksBuilder {
         A: Agent,
         S: Sampler<Tensor = <EB::Env as Env>::Tensor>,
     {
-        let evaluator = self.evaluator_config.map(|evaluator_builder| {
-            evaluator_builder.build::<A::Actor, EB>(obs_normalizer, env_builder)
-        });
+        let (evaluator, performance_output_dir) = match self.training_artifacts_config {
+            Some(config) => {
+                let performance_output_dir = config
+                    .performance_metrics
+                    .then(|| config.output_dir.clone());
+                let evaluator = (config.evaluation_results || config.inference_artifacts)
+                    .then(|| config.build::<A::Actor, EB>(obs_normalizer, env_builder));
+                (evaluator, performance_output_dir)
+            }
+            None => (None, None),
+        };
         DefaultOnPolicyAlgorithmHooks::new(
             self.learning_schedule,
             evaluator,
+            performance_output_dir,
             self.learning_rate_schedule,
             self.command_rx,
         )
@@ -130,9 +139,9 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
         }
     }
 
-    /// Installs the evaluator used during training.
-    pub fn with_evaluator(mut self, evaluator_builder: BestActorEvaluatorConfig) -> Self {
-        self.hooks_builder = self.hooks_builder.with_evaluator(evaluator_builder);
+    /// Enables training evaluation, inference artifacts, and performance metrics.
+    pub fn with_training_artifacts(mut self, config: TrainingArtifactsConfig) -> Self {
+        self.hooks_builder = self.hooks_builder.with_training_artifacts(config);
         self
     }
 
@@ -170,8 +179,11 @@ impl<AB: AgentBuilder, SB: SamplerBuilder> OnPolicyAlgorithmBuilder<AB, SB> {
     }
 
     pub fn try_write_inference_config(&self) -> anyhow::Result<()> {
-        let Some(BestActorEvaluatorConfig { output_dir, .. }) =
-            &self.hooks_builder.evaluator_config
+        let Some(TrainingArtifactsConfig {
+            output_dir,
+            inference_artifacts: true,
+            ..
+        }) = &self.hooks_builder.training_artifacts_config
         else {
             return Ok(());
         };

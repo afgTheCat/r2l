@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use burn::backend::NdArray;
 use candle_core::DType;
-use candle_nn::{VarBuilder, VarMap, var_builder};
+use candle_nn::{VarBuilder, VarMap};
 use r2l_burn::distributions::BurnPolicyKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
@@ -115,7 +115,7 @@ impl InferenceArtifacts {
         let actor = match self.config.backend {
             InferenceBackend::Candle(backend) => {
                 let mut varmap = VarMap::new();
-                varmap.load(self.directory.join(ACTOR_FILE));
+                varmap.load(self.directory.join(ACTOR_FILE)).unwrap();
                 let var_builder = VarBuilder::from_varmap(&varmap, DType::F32, &backend.device);
                 let actor = CandlePolicyKind::build(
                     env_description.action_space.clone(),
