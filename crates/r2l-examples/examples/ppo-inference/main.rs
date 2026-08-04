@@ -1,8 +1,4 @@
-use r2l_api::{
-    EvaluationSettings, InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder,
-    SamplerExecutionMode::{MultiThreaded, SingleThreaded},
-    TrainingArtifactsConfig,
-};
+use r2l_api::{InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
 use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";

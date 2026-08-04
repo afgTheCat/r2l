@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use burn::backend::NdArray;
 use candle_core::DType;
-use candle_nn::{VarBuilder, VarMap};
+use candle_nn::VarBuilder;
 use r2l_burn::distributions::BurnPolicyKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
@@ -112,11 +112,14 @@ impl InferenceArtifacts {
             }
         };
         let env_description = env.env_description();
+        let actor_bytes = std::fs::read(self.directory.join(ACTOR_FILE))?;
         let actor = match self.config.backend {
             InferenceBackend::Candle(backend) => {
-                let mut varmap = VarMap::new();
-                varmap.load(self.directory.join(ACTOR_FILE)).unwrap();
-                let var_builder = VarBuilder::from_varmap(&varmap, DType::F32, &backend.device);
+                let var_builder = VarBuilder::from_buffered_safetensors(
+                    actor_bytes,
+                    DType::F32,
+                    &backend.device,
+                )?;
                 let actor = CandlePolicyKind::build(
                     env_description.action_space.clone(),
                     &var_builder,
@@ -128,7 +131,6 @@ impl InferenceArtifacts {
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
             InferenceBackend::Burn(_) => {
-                let actor_bytes = std::fs::read(self.directory.join(ACTOR_FILE))?;
                 let actor = self
                     .config
                     .policy_builder
@@ -249,5 +251,95 @@ impl<E: Env> InferenceRunner<E> {
             }
         }
         self.reset().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use candle_core::{Device, Tensor};
+    use r2l_core::{
+        env::{Env, EnvDescription, Snapshot, Space},
+        models::Actor,
+    };
+
+    use super::*;
+
+    struct TestEnv;
+
+    impl Env for TestEnv {
+        type Tensor = Tensor;
+
+        fn reset(&mut self, _seed: u64) -> anyhow::Result<Self::Tensor> {
+            Ok(Tensor::zeros(3, candle_core::DType::F32, &Device::Cpu)?)
+        }
+
+        fn step(&mut self, _action: Self::Tensor) -> anyhow::Result<Snapshot<Self::Tensor>> {
+            Ok(Snapshot::new(
+                Tensor::zeros(3, candle_core::DType::F32, &Device::Cpu)?,
+                0.0,
+                true,
+                false,
+            ))
+        }
+
+        fn env_description(&self) -> EnvDescription<Self::Tensor> {
+            EnvDescription::new(
+                Space::Box {
+                    min: None,
+                    max: None,
+                    shape: vec![3],
+                },
+                Space::Box {
+                    min: None,
+                    max: None,
+                    shape: vec![2],
+                },
+            )
+        }
+    }
+
+    #[test]
+    fn candle_inference_builds_from_saved_safetensors() -> anyhow::Result<()> {
+        let output_dir = unique_test_dir("candle-inference-safetensors");
+        std::fs::create_dir_all(&output_dir)?;
+
+        let policy_builder = PolicyBuilder::new().with_hidden_layers(vec![4]);
+        let actor = policy_builder.build_candle::<Tensor>(
+            3,
+            Space::Box {
+                min: None,
+                max: None,
+                shape: vec![2],
+            },
+            &Device::Cpu,
+        )?;
+        let actor_bytes = actor.try_serialize().unwrap();
+        std::fs::write(output_dir.join(ACTOR_FILE), actor_bytes)?;
+
+        let config = InferenceConfig::new(
+            policy_builder,
+            InferenceObservationMode::Raw,
+            InferenceBackend::Candle(CandleBackend {
+                device: Device::Cpu,
+            }),
+        );
+        config.write_to_dir(&output_dir)?;
+
+        let artifacts = InferenceArtifacts::load(&output_dir)?;
+        let mut runner = artifacts.build(TestEnv)?;
+        runner.mode_step()?;
+
+        std::fs::remove_dir_all(output_dir)?;
+        Ok(())
+    }
+
+    fn unique_test_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "r2l-api-{name}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ))
     }
 }
