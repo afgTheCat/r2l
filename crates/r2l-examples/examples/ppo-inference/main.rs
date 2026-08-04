@@ -1,4 +1,8 @@
-use r2l_api::{InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
+use r2l_api::{
+    EvaluationSettings, InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder,
+    SamplerExecutionMode::{MultiThreaded, SingleThreaded},
+    TrainingArtifactsConfig,
+};
 use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";
@@ -22,7 +26,7 @@ fn main() {
     let inference_artifacts = InferenceArtifacts::load(ARTIFACT_DIR).unwrap();
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
     let mut inference = inference_artifacts.build(env).unwrap();
-    for _ in 0..10 {
+    for _ in 0..4 {
         inference.run_episode();
     }
 }
