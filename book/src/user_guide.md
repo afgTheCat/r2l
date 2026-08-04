@@ -1,4 +1,4 @@
-## Getting started
+# Getting started
 
 For most applications, `r2l-api` is the main dependency. It provides complete
 PPO and A2C builders while the lower-level workspace crates define environments,
@@ -69,6 +69,55 @@ runs/pendulum
 
 ## Running inference
 
+Using the inference artifacts and a new environment, you can create an
+`InferenceRunner`.
+
+```rust
+use r2l_api::InferenceArtifacts;
+use r2l_gym::GymEnv;
+
+fn main() {
+    let inference_artifacts = InferenceArtifacts::load("runs/pendulum").unwrap();
+    let env = GymEnv::new("Pendulum-v1", Some("human".to_owned())).unwrap();
+    let mut inference = inference_artifacts.build(env).unwrap();
+    for _ in 0..4 {
+        inference.run_episode();
+    }
+}
+```
+
+The inference config does only describe the shape of the policy and the
+observation normalization configs. It does not hold any information regarding
+how the policy was trained.
+
+# Environments
+
+Native environments implement `Env`. An environment returns an initial
+observation from `reset`, accepts one action in `step`, and describes its
+observation and action spaces.
+
+```rust,noplayground
+{{#include ../../crates/r2l-core/src/env/mod.rs:env}}
+```
+
+Algorithms receive an `EnvBuilder` rather than a concrete environment so that
+each sampler worker can construct its environment in the place where it runs. A
+closure or function returning `anyhow::Result<E>` automatically implements
+`EnvBuilder`.
+
+The complete workspace example demonstrates a custom environment, a custom
+builder, a function builder, a closure builder, and `GymEnvBuilder`:
+
+```rust,noplayground
+{{#include ../../crates/r2l-examples/examples/env_building/main.rs:env_builders}}
+```
+
+`r2l-gym` currently maps `Discrete`, `Box`, `MultiDiscrete`, `MultiBinary`,
+`Tuple`, and `Dict` spaces. Structured observations are flattened into
+`TensorData`; discrete observations are one-hot encoded.
+
+# Hyperparameters
+
 ## Backends
 
 The algorithm builders default to Candle. Use `with_candle(device)` to choose a
@@ -132,29 +181,3 @@ configuration:
 For the underlying traits and hook points, continue with
 [On-policy algorithms](./on_policy_algorithms.md). For exact builder methods,
 use the [`r2l-api` reference](https://docs.rs/r2l-api/0.0.2/r2l_api/).
-
-## Environments
-
-Native environments implement `Env`. An environment returns an initial
-observation from `reset`, accepts one action in `step`, and describes its
-observation and action spaces.
-
-```rust,noplayground
-{{#include ../../crates/r2l-core/src/env/mod.rs:env}}
-```
-
-Algorithms receive an `EnvBuilder` rather than a concrete environment so that
-each sampler worker can construct its environment in the place where it runs. A
-closure or function returning `anyhow::Result<E>` automatically implements
-`EnvBuilder`.
-
-The complete workspace example demonstrates a custom environment, a custom
-builder, a function builder, a closure builder, and `GymEnvBuilder`:
-
-```rust,noplayground
-{{#include ../../crates/r2l-examples/examples/env_building/main.rs:env_builders}}
-```
-
-`r2l-gym` currently maps `Discrete`, `Box`, `MultiDiscrete`, `MultiBinary`,
-`Tuple`, and `Dict` spaces. Structured observations are flattened into
-`TensorData`; discrete observations are one-hot encoded.
