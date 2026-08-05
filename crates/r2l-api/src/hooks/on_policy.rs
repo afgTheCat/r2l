@@ -21,13 +21,13 @@ use crate::BestActorEvaluator;
 
 const PERFORMANCE_FILE: &str = "performance.csv";
 
-struct PerformanceLog {
-    file: File,
-    training_started: Instant,
-    rollout_started: Instant,
-    phase_started: Instant,
-    collect_ms: f64,
-    rollout: usize,
+pub struct PerformanceLog {
+    pub file: File,
+    pub training_started: Instant,
+    pub rollout_started: Instant,
+    pub phase_started: Instant,
+    pub collect_ms: f64,
+    pub rollout: usize,
 }
 
 fn elapsed_ms(started: Instant) -> f64 {
@@ -170,12 +170,12 @@ pub fn on_policy_command_channel() -> (OnPolicyCommandReceiver, OnPolicyCommandS
 /// optionally evaluates the current actor, and shuts down the runtime when the
 /// algorithm exits.
 pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
-    learning_schedule: LearningSchedule,
-    learning_rate_schedule: Option<LearningRateSchedule>,
-    evaluator: Option<BestActorEvaluator<A::Actor, E>>,
-    performance_log: Option<PerformanceLog>,
-    command_rx: Option<OnPolicyCommandReceiver>,
-    _phantom: PhantomData<(A, S, E)>,
+    pub learning_schedule: LearningSchedule,
+    pub learning_rate_schedule: Option<LearningRateSchedule>,
+    pub evaluator: Option<BestActorEvaluator<A::Actor, E>>,
+    pub performance_log: Option<PerformanceLog>,
+    pub command_rx: Option<OnPolicyCommandReceiver>,
+    pub _phantom: PhantomData<(A, S, E)>,
 }
 
 impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
