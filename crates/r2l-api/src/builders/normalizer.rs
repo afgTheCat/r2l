@@ -21,7 +21,7 @@ impl NormalizerBuilder {
             normalizer_mode,
             inner,
         } = normalizer;
-        let inner = inner.lock().unwrap();
+        let inner = inner.0.lock().unwrap();
         let RunningMeanStd { mean, var, count } = &inner.rm;
         let (mean, obs_shape) = mean.to_vec_and_shape();
         let var = var.to_vec();

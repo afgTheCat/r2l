@@ -18,12 +18,12 @@ pub enum NormalizerMode {
 const EPSILON: f32 = 1e-8;
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct ClippedNormalizerInner<T: R2lTensor> {
+pub struct ClippedRunningMean<T: R2lTensor> {
     pub rm: RunningMeanStd<T>,
     pub clip: f32,
 }
 
-impl<T: R2lTensor> ClippedNormalizerInner<T> {
+impl<T: R2lTensor> ClippedRunningMean<T> {
     pub fn update(&mut self, obs: &[T]) {
         self.rm.update(obs);
     }
@@ -43,35 +43,44 @@ impl<T: R2lTensor> ClippedNormalizerInner<T> {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ClippedNormalizerInner<T: R2lTensor>(pub Arc<Mutex<ClippedRunningMean<T>>>);
+
+impl<T: R2lTensor> Clone for ClippedNormalizerInner<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
 /// Shared, clipped observation normalizer backed by running statistics.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ClippedNormalizer<T: R2lTensor> {
     pub normalizer_mode: NormalizerMode,
-    pub inner: Arc<Mutex<ClippedNormalizerInner<T>>>,
+    pub inner: ClippedNormalizerInner<T>,
 }
 
 impl<T: R2lTensor> ClippedNormalizer<T> {
     pub fn new(normalizer_mode: NormalizerMode, rm: RunningMeanStd<T>, clip: f32) -> Self {
-        let inner = ClippedNormalizerInner { clip, rm };
+        let inner = ClippedRunningMean { clip, rm };
         Self {
             normalizer_mode,
-            inner: Arc::new(Mutex::new(inner)),
+            inner: ClippedNormalizerInner(Arc::new(Mutex::new(inner))),
         }
     }
 
     /// Creates a normalizer for observations of `shape`.
     pub fn build(normalizer_mode: NormalizerMode, clip: f32, shape: Vec<usize>) -> Self {
         let rm = RunningMeanStd::new(shape);
-        let inner = ClippedNormalizerInner { clip, rm };
+        let inner = ClippedRunningMean { clip, rm };
         Self {
             normalizer_mode,
-            inner: Arc::new(Mutex::new(inner)),
+            inner: ClippedNormalizerInner(Arc::new(Mutex::new(inner))),
         }
     }
 
     /// Optionally updates statistics, then normalizes and clips `obs` in place.
     pub fn apply_slice_in_place(&self, obs: &mut [T]) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.0.lock().unwrap();
         match self.normalizer_mode {
             NormalizerMode::ReadOnly => inner.normalize_in_place(obs),
             NormalizerMode::Update => {
