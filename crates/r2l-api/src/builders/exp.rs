@@ -2,6 +2,7 @@ use std::io::Write;
 use std::sync::Arc;
 use std::{fs::File, marker::PhantomData, time::Instant};
 
+use r2l_core::env::normalizer::{ClippedNormalizer, NormalizerMode};
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     on_policy::algorithm::{
@@ -16,13 +17,15 @@ use crate::{
 
 const PERFORMANCE_FILE: &str = "performance.csv";
 
-enum SamplerType {
+enum SamplerConfiguration {
     Direct,
-    Staged,
+    Staged { obs_clip: Option<f32> },
 }
 
 struct Builder<E: Env> {
     env_builder: Arc<dyn EnvBuilder<Env = E>>,
+    n_envs: usize,
+    sampler_configuraion: SamplerConfiguration,
 
     // for the hooks
     learning_schedule: LearningSchedule,
@@ -32,21 +35,35 @@ struct Builder<E: Env> {
 }
 
 impl<E: Env> Builder<E> {
-    fn evaluator<A: Agent>(&self) -> Option<BestActorEvaluator<A::Actor, E>> {
-        let Some(config) = self.training_artifacts_config else {
-            return None;
-        };
-        // let env_builder = EnvBuilderType::homogeneous(builder, n_envs)
-        // let evaluator = (config.evaluation_results || config.inference_artifacts)
-        //     .then(|| config.build::<A::Actor, EB>(obs_normalizer, env_builder));
+    // fn obs_normalizer(&self) -> Option<ClippedNormalizer<E::Tensor>> {
+    //     let SamplerConfiguration::Staged { obs_clip } = self.sampler_configuraion else {
+    //         return None;
+    //     };
+    //     let env_description = self.env_builder.env_description().unwrap();
+    //     let obs_size = env_description.observation_space.size();
+    //     todo!()
+    // }
 
+    fn evaluator<A: Agent>(
+        &self,
+        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    ) -> Option<BestActorEvaluator<A::Actor, E>> {
         todo!()
+        // let Some(config) = self.training_artifacts_config.as_ref() else {
+        //     return None;
+        // };
+        // let env_builder = self.env_builder.clone();
+        // let env_builder = move || env_builder.build_env();
+        // let env_builder = EnvBuilderType::homogeneous(env_builder, self.n_envs);
+        // let evaluator = config.build(obs_normalizer, env_builder);
+        // Some(evaluator)
     }
 
     fn default_on_policy_hook<A: Agent, S: Sampler<Tensor = E::Tensor>>(
         mut self,
+        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     ) -> DefaultOnPolicyAlgorithmHooks<A, S, E> {
-        let evaluator = self.evaluator::<A>();
+        let evaluator = self.evaluator::<A>(obs_normalizer);
         let performance_log = self.training_artifacts_config.as_ref().map(|config| -> _ {
             let output_dir = config.output_dir.clone();
             std::fs::create_dir_all(&output_dir).unwrap();
@@ -94,7 +111,8 @@ impl<A: Agent + Buildable, S: Sampler + Buildable, E: Env<Tensor = S::Tensor>>
     fn build(mut self) -> OnPolicyAlgorithm<A, S, DefaultOnPolicyAlgorithmHooks<A, S, E>> {
         let agent = A::build(&self.builder);
         let sampler = S::build(&self.builder);
-        let hooks = self.builder.default_on_policy_hook();
+        // TODO: add that thing in here
+        let hooks = self.builder.default_on_policy_hook(None);
         OnPolicyAlgorithm::new(OnPolicyRuntime { agent, sampler }, hooks)
     }
 }

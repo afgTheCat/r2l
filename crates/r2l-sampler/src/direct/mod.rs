@@ -126,6 +126,24 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
             hook,
         }
     }
+
+    /// Builds a homogeneous sampler from a shared environment builder.
+    pub fn build_from_env_builder(
+        env_builder: Arc<dyn EnvBuilder<Env = E>>,
+        num_envs: usize,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+    ) -> Self
+    where
+        E: 'static,
+    {
+        let env_builder = move || env_builder.build_env();
+        Self::build(
+            EnvBuilderType::homogeneous(env_builder, num_envs),
+            hook,
+            execution_mode,
+        )
+    }
 }
 
 impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {

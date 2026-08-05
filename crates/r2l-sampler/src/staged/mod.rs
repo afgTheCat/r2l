@@ -1,5 +1,7 @@
 mod worker;
 
+use std::sync::Arc;
+
 use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
 use itertools::Itertools;
 use r2l_core::{
@@ -217,6 +219,26 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
             core: StagedSamplerCore::build(env_builder, execution_mode, obs_normalizer),
             hook,
         }
+    }
+
+    /// Builds a homogeneous sampler from a shared environment builder.
+    pub fn build_from_env_builder(
+        env_builder: Arc<dyn EnvBuilder<Env = E>>,
+        num_envs: usize,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    ) -> Self
+    where
+        E: 'static,
+    {
+        let env_builder = move || env_builder.build_env();
+        Self::build_with_obs_normalizer(
+            EnvBuilderType::homogeneous(env_builder, num_envs),
+            hook,
+            execution_mode,
+            obs_normalizer,
+        )
     }
 }
 
