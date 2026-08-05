@@ -115,6 +115,10 @@ pub struct DirectSampler<E: Env, H: DirectSamplerHook<E = E>> {
 }
 
 impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
+    pub fn new(core: DirectSamplerCore<E>, hook: H) -> Self {
+        Self { core, hook }
+    }
+
     /// Builds a raw sampler and its environment workers.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,

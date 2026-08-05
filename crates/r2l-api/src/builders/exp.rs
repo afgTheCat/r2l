@@ -7,9 +7,12 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     on_policy::algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime, Sampler},
 };
-use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
+use r2l_sampler::{
+    DirectSampler, DirectSamplerCore, SamplerExecutionMode, StagedSampler, StagedSamplerCore,
+};
 
 use crate::evaluators::best_actor_evaluator::EvaluationSampler;
+use crate::utils::RewardNormalizer;
 use crate::{
     BestActorEvaluator, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
     OnPolicyCommandReceiver, TrainingArtifactsConfig, hooks::on_policy::PerformanceLog,
@@ -32,6 +35,17 @@ trait EnvBuildPlan<E: Env> {
         evaluation_execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     ) -> EvaluationSampler<E>;
+
+    fn build_direct_sampler_core(
+        &self,
+        execution_mode: SamplerExecutionMode,
+    ) -> DirectSamplerCore<E>;
+
+    fn build_staged_sampler_core(
+        &self,
+        execution_mode: SamplerExecutionMode,
+        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    ) -> StagedSamplerCore<E>;
 }
 
 struct TypedEnvBuildPlan<EB: EnvBuilder> {
@@ -52,6 +66,21 @@ impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
             obs_normalizer,
         )
     }
+
+    fn build_direct_sampler_core(
+        &self,
+        execution_mode: SamplerExecutionMode,
+    ) -> DirectSamplerCore<EB::Env> {
+        DirectSamplerCore::build(self.env_builder.clone(), execution_mode)
+    }
+
+    fn build_staged_sampler_core(
+        &self,
+        execution_mode: SamplerExecutionMode,
+        obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
+    ) -> StagedSamplerCore<EB::Env> {
+        StagedSamplerCore::build(self.env_builder.clone(), execution_mode, obs_normalizer)
+    }
 }
 
 struct Builder<E: Env> {
@@ -64,6 +93,12 @@ struct Builder<E: Env> {
     learning_rate_schedule: Option<LearningRateSchedule>,
     training_artifacts_config: Option<TrainingArtifactsConfig>,
     policy_command_rx: Option<OnPolicyCommandReceiver>,
+
+    // for the sampler
+    sampler_execution_mode: SamplerExecutionMode,
+    reward_normalizer: Option<RewardNormalizer>,
+    rollout_steps: usize,
+    rollout_episodes: usize,
 }
 
 impl<E: Env> Builder<E> {
@@ -79,6 +114,10 @@ impl<E: Env> Builder<E> {
             learning_rate_schedule: None,
             training_artifacts_config: None,
             policy_command_rx: None,
+            sampler_execution_mode: SamplerExecutionMode::MultiThreaded,
+            reward_normalizer: None,
+            rollout_steps: 1024,
+            rollout_episodes: 1,
         }
     }
 
@@ -151,6 +190,36 @@ impl<E: Env> Builder<E> {
             _phantom: PhantomData,
         }
     }
+
+    fn direct_sampler_step_bound(&self) -> DirectSampler<E, StepBoundHook<E>> {
+        let sampler_core = self
+            .env_build_plan
+            .build_direct_sampler_core(self.sampler_execution_mode);
+        let reward_normalizer = self.reward_normalizer.clone();
+        let step_bound_hook = StepBoundHook::new(self.rollout_steps, reward_normalizer);
+        DirectSampler::new(sampler_core, step_bound_hook)
+    }
+
+    fn direct_sampler_episode_bound(&self) -> DirectSampler<E, EpisodeBoundHook<E>> {
+        let sampler_core = self
+            .env_build_plan
+            .build_direct_sampler_core(self.sampler_execution_mode);
+        let episode_bound_hook = EpisodeBoundHook::new(self.rollout_episodes);
+        DirectSampler::new(sampler_core, episode_bound_hook)
+    }
+
+    fn staged_sampler_step_bound(&self) -> StagedSampler<E, StepBoundHook<E>> {
+        let obs_normalizer = self.obs_normalizer(NormalizerMode::Update);
+        let sampler_core = self
+            .env_build_plan
+            .build_staged_sampler_core(self.sampler_execution_mode, obs_normalizer);
+        let reward_normalizer = self.reward_normalizer.clone();
+        let step_bound_hook = StepBoundHook::new(self.rollout_steps, reward_normalizer);
+        StagedSampler {
+            core: sampler_core,
+            hook: step_bound_hook,
+        }
+    }
 }
 
 trait Buildable<E: Env> {
@@ -182,19 +251,19 @@ impl<A: Agent<Tensor = S::Tensor>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
 impl<E: Env> Buildable<E> for DirectSampler<E, StepBoundHook<E>> {
     fn build(builder: &Builder<E>) -> Self {
-        todo!()
+        builder.direct_sampler_step_bound()
     }
 }
 
 impl<E: Env> Buildable<E> for DirectSampler<E, EpisodeBoundHook<E>> {
     fn build(builder: &Builder<E>) -> Self {
-        todo!()
+        builder.direct_sampler_episode_bound()
     }
 }
 
 impl<E: Env> Buildable<E> for StagedSampler<E, StepBoundHook<E>> {
     fn build(builder: &Builder<E>) -> Self {
-        todo!()
+        builder.staged_sampler_step_bound()
     }
 }
 

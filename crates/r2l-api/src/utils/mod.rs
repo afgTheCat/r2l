@@ -23,6 +23,7 @@ pub fn fmt_stat(x: f32) -> String {
 const EPSILON: f32 = 1e-8;
 
 /// Normalizes rewards using the running variance of discounted returns.
+#[derive(Clone)]
 pub struct RewardNormalizer {
     reward_accumulator: Vec<f32>,
     return_rms: RunningMeanStdF32,
