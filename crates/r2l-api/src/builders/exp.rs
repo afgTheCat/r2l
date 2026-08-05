@@ -1,19 +1,15 @@
 use std::io::Write;
-use std::sync::{Arc, Mutex};
 use std::{fs::File, marker::PhantomData, time::Instant};
 
 use r2l_core::env::EnvDescription;
-use r2l_core::env::normalizer::{
-    ClippedNormalizer, ClippedNormalizerInner, ClippedRunningMean, NormalizerMode,
-};
+use r2l_core::env::normalizer::{ClippedNormalizer, ClippedNormalizerInner, NormalizerMode};
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
-    on_policy::algorithm::{
-        Agent, OnPolicyAlgorithm, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler,
-    },
+    on_policy::algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime, Sampler},
 };
-use r2l_sampler::{DirectSampler, StagedSampler};
+use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
 
+use crate::evaluators::best_actor_evaluator::EvaluationSampler;
 use crate::{
     BestActorEvaluator, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
     OnPolicyCommandReceiver, TrainingArtifactsConfig, hooks::on_policy::PerformanceLog,
@@ -29,32 +25,37 @@ enum SamplerConfiguration<E: Env> {
     },
 }
 
-trait EnvBuildPlan<A: Agent, E: Env<Tensor = A::Tensor>> {
-    fn build_evaluator(
+trait EnvBuildPlan<E: Env> {
+    fn build_evaluator_sampler(
         &self,
-        config: TrainingArtifactsConfig,
+        episodes_per_evaluation: usize,
+        evaluation_execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> BestActorEvaluator<A::Actor, E>;
+    ) -> EvaluationSampler<E>;
 }
 
 struct TypedEnvBuildPlan<EB: EnvBuilder> {
     env_builder: EnvBuilderType<EB>,
 }
 
-impl<A: Agent, EB: EnvBuilder<Env: Env<Tensor = A::Tensor>>> EnvBuildPlan<A, EB::Env>
-    for TypedEnvBuildPlan<EB>
-{
-    fn build_evaluator(
+impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
+    fn build_evaluator_sampler(
         &self,
-        config: TrainingArtifactsConfig,
+        episodes_per_evaluation: usize,
+        evaluation_execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
-    ) -> BestActorEvaluator<A::Actor, EB::Env> {
-        config.build(obs_normalizer, self.env_builder.clone())
+    ) -> EvaluationSampler<EB::Env> {
+        EvaluationSampler::build(
+            self.env_builder.clone(),
+            episodes_per_evaluation,
+            evaluation_execution_mode,
+            obs_normalizer,
+        )
     }
 }
 
-struct Builder<A: Agent, E: Env<Tensor = A::Tensor>> {
-    env_build_plan: Box<dyn EnvBuildPlan<A, E>>,
+struct Builder<E: Env> {
+    env_build_plan: Box<dyn EnvBuildPlan<E>>,
     env_desription: EnvDescription<E::Tensor>,
     sampler_configuraion: SamplerConfiguration<E>,
 
@@ -65,7 +66,7 @@ struct Builder<A: Agent, E: Env<Tensor = A::Tensor>> {
     policy_command_rx: Option<OnPolicyCommandReceiver>,
 }
 
-impl<A: Agent, E: Env<Tensor = A::Tensor>> Builder<A, E> {
+impl<E: Env> Builder<E> {
     fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
         let env_desription = env_builder.env_description().unwrap();
         Self {
@@ -101,17 +102,24 @@ impl<A: Agent, E: Env<Tensor = A::Tensor>> Builder<A, E> {
         Some(normalizer)
     }
 
-    fn evaluator(
+    fn evaluator<A: Agent>(
         &mut self,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     ) -> Option<BestActorEvaluator<A::Actor, E>> {
         let config = self.training_artifacts_config.take()?;
-        Some(self.env_build_plan.build_evaluator(config, obs_normalizer))
+        if !config.evaluation_results && !config.inference_artifacts {
+            return None;
+        }
+        let evaluation_sampler = self.env_build_plan.build_evaluator_sampler(
+            config.evaluation_settings.episodes_per_evaluation,
+            config.evaluation_settings.evaluation_execution_mode,
+            obs_normalizer,
+        );
+        Some(config.build_with_sampler(evaluation_sampler))
     }
 
-    fn default_on_policy_hook<S: Sampler<Tensor = E::Tensor>>(
+    fn default_on_policy_hook<A: Agent, S: Sampler<Tensor = E::Tensor>>(
         mut self,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     ) -> DefaultOnPolicyAlgorithmHooks<A, S, E> {
         let performance_log = self.training_artifacts_config.as_ref().map(|config| -> _ {
             let output_dir = config.output_dir.clone();
@@ -132,7 +140,8 @@ impl<A: Agent, E: Env<Tensor = A::Tensor>> Builder<A, E> {
                 rollout: 0,
             }
         });
-        let evaluator = self.evaluator(obs_normalizer);
+        let obs_normalizer = self.obs_normalizer(NormalizerMode::ReadOnly);
+        let evaluator = self.evaluator::<A>(obs_normalizer);
         DefaultOnPolicyAlgorithmHooks {
             learning_schedule: self.learning_schedule,
             learning_rate_schedule: self.learning_rate_schedule,
@@ -144,8 +153,8 @@ impl<A: Agent, E: Env<Tensor = A::Tensor>> Builder<A, E> {
     }
 }
 
-trait Buildable {
-    fn build<A: Agent, E: Env<Tensor = A::Tensor>>(builder: &Builder<A, E>) -> Self;
+trait Buildable<E: Env> {
+    fn build(builder: &Builder<E>) -> Self;
 }
 
 struct Config<A: Agent<Tensor = S::Tensor>, S: Sampler, E: Env<Tensor = S::Tensor>>(
@@ -153,7 +162,7 @@ struct Config<A: Agent<Tensor = S::Tensor>, S: Sampler, E: Env<Tensor = S::Tenso
 );
 
 struct OnPolicyAlgoBuilder<A: Agent<Tensor = S::Tensor>, S: Sampler, E: Env<Tensor = S::Tensor>> {
-    builder: Builder<A, E>,
+    builder: Builder<E>,
     config: Config<A, S, E>,
 }
 
@@ -171,31 +180,34 @@ impl<A: Agent<Tensor = S::Tensor>, S: Sampler, E: Env<Tensor = S::Tensor>>
 // Agent: PPOCandle, A2CCandle, PPOBurn, A2CBurn
 // Sampler: DirectSampler<E, StepBound>, DirectSampler<EpisodeBound>,
 
-// impl<E: Env> Buildable for DirectSampler<E, StepBoundHook<E>> {
-//     fn build<A: Agent, E: Env<Tensor = A::Tensor>>(builder: &Builder<A, E>) -> Self {
-//         todo!()
-//     }
-// }
+impl<E: Env> Buildable<E> for DirectSampler<E, StepBoundHook<E>> {
+    fn build(builder: &Builder<E>) -> Self {
+        todo!()
+    }
+}
 
-// impl<E: Env> Buildable for DirectSampler<E, EpisodeBoundHook<E>> {
-//     fn build<A: Agent, E: Env<Tensor = A::Tensor>>(builder: &Builder<A, E>) -> Self {
-//         todo!()
-//     }
-// }
+impl<E: Env> Buildable<E> for DirectSampler<E, EpisodeBoundHook<E>> {
+    fn build(builder: &Builder<E>) -> Self {
+        todo!()
+    }
+}
 
-// impl<E: Env> Buildable for StagedSampler<E, StepBoundHook<E>> {
-//     fn build<A: Agent, E: Env<Tensor = A::Tensor>>(builder: &Builder<A, E>) -> Self {
-//         todo!()
-//     }
-// }
+impl<E: Env> Buildable<E> for StagedSampler<E, StepBoundHook<E>> {
+    fn build(builder: &Builder<E>) -> Self {
+        todo!()
+    }
+}
 
-impl<A: Agent<Tensor = S::Tensor> + Buildable, S: Sampler + Buildable, E: Env<Tensor = S::Tensor>>
-    OnPolicyAlgoBuilder<A, S, E>
+impl<
+    A: Agent<Tensor = S::Tensor> + Buildable<E>,
+    S: Sampler + Buildable<E>,
+    E: Env<Tensor = S::Tensor>,
+> OnPolicyAlgoBuilder<A, S, E>
 {
     fn build(self) -> OnPolicyAlgorithm<A, S, DefaultOnPolicyAlgorithmHooks<A, S, E>> {
         let agent = A::build(&self.builder);
         let sampler = S::build(&self.builder);
-        let hooks = self.builder.default_on_policy_hook(None);
+        let hooks = self.builder.default_on_policy_hook();
         OnPolicyAlgorithm::new(OnPolicyRuntime { agent, sampler }, hooks)
     }
 }

@@ -32,13 +32,13 @@ fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
 
 const EVALUATIONS_FILE: &str = "evaluations.csv";
 
-enum EvaluationSampler<E: Env> {
+pub enum EvaluationSampler<E: Env> {
     Direct(DirectSampler<E, EpisodeBoundHook<E>>),
     Staged(StagedSampler<E, EpisodeBoundHook<E>>),
 }
 
 impl<E: Env> EvaluationSampler<E> {
-    fn build<EB: EnvBuilder<Env = E>>(
+    pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         n_episodes: usize,
         execution_mode: SamplerExecutionMode,
@@ -209,20 +209,24 @@ impl TrainingArtifactsConfig {
         obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
         env_builder: EnvBuilderType<EB>,
     ) -> BestActorEvaluator<A, EB::Env> {
-        let EvaluationSettings {
-            episodes_per_evaluation,
-            evaluation_execution_mode,
-            rollouts_per_evaluation,
-        } = self.evaluation_settings;
+        let episodes_per_evaluation = self.evaluation_settings.episodes_per_evaluation;
+        let evaluation_execution_mode = self.evaluation_settings.evaluation_execution_mode;
         let sampler = EvaluationSampler::build(
             env_builder,
             episodes_per_evaluation,
             evaluation_execution_mode,
             obs_normalizer,
         );
+        self.build_with_sampler(sampler)
+    }
+
+    pub(crate) fn build_with_sampler<A: Actor + Clone, E: Env>(
+        self,
+        sampler: EvaluationSampler<E>,
+    ) -> BestActorEvaluator<A, E> {
         BestActorEvaluator {
             current_evaluator_step: 0,
-            rollouts_per_evaluation,
+            rollouts_per_evaluation: self.evaluation_settings.rollouts_per_evaluation,
             sampler,
             output_dir: self.output_dir,
             write_evaluation_results: self.evaluation_results,
@@ -246,7 +250,7 @@ struct EvalState {
 /// This evaluator collects episode-bounded rollouts,
 /// computes the average completed-episode reward, and retains the best actor
 /// observed so far.
-pub struct BestActorEvaluator<A: Actor, E: Env<Tensor: R2lTensor>> {
+pub struct BestActorEvaluator<A: Actor, E: Env> {
     sampler: EvaluationSampler<E>,
     output_dir: PathBuf,
     write_evaluation_results: bool,
