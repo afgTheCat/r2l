@@ -41,7 +41,7 @@ pub use builders::sampler::{
     SamplerBuilder, StagedSamplerSelection,
 };
 pub use builders::sampler::{EpisodeHookBound, StepHookBound};
-pub use builders2::{OnPolicyAlgoBuilder, PPO2AlgorithmBuilder};
+pub use builders2::{A2C2AlgorithmBuilder, OnPolicyAlgoBuilder, PPO2AlgorithmBuilder};
 pub use evaluators::best_actor_evaluator::{
     BestActorEvaluator, EvaluationSettings, TrainingArtifactsConfig,
 };

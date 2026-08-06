@@ -60,6 +60,13 @@ pub struct ClippedNormalizer<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> ClippedNormalizer<T> {
+    pub fn new2(normalizer_mode: NormalizerMode, inner: ClippedNormalizerInner<T>) -> Self {
+        Self {
+            normalizer_mode,
+            inner,
+        }
+    }
+
     pub fn new(normalizer_mode: NormalizerMode, rm: RunningMeanStd<T>, clip: f32) -> Self {
         let inner = ClippedRunningMean { clip, rm };
         Self {

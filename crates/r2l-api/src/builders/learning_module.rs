@@ -35,7 +35,7 @@ impl AdamWParams {
 ///
 /// This controls whether policy and value learning share a single optimizer
 /// configuration or use separate optimizer configurations.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OnPolicyOptimizerLayout {
     /// Use one joint optimizer configuration for both policy and value updates.
     Joint {
