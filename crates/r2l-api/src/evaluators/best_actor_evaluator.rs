@@ -13,7 +13,7 @@ use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    builders2::{
+    builders::{
         inference::{ACTOR_FILE, NORMALIZER_FILE},
         normalizer::NormalizerBuilder,
     },

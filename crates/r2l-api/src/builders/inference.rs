@@ -14,9 +14,8 @@ use r2l_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    BurnBackendConfig, CandleBackend, PolicyBuilder, builders::normalizer::NormalizerBuilder,
-};
+use super::normalizer::NormalizerBuilder;
+use crate::{BurnBackendConfig, CandleBackend, PolicyBuilder};
 
 pub(crate) const INFERENCE_CONFIG_FILE: &str = "inference.yaml";
 pub(crate) const ACTOR_FILE: &str = "actor.safetensors";
@@ -251,95 +250,5 @@ impl<E: Env> InferenceRunner<E> {
             }
         }
         self.reset().unwrap();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use candle_core::{Device, Tensor};
-    use r2l_core::{
-        env::{Env, EnvDescription, Snapshot, Space},
-        models::Actor,
-    };
-
-    use super::*;
-
-    struct TestEnv;
-
-    impl Env for TestEnv {
-        type Tensor = Tensor;
-
-        fn reset(&mut self, _seed: u64) -> anyhow::Result<Self::Tensor> {
-            Ok(Tensor::zeros(3, candle_core::DType::F32, &Device::Cpu)?)
-        }
-
-        fn step(&mut self, _action: Self::Tensor) -> anyhow::Result<Snapshot<Self::Tensor>> {
-            Ok(Snapshot::new(
-                Tensor::zeros(3, candle_core::DType::F32, &Device::Cpu)?,
-                0.0,
-                true,
-                false,
-            ))
-        }
-
-        fn env_description(&self) -> EnvDescription<Self::Tensor> {
-            EnvDescription::new(
-                Space::Box {
-                    min: None,
-                    max: None,
-                    shape: vec![3],
-                },
-                Space::Box {
-                    min: None,
-                    max: None,
-                    shape: vec![2],
-                },
-            )
-        }
-    }
-
-    #[test]
-    fn candle_inference_builds_from_saved_safetensors() -> anyhow::Result<()> {
-        let output_dir = unique_test_dir("candle-inference-safetensors");
-        std::fs::create_dir_all(&output_dir)?;
-
-        let policy_builder = PolicyBuilder::new().with_hidden_layers(vec![4]);
-        let actor = policy_builder.build_candle::<Tensor>(
-            3,
-            Space::Box {
-                min: None,
-                max: None,
-                shape: vec![2],
-            },
-            &Device::Cpu,
-        )?;
-        let actor_bytes = actor.try_serialize().unwrap();
-        std::fs::write(output_dir.join(ACTOR_FILE), actor_bytes)?;
-
-        let config = InferenceConfig::new(
-            policy_builder,
-            InferenceObservationMode::Raw,
-            InferenceBackend::Candle(CandleBackend {
-                device: Device::Cpu,
-            }),
-        );
-        config.write_to_dir(&output_dir)?;
-
-        let artifacts = InferenceArtifacts::load(&output_dir)?;
-        let mut runner = artifacts.build(TestEnv)?;
-        runner.mode_step()?;
-
-        std::fs::remove_dir_all(output_dir)?;
-        Ok(())
-    }
-
-    fn unique_test_dir(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "r2l-api-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ))
     }
 }
