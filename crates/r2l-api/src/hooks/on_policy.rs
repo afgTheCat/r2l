@@ -17,9 +17,7 @@ use r2l_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::BestActorEvaluator;
-
-const PERFORMANCE_FILE: &str = "performance.csv";
+use crate::evaluators::best_actor_evaluator::BestActorEvaluator;
 
 pub struct PerformanceLog {
     pub file: File,
@@ -148,7 +146,7 @@ impl OnPolicyCommandSender {
     pub fn shutdown(&self) {
         self.tx.send(OnPolicyCommand::Shutdown).unwrap();
         // empty the response queue
-        while let Ok(_) = self.rx.recv() {}
+        while self.rx.recv().is_ok() {}
     }
 }
 
@@ -170,53 +168,17 @@ pub fn on_policy_command_channel() -> (OnPolicyCommandReceiver, OnPolicyCommandS
 /// optionally evaluates the current actor, and shuts down the runtime when the
 /// algorithm exits.
 pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
-    pub learning_schedule: LearningSchedule,
-    pub learning_rate_schedule: Option<LearningRateSchedule>,
-    pub evaluator: Option<BestActorEvaluator<A::Actor, E>>,
-    pub performance_log: Option<PerformanceLog>,
-    pub command_rx: Option<OnPolicyCommandReceiver>,
-    pub _phantom: PhantomData<(A, S, E)>,
+    pub(crate) learning_schedule: LearningSchedule,
+    pub(crate) learning_rate_schedule: Option<LearningRateSchedule>,
+    pub(crate) evaluator: Option<BestActorEvaluator<A::Actor, E>>,
+    pub(crate) performance_log: Option<PerformanceLog>,
+    pub(crate) command_rx: Option<OnPolicyCommandReceiver>,
+    pub(crate) _phantom: PhantomData<(A, S, E)>,
 }
 
 impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
     DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
-    /// Creates the default hooks with their schedule, evaluator, and command receiver.
-    pub fn new(
-        learning_schedule: LearningSchedule,
-        evaluator: Option<BestActorEvaluator<A::Actor, E>>,
-        performance_output_dir: Option<PathBuf>,
-        learning_rate_schedule: Option<LearningRateSchedule>,
-        command_rx: Option<OnPolicyCommandReceiver>,
-    ) -> Self {
-        let performance_log = performance_output_dir.map(|output_dir| {
-            std::fs::create_dir_all(&output_dir).unwrap();
-            let mut file = File::create(output_dir.join(PERFORMANCE_FILE)).unwrap();
-            writeln!(
-                file,
-                "rollout,collect_ms,learn_ms,evaluate_ms,rollout_ms,total_ms"
-            )
-            .unwrap();
-            let now = Instant::now();
-            PerformanceLog {
-                file,
-                training_started: now,
-                rollout_started: now,
-                phase_started: now,
-                collect_ms: 0.0,
-                rollout: 0,
-            }
-        });
-        Self {
-            learning_schedule,
-            learning_rate_schedule,
-            evaluator,
-            performance_log,
-            command_rx,
-            _phantom: PhantomData,
-        }
-    }
-
     fn process_pending_commands(&self, runtime: &mut OnPolicyRuntime<A, S>) -> HookResult {
         let Some(command_rx) = &self.command_rx else {
             return HookResult::Continue;

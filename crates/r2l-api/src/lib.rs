@@ -7,7 +7,6 @@
 use burn::backend::{Autodiff, NdArray};
 
 // builders + hooks + higher level helpers
-mod agents;
 mod builders;
 mod evaluators;
 mod hooks;
@@ -16,25 +15,20 @@ mod utils;
 /// Default autodifferentiation backend used by Burn-based builders.
 pub type BurnBackend = Autodiff<NdArray>;
 
-pub use agents::a2c::{A2CBurnAgent, A2CCandleAgent};
-pub use agents::ppo::{PPOBurnAgent, PPOCandleAgent};
 pub use builders::{
-    A2C2AlgorithmBuilder, A2CAlgorithmBuilder, AdamWParams, BurnBackendConfig, CandleBackend,
-    InferenceActor, InferenceArtifacts, InferenceBackend, InferenceConfig,
-    InferenceObservationMode, InferenceRunner, NormalizerBuilder, OnPolicyAlgoBuilder,
-    OnPolicyOptimizerLayout, PPO2AlgorithmBuilder, PPOAlgorithmBuilder, PolicyBuilder,
+    A2CAlgorithmBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceArtifacts, InferenceRunner,
+    OnPolicyAlgoBuilder, OnPolicyOptimizerLayout, PPOAlgorithmBuilder, PPOBurn, PPOCandle,
+    PolicyBuilder,
 };
-pub use evaluators::best_actor_evaluator::{
-    BestActorEvaluator, EvaluationSettings, TrainingArtifactsConfig,
-};
+pub use evaluators::best_actor_evaluator::{EvaluationSettings, TrainingArtifactsConfig};
 pub use evaluators::simple_evaluator::Evaluator;
-pub use hooks::a2c::{A2CBatchStats, A2CStats, DefaultA2CHook};
+pub use hooks::a2c::{A2CBatchStats, A2CStats};
 pub use hooks::on_policy::{
     DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule, OnPolicyCommand,
     OnPolicyCommandReceiver, OnPolicyCommandResult, OnPolicyCommandSender,
     on_policy_command_channel,
 };
-pub use hooks::ppo::{DefaultPPOHook, PPOBatchStats, PPOStats};
+pub use hooks::ppo::{PPOBatchStats, PPOStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
 pub use r2l_core::{
     env::{

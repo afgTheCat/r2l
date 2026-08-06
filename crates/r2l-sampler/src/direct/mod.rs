@@ -46,13 +46,16 @@ pub trait DirectSamplerHook {
 
 /// Mutable direct-sampler state exposed to [`DirectSamplerHook`] implementations.
 pub struct DirectSamplerCore<E: Env> {
-    /// Per-environment output buffers.
-    pub buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
-    /// Inline or threaded environment workers.
-    pub worker_pool: WorkerPool<E>,
+    buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
+    worker_pool: WorkerPool<E>,
 }
 
 impl<E: Env> DirectSamplerCore<E> {
+    /// Returns the per-environment output buffers.
+    pub fn buffers_mut(&mut self) -> &mut ArrayHandle<TrajectoryBuffer<E::Tensor>> {
+        &mut self.buffers
+    }
+
     /// Resets every worker environment and clears its active episode state.
     pub fn reset_all_envs(&mut self) {
         self.worker_pool.reset_all_envs();

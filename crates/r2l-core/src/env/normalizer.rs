@@ -18,9 +18,9 @@ pub enum NormalizerMode {
 const EPSILON: f32 = 1e-8;
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct ClippedRunningMean<T: R2lTensor> {
-    pub rm: RunningMeanStd<T>,
-    pub clip: f32,
+struct ClippedRunningMean<T: R2lTensor> {
+    rm: RunningMeanStd<T>,
+    clip: f32,
 }
 
 impl<T: R2lTensor> ClippedRunningMean<T> {
@@ -44,7 +44,7 @@ impl<T: R2lTensor> ClippedRunningMean<T> {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ClippedNormalizerInner<T: R2lTensor>(pub Arc<Mutex<ClippedRunningMean<T>>>);
+struct ClippedNormalizerInner<T: R2lTensor>(Arc<Mutex<ClippedRunningMean<T>>>);
 
 impl<T: R2lTensor> Clone for ClippedNormalizerInner<T> {
     fn clone(&self) -> Self {
@@ -55,15 +55,27 @@ impl<T: R2lTensor> Clone for ClippedNormalizerInner<T> {
 /// Shared, clipped observation normalizer backed by running statistics.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ClippedNormalizer<T: R2lTensor> {
-    pub normalizer_mode: NormalizerMode,
-    pub inner: ClippedNormalizerInner<T>,
+    normalizer_mode: NormalizerMode,
+    inner: ClippedNormalizerInner<T>,
+}
+
+/// Serializable snapshot of a clipped normalizer's statistics.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ClippedNormalizerSnapshot {
+    normalizer_mode: NormalizerMode,
+    obs_shape: Vec<usize>,
+    mean: Vec<f32>,
+    var: Vec<f32>,
+    count: f32,
+    clip: f32,
 }
 
 impl<T: R2lTensor> ClippedNormalizer<T> {
-    pub fn new2(normalizer_mode: NormalizerMode, inner: ClippedNormalizerInner<T>) -> Self {
+    /// Returns a handle to the same statistics using `normalizer_mode`.
+    pub fn with_mode(&self, normalizer_mode: NormalizerMode) -> Self {
         Self {
             normalizer_mode,
-            inner,
+            inner: self.inner.clone(),
         }
     }
 
@@ -99,5 +111,29 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
 
     pub fn apply_tensor_in_place(&self, obs: &mut T) {
         self.apply_slice_in_place(std::slice::from_mut(obs));
+    }
+
+    /// Captures the current statistics in a backend-independent form.
+    pub fn snapshot(&self) -> ClippedNormalizerSnapshot {
+        let inner = self.inner.0.lock().unwrap();
+        let (mean, obs_shape) = inner.rm.mean.to_vec_and_shape();
+        ClippedNormalizerSnapshot {
+            normalizer_mode: self.normalizer_mode,
+            obs_shape,
+            mean,
+            var: inner.rm.var.to_vec(),
+            count: inner.rm.count,
+            clip: inner.clip,
+        }
+    }
+}
+
+impl ClippedNormalizerSnapshot {
+    /// Reconstructs a normalizer from this snapshot.
+    pub fn into_normalizer<T: R2lTensor>(self) -> ClippedNormalizer<T> {
+        let mean = T::from_vec_and_shape(self.mean, self.obs_shape.clone());
+        let var = T::from_vec_and_shape(self.var, self.obs_shape);
+        let rm = RunningMeanStd::build(mean, var, self.count);
+        ClippedNormalizer::new(self.normalizer_mode, rm, self.clip)
     }
 }

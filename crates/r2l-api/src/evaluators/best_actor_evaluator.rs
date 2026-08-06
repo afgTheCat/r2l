@@ -32,13 +32,13 @@ fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
 
 const EVALUATIONS_FILE: &str = "evaluations.csv";
 
-pub enum EvaluationSampler<E: Env> {
+pub(crate) enum EvaluationSampler<E: Env> {
     Direct(DirectSampler<E, EpisodeBoundHook<E>>),
     Staged(StagedSampler<E, EpisodeBoundHook<E>>),
 }
 
 impl<E: Env> EvaluationSampler<E> {
-    pub fn build<EB: EnvBuilder<Env = E>>(
+    pub(crate) fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         n_episodes: usize,
         execution_mode: SamplerExecutionMode,
@@ -88,9 +88,7 @@ impl<E: Env> EvaluationSampler<E> {
         match self {
             Self::Direct(_) => None,
             Self::Staged(sampler) => sampler
-                .core
-                .obs_normalizer
-                .clone()
+                .obs_normalizer()
                 .map(NormalizerBuilder::from_normalizer),
         }
     }
@@ -203,23 +201,6 @@ impl TrainingArtifactsConfig {
         self
     }
 
-    /// Builds an evaluator with an optional observation normalizer.
-    pub fn build<A: Actor + Clone, EB: EnvBuilder>(
-        self,
-        obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
-        env_builder: EnvBuilderType<EB>,
-    ) -> BestActorEvaluator<A, EB::Env> {
-        let episodes_per_evaluation = self.evaluation_settings.episodes_per_evaluation;
-        let evaluation_execution_mode = self.evaluation_settings.evaluation_execution_mode;
-        let sampler = EvaluationSampler::build(
-            env_builder,
-            episodes_per_evaluation,
-            evaluation_execution_mode,
-            obs_normalizer,
-        );
-        self.build_with_sampler(sampler)
-    }
-
     pub(crate) fn build_with_sampler<A: Actor + Clone, E: Env>(
         self,
         sampler: EvaluationSampler<E>,
@@ -250,7 +231,7 @@ struct EvalState {
 /// This evaluator collects episode-bounded rollouts,
 /// computes the average completed-episode reward, and retains the best actor
 /// observed so far.
-pub struct BestActorEvaluator<A: Actor, E: Env> {
+pub(crate) struct BestActorEvaluator<A: Actor, E: Env> {
     sampler: EvaluationSampler<E>,
     output_dir: PathBuf,
     write_evaluation_results: bool,

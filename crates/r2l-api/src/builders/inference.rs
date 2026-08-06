@@ -15,7 +15,7 @@ use r2l_core::{
 use serde::{Deserialize, Serialize};
 
 use super::normalizer::NormalizerBuilder;
-use crate::{BurnBackendConfig, CandleBackend, PolicyBuilder};
+use super::{BurnBackendConfig, CandleBackend, PolicyBuilder};
 
 pub(crate) const INFERENCE_CONFIG_FILE: &str = "inference.yaml";
 pub(crate) const ACTOR_FILE: &str = "actor.safetensors";
@@ -23,8 +23,7 @@ pub(crate) const NORMALIZER_FILE: &str = "normalizer.yaml";
 
 /// Observation processing applied during inference.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InferenceObservationMode {
+pub(crate) enum InferenceObservationMode {
     /// Uses observations exactly as produced by the environment.
     Raw,
     /// Applies observation normalization using separately stored statistics.
@@ -33,8 +32,7 @@ pub enum InferenceObservationMode {
 
 /// Backend used to construct the inference policy.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "config")]
-pub enum InferenceBackend {
+pub(crate) enum InferenceBackend {
     /// Candle backend configuration.
     Candle(CandleBackend),
     /// Default Burn backend configuration.
@@ -43,7 +41,7 @@ pub enum InferenceBackend {
 
 /// Serializable recipe for reconstructing an inference runtime.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InferenceConfig {
+pub(crate) struct InferenceConfig {
     policy_builder: PolicyBuilder,
     observation_mode: InferenceObservationMode,
     backend: InferenceBackend,
@@ -51,7 +49,7 @@ pub struct InferenceConfig {
 
 impl InferenceConfig {
     /// Creates an inference configuration.
-    pub fn new(
+    pub(crate) fn new(
         policy_builder: PolicyBuilder,
         observation_mode: InferenceObservationMode,
         backend: InferenceBackend,
@@ -64,7 +62,7 @@ impl InferenceConfig {
     }
 
     /// Writes this configuration to `inference.yaml` in `inference_dir`.
-    pub fn write_to_dir(&self, inference_dir: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub(crate) fn write_to_dir(&self, inference_dir: impl AsRef<Path>) -> anyhow::Result<()> {
         let inference_dir = inference_dir.as_ref();
         std::fs::create_dir_all(inference_dir)?;
         let serialized = yaml_serde::to_string(self)?;
@@ -73,7 +71,7 @@ impl InferenceConfig {
     }
 
     /// Loads `inference.yaml` from `inference_dir`.
-    pub fn load_from_dir(inference_dir: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub(crate) fn load_from_dir(inference_dir: impl AsRef<Path>) -> anyhow::Result<Self> {
         let serialized =
             std::fs::read_to_string(inference_dir.as_ref().join(INFERENCE_CONFIG_FILE))?;
         Ok(yaml_serde::from_str(&serialized)?)
@@ -93,11 +91,6 @@ impl InferenceArtifacts {
         let directory = directory.into();
         let config = InferenceConfig::load_from_dir(&directory)?;
         Ok(Self { config, directory })
-    }
-
-    /// Returns the loaded inference configuration.
-    pub fn config(&self) -> &InferenceConfig {
-        &self.config
     }
 
     /// Builds an inference runtime using the configured backend and learned artifacts.
@@ -138,7 +131,7 @@ impl InferenceArtifacts {
                         env_description.action_space,
                     )
                     .load_from_bytes(actor_bytes)?;
-                InferenceActor::Burn(ActorWrapper::new(actor))
+                InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))
             }
         };
         InferenceRunner::new(env, obs_normalizer, actor)
@@ -147,11 +140,11 @@ impl InferenceArtifacts {
 
 /// Backend-independent actor adapted to an environment tensor type.
 #[derive(Debug, Clone)]
-pub enum InferenceActor<T: R2lTensor> {
+enum InferenceActor<T: R2lTensor> {
     /// Candle-backed inference actor.
     Candle(ActorWrapper<CandlePolicyKind, T>),
     /// Burn-backed inference actor.
-    Burn(ActorWrapper<BurnPolicyKind<NdArray>, T>),
+    Burn(Box<ActorWrapper<BurnPolicyKind<NdArray>, T>>),
 }
 
 impl<T: R2lTensor> Actor for InferenceActor<T> {

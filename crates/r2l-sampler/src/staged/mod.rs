@@ -13,7 +13,7 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-pub use crate::{
+use crate::{
     RolloutMode, SamplerExecutionMode, SamplerHookResult,
     staged::{
         worker::ThreadHandle,
@@ -35,17 +35,18 @@ pub trait StagedSamplerHook {
 
 /// Mutable staged-sampler state exposed to hook implementations.
 pub struct StagedSamplerCore<E: Env> {
-    /// Inline or threaded environment workers.
-    pub pool: WorkerPool<E>,
-    /// Optional shared observation normalizer.
-    pub obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    /// Most recent, normalized observation for each environment.
-    pub last_states: ArrayHandle<E::Tensor>,
-    /// Per-environment output trajectory buffers.
-    pub buffers: Vec<TrajectoryBuffer<E::Tensor>>,
+    pool: WorkerPool<E>,
+    obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    last_states: ArrayHandle<E::Tensor>,
+    buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
 
 impl<E: Env> StagedSamplerCore<E> {
+    /// Returns the per-environment output trajectory buffers mutably.
+    pub fn buffers_mut(&mut self) -> &mut Vec<TrajectoryBuffer<E::Tensor>> {
+        &mut self.buffers
+    }
+
     /// Builds staged sampler state and its environment workers.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
@@ -203,11 +204,21 @@ impl<E: Env> StagedSamplerCore<E> {
 
 /// Observation-normalizing rollout sampler controlled by a hook.
 pub struct StagedSampler<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> {
-    pub core: StagedSamplerCore<E>,
-    pub hook: H,
+    core: StagedSamplerCore<E>,
+    hook: H,
 }
 
 impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H> {
+    /// Creates a staged sampler from its core state and hook.
+    pub fn new(core: StagedSamplerCore<E>, hook: H) -> Self {
+        Self { core, hook }
+    }
+
+    /// Returns the shared observation normalizer, when configured.
+    pub fn obs_normalizer(&self) -> Option<&ClippedNormalizer<E::Tensor>> {
+        self.core.obs_normalizer.as_ref()
+    }
+
     /// Builds a sampler with an existing shared observation normalizer.
     pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,

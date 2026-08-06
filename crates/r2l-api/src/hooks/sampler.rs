@@ -102,7 +102,7 @@ impl<E: Env<Tensor: R2lTensor>> DirectSamplerHook for StepBoundHook<E> {
         if self.steps_scheduled == self.num_steps
             && let Some(normalizer) = &mut self.reward_normalizer
         {
-            let mut buffers = core.buffers.lock().unwrap();
+            let mut buffers = core.buffers_mut().lock().unwrap();
             normalizer.normalize(&mut buffers);
         }
         self.next_result()
@@ -123,7 +123,7 @@ impl<E: Env<Tensor: R2lTensor>> StagedSamplerHook for StepBoundHook<E> {
         if self.steps_scheduled == self.num_steps
             && let Some(normalizer) = &mut self.reward_normalizer
         {
-            normalizer.normalize(&mut core.buffers);
+            normalizer.normalize(core.buffers_mut());
         }
         self.next_result()
     }

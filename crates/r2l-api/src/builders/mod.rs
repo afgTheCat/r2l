@@ -14,7 +14,7 @@ use r2l_agents::on_policy_algorithms::{
 use r2l_burn::learning_module::ActionSpacePolicyValueModule as BurnPolicyValueModule;
 use r2l_candle::learning_module::PolicyValueModule as CandlePolicyValueModule;
 use r2l_core::env::EnvDescription;
-use r2l_core::env::normalizer::{ClippedNormalizer, ClippedNormalizerInner, NormalizerMode};
+use r2l_core::env::normalizer::{ClippedNormalizer, NormalizerMode};
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     models::ActivationFunction,
@@ -30,11 +30,12 @@ use r2l_sampler::{
 };
 use serde::{Deserialize, Serialize, de::Error as _};
 
+use crate::evaluators::best_actor_evaluator::BestActorEvaluator;
 use crate::evaluators::best_actor_evaluator::EvaluationSampler;
 use crate::utils::RewardNormalizer;
 use crate::{
-    BestActorEvaluator, BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule,
-    LearningSchedule, OnPolicyCommandReceiver, TrainingArtifactsConfig,
+    BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
+    OnPolicyCommandReceiver, TrainingArtifactsConfig,
     hooks::{
         a2c::{A2CStats, DefaultA2CHook, DefaultA2CHookReporter},
         on_policy::PerformanceLog,
@@ -47,11 +48,8 @@ pub(crate) mod inference;
 pub(crate) mod normalizer;
 pub(crate) mod policy;
 
-pub use inference::{
-    InferenceActor, InferenceArtifacts, InferenceBackend, InferenceConfig,
-    InferenceObservationMode, InferenceRunner,
-};
-pub use normalizer::NormalizerBuilder;
+pub use inference::{InferenceArtifacts, InferenceRunner};
+use inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
 pub use policy::PolicyBuilder;
 
 const PERFORMANCE_FILE: &str = "performance.csv";
@@ -122,10 +120,10 @@ impl OnPolicyOptimizerLayout {
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct BurnBackendConfig;
+pub(crate) struct BurnBackendConfig;
 
 #[derive(Debug, Clone)]
-pub struct CandleBackend {
+pub(crate) struct CandleBackend {
     pub(crate) device: Device,
 }
 
@@ -187,7 +185,7 @@ enum SamplerConfiguration<E: Env> {
     StagedStep {
         rollout_steps: usize,
         reward_normalizer: Option<RewardNormalizer>,
-        clipped_normalizer_inner: Option<ClippedNormalizerInner<E::Tensor>>,
+        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     },
 }
 
@@ -487,14 +485,11 @@ impl<E: Env> Builder<E> {
             }
         });
         let obs_normalizer = if let SamplerConfiguration::StagedStep {
-            clipped_normalizer_inner: Some(inner),
+            obs_normalizer: Some(normalizer),
             ..
         } = &self.sampler_configuration
         {
-            Some(ClippedNormalizer::new2(
-                NormalizerMode::ReadOnly,
-                inner.clone(),
-            ))
+            Some(normalizer.with_mode(NormalizerMode::ReadOnly))
         } else {
             None
         };
@@ -540,22 +535,19 @@ impl<E: Env> Builder<E> {
         let SamplerConfiguration::StagedStep {
             rollout_steps,
             reward_normalizer,
-            clipped_normalizer_inner,
+            obs_normalizer,
         } = &self.sampler_configuration
         else {
             unreachable!("staged step-bound sampler type must use matching configuration")
         };
-        let obs_normalizer = clipped_normalizer_inner
+        let obs_normalizer = obs_normalizer
             .as_ref()
-            .map(|i| ClippedNormalizer::new2(NormalizerMode::Update, i.clone()));
+            .map(|normalizer| normalizer.with_mode(NormalizerMode::Update));
         let sampler_core = self
             .env_build_plan
             .build_staged_sampler_core(self.sampler_execution_mode, obs_normalizer);
         let step_bound_hook = StepBoundHook::new(*rollout_steps, reward_normalizer.clone());
-        StagedSampler {
-            core: sampler_core,
-            hook: step_bound_hook,
-        }
+        StagedSampler::new(sampler_core, step_bound_hook)
     }
 
     fn write_inference_config(&self, backend: InferenceBackend) -> anyhow::Result<()> {
@@ -564,7 +556,7 @@ impl<E: Env> Builder<E> {
         {
             let observation_mode = match &self.sampler_configuration {
                 SamplerConfiguration::StagedStep {
-                    clipped_normalizer_inner: Some(_),
+                    obs_normalizer: Some(_),
                     ..
                 } => InferenceObservationMode::Normalized,
                 _ => InferenceObservationMode::Raw,
@@ -1115,13 +1107,12 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
         mut self,
         obs_clip: Option<f32>,
     ) -> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>, E> {
-        let clipped_normalizer_inner = obs_clip.map(|clip| {
+        let obs_normalizer = obs_clip.map(|clip| {
             ClippedNormalizer::build(
                 NormalizerMode::Update,
                 clip,
                 vec![self.builder.env_desription.observation_space.size()],
             )
-            .inner
         });
         let SamplerConfiguration::DirectStep {
             rollout_steps,
@@ -1133,7 +1124,7 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
         self.builder.sampler_configuration = SamplerConfiguration::StagedStep {
             rollout_steps,
             reward_normalizer,
-            clipped_normalizer_inner,
+            obs_normalizer,
         };
         self.with_sampler(Builder::staged_sampler_step_bound)
     }
@@ -1182,10 +1173,9 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>
 
 pub type PPOAlgorithmBuilder<E> =
     OnPolicyAlgoBuilder<PPOCandle, DirectSampler<E, StepBoundHook<E>>, E>;
+
 pub type A2CAlgorithmBuilder<E> =
     OnPolicyAlgoBuilder<A2CCandle, DirectSampler<E, StepBoundHook<E>>, E>;
-pub type PPO2AlgorithmBuilder<E> = PPOAlgorithmBuilder<E>;
-pub type A2C2AlgorithmBuilder<E> = A2CAlgorithmBuilder<E>;
 
 impl<E: Env> PPOAlgorithmBuilder<E> {
     pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
