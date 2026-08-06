@@ -11,6 +11,7 @@ use r2l_core::{
     on_policy::algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime, Sampler},
     rng::set_seed,
 };
+use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{
     DirectSampler, DirectSamplerCore, SamplerExecutionMode, StagedSampler, StagedSamplerCore,
 };
@@ -19,8 +20,8 @@ use crate::evaluators::best_actor_evaluator::EvaluationSampler;
 use crate::utils::RewardNormalizer;
 use crate::{
     A2CBurnAgent, A2CCandleAgent, BestActorEvaluator, BurnBackend, BurnBackendConfig,
-    CandleBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
-    OnPolicyAgentBuilder, OnPolicyCommandReceiver, PPOBurnAgent, PPOCandleAgent,
+    CandleBackend, DefaultOnPolicyAlgorithmHooks, InferenceObservationMode, LearningRateSchedule,
+    LearningSchedule, OnPolicyAgentBuilder, OnPolicyCommandReceiver, PPOBurnAgent, PPOCandleAgent,
     PPOCandleAgentBuilder, PolicyBuilder, TrainingArtifactsConfig,
     builders::{
         a2c::hook::DefaultA2CHookBuilder,
@@ -292,14 +293,25 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn agent<AB: AgentBuilder>(&self, agent_builder: AB) -> AB::Agent {
-        agent_builder
-            .build(
-                self.env_desription.observation_size(),
-                self.env_desription.action_space.clone(),
-                self.seed,
-            )
-            .unwrap()
+    fn agent<AB: AgentBuilder>(&self, agent_builder: AB) -> anyhow::Result<AB::Agent> {
+        if let Some(config) = &self.training_artifacts_config
+            && config.inference_artifacts
+        {
+            let observation_mode = match &self.sampler_configuraion {
+                SamplerConfiguration::Staged {
+                    clipped_normalizer_inner: Some(_),
+                } => InferenceObservationMode::Normalized,
+                _ => InferenceObservationMode::Raw,
+            };
+            if let Some(inference_config) = agent_builder.inference_config(observation_mode) {
+                inference_config.write_to_dir(&config.output_dir)?;
+            }
+        }
+        agent_builder.build(
+            self.env_desription.observation_size(),
+            self.env_desription.action_space.clone(),
+            self.seed,
+        )
     }
 
     fn ppo_agent_builder<B>(
@@ -355,25 +367,25 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn ppo_candle_agent(&mut self) -> PPOCandleAgent {
+    fn ppo_candle_agent(&mut self) -> anyhow::Result<PPOCandleAgent> {
         let backend = self.candle_backend.take().unwrap();
         let agent_builder = self.ppo_agent_builder(backend);
         self.agent(agent_builder)
     }
 
-    fn ppo_burn_agent(&mut self) -> PPOBurnAgent<BurnBackend> {
+    fn ppo_burn_agent(&mut self) -> anyhow::Result<PPOBurnAgent<BurnBackend>> {
         let backend = self.burn_backend.take().unwrap();
         let agent_builder = self.ppo_agent_builder(backend);
         self.agent(agent_builder)
     }
 
-    fn a2c_candle_agent(&mut self) -> A2CCandleAgent {
+    fn a2c_candle_agent(&mut self) -> anyhow::Result<A2CCandleAgent> {
         let backend = self.candle_backend.take().unwrap();
         let agent_builder = self.a2c_agent_builder(backend);
         self.agent(agent_builder)
     }
 
-    fn a2c_burn_agent(&mut self) -> A2CBurnAgent<BurnBackend> {
+    fn a2c_burn_agent(&mut self) -> anyhow::Result<A2CBurnAgent<BurnBackend>> {
         let backend = self.burn_backend.take().unwrap();
         let agent_builder = self.a2c_agent_builder(backend);
         self.agent(agent_builder)
@@ -381,28 +393,30 @@ impl<E: Env> Builder<E> {
 }
 
 trait Buildable<E: Env> {
-    fn build(builder: &mut Builder<E>) -> Self;
+    fn build(builder: &mut Builder<E>) -> anyhow::Result<Self>
+    where
+        Self: Sized;
 }
 
 struct Config<A: Agent, S: Sampler, E: Env>(PhantomData<(A, S, E)>);
 
-struct OnPolicyAlgoBuilder<A: Agent, S: Sampler, E: Env> {
+pub struct OnPolicyAlgoBuilder<A: Agent, S: Sampler, E: Env> {
     builder: Builder<E>,
-    config: Config<A, S, E>,
+    _config: Config<A, S, E>,
 }
 
 impl<A: Agent, S: Sampler, E: Env> OnPolicyAlgoBuilder<A, S, E> {
-    fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
+    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
         Self {
             builder: Builder::new(env_builder, n_envs),
-            config: Config(PhantomData),
+            _config: Config(PhantomData),
         }
     }
 
     fn with_agent<A2: Agent>(self) -> OnPolicyAlgoBuilder<A2, S, E> {
         OnPolicyAlgoBuilder {
             builder: self.builder,
-            config: Config(PhantomData),
+            _config: Config(PhantomData),
         }
     }
 
@@ -590,6 +604,15 @@ impl<A: Agent, S: Sampler, E: Env> OnPolicyAlgoBuilder<A, S, E> {
     }
 }
 
+pub type PPO2AlgorithmBuilder<E> =
+    OnPolicyAlgoBuilder<PPOCandleAgent, DirectSampler<E, StepBoundHook<E>>, E>;
+
+impl PPO2AlgorithmBuilder<GymEnv> {
+    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Self {
+        Self::new(env_builder.into(), n_envs)
+    }
+}
+
 impl<S: Sampler, E: Env> OnPolicyAlgoBuilder<PPOCandleAgent, S, E> {
     pub fn with_candle(mut self, device: Device) -> Self {
         self.builder.candle_backend = Some(CandleBackend { device });
@@ -743,57 +766,62 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>
 }
 
 impl<E: Env> Buildable<E> for PPOCandleAgent {
-    fn build(builder: &mut Builder<E>) -> Self {
+    fn build(builder: &mut Builder<E>) -> anyhow::Result<Self> {
         builder.ppo_candle_agent()
     }
 }
 
 impl<E: Env> Buildable<E> for A2CCandleAgent {
-    fn build(builder: &mut Builder<E>) -> Self {
+    fn build(builder: &mut Builder<E>) -> anyhow::Result<Self> {
         builder.a2c_candle_agent()
     }
 }
 
 impl<E: Env> Buildable<E> for PPOBurnAgent<BurnBackend> {
-    fn build(builder: &mut Builder<E>) -> Self {
+    fn build(builder: &mut Builder<E>) -> anyhow::Result<Self> {
         builder.ppo_burn_agent()
     }
 }
 
 impl<E: Env> Buildable<E> for A2CBurnAgent<BurnBackend> {
-    fn build(builder: &mut Builder<E>) -> Self {
+    fn build(builder: &mut Builder<E>) -> anyhow::Result<Self> {
         builder.a2c_burn_agent()
     }
 }
 
 impl<E: Env> Buildable<E> for DirectSampler<E, StepBoundHook<E>> {
-    fn build(builder: &mut Builder<E>) -> Self {
-        builder.direct_sampler_step_bound()
+    fn build(builder: &mut Builder<E>) -> anyhow::Result<Self> {
+        Ok(builder.direct_sampler_step_bound())
     }
 }
 
 impl<E: Env> Buildable<E> for DirectSampler<E, EpisodeBoundHook<E>> {
-    fn build(builder: &mut Builder<E>) -> Self {
-        builder.direct_sampler_episode_bound()
+    fn build(builder: &mut Builder<E>) -> anyhow::Result<Self> {
+        Ok(builder.direct_sampler_episode_bound())
     }
 }
 
 impl<E: Env> Buildable<E> for StagedSampler<E, StepBoundHook<E>> {
-    fn build(builder: &mut Builder<E>) -> Self {
-        builder.staged_sampler_step_bound()
+    fn build(builder: &mut Builder<E>) -> anyhow::Result<Self> {
+        Ok(builder.staged_sampler_step_bound())
     }
 }
 
 impl<A: Agent + Buildable<E>, S: Sampler + Buildable<E>, E: Env<Tensor = S::Tensor>>
     OnPolicyAlgoBuilder<A, S, E>
 {
-    fn build(mut self) -> OnPolicyAlgorithm<A, S, DefaultOnPolicyAlgorithmHooks<A, S, E>> {
+    pub fn build(
+        mut self,
+    ) -> anyhow::Result<OnPolicyAlgorithm<A, S, DefaultOnPolicyAlgorithmHooks<A, S, E>>> {
         if let Some(seed) = self.builder.seed {
             set_seed(seed);
         }
-        let agent = A::build(&mut self.builder);
-        let sampler = S::build(&mut self.builder);
+        let agent = A::build(&mut self.builder)?;
+        let sampler = S::build(&mut self.builder)?;
         let hooks = self.builder.default_on_policy_hook();
-        OnPolicyAlgorithm::new(OnPolicyRuntime { agent, sampler }, hooks)
+        Ok(OnPolicyAlgorithm::new(
+            OnPolicyRuntime { agent, sampler },
+            hooks,
+        ))
     }
 }

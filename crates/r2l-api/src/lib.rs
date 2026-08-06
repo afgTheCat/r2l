@@ -23,6 +23,7 @@ pub use builders::a2c::algorithm::{
     A2CAlgorithmBuilder, A2CBurnAlgorithmBuilder, A2CCandleAlgorithmBuilder,
 };
 pub use builders::agent::{BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder};
+pub use builders::exp::{OnPolicyAlgoBuilder, PPO2AlgorithmBuilder};
 pub use builders::inference::{
     InferenceActor, InferenceArtifacts, InferenceBackend, InferenceConfig,
     InferenceObservationMode, InferenceRunner,
