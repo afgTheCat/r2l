@@ -1,7 +1,7 @@
 # Algorithms
 
 The algorithm examples show complete PPO and A2C configurations through
-`r2l-api`. They are useful when you want a runnable training loop before
+`r2l`. They are useful when you want a runnable training loop before
 customizing lower-level hooks or samplers.
 
 ## PPO
@@ -15,7 +15,7 @@ Run it from the workspace root:
 cargo run -p r2l-examples --example ppo
 ```
 
-```rust,noplayground
+```rust,ignore
 {{#include ../../../crates/r2l-examples/examples/ppo/main.rs:ppo}}
 ```
 
@@ -35,7 +35,7 @@ Run it from the workspace root:
 cargo run -p r2l-examples --example a2c
 ```
 
-```rust,noplayground
+```rust,ignore
 {{#include ../../../crates/r2l-examples/examples/a2c/main.rs:a2c}}
 ```
 

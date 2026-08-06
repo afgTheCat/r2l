@@ -1,9 +1,9 @@
 # Getting started
 
-For most applications, `r2l-api` is the main dependency. It provides complete
+For most applications, `r2l` is the main dependency. It provides complete
 PPO and A2C builders while the lower-level workspace crates define environments,
 samplers, agents, and backend integrations. This getting started guide will be
-solely using the `r2l-api` crate, which itself builds on lower-level crates. If
+solely using the `r2l` crate, which itself builds on lower-level crates. If
 the current setup does not satisfy you, the lower level hooks allow for a lot of
 hackability.
 
@@ -11,8 +11,9 @@ hackability.
 
 The shortest Gymnasium-based PPO setup is:
 
-```rust
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
+```rust,no_run
+# extern crate r2l;
+use r2l::PPOAlgorithmBuilder;
 
 fn main() {
     let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4);
@@ -33,14 +34,17 @@ We rarely want to train algorithms for the sake of it. Once an algorithm is
 learned, we are usually curious about
 
 - how the chosen hyperparameters affect learning performance
-- how can we run inference using the model
+- how to run inference using the model
 - less often, maybe we are curious about the running performance of the
   algorithm
 
-`r2l` allows saving these arrifacts using the `with_training_artifacts` builder
+`r2l` allows saving these artifacts using the `with_training_artifacts` builder
 method.
 
-```rust
+```rust,no_run
+# extern crate r2l;
+use r2l::{PPOAlgorithmBuilder, TrainingArtifactsConfig};
+
 fn main() {
     let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4);
     let artifacts_config = TrainingArtifactsConfig::new("runs/pendulum")
@@ -77,8 +81,10 @@ runs/pendulum
 Using the inference artifacts and a new environment, you can create an
 `InferenceRunner`.
 
-```rust
-use r2l_api::InferenceArtifacts;
+```rust,no_run
+# extern crate r2l;
+# extern crate r2l_gym;
+use r2l::InferenceArtifacts;
 use r2l_gym::GymEnv;
 
 fn main() {
@@ -91,15 +97,15 @@ fn main() {
 }
 ```
 
-The inference config does only describe the shape of the policy and the
-observation normalization configs. It does not hold any information regarding
-how the policy was trained.
+The inference configuration describes only the policy shape and observation
+normalization settings. It does not contain information about how the policy
+was trained.
 
 # Environments
 
 Environments implement the `Env` trait.
 
-```rust,noplayground
+```rust,ignore
 {{#include ../../crates/r2l-core/src/env/mod.rs:env}}
 ```
 
@@ -107,21 +113,21 @@ Algorithm builders receive an `EnvBuilder` rather than a concrete environment so
 that each sampler worker can construct its environment in the place where it
 runs.
 
-```rust,noplayground
+```rust,ignore
 {{#include ../../crates/r2l-core/src/env/mod.rs:env_builder}}
 ```
 
 A closure or function returning `anyhow::Result<E>` automatically implements
 `EnvBuilder`.
 
-```rust
+```rust,ignore
 let env_builder = || Ok(MyEnv);
 let ppo_builder = PPOAlgorithmBuilder::new(env_builder, 10);
 let ppo = ppo_builder.build().unwrap();
 ```
 
-For a more detailed example of how to implement the `Env` trait and the
-`EnvBuilder` traits, see the
+For a more detailed example of how to implement the `Env` and `EnvBuilder`
+traits, see the
 [environment building example](./examples/env_building.md).
 
 # Hyperparameters
@@ -140,19 +146,20 @@ that are specific to a chosen backend when following compiler suggestions.
 
 ## Rollout collection
 
-`StepHookBound::new(n)` collects `n` steps per environment for each rollout.
-`EpisodeHookBound::new(n)` collects `n` completed episodes per environment.
-Install either with `with_rollout_bound`.
+`with_rollout_steps(n)` collects `n` steps per environment for each rollout.
+`with_rollout_episodes(n)` switches to episode-bounded sampling and collects
+`n` completed episodes per environment.
 
-The default `SamplerExecutionMode::SingleThreaded` steps workers sequentially on
-the calling thread. `SamplerExecutionMode::MultiThreaded` runs workers on
-dedicated threads:
+The builders default to `SamplerExecutionMode::MultiThreaded`, which runs
+workers on dedicated threads. Use `SamplerExecutionMode::SingleThreaded` to
+step workers sequentially on the calling thread:
 
-```rust
-use r2l_api::{PPOAlgorithmBuilder, SamplerExecutionMode};
+```rust,no_run
+# extern crate r2l;
+use r2l::{PPOAlgorithmBuilder, SamplerExecutionMode};
 
 let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
-    .with_execution_mode(SamplerExecutionMode::MultiThreaded);
+    .with_execution_mode(SamplerExecutionMode::SingleThreaded);
 ```
 
 Gymnasium calls still execute under Python's interpreter lock, so threaded
@@ -175,4 +182,4 @@ configured training schedule.
 
 For the underlying traits and hook points, continue with
 [On-policy algorithms](./on_policy_algorithms.md). For exact builder methods,
-use the [`r2l-api` reference](https://docs.rs/r2l-api/0.0.2/r2l_api/).
+use the [`r2l` reference](https://docs.rs/r2l/0.0.2/r2l/).

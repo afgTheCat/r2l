@@ -13,7 +13,7 @@ This repository is a Rust workspace for reinforcement learning libraries and exa
 - `crates/r2l-examples`: runnable examples and integration demos
 - `crates/r2l-candle`: Candle-based LM integrations
 - `crates/r2l-burn`: Burn-based LM integrations
-- `crates/r2l-api`: shared API-facing types and interfaces
+- `crates/r2l`: primary user-facing builders and interfaces
 
 ## Working Style
 

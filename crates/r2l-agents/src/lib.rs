@@ -4,7 +4,7 @@
 //! PPO, and VPG together with their hook interfaces and shared rollout
 //! processing utilities.
 //!
-//! Most users interact with these algorithms through `r2l-api`, which provides
+//! Most users interact with these algorithms through `r2l`, which provides
 //! builders, backend selection, and default hooks on top of this crate.
 
 /// On-policy algorithm implementations and shared rollout-processing helpers.

@@ -4,7 +4,7 @@ use std::{
 };
 
 use candle_core::Device;
-use r2l_api::{A2CAlgorithmBuilder, LearningSchedule};
+use r2l::{A2CAlgorithmBuilder, LearningSchedule};
 
 #[allow(dead_code)]
 struct A2CTestConfig {

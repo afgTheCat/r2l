@@ -4,7 +4,7 @@ Candle-backed policies and on-policy learning modules for `r2l`.
 
 This crate implements categorical, multi-categorical, Bernoulli, and diagonal
 Gaussian policies together with joint and split policy/value learning modules.
-Most applications select this backend through `r2l-api`'s `with_candle(device)`
+Most applications select this backend through `r2l`'s `with_candle(device)`
 builder method.
 
 API documentation is available on

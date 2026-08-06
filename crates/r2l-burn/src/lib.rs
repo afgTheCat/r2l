@@ -8,7 +8,7 @@
 //!   [`OnPolicyLearningModule`](r2l_core::on_policy::learning_module::OnPolicyLearningModule)
 //!   implementations for policy/value training
 //!
-//! Most users interact with these types indirectly through `r2l-api`, but they
+//! Most users interact with these types indirectly through `r2l`, but they
 //! remain public for lower-level composition and backend-specific work.
 
 /// Burn policy implementations for supported action spaces.

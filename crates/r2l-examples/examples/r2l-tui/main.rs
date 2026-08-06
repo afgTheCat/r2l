@@ -2,7 +2,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::{f64, io, sync::mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l_api::{
+use r2l::{
     LearningSchedule, OnPolicyCommandReceiver, OnPolicyCommandSender, PPOAlgorithmBuilder,
     PPOStats, on_policy_command_channel,
 };
@@ -274,7 +274,7 @@ pub fn train_ppo(
 ) -> anyhow::Result<()> {
     let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 4)
         .with_candle(candle_core::Device::Cpu)
-        .with_execution_mode(r2l_api::SamplerExecutionMode::MultiThreaded)
+        .with_execution_mode(r2l::SamplerExecutionMode::MultiThreaded)
         .with_clip_range(0.2)
         .with_entropy_coeff(0.)
         .with_lambda(0.95)

@@ -20,7 +20,7 @@ cargo run -p r2l-examples --example env_building
 
 The full example is:
 
-```rust,noplayground
+```rust,ignore
 {{#include ../../../crates/r2l-examples/examples/env_building/main.rs:env_builders}}
 ```
 

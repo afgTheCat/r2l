@@ -1,8 +1,6 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
-use r2l_api::{
-    LearningRateSchedule, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig,
-};
+use r2l::{LearningRateSchedule, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
 use serde::{Deserialize, Deserializer, Serialize, de};
 use yaml_serde::Value;
 

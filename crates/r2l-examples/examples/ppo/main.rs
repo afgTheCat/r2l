@@ -1,5 +1,5 @@
 // ANCHOR: ppo
-use r2l_api::{InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
+use r2l::{InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
 use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";

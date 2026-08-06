@@ -6857,18 +6857,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "r2l-agents"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "derive_more",
- "r2l-core",
- "rand 0.10.2",
- "serde",
-]
-
-[[package]]
-name = "r2l-api"
+name = "r2l"
 version = "0.0.2"
 dependencies = [
  "anyhow",
@@ -6877,8 +6866,8 @@ dependencies = [
  "candle-core 0.11.0",
  "candle-nn",
  "derive_more",
+ "r2l",
  "r2l-agents",
- "r2l-api",
  "r2l-burn",
  "r2l-candle",
  "r2l-core",
@@ -6887,6 +6876,17 @@ dependencies = [
  "rand 0.10.2",
  "serde",
  "yaml_serde",
+]
+
+[[package]]
+name = "r2l-agents"
+version = "0.0.2"
+dependencies = [
+ "anyhow",
+ "derive_more",
+ "r2l-core",
+ "rand 0.10.2",
+ "serde",
 ]
 
 [[package]]
@@ -6947,8 +6947,8 @@ dependencies = [
  "egui",
  "egui_plot",
  "egui_table",
+ "r2l",
  "r2l-agents",
- "r2l-api",
  "r2l-burn",
  "r2l-candle",
  "r2l-core",
@@ -6989,7 +6989,7 @@ dependencies = [
  "anyhow",
  "clap",
  "pyo3",
- "r2l-api",
+ "r2l",
  "r2l-core",
  "r2l-gym",
  "r2l-sampler",

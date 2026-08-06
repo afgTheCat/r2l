@@ -54,30 +54,49 @@ pub use policy::PolicyBuilder;
 
 const PERFORMANCE_FILE: &str = "performance.csv";
 
+/// PPO agent produced by a Candle-backed algorithm builder.
 pub type PPOCandle = PPO<CandlePolicyValueModule, DefaultPPOHook<CandlePolicyValueModule>>;
+/// PPO agent produced by a Burn-backed algorithm builder.
 pub type PPOBurn<B> = PPO<BurnPolicyValueModule<B>, DefaultPPOHook<BurnPolicyValueModule<B>>>;
+/// A2C agent produced by a Candle-backed algorithm builder.
 pub type A2CCandle = A2C<CandlePolicyValueModule, DefaultA2CHook<CandlePolicyValueModule>>;
+/// A2C agent produced by a Burn-backed algorithm builder.
 pub type A2CBurn<B> = A2C<BurnPolicyValueModule<B>, DefaultA2CHook<BurnPolicyValueModule<B>>>;
 
+/// AdamW hyperparameters used by an on-policy learning module.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AdamWParams {
+    /// Learning rate.
     pub lr: f64,
+    /// First-moment decay coefficient.
     pub beta1: f64,
+    /// Second-moment decay coefficient.
     pub beta2: f64,
+    /// Numerical-stability term.
     pub eps: f64,
+    /// Weight-decay coefficient.
     pub weight_decay: f64,
 }
 
+/// Optimizer arrangement for the policy and value networks.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OnPolicyOptimizerLayout {
+    /// One optimizer updates both networks.
     Joint {
+        /// Optional maximum gradient norm.
         max_grad_norm: Option<f32>,
+        /// Shared AdamW parameters.
         params: AdamWParams,
     },
+    /// Policy and value networks use independent optimizers.
     Split {
+        /// Optional maximum policy gradient norm.
         policy_max_grad_norm: Option<f32>,
+        /// Policy optimizer parameters.
         policy_params: AdamWParams,
+        /// Optional maximum value gradient norm.
         value_max_grad_norm: Option<f32>,
+        /// Value optimizer parameters.
         value_params: AdamWParams,
     },
 }
@@ -98,22 +117,27 @@ impl OnPolicyOptimizerLayout {
         self
     }
 
+    /// Sets the learning rate of every optimizer in the layout.
     pub fn with_lr(self, lr: f64) -> Self {
         self.map_params(|params| params.lr = lr)
     }
 
+    /// Sets the first-moment decay of every optimizer in the layout.
     pub fn with_beta1(self, beta1: f64) -> Self {
         self.map_params(|params| params.beta1 = beta1)
     }
 
+    /// Sets the second-moment decay of every optimizer in the layout.
     pub fn with_beta2(self, beta2: f64) -> Self {
         self.map_params(|params| params.beta2 = beta2)
     }
 
+    /// Sets the numerical-stability term of every optimizer in the layout.
     pub fn with_epsilon(self, epsilon: f64) -> Self {
         self.map_params(|params| params.eps = epsilon)
     }
 
+    /// Sets the weight decay of every optimizer in the layout.
     pub fn with_weight_decay(self, weight_decay: f64) -> Self {
         self.map_params(|params| params.weight_decay = weight_decay)
     }
@@ -714,6 +738,18 @@ struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     build_sampler: fn(&Builder<E>) -> S,
 }
 
+/// Configures and builds a complete PPO or A2C training algorithm.
+///
+/// Start with [`PPOAlgorithmBuilder`] or [`A2CAlgorithmBuilder`]. Some methods,
+/// such as backend and sampler selection, return a builder with different
+/// generic arguments. The concrete state components are publicly named so such
+/// builders can be stored in and passed to user functions.
+///
+/// Both entry points default to Candle on the CPU, multi-threaded direct
+/// sampling with 1,024 steps per environment, and a training limit of 300
+/// rollouts. Shared learning defaults include `gamma = 0.98`, `lambda = 0.8`,
+/// minibatches of 64 samples, and a joint AdamW optimizer with a learning rate
+/// of `3e-4`.
 pub struct OnPolicyAlgoBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     builder: Builder<E>,
     config: Config<A, S, E>,
@@ -770,21 +806,27 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
         }
     }
 
+    /// Enables the evaluation, performance, and inference artifacts selected by `config`.
     pub fn with_training_artifacts(mut self, config: TrainingArtifactsConfig) -> Self {
         self.builder.training_artifacts_config = Some(config);
         self
     }
 
+    /// Sets the schedule that determines when training stops.
     pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
         self.builder.learning_schedule = learning_schedule;
         self
     }
 
+    /// Installs a channel for controlling a running algorithm.
     pub fn with_command_rx(mut self, command_rx: OnPolicyCommandReceiver) -> Self {
         self.builder.policy_command_rx = Some(command_rx);
         self
     }
 
+    /// Sets the learning-rate schedule applied as training progresses.
+    ///
+    /// Passing `None` leaves the optimizer at its configured learning rate.
     pub fn with_learning_rate_schedule(
         mut self,
         learning_rate_schedule: Option<LearningRateSchedule>,
@@ -793,36 +835,43 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
         self
     }
 
+    /// Sets the random seed used when the algorithm is built.
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.builder.seed = Some(seed);
         self
     }
 
+    /// Selects single-threaded or multi-threaded environment execution.
     pub fn with_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
         self.builder.sampler_execution_mode = execution_mode;
         self
     }
 
+    /// Replaces the policy-network configuration.
     pub fn with_policy_builder(mut self, policy_builder: PolicyBuilder) -> Self {
         self.builder.policy_builder = policy_builder;
         self
     }
 
+    /// Sets the hidden-layer widths of the policy network.
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
         self.builder.policy_builder.hidden_layers = policy_hidden_layers;
         self
     }
 
+    /// Sets the hidden-layer activation used by the policy and value networks.
     pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
         self.builder.policy_builder.activation_function = activation_function;
         self
     }
 
+    /// Sets the initial log standard deviation for continuous-action policies.
     pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
         self.builder.policy_builder.log_std_init = log_std_init;
         self
     }
 
+    /// Sets every optimizer's learning rate and selects a constant schedule.
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_lr(learning_rate));
@@ -830,30 +879,35 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
         self
     }
 
+    /// Sets the AdamW first-moment decay for every optimizer.
     pub fn with_beta1(mut self, beta1: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_beta1(beta1));
         self
     }
 
+    /// Sets the AdamW second-moment decay for every optimizer.
     pub fn with_beta2(mut self, beta2: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_beta2(beta2));
         self
     }
 
+    /// Sets the AdamW numerical-stability term for every optimizer.
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_epsilon(epsilon));
         self
     }
 
+    /// Sets the AdamW weight decay for every optimizer.
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_weight_decay(weight_decay));
         self
     }
 
+    /// Uses one optimizer for the policy and value networks.
     pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: AdamWParams) -> Self {
         self.builder
             .update_optimizer_layout(|_| OnPolicyOptimizerLayout::Joint {
@@ -863,6 +917,7 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
         self
     }
 
+    /// Uses independent optimizers for the policy and value networks.
     pub fn with_split(
         mut self,
         policy_max_grad_norm: Option<f32>,
@@ -880,16 +935,19 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
         self
     }
 
+    /// Sets the hidden-layer widths of the value network.
     pub fn with_value_hidden_layers(mut self, value_hidden_layers: Vec<usize>) -> Self {
         self.builder.value_hidden_layers = value_hidden_layers;
         self
     }
 
+    /// Replaces the optimizer arrangement and its parameters.
     pub fn with_optimizer_layout(mut self, optimizer_layout: OnPolicyOptimizerLayout) -> Self {
         self.builder.update_optimizer_layout(|_| optimizer_layout);
         self
     }
 
+    /// Enables or disables advantage normalization before learning.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         match &mut self.builder.algorithm_configuration {
             AlgorithmConfiguration::Ppo {
@@ -904,41 +962,49 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
         self
     }
 
+    /// Sets the entropy term coefficient in the training loss.
     pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
         self.builder.entropy_coeff = entropy_coeff;
         self
     }
 
+    /// Sets the optional value-function loss coefficient.
     pub fn with_vf_coeff(mut self, vf_coeff: Option<f32>) -> Self {
         self.builder.vf_coeff = vf_coeff;
         self
     }
 
+    /// Sets optional gradient-norm clipping in the algorithm hook.
     pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
         self.builder.gradient_clipping = gradient_clipping;
         self
     }
 
+    /// Enables or disables progress output from the learning hook.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
         self.builder.log_progress = log_progress;
         self
     }
 
+    /// Sets the reward discount factor.
     pub fn with_gamma(mut self, gamma: f32) -> Self {
         self.builder.gamma = gamma;
         self
     }
 
+    /// Sets the generalized advantage-estimation lambda.
     pub fn with_lambda(mut self, lambda: f32) -> Self {
         self.builder.lambda = lambda;
         self
     }
 
+    /// Sets the minibatch size used by learning updates.
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
         self.builder.sample_size = sample_size;
         self
     }
 
+    /// Builds the configured agent, sampler, and training lifecycle hooks.
     pub fn build(
         mut self,
     ) -> anyhow::Result<OnPolicyAlgorithm<A, S, DefaultOnPolicyAlgorithmHooks<A, S, E>>> {
@@ -956,11 +1022,13 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOCandle, S, E> {
+    /// Uses Candle on `device` for PPO learning.
     pub fn with_candle(mut self, device: Device) -> Self {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self
     }
 
+    /// Switches PPO learning to the default Burn backend.
     pub fn with_burn(mut self) -> OnPolicyAlgoBuilder<PPOBurn<BurnBackend>, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
         self.with_agent(Builder::ppo_burn_agent)
@@ -968,11 +1036,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOCandle, S, E
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOBurn<BurnBackend>, S, E> {
+    /// Switches PPO learning to Candle on `device`.
     pub fn with_candle(mut self, device: Device) -> OnPolicyAlgoBuilder<PPOCandle, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self.with_agent(Builder::ppo_candle_agent)
     }
 
+    /// Keeps PPO learning on the default Burn backend.
     pub fn with_burn(mut self) -> Self {
         self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
         self
@@ -986,6 +1056,7 @@ where
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
 {
+    /// Installs an optional channel for reporting PPO training statistics.
     pub fn with_reporter(mut self, tx: Option<Sender<PPOStats>>) -> Self {
         let AlgorithmConfiguration::Ppo { reporter, .. } =
             &mut self.builder.algorithm_configuration
@@ -996,6 +1067,7 @@ where
         self
     }
 
+    /// Sets the maximum PPO epochs performed for each rollout.
     pub fn with_total_epochs(mut self, total_epochs: usize) -> Self {
         let AlgorithmConfiguration::Ppo {
             total_epochs: configured,
@@ -1008,6 +1080,7 @@ where
         self
     }
 
+    /// Sets the optional KL-divergence threshold for stopping PPO epochs early.
     pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
         let AlgorithmConfiguration::Ppo {
             target_kl: configured,
@@ -1020,6 +1093,7 @@ where
         self
     }
 
+    /// Sets the PPO policy-ratio clipping range.
     pub fn with_clip_range(mut self, clip_range: f32) -> Self {
         let AlgorithmConfiguration::Ppo {
             clip_range: configured,
@@ -1034,11 +1108,13 @@ where
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CCandle, S, E> {
+    /// Uses Candle on `device` for A2C learning.
     pub fn with_candle(mut self, device: Device) -> Self {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self
     }
 
+    /// Switches A2C learning to the default Burn backend.
     pub fn with_burn(mut self) -> OnPolicyAlgoBuilder<A2CBurn<BurnBackend>, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
         self.with_agent(Builder::a2c_burn_agent)
@@ -1046,11 +1122,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CCandle, S, E
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CBurn<BurnBackend>, S, E> {
+    /// Switches A2C learning to Candle on `device`.
     pub fn with_candle(mut self, device: Device) -> OnPolicyAlgoBuilder<A2CCandle, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self.with_agent(Builder::a2c_candle_agent)
     }
 
+    /// Keeps A2C learning on the default Burn backend.
     pub fn with_burn(mut self) -> Self {
         self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
         self
@@ -1064,6 +1142,7 @@ where
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
 {
+    /// Installs an optional channel for reporting A2C training statistics.
     pub fn with_reporter(mut self, tx: Option<Sender<A2CStats>>) -> Self {
         let AlgorithmConfiguration::A2C { reporter, .. } =
             &mut self.builder.algorithm_configuration
@@ -1076,6 +1155,7 @@ where
 }
 
 impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>, E> {
+    /// Sets the number of steps collected per environment and rollout.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
         let SamplerConfiguration::DirectStep {
             rollout_steps: configured,
@@ -1088,6 +1168,7 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
         self
     }
 
+    /// Normalizes discounted rewards and clips them to `clip_reward`.
     pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
         let SamplerConfiguration::DirectStep {
             reward_normalizer, ..
@@ -1103,6 +1184,10 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
         self
     }
 
+    /// Selects staged sampling and optionally enables clipped observation normalization.
+    ///
+    /// `Some(clip)` enables normalization with that clipping limit. `None`
+    /// retains staged sampling without applying an observation normalizer.
     pub fn with_observation_normalizer(
         mut self,
         obs_clip: Option<f32>,
@@ -1129,6 +1214,7 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
         self.with_sampler(Builder::staged_sampler_step_bound)
     }
 
+    /// Selects direct sampling bounded by completed episodes per environment.
     pub fn with_rollout_episodes(
         mut self,
         rollout_episodes: usize,
@@ -1143,6 +1229,7 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
 }
 
 impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>, E> {
+    /// Sets the number of steps collected per environment and rollout.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
         let SamplerConfiguration::StagedStep {
             rollout_steps: configured,
@@ -1155,6 +1242,7 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>
         self
     }
 
+    /// Normalizes discounted rewards and clips them to `clip_reward`.
     pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
         let SamplerConfiguration::StagedStep {
             reward_normalizer, ..
@@ -1171,13 +1259,16 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>
     }
 }
 
+/// Default PPO builder using Candle and direct, step-bounded sampling.
 pub type PPOAlgorithmBuilder<E> =
     OnPolicyAlgoBuilder<PPOCandle, DirectSampler<E, StepBoundHook<E>>, E>;
 
+/// Default A2C builder using Candle and direct, step-bounded sampling.
 pub type A2CAlgorithmBuilder<E> =
     OnPolicyAlgoBuilder<A2CCandle, DirectSampler<E, StepBoundHook<E>>, E>;
 
 impl<E: Env> PPOAlgorithmBuilder<E> {
+    /// Creates a PPO builder using `n_envs` homogeneous environments.
     pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
         Self::configured(
             env_builder,
@@ -1203,6 +1294,7 @@ impl<E: Env> PPOAlgorithmBuilder<E> {
 }
 
 impl<E: Env> A2CAlgorithmBuilder<E> {
+    /// Creates an A2C builder using `n_envs` homogeneous environments.
     pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
         Self::configured(
             env_builder,
@@ -1225,12 +1317,14 @@ impl<E: Env> A2CAlgorithmBuilder<E> {
 }
 
 impl PPOAlgorithmBuilder<GymEnv> {
+    /// Creates a PPO builder for a Gymnasium environment.
     pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Self {
         Self::new(env_builder.into(), n_envs)
     }
 }
 
 impl A2CAlgorithmBuilder<GymEnv> {
+    /// Creates an A2C builder for a Gymnasium environment.
     pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Self {
         Self::new(env_builder.into(), n_envs)
     }

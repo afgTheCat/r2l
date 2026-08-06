@@ -5,7 +5,7 @@ use std::{
 };
 
 use candle_core::Device;
-use r2l_api::{A2CAlgorithmBuilder, A2CStats, LearningSchedule, SamplerExecutionMode};
+use r2l::{A2CAlgorithmBuilder, A2CStats, LearningSchedule, SamplerExecutionMode};
 
 fn main() {
     let (update_tx, update_rx): (Sender<A2CStats>, Receiver<A2CStats>) = mpsc::channel();

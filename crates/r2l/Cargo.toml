@@ -1,5 +1,5 @@
 [package]
-name = "r2l-api"
+name = "r2l"
 version.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -34,4 +34,4 @@ cuda = [
 ]
 
 [dev-dependencies]
-r2l-api = { path = ".", features = ["test-utils"] }
+r2l = { path = ".", features = ["test-utils"] }

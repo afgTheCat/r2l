@@ -7,7 +7,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-r2l-api = { workspace = true }
+r2l = { workspace = true }
 r2l-core = { workspace = true }
 r2l-gym = { workspace = true }
 r2l-sampler = { workspace = true }

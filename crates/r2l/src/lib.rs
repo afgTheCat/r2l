@@ -3,6 +3,19 @@
 //! Most users should start with [`PPOAlgorithmBuilder`] or
 //! [`A2CAlgorithmBuilder`]. These builders combine an environment, sampler,
 //! backend-specific agent, training schedule, and optional evaluator.
+//!
+//! ```no_run
+//! use r2l::{LearningSchedule, PPOAlgorithmBuilder};
+//!
+//! let mut algorithm = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
+//!     .with_rollout_steps(1024)
+//!     .with_learning_schedule(LearningSchedule::total_step_bound(100_000))
+//!     .build()
+//!     .unwrap();
+//! algorithm.train().unwrap();
+//! ```
+
+#![warn(missing_docs)]
 
 use burn::backend::{Autodiff, NdArray};
 

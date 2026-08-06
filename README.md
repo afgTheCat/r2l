@@ -10,7 +10,7 @@ With `gymnasium` installed, a complete training and inference workflow looks
 like this:
 
 ```rust,no_run
-use r2l_api::{
+use r2l::{
     InferenceArtifacts, LearningSchedule, TrainingArtifactsConfig,
     PPOAlgorithmBuilder,
 };
@@ -49,7 +49,7 @@ SafeTensors weights, and observation-normalizer state when normalization is
 enabled. Run this example from the workspace root with:
 
 ```text
-cargo run -p r2l-examples --example ppo-inference
+cargo run -p r2l-examples --example ppo
 ```
 
 For more information, read the [book](https://afgthecat.github.io/r2l/).
