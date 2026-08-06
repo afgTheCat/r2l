@@ -5,7 +5,7 @@ use burn::{
     grad_clipping::GradientClippingConfig, optim::AdamWConfig, prelude::Backend,
     tensor::backend::AutodiffBackend,
 };
-use candle_core::Device;
+use candle_core::{Device, DeviceLocation};
 use candle_nn::ParamsAdamW;
 use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
@@ -28,15 +28,13 @@ use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{
     DirectSampler, DirectSamplerCore, SamplerExecutionMode, StagedSampler, StagedSamplerCore,
 };
+use serde::{Deserialize, Serialize, de::Error as _};
 
 use crate::evaluators::best_actor_evaluator::EvaluationSampler;
 use crate::utils::RewardNormalizer;
 use crate::{
-    BestActorEvaluator, BurnBackend, BurnBackendConfig, CandleBackend,
-    DefaultOnPolicyAlgorithmHooks, InferenceBackend, InferenceConfig, InferenceObservationMode,
-    LearningRateSchedule, LearningSchedule, OnPolicyCommandReceiver, PolicyBuilder,
-    TrainingArtifactsConfig,
-    builders::learning_module::{AdamWParams, OnPolicyOptimizerLayout},
+    BestActorEvaluator, BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule,
+    LearningSchedule, OnPolicyCommandReceiver, TrainingArtifactsConfig,
     hooks::{
         a2c::{A2CStats, DefaultA2CHook, DefaultA2CHookReporter},
         on_policy::PerformanceLog,
@@ -45,6 +43,17 @@ use crate::{
 };
 use crate::{EpisodeBoundHook, StepBoundHook};
 
+pub(crate) mod inference;
+pub(crate) mod normalizer;
+pub(crate) mod policy;
+
+pub use inference::{
+    InferenceActor, InferenceArtifacts, InferenceBackend, InferenceConfig,
+    InferenceObservationMode, InferenceRunner,
+};
+pub use normalizer::NormalizerBuilder;
+pub use policy::PolicyBuilder;
+
 const PERFORMANCE_FILE: &str = "performance.csv";
 
 pub type PPOCandle = PPO<CandlePolicyValueModule, DefaultPPOHook<CandlePolicyValueModule>>;
@@ -52,15 +61,130 @@ pub type PPOBurn<B> = PPO<BurnPolicyValueModule<B>, DefaultPPOHook<BurnPolicyVal
 pub type A2CCandle = A2C<CandlePolicyValueModule, DefaultA2CHook<CandlePolicyValueModule>>;
 pub type A2CBurn<B> = A2C<BurnPolicyValueModule<B>, DefaultA2CHook<BurnPolicyValueModule<B>>>;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AdamWParams {
+    pub lr: f64,
+    pub beta1: f64,
+    pub beta2: f64,
+    pub eps: f64,
+    pub weight_decay: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum OnPolicyOptimizerLayout {
+    Joint {
+        max_grad_norm: Option<f32>,
+        params: AdamWParams,
+    },
+    Split {
+        policy_max_grad_norm: Option<f32>,
+        policy_params: AdamWParams,
+        value_max_grad_norm: Option<f32>,
+        value_params: AdamWParams,
+    },
+}
+
+impl OnPolicyOptimizerLayout {
+    fn map_params(mut self, mut update: impl FnMut(&mut AdamWParams)) -> Self {
+        match &mut self {
+            Self::Joint { params, .. } => update(params),
+            Self::Split {
+                policy_params,
+                value_params,
+                ..
+            } => {
+                update(policy_params);
+                update(value_params);
+            }
+        }
+        self
+    }
+
+    pub fn with_lr(self, lr: f64) -> Self {
+        self.map_params(|params| params.lr = lr)
+    }
+
+    pub fn with_beta1(self, beta1: f64) -> Self {
+        self.map_params(|params| params.beta1 = beta1)
+    }
+
+    pub fn with_beta2(self, beta2: f64) -> Self {
+        self.map_params(|params| params.beta2 = beta2)
+    }
+
+    pub fn with_epsilon(self, epsilon: f64) -> Self {
+        self.map_params(|params| params.eps = epsilon)
+    }
+
+    pub fn with_weight_decay(self, weight_decay: f64) -> Self {
+        self.map_params(|params| params.weight_decay = weight_decay)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct BurnBackendConfig;
+
+#[derive(Debug, Clone)]
+pub struct CandleBackend {
+    pub(crate) device: Device,
+}
+
+#[derive(Serialize, Deserialize)]
+enum CandleDeviceConfig {
+    Cpu,
+    Cuda { ordinal: usize },
+    Metal { ordinal: usize },
+}
+
+impl Serialize for CandleBackend {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let device = match self.device.location() {
+            DeviceLocation::Cpu => CandleDeviceConfig::Cpu,
+            DeviceLocation::Cuda { gpu_id } => CandleDeviceConfig::Cuda { ordinal: gpu_id },
+            DeviceLocation::Metal { gpu_id } => CandleDeviceConfig::Metal { ordinal: gpu_id },
+        };
+        device.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for CandleBackend {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let device = match CandleDeviceConfig::deserialize(deserializer)? {
+            CandleDeviceConfig::Cpu => Device::Cpu,
+            CandleDeviceConfig::Cuda { ordinal } => {
+                Device::new_cuda(ordinal).map_err(D::Error::custom)?
+            }
+            CandleDeviceConfig::Metal { ordinal } => {
+                Device::new_metal(ordinal).map_err(D::Error::custom)?
+            }
+        };
+        Ok(Self { device })
+    }
+}
+
+impl CandleBackend {
+    fn seed(&self, seed: u64) {
+        if !matches!(&self.device, Device::Cpu) {
+            self.device.set_seed(seed).unwrap();
+        }
+    }
+}
+
 enum SamplerConfiguration<E: Env> {
-    DirectStepBound {
+    DirectStep {
         rollout_steps: usize,
         reward_normalizer: Option<RewardNormalizer>,
     },
-    DirectEpisodeBound {
+    DirectEpisode {
         rollout_episodes: usize,
     },
-    StagedStepBound {
+    StagedStep {
         rollout_steps: usize,
         reward_normalizer: Option<RewardNormalizer>,
         clipped_normalizer_inner: Option<ClippedNormalizerInner<E::Tensor>>,
@@ -73,7 +197,7 @@ enum BackendConfiguration {
 }
 
 enum AlgorithmConfiguration {
-    PPO {
+    Ppo {
         normalize_advantage: Option<bool>,
         total_epochs: usize,
         target_kl: Option<f32>,
@@ -362,7 +486,7 @@ impl<E: Env> Builder<E> {
                 rollout: 0,
             }
         });
-        let obs_normalizer = if let SamplerConfiguration::StagedStepBound {
+        let obs_normalizer = if let SamplerConfiguration::StagedStep {
             clipped_normalizer_inner: Some(inner),
             ..
         } = &self.sampler_configuration
@@ -386,7 +510,7 @@ impl<E: Env> Builder<E> {
     }
 
     fn direct_sampler_step_bound(&self) -> DirectSampler<E, StepBoundHook<E>> {
-        let SamplerConfiguration::DirectStepBound {
+        let SamplerConfiguration::DirectStep {
             rollout_steps,
             reward_normalizer,
         } = &self.sampler_configuration
@@ -401,8 +525,7 @@ impl<E: Env> Builder<E> {
     }
 
     fn direct_sampler_episode_bound(&self) -> DirectSampler<E, EpisodeBoundHook<E>> {
-        let SamplerConfiguration::DirectEpisodeBound { rollout_episodes } =
-            &self.sampler_configuration
+        let SamplerConfiguration::DirectEpisode { rollout_episodes } = &self.sampler_configuration
         else {
             unreachable!("direct episode-bound sampler type must use matching configuration")
         };
@@ -414,7 +537,7 @@ impl<E: Env> Builder<E> {
     }
 
     fn staged_sampler_step_bound(&self) -> StagedSampler<E, StepBoundHook<E>> {
-        let SamplerConfiguration::StagedStepBound {
+        let SamplerConfiguration::StagedStep {
             rollout_steps,
             reward_normalizer,
             clipped_normalizer_inner,
@@ -440,7 +563,7 @@ impl<E: Env> Builder<E> {
             && config.inference_artifacts
         {
             let observation_mode = match &self.sampler_configuration {
-                SamplerConfiguration::StagedStepBound {
+                SamplerConfiguration::StagedStep {
                     clipped_normalizer_inner: Some(_),
                     ..
                 } => InferenceObservationMode::Normalized,
@@ -454,7 +577,7 @@ impl<E: Env> Builder<E> {
     }
 
     fn ppo_hook<M>(&mut self) -> DefaultPPOHook<M> {
-        let AlgorithmConfiguration::PPO {
+        let AlgorithmConfiguration::Ppo {
             normalize_advantage,
             total_epochs,
             target_kl,
@@ -500,7 +623,7 @@ impl<E: Env> Builder<E> {
     }
 
     fn ppo_params(&self) -> PPOParams {
-        let AlgorithmConfiguration::PPO { clip_range, .. } = &self.algorithm_configuration else {
+        let AlgorithmConfiguration::Ppo { clip_range, .. } = &self.algorithm_configuration else {
             unreachable!("PPO agent type must use PPO configuration")
         };
         PPOParams {
@@ -777,7 +900,7 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
 
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         match &mut self.builder.algorithm_configuration {
-            AlgorithmConfiguration::PPO {
+            AlgorithmConfiguration::Ppo {
                 normalize_advantage: configured,
                 ..
             }
@@ -872,7 +995,7 @@ where
     E: Env<Tensor = S::Tensor>,
 {
     pub fn with_reporter(mut self, tx: Option<Sender<PPOStats>>) -> Self {
-        let AlgorithmConfiguration::PPO { reporter, .. } =
+        let AlgorithmConfiguration::Ppo { reporter, .. } =
             &mut self.builder.algorithm_configuration
         else {
             unreachable!("PPO agent type must use PPO configuration")
@@ -882,7 +1005,7 @@ where
     }
 
     pub fn with_total_epochs(mut self, total_epochs: usize) -> Self {
-        let AlgorithmConfiguration::PPO {
+        let AlgorithmConfiguration::Ppo {
             total_epochs: configured,
             ..
         } = &mut self.builder.algorithm_configuration
@@ -894,7 +1017,7 @@ where
     }
 
     pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
-        let AlgorithmConfiguration::PPO {
+        let AlgorithmConfiguration::Ppo {
             target_kl: configured,
             ..
         } = &mut self.builder.algorithm_configuration
@@ -906,7 +1029,7 @@ where
     }
 
     pub fn with_clip_range(mut self, clip_range: f32) -> Self {
-        let AlgorithmConfiguration::PPO {
+        let AlgorithmConfiguration::Ppo {
             clip_range: configured,
             ..
         } = &mut self.builder.algorithm_configuration
@@ -962,7 +1085,7 @@ where
 
 impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>, E> {
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
-        let SamplerConfiguration::DirectStepBound {
+        let SamplerConfiguration::DirectStep {
             rollout_steps: configured,
             ..
         } = &mut self.builder.sampler_configuration
@@ -974,7 +1097,7 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
     }
 
     pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
-        let SamplerConfiguration::DirectStepBound {
+        let SamplerConfiguration::DirectStep {
             reward_normalizer, ..
         } = &mut self.builder.sampler_configuration
         else {
@@ -1000,14 +1123,14 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
             )
             .inner
         });
-        let SamplerConfiguration::DirectStepBound {
+        let SamplerConfiguration::DirectStep {
             rollout_steps,
             reward_normalizer,
         } = self.builder.sampler_configuration
         else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
-        self.builder.sampler_configuration = SamplerConfiguration::StagedStepBound {
+        self.builder.sampler_configuration = SamplerConfiguration::StagedStep {
             rollout_steps,
             reward_normalizer,
             clipped_normalizer_inner,
@@ -1019,19 +1142,18 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
         mut self,
         rollout_episodes: usize,
     ) -> OnPolicyAlgoBuilder<A, DirectSampler<E, EpisodeBoundHook<E>>, E> {
-        let SamplerConfiguration::DirectStepBound { .. } = self.builder.sampler_configuration
-        else {
+        let SamplerConfiguration::DirectStep { .. } = self.builder.sampler_configuration else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
         self.builder.sampler_configuration =
-            SamplerConfiguration::DirectEpisodeBound { rollout_episodes };
+            SamplerConfiguration::DirectEpisode { rollout_episodes };
         self.with_sampler(Builder::direct_sampler_episode_bound)
     }
 }
 
 impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>, E> {
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
-        let SamplerConfiguration::StagedStepBound {
+        let SamplerConfiguration::StagedStep {
             rollout_steps: configured,
             ..
         } = &mut self.builder.sampler_configuration
@@ -1043,7 +1165,7 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>
     }
 
     pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
-        let SamplerConfiguration::StagedStepBound {
+        let SamplerConfiguration::StagedStep {
             reward_normalizer, ..
         } = &mut self.builder.sampler_configuration
         else {
@@ -1058,17 +1180,19 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>
     }
 }
 
-pub type PPO2AlgorithmBuilder<E> =
+pub type PPOAlgorithmBuilder<E> =
     OnPolicyAlgoBuilder<PPOCandle, DirectSampler<E, StepBoundHook<E>>, E>;
-pub type A2C2AlgorithmBuilder<E> =
+pub type A2CAlgorithmBuilder<E> =
     OnPolicyAlgoBuilder<A2CCandle, DirectSampler<E, StepBoundHook<E>>, E>;
+pub type PPO2AlgorithmBuilder<E> = PPOAlgorithmBuilder<E>;
+pub type A2C2AlgorithmBuilder<E> = A2CAlgorithmBuilder<E>;
 
-impl<E: Env> PPO2AlgorithmBuilder<E> {
+impl<E: Env> PPOAlgorithmBuilder<E> {
     pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
         Self::configured(
             env_builder,
             n_envs,
-            AlgorithmConfiguration::PPO {
+            AlgorithmConfiguration::Ppo {
                 normalize_advantage: None,
                 total_epochs: 10,
                 target_kl: None,
@@ -1078,7 +1202,7 @@ impl<E: Env> PPO2AlgorithmBuilder<E> {
             BackendConfiguration::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
-            SamplerConfiguration::DirectStepBound {
+            SamplerConfiguration::DirectStep {
                 rollout_steps: 1024,
                 reward_normalizer: None,
             },
@@ -1088,7 +1212,7 @@ impl<E: Env> PPO2AlgorithmBuilder<E> {
     }
 }
 
-impl<E: Env> A2C2AlgorithmBuilder<E> {
+impl<E: Env> A2CAlgorithmBuilder<E> {
     pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
         Self::configured(
             env_builder,
@@ -1100,7 +1224,7 @@ impl<E: Env> A2C2AlgorithmBuilder<E> {
             BackendConfiguration::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
-            SamplerConfiguration::DirectStepBound {
+            SamplerConfiguration::DirectStep {
                 rollout_steps: 1024,
                 reward_normalizer: None,
             },
@@ -1110,13 +1234,13 @@ impl<E: Env> A2C2AlgorithmBuilder<E> {
     }
 }
 
-impl PPO2AlgorithmBuilder<GymEnv> {
+impl PPOAlgorithmBuilder<GymEnv> {
     pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Self {
         Self::new(env_builder.into(), n_envs)
     }
 }
 
-impl A2C2AlgorithmBuilder<GymEnv> {
+impl A2CAlgorithmBuilder<GymEnv> {
     pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Self {
         Self::new(env_builder.into(), n_envs)
     }

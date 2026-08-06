@@ -5,9 +5,7 @@ use std::{
 };
 
 use candle_core::Device;
-use r2l_api::{
-    A2CAlgorithmBuilder, A2CStats, LearningSchedule, SamplerExecutionMode, StepHookBound,
-};
+use r2l_api::{A2CAlgorithmBuilder, A2CStats, LearningSchedule, SamplerExecutionMode};
 
 fn main() {
     let (update_tx, update_rx): (Sender<A2CStats>, Receiver<A2CStats>) = mpsc::channel();
@@ -17,7 +15,7 @@ fn main() {
         .with_seed(0)
         .with_entropy_coeff(0.2)
         .with_gradient_clipping(Some(0.5))
-        .with_rollout_bound(StepHookBound::new(2048))
+        .with_rollout_steps(2048)
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_learning_schedule(LearningSchedule::rollout_bound(300))
         .with_reporter(Some(update_tx));

@@ -222,7 +222,7 @@ impl DefaultPPOHookReporter {
     }
 }
 
-/// Default training hook used by [`PPOAgentBuilder`](crate::PPOAgentBuilder).
+/// Default training hook used by [`PPOAlgorithmBuilder`](crate::PPOAlgorithmBuilder).
 ///
 /// This hook applies the crate's standard PPO training behavior: advantage
 /// normalization when enabled, repeated PPO epochs, optional value-loss

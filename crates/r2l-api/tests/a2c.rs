@@ -4,7 +4,7 @@ use std::{
 };
 
 use candle_core::Device;
-use r2l_api::{A2CAlgorithmBuilder, LearningSchedule, StepHookBound};
+use r2l_api::{A2CAlgorithmBuilder, LearningSchedule};
 
 #[allow(dead_code)]
 struct A2CTestConfig {
@@ -33,7 +33,7 @@ fn configure_candle_a2c_test(config: A2CTestConfig) {
         .with_entropy_coeff(config.entropy_coeff)
         .with_lambda(config.gae_lambda)
         .with_gamma(config.gamma)
-        .with_rollout_bound(StepHookBound::new(config.n_steps))
+        .with_rollout_steps(config.n_steps)
         .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps))
         .with_reporter(Some(update_tx));
 

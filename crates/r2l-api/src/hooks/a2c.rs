@@ -198,7 +198,7 @@ impl DefaultA2CHookReporter {
     }
 }
 
-/// Default training hook used by [`A2CAgentBuilder`](crate::A2CAgentBuilder).
+/// Default training hook used by [`A2CAlgorithmBuilder`](crate::A2CAlgorithmBuilder).
 ///
 /// This hook applies the crate's standard A2C training behavior:
 /// advantage normalization when enabled, optional value-loss weighting,

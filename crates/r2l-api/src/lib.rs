@@ -8,7 +8,7 @@ use burn::backend::{Autodiff, NdArray};
 
 // builders + hooks + higher level helpers
 mod agents;
-mod builders;
+// mod builders;
 mod builders2;
 mod evaluators;
 mod hooks;
@@ -19,29 +19,30 @@ pub type BurnBackend = Autodiff<NdArray>;
 
 pub use agents::a2c::{A2CBurnAgent, A2CCandleAgent};
 pub use agents::ppo::{PPOBurnAgent, PPOCandleAgent};
-pub use builders::a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder};
-pub use builders::a2c::algorithm::{
-    A2CAlgorithmBuilder, A2CBurnAlgorithmBuilder, A2CCandleAlgorithmBuilder,
-};
-pub use builders::agent::{BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder};
-pub use builders::inference::{
+// pub use builders::a2c::agent::{A2CAgentBuilder, A2CBurnAgentBuilder, A2CCandleAgentBuilder};
+// pub use builders::a2c::algorithm::{
+//     A2CAlgorithmBuilder, A2CBurnAlgorithmBuilder, A2CCandleAlgorithmBuilder,
+// };
+// pub use builders::agent::{BurnBackendConfig, CandleBackend, OnPolicyAgentBuilder};
+// pub use builders::learning_module::OnPolicyOptimizerLayout;
+// pub use builders::normalizer::NormalizerBuilder;
+// pub use builders::on_policy::OnPolicyAlgorithmBuilder;
+// pub use builders::policy::PolicyBuilder;
+// pub use builders::ppo::agent::{PPOAgentBuilder, PPOBurnAgentBuilder, PPOCandleAgentBuilder};
+// pub use builders::ppo::algorithm::{
+//     PPOAlgorithmBuilder, PPOBurnAlgorithmBuilder, PPOCandleAlgorithmBuilder,
+// };
+// pub use builders::sampler::{
+//     BuiltSampler, ConfiguredSamplerBuilder, DefaultSamplerBuilder, DirectSamplerSelection,
+//     SamplerBuilder, StagedSamplerSelection,
+// };
+// pub use builders::sampler::{EpisodeHookBound, StepHookBound};
+pub use builders2::{
+    A2C2AlgorithmBuilder, A2CAlgorithmBuilder, AdamWParams, BurnBackendConfig, CandleBackend,
     InferenceActor, InferenceArtifacts, InferenceBackend, InferenceConfig,
-    InferenceObservationMode, InferenceRunner,
+    InferenceObservationMode, InferenceRunner, NormalizerBuilder, OnPolicyAlgoBuilder,
+    OnPolicyOptimizerLayout, PPO2AlgorithmBuilder, PPOAlgorithmBuilder, PolicyBuilder,
 };
-pub use builders::learning_module::OnPolicyOptimizerLayout;
-pub use builders::normalizer::NormalizerBuilder;
-pub use builders::on_policy::OnPolicyAlgorithmBuilder;
-pub use builders::policy::PolicyBuilder;
-pub use builders::ppo::agent::{PPOAgentBuilder, PPOBurnAgentBuilder, PPOCandleAgentBuilder};
-pub use builders::ppo::algorithm::{
-    PPOAlgorithmBuilder, PPOBurnAlgorithmBuilder, PPOCandleAlgorithmBuilder,
-};
-pub use builders::sampler::{
-    BuiltSampler, ConfiguredSamplerBuilder, DefaultSamplerBuilder, DirectSamplerSelection,
-    SamplerBuilder, StagedSamplerSelection,
-};
-pub use builders::sampler::{EpisodeHookBound, StepHookBound};
-pub use builders2::{A2C2AlgorithmBuilder, OnPolicyAlgoBuilder, PPO2AlgorithmBuilder};
 pub use evaluators::best_actor_evaluator::{
     BestActorEvaluator, EvaluationSettings, TrainingArtifactsConfig,
 };

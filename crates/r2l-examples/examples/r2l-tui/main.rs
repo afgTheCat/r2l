@@ -4,7 +4,7 @@ use std::{f64, io, sync::mpsc};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l_api::{
     LearningSchedule, OnPolicyCommandReceiver, OnPolicyCommandSender, PPOAlgorithmBuilder,
-    PPOStats, StepHookBound, on_policy_command_channel,
+    PPOStats, on_policy_command_channel,
 };
 use r2l_examples::EventBox;
 use ratatui::layout::Alignment;
@@ -280,7 +280,7 @@ pub fn train_ppo(
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
-        .with_rollout_bound(StepHookBound::new(1024))
+        .with_rollout_steps(1024)
         .with_total_epochs(10)
         .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
         .with_log_progress(false)
