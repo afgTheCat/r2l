@@ -16,3 +16,6 @@ yaml_serde = { workspace = true }
 anyhow = { workspace = true }
 clap = { version = "4.5.60", features = ["derive"] }
 pyo3 = { version = "0.24.1", features = ["auto-initialize"] }
+
+[lints]
+workspace = true

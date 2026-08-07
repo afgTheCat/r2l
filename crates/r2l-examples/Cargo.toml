@@ -30,5 +30,8 @@ anyhow = { workspace = true }
 r2l-sampler = { workspace = true }
 burn-store = { workspace = true }
 
+[lints]
+workspace = true
+
 [[example]]
 name = "r2l-tui"
