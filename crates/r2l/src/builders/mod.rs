@@ -1,5 +1,4 @@
-use std::io::Write;
-use std::{fs::File, marker::PhantomData, sync::mpsc::Sender, time::Instant};
+use std::{marker::PhantomData, sync::mpsc::Sender};
 
 use burn::{
     grad_clipping::GradientClippingConfig, optim::AdamWConfig, prelude::Backend,
@@ -38,7 +37,6 @@ use crate::{
     OnPolicyCommandReceiver, TrainingArtifactsConfig,
     hooks::{
         a2c::{A2CStats, DefaultA2CHook, DefaultA2CHookReporter},
-        on_policy::PerformanceLog,
         ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPOStats, TargetKl},
     },
 };
@@ -51,8 +49,6 @@ pub(crate) mod policy;
 pub use inference::{InferenceArtifacts, InferenceRunner};
 use inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
 pub use policy::PolicyBuilder;
-
-const PERFORMANCE_FILE: &str = "performance.csv";
 
 /// PPO agent produced by a Candle-backed algorithm builder.
 pub type PPOCandle = PPO<CandlePolicyValueModule, DefaultPPOHook<CandlePolicyValueModule>>;
@@ -489,25 +485,6 @@ impl<E: Env> Builder<E> {
     fn default_on_policy_hook<A: Agent, S: Sampler<Tensor = E::Tensor>>(
         mut self,
     ) -> DefaultOnPolicyAlgorithmHooks<A, S, E> {
-        let performance_log = self.training_artifacts_config.as_ref().map(|config| -> _ {
-            let output_dir = config.output_dir.clone();
-            std::fs::create_dir_all(&output_dir).unwrap();
-            let mut file = File::create(output_dir.join(PERFORMANCE_FILE)).unwrap();
-            writeln!(
-                file,
-                "rollout,collect_ms,learn_ms,evaluate_ms,rollout_ms,total_ms"
-            )
-            .unwrap();
-            let now = Instant::now();
-            PerformanceLog {
-                file,
-                training_started: now,
-                rollout_started: now,
-                phase_started: now,
-                collect_ms: 0.0,
-                rollout: 0,
-            }
-        });
         let obs_normalizer = if let SamplerConfiguration::StagedStep {
             obs_normalizer: Some(normalizer),
             ..
@@ -518,12 +495,15 @@ impl<E: Env> Builder<E> {
             None
         };
         let evaluator = self.evaluator::<A>(obs_normalizer);
+        let performance_log = self
+            .training_artifacts_config
+            .and_then(|c| c.into_performance_metrics());
         DefaultOnPolicyAlgorithmHooks {
             learning_schedule: self.learning_schedule,
             learning_rate_schedule: self.learning_rate_schedule,
             evaluator,
             performance_log,
-            command_rx: self.policy_command_rx.take(),
+            command_rx: self.policy_command_rx,
             _phantom: PhantomData,
         }
     }

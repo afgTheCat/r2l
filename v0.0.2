@@ -24,6 +24,6 @@
 [x] Support configurable initial log standard deviation for continuous policies (`log_std_init`)
 [x] Support linear learning-rate schedules
 [x] Have the same kind of results as stable baselines + status for the envs
-[ ] Add safetensor serialization for Candle multi-categorical, Bernoulli, and composite policies
-[ ] Encode enough policy-kind metadata for `CandlePolicyKind::from_bytes` to restore every supported variant unambiguously
+[x] Add safetensor serialization for Candle multi-categorical, Bernoulli, and composite policies
+[x] Encode enough policy-kind metadata for `CandlePolicyKind::from_bytes` to restore every supported variant unambiguously
 [ ] Design scalable backend- and device-aware tensor conversion so `ActorWrapper` can place observations on CUDA or Metal instead of always constructing Candle tensors on the CPU

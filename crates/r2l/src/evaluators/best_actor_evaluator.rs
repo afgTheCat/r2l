@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::io::Write;
+use std::{fs::File, path::PathBuf, time::Instant};
 
 use anyhow::Result;
 use r2l_core::{
@@ -17,7 +18,7 @@ use crate::{
         inference::{ACTOR_FILE, NORMALIZER_FILE},
         normalizer::NormalizerBuilder,
     },
-    hooks::sampler::EpisodeBoundHook,
+    hooks::{on_policy::PerformanceLog, sampler::EpisodeBoundHook},
 };
 
 fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
@@ -31,6 +32,7 @@ fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
 }
 
 const EVALUATIONS_FILE: &str = "evaluations.csv";
+const PERFORMANCE_FILE: &str = "performance.csv";
 
 pub(crate) enum EvaluationSampler<E: Env> {
     Direct(DirectSampler<E, EpisodeBoundHook<E>>),
@@ -217,6 +219,28 @@ impl TrainingArtifactsConfig {
             best_obs_normalizer: None,
             eval_states: vec![],
         }
+    }
+    pub(crate) fn into_performance_metrics(self) -> Option<PerformanceLog> {
+        if !self.performance_metrics {
+            return None;
+        }
+        let output_dir = self.output_dir.clone();
+        std::fs::create_dir_all(&output_dir).unwrap();
+        let mut file = File::create(output_dir.join(PERFORMANCE_FILE)).unwrap();
+        writeln!(
+            file,
+            "rollout,collect_ms,learn_ms,evaluate_ms,rollout_ms,total_ms"
+        )
+        .unwrap();
+        let now = Instant::now();
+        Some(PerformanceLog {
+            file,
+            training_started: now,
+            rollout_started: now,
+            phase_started: now,
+            collect_ms: 0.0,
+            rollout: 0,
+        })
     }
 }
 
