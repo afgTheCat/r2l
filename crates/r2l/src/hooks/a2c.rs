@@ -8,15 +8,15 @@ use r2l_agents::on_policy_algorithms::{
     a2c::{A2CBatchData, A2CHook, A2CParams},
 };
 use r2l_burn::learning_module::{
-    BurnPolicy, PolicyValueLosses as BurnPolicyValueLosses,
-    PolicyValueModule as BurnPolicyValueModule,
+    BurnPolicy, PolicyValueLearner as BurnPolicyValueLearner,
+    PolicyValueLosses as BurnPolicyValueLosses,
 };
 use r2l_candle::learning_module::{
-    PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
+    PolicyValueLearner as CandlePolicyValueLearner, PolicyValueLosses as CandlePolicyValueLosses,
 };
 use r2l_core::{
     HookResult, buffers::TrajectoryBatch, models::Policy,
-    on_policy::learning_module::OnPolicyLearningModule,
+    on_policy::learning_module::OnPolicyLearner,
 };
 
 use crate::utils::{fmt_stat, mean};
@@ -26,7 +26,7 @@ use crate::utils::{fmt_stat, mean};
 /// Each value corresponds to a single optimization batch processed during one
 /// A2C learning pass.
 #[derive(Debug, Clone)]
-pub struct A2CBatchStats {
+pub struct A2CMinibatchStats {
     /// Entropy regularization term computed for the batch.
     pub entropy_loss: f32,
     /// Policy-gradient loss computed for the batch.
@@ -37,14 +37,14 @@ pub struct A2CBatchStats {
 
 /// Aggregated statistics emitted by the default A2C hook after a learning pass.
 ///
-/// A report contains all collected [`A2CBatchStats`] for the rollout together
+/// A report contains all collected [`A2CMinibatchStats`] for the rollout together
 /// with rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
-pub struct A2CStats {
+pub struct A2CRolloutStats {
     /// Rollout index to which the stats belong to
     pub rollout_idx: usize,
     /// Batch-level statistics collected during the most recent learning pass.
-    pub batch_stats: Vec<A2CBatchStats>,
+    pub batch_stats: Vec<A2CMinibatchStats>,
     /// Current action-distribution standard deviation when available.
     pub std: Option<f32>,
     /// Average completed-episode reward observed across the active env set.
@@ -53,7 +53,7 @@ pub struct A2CStats {
     pub learning_rate: f64,
 }
 
-impl A2CStats {
+impl A2CRolloutStats {
     /// Returns the mean entropy loss across collected minibatches.
     pub fn entropy_loss(&self) -> f32 {
         mean(
@@ -88,12 +88,12 @@ impl A2CStats {
     }
 
     /// Appends one batch report to this rollout report.
-    pub fn collect_batch_data(&mut self, batch_stats: A2CBatchStats) {
+    pub fn collect_batch_data(&mut self, batch_stats: A2CMinibatchStats) {
         self.batch_stats.push(batch_stats);
     }
 }
 
-impl std::fmt::Display for A2CStats {
+impl std::fmt::Display for A2CRolloutStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let rows = [
             ("Average reward", fmt_stat(self.average_reward)),
@@ -122,19 +122,23 @@ impl std::fmt::Display for A2CStats {
 
 pub(crate) struct DefaultA2CHookReporter {
     pub(crate) rollout_idx: usize,
-    pub(crate) report: A2CStats,
-    pub(crate) tx: Option<Sender<A2CStats>>,
+    pub(crate) report: A2CRolloutStats,
+    pub(crate) tx: Option<Sender<A2CRolloutStats>>,
     pub(crate) log_progress: bool,
     pub(crate) unfinished_episode_rewards: Vec<f32>,
     pub(crate) latest_average_reward: f32,
 }
 
 impl DefaultA2CHookReporter {
-    pub fn new(tx: Option<Sender<A2CStats>>, log_progress: bool, n_envs: usize) -> Option<Self> {
+    pub fn new(
+        tx: Option<Sender<A2CRolloutStats>>,
+        log_progress: bool,
+        n_envs: usize,
+    ) -> Option<Self> {
         if tx.is_some() || log_progress {
             Some(Self {
                 rollout_idx: 0,
-                report: A2CStats::default(),
+                report: A2CRolloutStats::default(),
                 tx,
                 log_progress,
                 unfinished_episode_rewards: vec![0.; n_envs],
@@ -149,7 +153,7 @@ impl DefaultA2CHookReporter {
         self.rollout_idx += 1;
         let progress = std::mem::replace(
             &mut self.report,
-            A2CStats {
+            A2CRolloutStats {
                 rollout_idx: self.rollout_idx,
                 ..Default::default()
             },
@@ -203,9 +207,9 @@ impl DefaultA2CHookReporter {
 /// This hook applies the crate's standard A2C training behavior:
 /// advantage normalization when enabled, optional value-loss weighting,
 /// optional entropy regularization, optional gradient clipping, and optional
-/// rollout reporting through [`A2CStats`].
+/// rollout reporting through [`A2CRolloutStats`].
 ///
-/// The generic parameter tracks the concrete learning-module backend and is not
+/// The generic parameter tracks the concrete learner backend and is not
 /// usually named directly by callers.
 pub struct DefaultA2CHook<T = ()> {
     pub(crate) normalize_advantage: bool,
@@ -216,15 +220,15 @@ pub struct DefaultA2CHook<T = ()> {
     pub(crate) _lm: PhantomData<T>,
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
-    for DefaultA2CHook<BurnPolicyValueModule<B, D>>
+impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
+    for DefaultA2CHook<BurnPolicyValueLearner<B, D>>
 {
     fn before_learning_hook<
-        C: TrajectoryBatch<<BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor>,
+        C: TrajectoryBatch<<BurnPolicyValueLearner<B, D> as OnPolicyLearner>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnPolicyValueModule<B, D>,
+        module: &mut BurnPolicyValueLearner<B, D>,
         _buffers: &[C],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -241,7 +245,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
     fn batch_hook(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnPolicyValueModule<B, D>,
+        module: &mut BurnPolicyValueLearner<B, D>,
         losses: &mut BurnPolicyValueLosses<B>,
         data: &A2CBatchData<burn::Tensor<B, 1>>,
     ) -> Result<HookResult> {
@@ -249,7 +253,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
         let entropy = module.policy().entropy(&data.observations)?;
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         if let Some(DefaultA2CHookReporter { report, .. }) = &mut self.reporter {
-            report.collect_batch_data(A2CBatchStats {
+            report.collect_batch_data(A2CMinibatchStats {
                 policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
                 entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
                 value_loss: losses.value_loss.to_data().to_vec::<f32>().unwrap()[0],
@@ -262,11 +266,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
     }
 
     fn after_learning_hook<
-        C: TrajectoryBatch<<BurnPolicyValueModule<B, D> as OnPolicyLearningModule>::InferenceTensor>,
+        C: TrajectoryBatch<<BurnPolicyValueLearner<B, D> as OnPolicyLearner>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnPolicyValueModule<B, D>,
+        module: &mut BurnPolicyValueLearner<B, D>,
         buffers: &[C],
     ) -> Result<HookResult> {
         if let Some(reporter) = &mut self.reporter {
@@ -279,13 +283,13 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueModule<B, D>>
     }
 }
 
-impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule> {
+impl A2CHook<CandlePolicyValueLearner> for DefaultA2CHook<CandlePolicyValueLearner> {
     fn before_learning_hook<
-        B: TrajectoryBatch<<CandlePolicyValueModule as OnPolicyLearningModule>::InferenceTensor>,
+        B: TrajectoryBatch<<CandlePolicyValueLearner as OnPolicyLearner>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut CandlePolicyValueModule,
+        module: &mut CandlePolicyValueLearner,
         _buffers: &[B],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -300,7 +304,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
     fn batch_hook(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut CandlePolicyValueModule,
+        module: &mut CandlePolicyValueLearner,
         losses: &mut CandlePolicyValueLosses,
         data: &A2CBatchData<candle_core::Tensor>,
     ) -> Result<HookResult> {
@@ -309,7 +313,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
         if let Some(DefaultA2CHookReporter { report, .. }) = &mut self.reporter {
-            report.collect_batch_data(A2CBatchStats {
+            report.collect_batch_data(A2CMinibatchStats {
                 policy_loss: losses.policy_loss.to_scalar()?,
                 entropy_loss: entropy_loss.to_scalar()?,
                 value_loss: losses.value_loss.to_scalar()?,
@@ -324,7 +328,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
     fn after_learning_hook<B: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut CandlePolicyValueModule,
+        module: &mut CandlePolicyValueLearner,
         buffers: &[B],
     ) -> Result<HookResult> {
         if let Some(reporter) = &mut self.reporter {

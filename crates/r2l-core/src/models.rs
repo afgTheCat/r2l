@@ -131,8 +131,8 @@ pub trait Policy: Actor {
     }
 }
 
-/// Component that applies backend-specific optimizer updates.
-pub trait LearningModule {
+/// Component that learns from backend-specific loss values.
+pub trait Learner {
     /// Loss bundle consumed by this module.
     type Losses;
 

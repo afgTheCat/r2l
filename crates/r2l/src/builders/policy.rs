@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// Backend-independent configuration for an inference policy.
 ///
-/// Training learning-module builders and inference runners both use this
+/// Training learner builders and inference runners both use this
 /// configuration to construct the same policy architecture.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyBuilder {

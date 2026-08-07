@@ -1,16 +1,16 @@
 use crate::{
-    models::{LearningModule, Policy, ValueFunction},
+    models::{Learner, Policy, ValueFunction},
     on_policy::losses::FromPolicyValueLosses,
     tensor::R2lTensor,
 };
 
-/// Learning module contract required by the built-in on-policy algorithms.
+/// Learner contract required by the built-in on-policy algorithms.
 ///
 /// This ties together a train-time policy, an inference-time policy, a value
 /// function, tensor conversion helpers, and a loss bundle that can be assembled
 /// from policy/value loss terms.
-pub trait OnPolicyLearningModule:
-    LearningModule<Losses: FromPolicyValueLosses<Self::LearningTensor>>
+pub trait OnPolicyLearner:
+    Learner<Losses: FromPolicyValueLosses<Self::LearningTensor>>
     + ValueFunction<Tensor = Self::LearningTensor>
 {
     /// Tensor type used by rollout actors and environment buffers.

@@ -1,8 +1,8 @@
-//! Burn policy/value learning modules used by on-policy algorithms.
+//! Burn policy/value learners used by on-policy algorithms.
 //!
-//! The central public type here is [`crate::learning_module::PolicyValueModule`],
+//! The central public type here is [`crate::learning_module::PolicyValueLearner`],
 //! which combines a Burn policy, a value function, and optimizer state into one
-//! [`OnPolicyLearningModule`](r2l_core::on_policy::learning_module::OnPolicyLearningModule)
+//! [`OnPolicyLearner`](r2l_core::on_policy::learning_module::OnPolicyLearner)
 //! implementation.
 
 use burn::{
@@ -13,17 +13,17 @@ use burn::{
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_core::{
-    models::{ActivationFunction, LearningModule, Policy, ValueFunction},
-    on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
+    models::{ActivationFunction, Learner, Policy, ValueFunction},
+    on_policy::{learning_module::OnPolicyLearner, losses::FromPolicyValueLosses},
 };
 
 use crate::{distributions::BurnPolicyKind, sequential::Sequential};
 
 // A series constraints that we need for the policy to work nicely with AdamW
-/// Trait alias-like bound for Burn policies used by on-policy learning modules.
+/// Trait alias-like bound for Burn policies used by on-policy learners.
 ///
 /// This captures the combination of Burn autodiff support and `r2l-core`
-/// [`Policy`] behavior required by the Burn learning-module implementations.
+/// [`Policy`] behavior required by the Burn learner implementations.
 pub trait BurnPolicy<B: AutodiffBackend>:
     AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
     + ModuleDisplay
@@ -38,7 +38,7 @@ impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
 {
 }
 
-/// Loss container used by Burn on-policy learning modules.
+/// Loss container used by Burn on-policy learners.
 ///
 /// This stores the policy loss, value loss, and an optional multiplier applied
 /// to the value loss during optimization.
@@ -97,15 +97,15 @@ impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
     }
 }
 
-/// Burn on-policy learning module with one shared optimizer configuration.
-pub struct JointPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
+/// Burn on-policy learner with one shared optimizer configuration.
+pub struct JointPolicyValueLearner<B: AutodiffBackend, M: BurnPolicy<B>> {
     lr: f64,
     model: JointActorModel<B, M>,
     // NOTE: the optimizer needs to be optimizing both the policy and the value net at the same time
     optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
     fn new(
         model: JointActorModel<B, M>,
         optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
@@ -134,7 +134,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueModule<B, M> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for JointPolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for JointPolicyValueLearner<B, M> {
     type Losses = PolicyValueLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -151,7 +151,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for JointPolicyValueMo
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueLearner<B, M> {
     type Tensor = Tensor<B, 1>;
 
     fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -161,7 +161,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueMod
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for JointPolicyValueModule<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueLearner<B, D> {
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
     type Policy = D;
@@ -188,8 +188,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for JointPolic
     }
 }
 
-/// Burn on-policy learning module with separate policy and value optimizers.
-pub struct SplitPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
+/// Burn on-policy learner with separate policy and value optimizers.
+pub struct SplitPolicyValueLearner<B: AutodiffBackend, M: BurnPolicy<B>> {
     policy: M,
     value_net: Sequential<B>,
     policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
@@ -198,7 +198,7 @@ pub struct SplitPolicyValueModule<B: AutodiffBackend, M: BurnPolicy<B>> {
     value_lr: f64,
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
     fn new(
         policy: M,
         value_net: Sequential<B>,
@@ -237,7 +237,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueModule<B, M> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for SplitPolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for SplitPolicyValueLearner<B, M> {
     type Losses = PolicyValueLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -260,7 +260,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for SplitPolicyValueMo
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueLearner<B, M> {
     type Tensor = Tensor<B, 1>;
 
     fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -270,7 +270,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueMod
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolicyValueModule<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for SplitPolicyValueLearner<B, D> {
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
     type Policy = D;
@@ -298,14 +298,14 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for SplitPolic
 }
 
 /// Erased Burn policy/value module covering joint and split optimizer layouts.
-pub enum PolicyValueModule<B: AutodiffBackend, D: BurnPolicy<B>> {
+pub enum PolicyValueLearner<B: AutodiffBackend, D: BurnPolicy<B> = BurnPolicyKind<B>> {
     /// Policy/value module with one shared optimizer configuration.
-    Joint(JointPolicyValueModule<B, D>),
+    Joint(JointPolicyValueLearner<B, D>),
     /// Policy/value module with separate policy and value optimizers.
-    Split(SplitPolicyValueModule<B, D>),
+    Split(SplitPolicyValueLearner<B, D>),
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     /// Builds a policy/value module with a shared optimizer configuration.
     pub fn joint(
         policy: D,
@@ -316,7 +316,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
     ) -> Self {
         let value_net: Sequential<B> = Sequential::build(value_layers, activation);
         let model = JointActorModel::new(policy, value_net);
-        let model = JointPolicyValueModule::new(model, optimizer_config.init(), lr);
+        let model = JointPolicyValueLearner::new(model, optimizer_config.init(), lr);
         Self::Joint(model)
     }
 
@@ -331,7 +331,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
         value_lr: f64,
     ) -> Self {
         let value_net: Sequential<B> = Sequential::build(value_layers, activation);
-        let model = SplitPolicyValueModule::new(
+        let model = SplitPolicyValueLearner::new(
             policy,
             value_net,
             policy_optimizer_config.init(),
@@ -343,7 +343,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     /// Sets policy-side gradient clipping on the contained optimizer state.
     pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
         match self {
@@ -369,7 +369,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for PolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for PolicyValueLearner<B, M> {
     type Losses = PolicyValueLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -380,7 +380,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> LearningModule for PolicyValueModule<
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueModule<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueLearner<B, M> {
     type Tensor = Tensor<B, 1>;
 
     fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -391,7 +391,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueModule<B
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValueModule<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for PolicyValueLearner<B, D> {
     type LearningTensor = Tensor<B, 1>;
     type InferenceTensor = Tensor<B::InnerBackend, 1>;
     type Policy = D;
@@ -426,6 +426,3 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearningModule for PolicyValu
         Tensor::from_data(t.to_data(), &Default::default())
     }
 }
-
-/// Burn learning module whose policy variant is selected from the action space.
-pub type ActionSpacePolicyValueModule<B> = PolicyValueModule<B, BurnPolicyKind<B>>;

@@ -3,9 +3,9 @@
 use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryBatch,
-    models::{LearningModule, Policy},
+    models::{Learner, Policy},
     on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
+        algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
     },
     tensor::R2lTensor,
 };
@@ -50,7 +50,7 @@ pub struct A2CBatchData<T: R2lTensor> {
 }
 
 /// Hook interface for customizing A2C training over trajectory batches.
-pub trait A2CHook<M: OnPolicyLearningModule> {
+pub trait A2CHook<M: OnPolicyLearner> {
     /// Runs after advantages and returns are computed and before minibatching.
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
@@ -68,7 +68,7 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
         &mut self,
         _params: &mut A2CParams,
         _module: &mut M,
-        _losses: &mut <M as LearningModule>::Losses,
+        _losses: &mut <M as Learner>::Losses,
         _data: &A2CBatchData<M::LearningTensor>,
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
@@ -86,16 +86,16 @@ pub trait A2CHook<M: OnPolicyLearningModule> {
 }
 
 /// Prototype Advantage Actor-Critic algorithm over finalized trajectory batches.
-pub struct A2C<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> {
+pub struct A2C<Module: OnPolicyLearner, Hooks: A2CHook<Module>> {
     /// A2C hyperparameters.
     pub params: A2CParams,
-    /// Learning module containing policy, value function, and optimizer state.
+    /// Learner containing policy, value function, and optimizer state.
     pub lm: Module,
     /// Hook implementation used to customize learning behavior.
     pub hooks: Hooks,
 }
 
-impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
+impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
     fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
@@ -161,7 +161,7 @@ impl<Module: OnPolicyLearningModule, Hooks: A2CHook<Module>> A2C<Module, Hooks> 
     }
 }
 
-impl<M: OnPolicyLearningModule, H: A2CHook<M>> Agent for A2C<M, H> {
+impl<M: OnPolicyLearner, H: A2CHook<M>> Agent for A2C<M, H> {
     type Tensor = M::InferenceTensor;
     type Actor = M::InferencePolicy;
 

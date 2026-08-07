@@ -11,8 +11,8 @@ use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
     ppo::{PPO, PPOHook, PPOParams},
 };
-use r2l_burn::learning_module::ActionSpacePolicyValueModule as BurnPolicyValueModule;
-use r2l_candle::learning_module::PolicyValueModule as CandlePolicyValueModule;
+use r2l_burn::learning_module::PolicyValueLearner as BurnPolicyValueLearner;
+use r2l_candle::learning_module::PolicyValueLearner as CandlePolicyValueLearner;
 use r2l_core::env::EnvDescription;
 use r2l_core::env::normalizer::{ClippedNormalizer, NormalizerMode};
 use r2l_core::{
@@ -20,7 +20,7 @@ use r2l_core::{
     models::ActivationFunction,
     on_policy::{
         algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime, Sampler},
-        learning_module::OnPolicyLearningModule,
+        learning_module::OnPolicyLearner,
     },
     rng::set_seed,
 };
@@ -37,9 +37,9 @@ use crate::{
     BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
     OnPolicyCommandReceiver, TrainingArtifactsConfig,
     hooks::{
-        a2c::{A2CStats, DefaultA2CHook, DefaultA2CHookReporter},
+        a2c::{A2CRolloutStats, DefaultA2CHook, DefaultA2CHookReporter},
         on_policy::PerformanceLog,
-        ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPOStats, TargetKl},
+        ppo::{DefaultPPOHook, DefaultPPOHookReporter, PPORolloutStats, TargetKl},
     },
 };
 use crate::{EpisodeBoundHook, StepBoundHook};
@@ -55,15 +55,15 @@ pub use policy::PolicyBuilder;
 const PERFORMANCE_FILE: &str = "performance.csv";
 
 /// PPO agent produced by a Candle-backed algorithm builder.
-pub type PPOCandle = PPO<CandlePolicyValueModule, DefaultPPOHook<CandlePolicyValueModule>>;
+pub type PPOCandle = PPO<CandlePolicyValueLearner, DefaultPPOHook<CandlePolicyValueLearner>>;
 /// PPO agent produced by a Burn-backed algorithm builder.
-pub type PPOBurn<B> = PPO<BurnPolicyValueModule<B>, DefaultPPOHook<BurnPolicyValueModule<B>>>;
+pub type PPOBurn<B> = PPO<BurnPolicyValueLearner<B>, DefaultPPOHook<BurnPolicyValueLearner<B>>>;
 /// A2C agent produced by a Candle-backed algorithm builder.
-pub type A2CCandle = A2C<CandlePolicyValueModule, DefaultA2CHook<CandlePolicyValueModule>>;
+pub type A2CCandle = A2C<CandlePolicyValueLearner, DefaultA2CHook<CandlePolicyValueLearner>>;
 /// A2C agent produced by a Burn-backed algorithm builder.
-pub type A2CBurn<B> = A2C<BurnPolicyValueModule<B>, DefaultA2CHook<BurnPolicyValueModule<B>>>;
+pub type A2CBurn<B> = A2C<BurnPolicyValueLearner<B>, DefaultA2CHook<BurnPolicyValueLearner<B>>>;
 
-/// AdamW hyperparameters used by an on-policy learning module.
+/// AdamW hyperparameters used by an on-policy learner.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AdamWParams {
     /// Learning rate.
@@ -224,11 +224,11 @@ enum AlgorithmConfiguration {
         total_epochs: usize,
         target_kl: Option<f32>,
         clip_range: f32,
-        reporter: Option<Sender<PPOStats>>,
+        reporter: Option<Sender<PPORolloutStats>>,
     },
     A2C {
         normalize_advantage: Option<bool>,
-        reporter: Option<Sender<A2CStats>>,
+        reporter: Option<Sender<A2CRolloutStats>>,
     },
 }
 
@@ -371,10 +371,7 @@ impl<E: Env> Builder<E> {
         self.optimizer_layout = update(self.optimizer_layout.clone());
     }
 
-    fn build_candle_learning_module(
-        &self,
-        device: &Device,
-    ) -> anyhow::Result<CandlePolicyValueModule> {
+    fn build_candle_learner(&self, device: &Device) -> anyhow::Result<CandlePolicyValueLearner> {
         let observation_size = self.env_desription.observation_size();
         let (policy, policy_varmap) = self.policy_builder.build_candle_with_varmap(
             observation_size,
@@ -386,7 +383,7 @@ impl<E: Env> Builder<E> {
             OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
                 params,
-            } => CandlePolicyValueModule::build_joint(
+            } => CandlePolicyValueLearner::build_joint(
                 policy,
                 &self.value_hidden_layers,
                 policy_varmap,
@@ -399,7 +396,7 @@ impl<E: Env> Builder<E> {
                 policy_params,
                 value_max_grad_norm,
                 value_params,
-            } => CandlePolicyValueModule::build_split(
+            } => CandlePolicyValueLearner::build_split(
                 policy,
                 &self.value_hidden_layers,
                 policy_varmap,
@@ -412,7 +409,7 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn build_burn_learning_module<B: AutodiffBackend>(&self) -> BurnPolicyValueModule<B> {
+    fn build_burn_learner<B: AutodiffBackend>(&self) -> BurnPolicyValueLearner<B> {
         let observation_size = self.env_desription.observation_size();
         let policy = self
             .policy_builder
@@ -423,7 +420,7 @@ impl<E: Env> Builder<E> {
             OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
                 params,
-            } => BurnPolicyValueModule::joint(
+            } => BurnPolicyValueLearner::joint(
                 policy,
                 value_layers,
                 activation_function,
@@ -435,7 +432,7 @@ impl<E: Env> Builder<E> {
                 policy_params,
                 value_max_grad_norm,
                 value_params,
-            } => BurnPolicyValueModule::split(
+            } => BurnPolicyValueLearner::split(
                 policy,
                 value_layers,
                 activation_function,
@@ -668,10 +665,10 @@ impl<E: Env> Builder<E> {
         if let Some(seed) = self.seed {
             backend.seed(seed);
         }
-        let learning_module = self.build_candle_learning_module(&backend.device).unwrap();
+        let learner = self.build_candle_learner(&backend.device).unwrap();
         let hooks = self.ppo_hook();
         PPO {
-            lm: learning_module,
+            lm: learner,
             hooks,
             params: self.ppo_params(),
         }
@@ -686,10 +683,10 @@ impl<E: Env> Builder<E> {
         if let Some(seed) = self.seed {
             BurnBackend::seed(&Default::default(), seed);
         }
-        let learning_module = self.build_burn_learning_module::<BurnBackend>();
+        let learner = self.build_burn_learner::<BurnBackend>();
         let hooks = self.ppo_hook();
         PPO {
-            lm: learning_module,
+            lm: learner,
             hooks,
             params: self.ppo_params(),
         }
@@ -705,10 +702,10 @@ impl<E: Env> Builder<E> {
         if let Some(seed) = self.seed {
             backend.seed(seed);
         }
-        let learning_module = self.build_candle_learning_module(&backend.device).unwrap();
+        let learner = self.build_candle_learner(&backend.device).unwrap();
         let hooks = self.a2c_hook();
         A2C {
-            lm: learning_module,
+            lm: learner,
             hooks,
             params: self.a2c_params(),
         }
@@ -723,10 +720,10 @@ impl<E: Env> Builder<E> {
         if let Some(seed) = self.seed {
             BurnBackend::seed(&Default::default(), seed);
         }
-        let learning_module = self.build_burn_learning_module::<BurnBackend>();
+        let learner = self.build_burn_learner::<BurnBackend>();
         let hooks = self.a2c_hook();
         A2C {
-            lm: learning_module,
+            lm: learner,
             hooks,
             params: self.a2c_params(),
         }
@@ -1051,13 +1048,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOBurn<BurnBac
 
 impl<M, S, E> OnPolicyAlgoBuilder<PPO<M, DefaultPPOHook<M>>, S, E>
 where
-    M: OnPolicyLearningModule,
+    M: OnPolicyLearner,
     DefaultPPOHook<M>: PPOHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
 {
     /// Installs an optional channel for reporting PPO training statistics.
-    pub fn with_reporter(mut self, tx: Option<Sender<PPOStats>>) -> Self {
+    pub fn with_reporter(mut self, tx: Option<Sender<PPORolloutStats>>) -> Self {
         let AlgorithmConfiguration::Ppo { reporter, .. } =
             &mut self.builder.algorithm_configuration
         else {
@@ -1137,13 +1134,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CBurn<BurnBac
 
 impl<M, S, E> OnPolicyAlgoBuilder<A2C<M, DefaultA2CHook<M>>, S, E>
 where
-    M: OnPolicyLearningModule,
+    M: OnPolicyLearner,
     DefaultA2CHook<M>: A2CHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
 {
     /// Installs an optional channel for reporting A2C training statistics.
-    pub fn with_reporter(mut self, tx: Option<Sender<A2CStats>>) -> Self {
+    pub fn with_reporter(mut self, tx: Option<Sender<A2CRolloutStats>>) -> Self {
         let AlgorithmConfiguration::A2C { reporter, .. } =
             &mut self.builder.algorithm_configuration
         else {

@@ -3,9 +3,9 @@
 use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryBatch,
-    models::{LearningModule, Policy},
+    models::{Learner, Policy},
     on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
+        algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
     },
     tensor::R2lTensor,
 };
@@ -60,7 +60,7 @@ pub struct PPOBatchData<T: R2lTensor> {
 }
 
 /// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
-pub trait PPOHook<M: OnPolicyLearningModule> {
+pub trait PPOHook<M: OnPolicyLearner> {
     /// Runs after advantages and returns are computed and before PPO epochs.
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
@@ -88,7 +88,7 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
-        _losses: &mut <M as LearningModule>::Losses,
+        _losses: &mut <M as Learner>::Losses,
         _data: &PPOBatchData<M::LearningTensor>,
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
@@ -96,16 +96,16 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
 }
 
 /// Prototype PPO variant over finalized trajectory batches.
-pub struct PPO<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
+pub struct PPO<Module: OnPolicyLearner, Hooks: PPOHook<Module>> {
     /// PPO hyperparameters.
     pub params: PPOParams,
-    /// Learning module containing policy, value function, and optimizer state.
+    /// Learner containing policy, value function, and optimizer state.
     pub lm: Module,
     /// Hook implementation used to customize learning behavior.
     pub hooks: Hooks,
 }
 
-impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
+impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
     fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
@@ -194,7 +194,7 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
     }
 }
 
-impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
+impl<M: OnPolicyLearner, H: PPOHook<M>> Agent for PPO<M, H> {
     type Tensor = M::InferenceTensor;
     type Actor = M::InferencePolicy;
 

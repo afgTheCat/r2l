@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l::{LearningSchedule, PPOAlgorithmBuilder, PPOStats};
+use r2l::{LearningSchedule, PPOAlgorithmBuilder, PPORolloutStats};
 use r2l_examples::EventBox;
 use r2l_sampler::SamplerExecutionMode;
 
@@ -49,7 +49,7 @@ impl eframe::App for App {
             let Ok(event) = event else {
                 break;
             };
-            let Ok(progress) = event.downcast::<PPOStats>() else {
+            let Ok(progress) = event.downcast::<PPORolloutStats>() else {
                 break;
             };
             let average_reward = progress.average_reward;
@@ -109,7 +109,7 @@ const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
 
 pub fn train_ppo(
-    tx: Sender<PPOStats>,
+    tx: Sender<PPORolloutStats>,
     total_rollouts: usize,
     clip_range: f32,
 ) -> anyhow::Result<()> {
@@ -136,7 +136,8 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
-    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
+    let (update_tx, update_rx): (Sender<PPORolloutStats>, Receiver<PPORolloutStats>) =
+        mpsc::channel();
     let tx_to_events = event_tx.clone();
     std::thread::spawn(move || {
         while let Ok(update) = update_rx.recv() {
