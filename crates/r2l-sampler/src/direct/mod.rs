@@ -168,7 +168,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
         self.core.worker_pool.clear_buffers();
-        self.core.worker_pool.set_actor(actor.clone());
+        self.core.worker_pool.set_actor(&actor);
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {

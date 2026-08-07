@@ -210,7 +210,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         Self { worker_handles }
     }
 
-    pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
+    pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: &A) {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
         }
@@ -276,7 +276,7 @@ impl<E: Env> WorkerPool<E> {
     }
 
     /// Installs a clone of `policy` on every worker.
-    pub fn set_actor<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
+    pub fn set_actor<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) {
         match self {
             Self::Vec(workers) => {
                 for worker in workers.iter_mut() {

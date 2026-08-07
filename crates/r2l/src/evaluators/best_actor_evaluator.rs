@@ -50,7 +50,7 @@ impl<E: Env> EvaluationSampler<E> {
         let hook = EpisodeBoundHook::new(n_episodes);
         if let Some(obs_normalizer) = obs_normalizer {
             Self::Staged(StagedSampler::build_with_obs_normalizer(
-                env_builder,
+                &env_builder,
                 hook,
                 execution_mode,
                 Some(obs_normalizer),

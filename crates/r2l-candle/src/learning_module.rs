@@ -59,7 +59,7 @@ impl PolicyValueLosses {
     /// # Errors
     ///
     /// Returns an error if the tensor addition fails.
-    pub fn add_entropy_loss(&mut self, entropy_loss: Tensor) -> Result<()> {
+    pub fn add_entropy_loss(&mut self, entropy_loss: &Tensor) -> Result<()> {
         self.policy_loss = self.policy_loss.add(&entropy_loss)?;
         Ok(())
     }

@@ -284,7 +284,7 @@ impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
     ) -> StagedSamplerCore<EB::Env> {
-        StagedSamplerCore::build(self.env_builder.clone(), execution_mode, obs_normalizer)
+        StagedSamplerCore::build(&self.env_builder, execution_mode, obs_normalizer)
     }
 }
 
@@ -424,27 +424,36 @@ impl<E: Env> Builder<E> {
             OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
                 params,
-            } => BurnPolicyValueModule::joint(
-                policy,
-                value_layers,
-                activation_function,
-                Self::burn_optimizer_config(params, *max_grad_norm),
-                params.lr,
-            ),
+            } => {
+                let optimizer_config = Self::burn_optimizer_config(params, *max_grad_norm);
+                BurnPolicyValueModule::joint(
+                    policy,
+                    value_layers,
+                    activation_function,
+                    &optimizer_config,
+                    params.lr,
+                )
+            }
             OnPolicyOptimizerLayout::Split {
                 policy_max_grad_norm,
                 policy_params,
                 value_max_grad_norm,
                 value_params,
-            } => BurnPolicyValueModule::split(
-                policy,
-                value_layers,
-                activation_function,
-                Self::burn_optimizer_config(policy_params, *policy_max_grad_norm),
-                policy_params.lr,
-                Self::burn_optimizer_config(value_params, *value_max_grad_norm),
-                value_params.lr,
-            ),
+            } => {
+                let optimizer_config =
+                    Self::burn_optimizer_config(policy_params, *policy_max_grad_norm);
+                let value_optimizer_config =
+                    Self::burn_optimizer_config(value_params, *value_max_grad_norm);
+                BurnPolicyValueModule::split(
+                    policy,
+                    value_layers,
+                    activation_function,
+                    &optimizer_config,
+                    policy_params.lr,
+                    &value_optimizer_config,
+                    value_params.lr,
+                )
+            }
         }
     }
 

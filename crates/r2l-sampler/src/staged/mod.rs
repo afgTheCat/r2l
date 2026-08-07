@@ -54,16 +54,16 @@ impl<E: Env> StagedSamplerCore<E> {
     /// Panics if an environment cannot be built or reset.
     #[must_use]
     pub fn build<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+        env_builder: &EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     ) -> Self {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
         let (mut last_states, pool) = match execution_mode {
-            SamplerExecutionMode::SingleThreaded => Self::build_vec_workers(&env_builder, num_envs),
+            SamplerExecutionMode::SingleThreaded => Self::build_vec_workers(env_builder, num_envs),
             SamplerExecutionMode::MultiThreaded => {
-                Self::build_thread_workers(&env_builder, num_envs)
+                Self::build_thread_workers(env_builder, num_envs)
             }
         };
         if let Some(obs_normalizer) = &obs_normalizer {
@@ -194,7 +194,7 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     /// Installs a clone of `policy` on every worker.
-    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
+    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) {
         self.pool.set_policy(policy);
     }
 
@@ -231,7 +231,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
 
     /// Builds a sampler with an existing shared observation normalizer.
     pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+        env_builder: &EnvBuilderType<EB>,
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
@@ -255,7 +255,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     {
         let env_builder = move || env_builder.build_env();
         Self::build_with_obs_normalizer(
-            EnvBuilderType::homogeneous(env_builder, num_envs),
+            &EnvBuilderType::homogeneous(env_builder, num_envs),
             hook,
             execution_mode,
             obs_normalizer,
@@ -278,7 +278,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
         self.core.clear_buffers();
-        self.core.set_policy(actor.clone());
+        self.core.set_policy(&actor);
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {

@@ -319,7 +319,7 @@ impl A2CHook<CandlePolicyValueModule> for DefaultA2CHook<CandlePolicyValueModule
             });
         }
         if self.entropy_coeff != 0. {
-            losses.add_entropy_loss(entropy_loss)?;
+            losses.add_entropy_loss(&entropy_loss)?;
         }
         Ok(HookResult::Continue)
     }

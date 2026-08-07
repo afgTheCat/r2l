@@ -311,7 +311,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
         policy: D,
         value_layers: &[usize],
         activation: ActivationFunction,
-        optimizer_config: AdamWConfig,
+        optimizer_config: &AdamWConfig,
         lr: f64,
     ) -> Self {
         let value_net: Sequential<B> = Sequential::build(value_layers, activation);
@@ -325,9 +325,9 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueModule<B, D> {
         policy: D,
         value_layers: &[usize],
         activation: ActivationFunction,
-        policy_optimizer_config: AdamWConfig,
+        policy_optimizer_config: &AdamWConfig,
         policy_lr: f64,
-        value_optimizer_config: AdamWConfig,
+        value_optimizer_config: &AdamWConfig,
         value_lr: f64,
     ) -> Self {
         let value_net: Sequential<B> = Sequential::build(value_layers, activation);

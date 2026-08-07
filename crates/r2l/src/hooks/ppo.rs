@@ -431,7 +431,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
             });
         }
         if self.entropy_coeff != 0. {
-            losses.add_entropy_loss(entropy_loss)?;
+            losses.add_entropy_loss(&entropy_loss)?;
         }
         if let Some(target_kl) = &mut self.target_kl {
             if approx_kl > 1.5 * target_kl.target {
