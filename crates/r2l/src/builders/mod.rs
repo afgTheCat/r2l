@@ -1,8 +1,8 @@
 use std::{marker::PhantomData, sync::mpsc::Sender};
 
 use burn::{
-    grad_clipping::GradientClippingConfig, optim::AdamWConfig, prelude::Backend,
-    tensor::backend::AutodiffBackend,
+    backend::ndarray::NdArrayDevice, grad_clipping::GradientClippingConfig, optim::AdamWConfig,
+    prelude::Backend, tensor::backend::AutodiffBackend,
 };
 use candle_core::{Device, DeviceLocation};
 use candle_nn::ParamsAdamW;
@@ -299,11 +299,11 @@ struct Builder<E: Env> {
     // for the hooks
     learning_schedule: LearningSchedule,
     learning_rate_schedule: Option<LearningRateSchedule>,
-    training_artifacts_config: Option<TrainingArtifactsConfig>,
+    training_artifacts: Option<TrainingArtifactsConfig>,
     policy_command_rx: Option<OnPolicyCommandReceiver>,
 
     // for the agent
-    policy_builder: PolicyBuilder,
+    policy_config: PolicyBuilder,
     value_hidden_layers: Vec<usize>,
     optimizer_layout: OnPolicyOptimizerLayout,
     log_progress: bool,
@@ -339,9 +339,9 @@ impl<E: Env> Builder<E> {
             algorithm_configuration,
             learning_schedule: LearningSchedule::rollout_bound(300),
             learning_rate_schedule: None,
-            training_artifacts_config: None,
+            training_artifacts: None,
             policy_command_rx: None,
-            policy_builder: PolicyBuilder::default(),
+            policy_config: PolicyBuilder::default(),
             value_hidden_layers: vec![64, 64],
             optimizer_layout: OnPolicyOptimizerLayout::Joint {
                 params: AdamWParams {
@@ -377,12 +377,12 @@ impl<E: Env> Builder<E> {
         device: &Device,
     ) -> anyhow::Result<CandlePolicyValueModule> {
         let observation_size = self.env_desription.observation_size();
-        let (policy, policy_varmap) = self.policy_builder.build_candle_with_varmap(
+        let (policy, policy_varmap) = self.policy_config.build_candle_with_varmap(
             observation_size,
             self.env_desription.action_space.clone(),
             device,
         )?;
-        let activation_function = self.policy_builder.activation_function;
+        let activation_function = self.policy_config.activation_function;
         match &self.optimizer_layout {
             OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
@@ -392,7 +392,7 @@ impl<E: Env> Builder<E> {
                 &self.value_hidden_layers,
                 policy_varmap,
                 *max_grad_norm,
-                Self::candle_optimizer_params(params.clone()),
+                Self::candle_optimizer_params(params),
                 activation_function,
             ),
             OnPolicyOptimizerLayout::Split {
@@ -406,8 +406,8 @@ impl<E: Env> Builder<E> {
                 policy_varmap,
                 *policy_max_grad_norm,
                 *value_max_grad_norm,
-                Self::candle_optimizer_params(policy_params.clone()),
-                Self::candle_optimizer_params(value_params.clone()),
+                Self::candle_optimizer_params(policy_params),
+                Self::candle_optimizer_params(value_params),
                 activation_function,
             ),
         }
@@ -416,9 +416,9 @@ impl<E: Env> Builder<E> {
     fn build_burn_learning_module<B: AutodiffBackend>(&self) -> BurnPolicyValueModule<B> {
         let observation_size = self.env_desription.observation_size();
         let policy = self
-            .policy_builder
+            .policy_config
             .build_burn::<B, _>(observation_size, self.env_desription.action_space.clone());
-        let activation_function = self.policy_builder.activation_function;
+        let activation_function = self.policy_config.activation_function;
         let value_layers = &[&[observation_size][..], &self.value_hidden_layers[..], &[1]].concat();
         match &self.optimizer_layout {
             OnPolicyOptimizerLayout::Joint {
@@ -448,7 +448,7 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn candle_optimizer_params(params: AdamWParams) -> ParamsAdamW {
+    fn candle_optimizer_params(params: &AdamWParams) -> ParamsAdamW {
         ParamsAdamW {
             lr: params.lr,
             beta1: params.beta1,
@@ -475,7 +475,7 @@ impl<E: Env> Builder<E> {
         &mut self,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     ) -> Option<BestActorEvaluator<A::Actor, E>> {
-        let config = self.training_artifacts_config.take()?;
+        let config = self.training_artifacts.take()?;
         if !config.evaluation_results && !config.inference_artifacts {
             return None;
         }
@@ -501,7 +501,7 @@ impl<E: Env> Builder<E> {
         };
         let evaluator = self.evaluator::<A>(obs_normalizer);
         let performance_log = self
-            .training_artifacts_config
+            .training_artifacts
             .and_then(super::evaluators::best_actor_evaluator::TrainingArtifactsConfig::into_performance_metrics);
         DefaultOnPolicyAlgorithmHooks {
             learning_schedule: self.learning_schedule,
@@ -560,7 +560,7 @@ impl<E: Env> Builder<E> {
     }
 
     fn write_inference_config(&self, backend: InferenceBackend) -> anyhow::Result<()> {
-        if let Some(config) = &self.training_artifacts_config
+        if let Some(config) = &self.training_artifacts
             && config.inference_artifacts
         {
             let observation_mode = match &self.sampler_configuration {
@@ -570,7 +570,7 @@ impl<E: Env> Builder<E> {
                 } => InferenceObservationMode::Normalized,
                 _ => InferenceObservationMode::Raw,
             };
-            let policy_builder = self.policy_builder.clone();
+            let policy_builder = self.policy_config.clone();
             InferenceConfig::new(policy_builder, observation_mode, backend)
                 .write_to_dir(&config.output_dir)?;
         }
@@ -669,7 +669,7 @@ impl<E: Env> Builder<E> {
         self.write_inference_config(InferenceBackend::Burn(backend))
             .unwrap();
         if let Some(seed) = self.seed {
-            BurnBackend::seed(&Default::default(), seed);
+            BurnBackend::seed(&NdArrayDevice::default(), seed);
         }
         let learning_module = self.build_burn_learning_module::<BurnBackend>();
         let hooks = self.ppo_hook();
@@ -706,7 +706,7 @@ impl<E: Env> Builder<E> {
         self.write_inference_config(InferenceBackend::Burn(backend))
             .unwrap();
         if let Some(seed) = self.seed {
-            BurnBackend::seed(&Default::default(), seed);
+            BurnBackend::seed(&NdArrayDevice::default(), seed);
         }
         let learning_module = self.build_burn_learning_module::<BurnBackend>();
         let hooks = self.a2c_hook();
@@ -735,6 +735,7 @@ struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
 /// rollouts. Shared learning defaults include `gamma = 0.98`, `lambda = 0.8`,
 /// minibatches of 64 samples, and a joint `AdamW` optimizer with a learning rate
 /// of `3e-4`.
+#[must_use]
 pub struct OnPolicyAlgoBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     builder: Builder<E>,
     config: Config<A, S, E>,
@@ -793,7 +794,7 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
 
     /// Enables the evaluation, performance, and inference artifacts selected by `config`.
     pub fn with_training_artifacts(mut self, config: TrainingArtifactsConfig) -> Self {
-        self.builder.training_artifacts_config = Some(config);
+        self.builder.training_artifacts = Some(config);
         self
     }
 
@@ -834,25 +835,25 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
 
     /// Replaces the policy-network configuration.
     pub fn with_policy_builder(mut self, policy_builder: PolicyBuilder) -> Self {
-        self.builder.policy_builder = policy_builder;
+        self.builder.policy_config = policy_builder;
         self
     }
 
     /// Sets the hidden-layer widths of the policy network.
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
-        self.builder.policy_builder.hidden_layers = policy_hidden_layers;
+        self.builder.policy_config.hidden_layers = policy_hidden_layers;
         self
     }
 
     /// Sets the hidden-layer activation used by the policy and value networks.
     pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
-        self.builder.policy_builder.activation_function = activation_function;
+        self.builder.policy_config.activation_function = activation_function;
         self
     }
 
     /// Sets the initial log standard deviation for continuous-action policies.
     pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
-        self.builder.policy_builder.log_std_init = log_std_init;
+        self.builder.policy_config.log_std_init = log_std_init;
         self
     }
 
@@ -990,6 +991,10 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
     }
 
     /// Builds the configured agent, sampler, and training lifecycle hooks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configured training algorithm cannot be constructed.
     pub fn build(
         mut self,
     ) -> anyhow::Result<OnPolicyAlgorithm<A, S, DefaultOnPolicyAlgorithmHooks<A, S, E>>> {

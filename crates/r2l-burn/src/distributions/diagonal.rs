@@ -23,6 +23,10 @@ pub struct DiagGaussianDistribution<B: Backend> {
 
 impl<B: Backend> DiagGaussianDistribution<B> {
     /// Builds a diagonal-Gaussian policy network.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `mu_layers` is empty.
     #[must_use]
     pub fn build(mu_layers: &[usize], activation: ActivationFunction, log_std_init: f32) -> Self {
         let device = Default::default();
@@ -39,6 +43,10 @@ impl<B: Backend> DiagGaussianDistribution<B> {
     }
 
     /// Builds a diagonal-Guassian policy using a safetensor store
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stored network dimensions or parameters are invalid.
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let mu_layers = Sequential::<B>::dims_from_store("mu_net", store);
         let mut distribution = Self::build(&mu_layers, ActivationFunction::default(), 0.0);
@@ -103,7 +111,10 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         let entropy_per_dim = log_std.clone()
             + Tensor::from_data(
                 TensorData::new(
-                    vec![f32::midpoint((2. * f32::consts::PI).ln(), 1.); log_std.shape().num_elements()],
+                    vec![
+                        f32::midpoint((2. * f32::consts::PI).ln(), 1.);
+                        log_std.shape().num_elements()
+                    ],
                     log_std.shape(),
                 ),
                 &device,

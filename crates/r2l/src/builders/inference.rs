@@ -87,6 +87,10 @@ pub struct InferenceArtifacts {
 
 impl InferenceArtifacts {
     /// Loads an inference configuration and binds it to `directory`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration cannot be read or deserialized.
     pub fn load(directory: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let directory = directory.into();
         let config = InferenceConfig::load_from_dir(&directory)?;
@@ -94,6 +98,10 @@ impl InferenceArtifacts {
     }
 
     /// Builds an inference runtime using the configured backend and learned artifacts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an artifact cannot be read or the configured model cannot be built.
     pub fn build<E: Env>(self, env: E) -> anyhow::Result<InferenceRunner<E>> {
         let obs_normalizer = match self.config.observation_mode {
             InferenceObservationMode::Raw => None,
@@ -192,6 +200,10 @@ impl<E: Env> InferenceRunner<E> {
     }
 
     /// Resets the environment and its current actor observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot be reset.
     pub fn reset(&mut self) -> anyhow::Result<()> {
         let mut last_state = self.env.reset(sample_u64())?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
@@ -202,6 +214,10 @@ impl<E: Env> InferenceRunner<E> {
     }
 
     /// Selects the modal action and advances the environment by one step.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if action inference or the environment step fails.
     pub fn mode_step(&mut self) -> anyhow::Result<Snapshot<E::Tensor>> {
         let action = self.actor.mode_action(self.last_state.clone())?;
         let mut snapshot = self.env.step(action)?;
@@ -213,6 +229,10 @@ impl<E: Env> InferenceRunner<E> {
     }
 
     /// Chooses an action and advances the environment by one step.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if action inference or the environment step fails.
     pub fn step(&mut self) -> anyhow::Result<Snapshot<E::Tensor>> {
         let action = self.actor.action(self.last_state.clone())?;
         let mut snapshot = self.env.step(action)?;
@@ -224,6 +244,10 @@ impl<E: Env> InferenceRunner<E> {
     }
 
     /// Runs the environment to completion and then resets it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if action inference, an environment step, or the final reset fails.
     pub fn run_episode(&mut self) {
         loop {
             let snapshot = self.step().unwrap();
@@ -235,6 +259,10 @@ impl<E: Env> InferenceRunner<E> {
     }
 
     /// Runs the environment to completion using modal actions only and then resets it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if action inference, an environment step, or the final reset fails.
     pub fn mode_run_episode(&mut self) {
         loop {
             let snapshot = self.mode_step().unwrap();

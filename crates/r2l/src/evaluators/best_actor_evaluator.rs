@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::io::Write;
 use std::{fs::File, path::PathBuf, time::Instant};
 
@@ -129,6 +130,10 @@ impl EvaluationSettings {
     }
 
     /// Sets the number of episodes collected during each evaluation pass.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `episodes_per_evaluation` is zero.
     #[must_use]
     pub fn with_episodes_per_evaluation(mut self, episodes_per_evaluation: usize) -> Self {
         assert!(
@@ -150,6 +155,10 @@ impl EvaluationSettings {
     }
 
     /// Sets the number of training rollouts between evaluation passes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rollouts_per_evaluation` is zero.
     #[must_use]
     pub fn with_rollouts_per_evaluation(mut self, rollouts_per_evaluation: usize) -> Self {
         assert!(
@@ -338,10 +347,11 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
         if self.write_evaluation_results {
             let mut csv = String::from("average_reward,total_episodes\n");
             for eval_state in &self.eval_states {
-                csv.push_str(&format!(
-                    "{},{}\n",
+                writeln!(
+                    csv,
+                    "{},{}",
                     eval_state.avg_reward, eval_state.total_episodes
-                ));
+                )?;
             }
             std::fs::write(self.output_dir.join(EVALUATIONS_FILE), csv)?;
         }

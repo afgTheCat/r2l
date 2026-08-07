@@ -126,6 +126,10 @@ fn batch_advantages_and_returns<
 }
 
 /// Computes generalized advantage estimates and return targets for each batch.
+///
+/// # Errors
+///
+/// Returns an error if value inference fails.
 pub fn batches_advantages_and_returns<
     T1: R2lTensor,
     T2: R2lTensor,
@@ -165,6 +169,10 @@ pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -
 }
 
 /// Computes action log-probabilities for every transition in each batch.
+///
+/// # Errors
+///
+/// Returns an error if policy evaluation fails.
 pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
     batches: &[B],
     policy: &impl Policy<Tensor = T>,

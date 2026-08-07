@@ -17,12 +17,12 @@ pub struct TrajectoryBuffer<T: R2lTensor> {
 impl<T: R2lTensor> Default for TrajectoryBuffer<T> {
     fn default() -> Self {
         Self {
-            states: Default::default(),
-            next_states: Default::default(),
-            actions: Default::default(),
-            rewards: Default::default(),
-            terminated: Default::default(),
-            truncated: Default::default(),
+            states: Vec::default(),
+            next_states: Vec::default(),
+            actions: Vec::default(),
+            rewards: Vec::default(),
+            terminated: Vec::default(),
+            truncated: Vec::default(),
         }
     }
 }

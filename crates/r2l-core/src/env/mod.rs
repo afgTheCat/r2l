@@ -132,8 +132,16 @@ pub trait Env {
     type Tensor: R2lTensor;
 
     /// Resets the environment and returns the initial observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot be reset.
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
     /// Applies one action and returns the resulting transition snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot apply the action.
     fn step(&mut self, action: Self::Tensor) -> Result<Snapshot<Self::Tensor>>;
     /// Returns static observation/action space metadata.
     fn env_description(&self) -> EnvDescription<Self::Tensor>;
@@ -147,9 +155,17 @@ pub trait EnvBuilder: Sync + Send + 'static {
     type Env: Env;
 
     /// Builds a fresh environment instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot be constructed.
     fn build_env(&self) -> Result<Self::Env>;
 
     /// Returns the environment description for produced environments.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a representative environment cannot be constructed.
     fn env_description(&self) -> Result<EnvDescription<<Self::Env as Env>::Tensor>> {
         let env = self.build_env()?;
         Ok(env.env_description())
@@ -212,6 +228,10 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     }
 
     /// Builds the environment at `idx`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the selected builder cannot construct an environment.
     pub fn build_idx(&self, idx: usize) -> Result<EB::Env> {
         match &self {
             Self::Homogeneous { builder, .. } => builder.build_env(),
@@ -238,6 +258,10 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     }
 
     /// Returns a representative environment description.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the selected builder cannot provide a description.
     pub fn env_description(&self) -> Result<EnvDescription<<EB::Env as Env>::Tensor>> {
         match &self {
             Self::Homogeneous { builder, n_envs: _ } => builder.env_description(),

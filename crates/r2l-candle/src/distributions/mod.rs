@@ -78,6 +78,10 @@ impl CandlePolicyKind {
     }
 
     /// Builds a Candle policy from serialized safetensors bytes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the bytes, metadata, or stored tensors are invalid.
     #[must_use]
     pub fn from_bytes(bytes: &[u8], device: Device) -> Self {
         let (_, safe_tensors_metadata) = SafeTensors::read_metadata(bytes).unwrap();
@@ -88,16 +92,20 @@ impl CandlePolicyKind {
 
         if tensors.contains_key("policy.log_std") {
             Self::DiagGaussian(DiagGaussianDistribution::from_parts(
-                tensors, device, metadata,
+                tensors, &device, &metadata,
             ))
         } else {
             Self::Categorical(CategoricalDistribution::from_parts(
-                tensors, device, metadata,
+                tensors, device, &metadata,
             ))
         }
     }
 
     /// Builds the appropriate Candle policy for the given action space.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the selected policy cannot be built.
     pub fn build<T: R2lTensor>(
         action_space: Space<T>,
         policy_varbuilder: &VarBuilder,

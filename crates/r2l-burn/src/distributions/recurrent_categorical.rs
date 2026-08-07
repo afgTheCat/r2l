@@ -37,6 +37,10 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
     /// `layers` follows the same convention as the feed-forward policies:
     /// first observation size, optional hidden encoder sizes, final action size.
     /// The recurrent hidden size is the encoder output size.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `layers` contains fewer than two entries.
     #[must_use]
     pub fn build(layers: &[usize]) -> Self {
         assert!(
@@ -81,6 +85,10 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
     }
 
     /// Builds a recurrent categorical policy using a safetensor store.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stored network dimensions or parameters are missing or invalid.
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let mut encoder_layers = Sequential::<B>::dims_from_store("encoder", store);
         let action_size = store

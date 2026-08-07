@@ -30,6 +30,10 @@ pub struct CategoricalDistribution {
 
 impl CategoricalDistribution {
     /// Builds a categorical policy network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network parameters cannot be initialized.
     pub fn build(
         observation_size: usize,
         action_size: usize,
@@ -50,8 +54,9 @@ impl CategoricalDistribution {
     pub(crate) fn from_parts(
         tensors: HashMap<String, Tensor>,
         device: Device,
-        metadata: PolicyMetadata,
+        metadata: &PolicyMetadata,
     ) -> Self {
+        let activation = metadata.activation;
         let (observation_size, layers) = network_shape(&tensors, "policy");
         let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
         let action_size = *layers.last().unwrap();
@@ -62,7 +67,7 @@ impl CategoricalDistribution {
             &vb,
             device,
             "policy",
-            metadata.activation,
+            activation,
         )
         .unwrap()
     }

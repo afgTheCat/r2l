@@ -22,6 +22,10 @@ pub struct CompositeDistribution {
 
 impl CompositeDistribution {
     /// Builds one child policy per nested action space.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any child policy cannot be built.
     pub fn build<T: R2lTensor>(
         action_spaces: Vec<Space<T>>,
         policy_varbuilder: &VarBuilder,

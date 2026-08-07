@@ -68,6 +68,10 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
     }
 
     /// Prototype learning entrypoint over finalized trajectory batches.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if tensor computation or the optimizer update fails.
     pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],

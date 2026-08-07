@@ -52,6 +52,10 @@ impl GymEnv {
     /// Creates a Gymnasium environment by name.
     ///
     /// `render_mode` is forwarded to `gymnasium.make` when provided.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if Gymnasium cannot create or inspect the environment.
     pub fn new(name: &str, render_mode: Option<String>) -> Result<GymEnv> {
         let env = Python::with_gil(|py| {
             let gym = py.import("gymnasium")?;

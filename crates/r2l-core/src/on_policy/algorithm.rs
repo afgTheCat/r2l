@@ -21,6 +21,10 @@ pub trait Agent {
     fn actor(&self) -> Self::Actor;
 
     /// Learns from a batch of trajectory containers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the agent update fails.
     fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()>;
 
     /// Sets the learning rate used by future updates.
@@ -70,6 +74,10 @@ impl<A: Agent, S: Sampler> OnPolicyRuntime<A, S> {
     }
 
     /// Adapts the sampler buffers and runs an agent update.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the agent cannot learn from the collected trajectories.
     pub fn learn(&mut self) -> Result<()> {
         let views = self.sampler.trajectory_views();
         let buffers = views
@@ -110,6 +118,10 @@ pub trait OnPolicyAlgorithmHooks {
     -> HookResult;
 
     /// Called once when the loop exits.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if hook shutdown fails.
     fn shutdown_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> Result<()>;
 }
 
@@ -128,6 +140,10 @@ impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgo
     }
 
     /// Runs training until a hook requests termination.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if learning or hook shutdown fails.
     pub fn train(&mut self) -> Result<()> {
         return_on_hook_result!(self.hooks.init_hook(&mut self.runtime));
         loop {

@@ -19,6 +19,10 @@ pub struct BernoulliDistribution {
 
 impl BernoulliDistribution {
     /// Builds a Bernoulli policy network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network parameters cannot be initialized.
     pub fn build(
         observation_size: usize,
         action_size: usize,

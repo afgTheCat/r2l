@@ -55,6 +55,10 @@ impl PolicyValueLosses {
     }
 
     /// Adds an entropy term into the policy loss.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor addition fails.
     pub fn add_entropy_loss(&mut self, entropy_loss: Tensor) -> Result<()> {
         self.policy_loss = self.policy_loss.add(&entropy_loss)?;
         Ok(())
@@ -202,6 +206,10 @@ pub enum PolicyValueOptimizer {
 
 impl PolicyValueOptimizer {
     /// Builds a joint policy/value optimizer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the optimizer cannot be initialized.
     pub fn joint(
         vm: VarMap,
         params: ParamsAdamW,
@@ -215,6 +223,10 @@ impl PolicyValueOptimizer {
     }
 
     /// Builds separate policy and value optimizers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either optimizer cannot be initialized.
     pub fn split(
         policy_vm: VarMap,
         critic_vm: VarMap,
@@ -223,8 +235,8 @@ impl PolicyValueOptimizer {
         policy_max_grad_norm: Option<f32>,
         value_max_grad_norm: Option<f32>,
     ) -> candle_core::Result<Self> {
-        let policy_optimizer = AdamW::new(policy_vm.all_vars(), policy_params.clone())?;
-        let value_optimizer = AdamW::new(critic_vm.all_vars(), value_params.clone())?;
+        let policy_optimizer = AdamW::new(policy_vm.all_vars(), policy_params)?;
+        let value_optimizer = AdamW::new(critic_vm.all_vars(), value_params)?;
         let policy_optimizer_with_grad =
             OptimizerWithMaxGrad::new(policy_optimizer, policy_max_grad_norm, policy_vm);
         let value_optimizer_with_grad =
@@ -288,6 +300,10 @@ pub struct PolicyValueModule {
 
 impl PolicyValueModule {
     /// Builds a policy/value module with a shared optimizer configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value network or optimizer cannot be initialized.
     pub fn build_joint(
         policy: CandlePolicyKind,
         value_hidden_layers: &[usize],
@@ -317,6 +333,10 @@ impl PolicyValueModule {
     }
 
     /// Builds a policy/value module with separate policy and value optimizers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value network or either optimizer cannot be initialized.
     #[allow(clippy::too_many_arguments)]
     pub fn build_split(
         policy: CandlePolicyKind,

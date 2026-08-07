@@ -56,6 +56,10 @@ impl PolicyBuilder {
     }
 
     /// Builds a Candle policy on `device`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configured policy network cannot be built.
     pub fn build_candle<T: R2lTensor>(
         &self,
         observation_size: usize,

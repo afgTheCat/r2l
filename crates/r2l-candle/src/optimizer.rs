@@ -41,6 +41,7 @@ impl Debug for OptimizerWithMaxGrad {
         f.debug_struct("OptimizerWithMaxGrad")
             .field("optimizer", &self.optimizer)
             .field("max_grad_norm", &self.max_grad_norm)
+            .field("varmap", &self.varmap.all_vars().len())
             .finish()
     }
 }

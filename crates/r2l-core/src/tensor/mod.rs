@@ -56,30 +56,66 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     }
 
     /// Elementwise addition.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn add(&self, other: &Self) -> anyhow::Result<Self>;
 
     /// Elementwise subtraction.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn sub(&self, other: &Self) -> anyhow::Result<Self>;
 
     /// Elementwise multiplication.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn mul(&self, other: &Self) -> anyhow::Result<Self>;
 
     /// Elementwise exponential.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn exp(&self) -> anyhow::Result<Self>;
 
     /// Clamps each element to the inclusive range `[min, max]`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn clamp(&self, min: f32, max: f32) -> anyhow::Result<Self>;
 
     /// Elementwise minimum between two tensors.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn minimum(&self, other: &Self) -> anyhow::Result<Self>;
 
     /// Elementwise negation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn neg(&self) -> anyhow::Result<Self>;
 
     /// Mean reduction over all elements.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the reduction.
     fn mean(&self) -> anyhow::Result<Self>;
 
     /// Elementwise square.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn sqr(&self) -> anyhow::Result<Self>;
 
     /// Creates a zero-filled tensor with `shape`.
@@ -90,6 +126,10 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     }
 
     /// Multiplies every element by `scalar`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self>;
 
     /// Adds a non-empty slice of equally shaped tensors.

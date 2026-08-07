@@ -52,6 +52,10 @@ pub enum BurnPolicyKind<B: Backend> {
 
 impl<B: Backend> BurnPolicyKind<B> {
     /// Loads policy parameters from safetensors bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stored policy parameters cannot be loaded.
     pub fn load_from_bytes(mut self, bytes: Vec<u8>) -> anyhow::Result<Self> {
         let mut store = SafetensorsStore::from_bytes(Some(bytes));
         match &mut self {

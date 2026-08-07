@@ -27,6 +27,10 @@ pub struct DiagGaussianDistribution {
 
 impl DiagGaussianDistribution {
     /// Builds a diagonal-Gaussian policy network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network or initial noise cannot be created.
     pub fn build(
         observation_size: usize,
         layers: &[usize],
@@ -48,11 +52,12 @@ impl DiagGaussianDistribution {
 
     pub(crate) fn from_parts(
         tensors: HashMap<String, Tensor>,
-        device: Device,
-        metadata: PolicyMetadata,
+        device: &Device,
+        metadata: &PolicyMetadata,
     ) -> Self {
+        let activation = metadata.activation;
         let (observation_size, layers) = network_shape(&tensors, "policy");
-        let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
+        let vb = VarBuilder::from_tensors(tensors, DType::F32, device);
         let action_size = *layers.last().unwrap();
         let log_std = vb.get(action_size, "policy.log_std").unwrap();
         Self::build(
@@ -61,7 +66,7 @@ impl DiagGaussianDistribution {
             &vb,
             log_std,
             "policy",
-            metadata.activation,
+            activation,
         )
         .unwrap()
     }

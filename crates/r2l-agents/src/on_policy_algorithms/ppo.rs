@@ -62,6 +62,10 @@ pub struct PPOBatchData<T: R2lTensor> {
 /// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
 pub trait PPOHook<M: OnPolicyLearningModule> {
     /// Runs after advantages and returns are computed and before PPO epochs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hook cannot complete.
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -74,6 +78,10 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
     }
 
     /// Runs after each PPO epoch and controls whether another epoch is performed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hook cannot complete.
     fn rollout_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -84,6 +92,10 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
     }
 
     /// Runs after minibatch losses are computed and before the optimizer update.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hook cannot complete.
     fn batch_hook(
         &mut self,
         _params: &mut PPOParams,
@@ -155,12 +167,12 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
     fn learning_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
-        advantages: Advantages,
-        returns: Returns,
-        logps: Logps,
+        advantages: &Advantages,
+        returns: &Returns,
+        logps: &Logps,
     ) -> anyhow::Result<()> {
         loop {
-            self.batch_loop(batches, &advantages, &logps, &returns)?;
+            self.batch_loop(batches, advantages, logps, returns)?;
             let rollout_hook_res = self
                 .hooks
                 .rollout_hook(&mut self.params, &mut self.lm, batches);
@@ -169,6 +181,10 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
     }
 
     /// Prototype learning entrypoint over finalized trajectory batches.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if tensor computation, a hook, or the optimizer update fails.
     pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
@@ -189,7 +205,7 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
         )?);
         let actor = self.lm.inference_policy();
         let logps = logps(batches, &actor)?;
-        self.learning_loop(batches, advantages, returns, logps)?;
+        self.learning_loop(batches, &advantages, &returns, &logps)?;
         Ok(())
     }
 }

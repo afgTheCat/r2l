@@ -30,14 +30,9 @@ impl<T: R2lTensor> RunningMeanStd<T> {
         Self { mean, var, count }
     }
 
-    fn update_from_moments(
-        &mut self,
-        batch_mean: T,
-        batch_var: T,
-        batch_count: f32,
-    ) -> anyhow::Result<()> {
+    fn update_from_moments(&mut self, batch_mean: &T, batch_var: &T, batch_count: f32) {
         if batch_count == 0.0 {
-            return Ok(());
+            return;
         }
         let tot_count = self.count + batch_count;
         let delta = batch_mean.sub(&self.mean).unwrap();
@@ -60,17 +55,24 @@ impl<T: R2lTensor> RunningMeanStd<T> {
             .unwrap();
         self.var = m_2.mul_scalar(1.0 / tot_count).unwrap();
         self.count = tot_count;
-        Ok(())
     }
 
     /// Updates the statistics from a batch of tensors.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the tensor operations fail.
     pub fn update(&mut self, t: &[T]) {
         let mean = T::mean_tensors(t);
         let var = T::var_tensors(t);
-        self.update_from_moments(mean, var, t.len() as f32).unwrap();
+        self.update_from_moments(&mean, &var, t.len() as f32);
     }
 
     /// Converts flat samples to tensors and updates the statistics.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any sample length differs from the configured tensor size.
     pub fn update_from_vec(&mut self, t: &[Vec<f32>]) {
         let mean_size = self.mean.size();
         assert!(t.iter().all(|t| t.len() == mean_size));
@@ -106,6 +108,10 @@ impl RunningMeanStdF32 {
     }
 
     /// Creates scalar running statistics with the provided initial sample count.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `epsilon` is negative.
     #[must_use]
     pub fn with_epsilon(epsilon: f32) -> Self {
         assert!(epsilon >= 0.0);
@@ -168,10 +174,10 @@ mod test {
         let device = Device::Cpu;
         let data = [
             0.488_830_6_f32,
-            0.48259816,
+            0.482_598_16,
             0.793_288_1,
             0.191_038_6,
-            0.11694599,
+            0.116_945_99,
             0.538_540_4,
         ];
         let tensors = data
@@ -182,7 +188,7 @@ mod test {
             .collect::<candle_core::Result<Vec<_>>>()?;
         let var = Tensor::var_tensors(&tensors);
         let reference_var =
-            Tensor::from_slice(&[0.02217002f32, 0.03342538, 0.01622409], 3, &device)?;
+            Tensor::from_slice(&[0.022_170_02_f32, 0.033_425_38, 0.016_224_09], 3, &device)?;
         let var_diff = (&var - &reference_var)?.abs()?.max(0)?;
         assert!(var_diff.to_scalar::<f32>()? < 1e-5, "var diff");
         Ok(())

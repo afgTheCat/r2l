@@ -148,6 +148,10 @@ impl OnPolicyCommandSender {
     }
 
     /// Shuts down the `OnPolicyAlgorithm` gracefully.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the command receiver has disconnected.
     pub fn shutdown(&self) {
         self.tx.send(OnPolicyCommand::Shutdown).unwrap();
         // empty the response queue

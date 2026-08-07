@@ -31,6 +31,10 @@ pub struct CategoricalDistribution<B: Backend> {
 
 impl<B: Backend> CategoricalDistribution<B> {
     /// Builds a categorical policy network.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `logits_layers` is empty.
     #[must_use]
     pub fn build(logits_layers: &[usize], activation: ActivationFunction) -> Self {
         let action_size = *logits_layers.last().unwrap();
@@ -42,6 +46,10 @@ impl<B: Backend> CategoricalDistribution<B> {
     }
 
     /// Builds a categoriacal policy using a safetensor store
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stored network dimensions or parameters are invalid.
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let logits_layers = Sequential::<B>::dims_from_store("logits", store);
         let mut distribution = Self::build(&logits_layers, ActivationFunction::default());

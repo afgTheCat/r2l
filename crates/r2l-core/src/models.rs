@@ -80,6 +80,10 @@ impl PolicyMetadata {
     }
 
     /// Builds policy metadata from the string map stored by safetensors.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the activation entry is missing or invalid.
     #[must_use]
     pub fn from_safetensors_metadata(metadata: &HashMap<String, String>) -> Self {
         Self {
@@ -97,9 +101,17 @@ pub trait Actor: Send + 'static {
     type Tensor: R2lTensor;
 
     /// Selects an action for a single observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if action inference fails.
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
 
     /// Selects the modal action for a single observation without sampling.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if action inference fails.
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
 
     /// Tries to serialize the Actor
@@ -114,6 +126,10 @@ pub trait Actor: Send + 'static {
 /// gradient losses and entropy bonuses over a batch.
 pub trait Policy: Actor {
     /// Computes log probabilities for batched observation/action pairs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy cannot evaluate the batch.
     fn log_probs(
         &self,
         observations: &[Self::Tensor],
@@ -121,13 +137,25 @@ pub trait Policy: Actor {
     ) -> Result<Self::Tensor>;
 
     /// Returns a representative action standard deviation when available.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the standard deviation cannot be computed.
     fn std(&self) -> Result<f32>;
 
     /// Computes the policy entropy for a batch of states.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the entropy cannot be computed.
     fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor>;
 
     /// Resamples exploration noise for policies that use state-independent
     /// noise. Implementations without such noise may keep the default no-op.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if exploration noise cannot be resampled.
     fn resample_noise(&mut self) -> Result<()> {
         Ok(())
     }
@@ -139,6 +167,10 @@ pub trait LearningModule {
     type Losses;
 
     /// Applies one optimization update from precomputed losses.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the optimizer update fails.
     fn update(&mut self, losses: Self::Losses) -> Result<()>;
 }
 
@@ -148,5 +180,9 @@ pub trait ValueFunction {
     type Tensor: Clone;
 
     /// Estimates values for a batch of observations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if value inference fails.
     fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor>;
 }

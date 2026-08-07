@@ -48,6 +48,10 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     /// Builds staged sampler state and its environment workers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an environment cannot be built or reset.
     #[must_use]
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
@@ -57,9 +61,9 @@ impl<E: Env> StagedSamplerCore<E> {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
         let (mut last_states, pool) = match execution_mode {
-            SamplerExecutionMode::SingleThreaded => Self::build_vec_workers(env_builder, num_envs),
+            SamplerExecutionMode::SingleThreaded => Self::build_vec_workers(&env_builder, num_envs),
             SamplerExecutionMode::MultiThreaded => {
-                Self::build_thread_workers(env_builder, num_envs)
+                Self::build_thread_workers(&env_builder, num_envs)
             }
         };
         if let Some(obs_normalizer) = &obs_normalizer {
@@ -75,7 +79,7 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     fn build_vec_workers<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+        env_builder: &EnvBuilderType<EB>,
         num_envs: usize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
         let mut envs = Vec::with_capacity(num_envs);
@@ -92,7 +96,7 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     fn build_thread_workers<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+        env_builder: &EnvBuilderType<EB>,
         num_envs: usize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
         let mut worker_handles = Vec::with_capacity(num_envs);
@@ -159,7 +163,10 @@ impl<E: Env> StagedSamplerCore<E> {
             .map(|idx| last_states[*idx].clone())
             .collect::<Vec<_>>();
         let memories = multi_memory.into_memories(&next_states);
-        let terminations = memories.iter().map(r2l_core::buffers::Memory::is_done).collect();
+        let terminations = memories
+            .iter()
+            .map(r2l_core::buffers::Memory::is_done)
+            .collect();
         for (idx, memory) in indices.iter().zip(memories) {
             self.buffers[*idx].push(memory);
         }
@@ -181,7 +188,9 @@ impl<E: Env> StagedSamplerCore<E> {
 
     /// Clears all output trajectory buffers.
     pub fn clear_buffers(&mut self) {
-        self.buffers.iter_mut().for_each(r2l_core::buffers::buffer::TrajectoryBuffer::clear);
+        self.buffers
+            .iter_mut()
+            .for_each(r2l_core::buffers::buffer::TrajectoryBuffer::clear);
     }
 
     /// Installs a clone of `policy` on every worker.

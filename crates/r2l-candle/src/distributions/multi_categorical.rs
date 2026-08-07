@@ -25,6 +25,10 @@ pub struct MultiCategoricalDistribution {
 
 impl MultiCategoricalDistribution {
     /// Builds a policy network whose output is split according to `nvec`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network parameters cannot be initialized.
     pub fn build(
         observation_size: usize,
         nvec: Vec<usize>,

@@ -62,6 +62,10 @@ impl<E: Env> DirectSamplerCore<E> {
     }
 
     /// Builds sampler state from an environment collection and execution mode.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an environment cannot be built.
     #[must_use]
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,

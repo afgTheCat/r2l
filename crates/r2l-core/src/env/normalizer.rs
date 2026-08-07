@@ -100,6 +100,10 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     }
 
     /// Optionally updates statistics, then normalizes and clips `obs` in place.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the shared statistics lock is poisoned.
     pub fn apply_slice_in_place(&self, obs: &mut [T]) {
         let mut inner = self.inner.0.lock().unwrap();
         match self.normalizer_mode {
@@ -116,6 +120,10 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     }
 
     /// Captures the current statistics in a backend-independent form.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the shared statistics lock is poisoned.
     #[must_use]
     pub fn snapshot(&self) -> ClippedNormalizerSnapshot {
         let inner = self.inner.0.lock().unwrap();
