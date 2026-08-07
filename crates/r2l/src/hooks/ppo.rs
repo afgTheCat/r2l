@@ -7,15 +7,15 @@ use r2l_agents::on_policy_algorithms::{
     ppo::{PPOBatchData, PPOHook, PPOParams},
 };
 use r2l_burn::learning_module::{
-    BurnPolicy, PolicyValueLosses as BurnPolicyValueLosses,
-    PolicyValueModule as BurnPolicyValueModule,
+    BurnPolicy, PolicyValueLearner as BurnPolicyValueLearner,
+    PolicyValueLosses as BurnPolicyValueLosses,
 };
 use r2l_candle::learning_module::{
-    PolicyValueLosses as CandlePolicyValueLosses, PolicyValueModule as CandlePolicyValueModule,
+    PolicyValueLearner as CandlePolicyValueLearner, PolicyValueLosses as CandlePolicyValueLosses,
 };
 use r2l_core::{
     HookResult, buffers::TrajectoryBatch, models::Policy,
-    on_policy::learning_module::OnPolicyLearningModule,
+    on_policy::learning_module::OnPolicyLearner,
 };
 
 use crate::utils::{fmt_stat, mean};
@@ -25,7 +25,7 @@ use crate::utils::{fmt_stat, mean};
 /// Each value corresponds to a single optimization batch processed within one
 /// PPO epoch.
 #[derive(Debug, Clone)]
-pub struct PPOBatchStats {
+pub struct PPOMinibatchStats {
     /// Fraction of samples whose probability ratio exceeded the clip range.
     pub clip_fraction: f32,
     /// Entropy regularization term computed for the batch.
@@ -41,14 +41,14 @@ pub struct PPOBatchStats {
 /// Aggregated statistics emitted by the default PPO hook after a learning
 /// pass.
 ///
-/// A report contains all collected [`PPOBatchStats`] for the rollout together
+/// A report contains all collected [`PPOMinibatchStats`] for the rollout together
 /// with rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
-pub struct PPOStats {
+pub struct PPORolloutStats {
     /// Rollout index to which the stats belong.
     pub rollout_idx: usize,
     /// Batch-level statistics collected across PPO epochs for the rollout.
-    pub batch_stats: Vec<PPOBatchStats>,
+    pub batch_stats: Vec<PPOMinibatchStats>,
     /// Current action-distribution standard deviation when available.
     pub std: Option<f32>,
     /// Average completed-episode reward observed across the active env set.
@@ -59,7 +59,7 @@ pub struct PPOStats {
     pub clip_range: f32,
 }
 
-impl PPOStats {
+impl PPORolloutStats {
     /// Returns the mean entropy loss across all collected batch stats.
     #[must_use]
     pub fn entropy_loss(&self) -> f32 {
@@ -109,12 +109,12 @@ impl PPOStats {
     }
 
     /// Appends one batch report to this rollout report.
-    pub fn collect_batch_data(&mut self, batch_stats: PPOBatchStats) {
+    pub fn collect_batch_data(&mut self, batch_stats: PPOMinibatchStats) {
         self.batch_stats.push(batch_stats);
     }
 }
 
-impl std::fmt::Display for PPOStats {
+impl std::fmt::Display for PPORolloutStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let rows = [
             ("Average reward", fmt_stat(self.average_reward)),
@@ -154,18 +154,22 @@ impl TargetKl {
 }
 
 pub(crate) struct DefaultPPOHookReporter {
-    report: PPOStats,
-    tx: Option<Sender<PPOStats>>,
+    report: PPORolloutStats,
+    tx: Option<Sender<PPORolloutStats>>,
     log_progress: bool,
     unfinished_episode_rewards: Vec<f32>,
     latest_average_reward: f32,
 }
 
 impl DefaultPPOHookReporter {
-    pub fn new(tx: Option<Sender<PPOStats>>, log_progress: bool, n_envs: usize) -> Option<Self> {
+    pub fn new(
+        tx: Option<Sender<PPORolloutStats>>,
+        log_progress: bool,
+        n_envs: usize,
+    ) -> Option<Self> {
         if tx.is_some() || log_progress {
             Some(Self {
-                report: PPOStats::default(),
+                report: PPORolloutStats::default(),
                 tx,
                 log_progress,
                 unfinished_episode_rewards: vec![0.; n_envs],
@@ -211,7 +215,7 @@ impl DefaultPPOHookReporter {
     fn send_report(&mut self, rollout_idx: usize) {
         let progress = std::mem::replace(
             &mut self.report,
-            PPOStats {
+            PPORolloutStats {
                 rollout_idx,
                 ..Default::default()
             },
@@ -232,9 +236,9 @@ impl DefaultPPOHookReporter {
 /// normalization when enabled, repeated PPO epochs, optional value-loss
 /// weighting, optional entropy regularization, optional gradient clipping,
 /// optional target-KL early stopping, and optional rollout reporting through
-/// [`PPOStats`].
+/// [`PPORolloutStats`].
 ///
-/// The generic parameter tracks the concrete learning-module backend and is not
+/// The generic parameter tracks the concrete learner backend and is not
 /// usually named directly by callers.
 pub struct DefaultPPOHook<T = ()> {
     pub(crate) normalize_advantage: bool,
@@ -249,15 +253,15 @@ pub struct DefaultPPOHook<T = ()> {
     pub(crate) _lm: PhantomData<T>,
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
-    for DefaultPPOHook<BurnPolicyValueModule<B, D>>
+impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
+    for DefaultPPOHook<BurnPolicyValueLearner<B, D>>
 {
     fn before_learning_hook<
         BT: TrajectoryBatch<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
     >(
         &mut self,
         _params: &mut PPOParams,
-        module: &mut BurnPolicyValueModule<B, D>,
+        module: &mut BurnPolicyValueLearner<B, D>,
         _batches: &[BT],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -276,7 +280,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
     fn rollout_hook<BT: TrajectoryBatch<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>>(
         &mut self,
         params: &mut PPOParams,
-        module: &mut BurnPolicyValueModule<B, D>,
+        module: &mut BurnPolicyValueLearner<B, D>,
         batches: &[BT],
     ) -> anyhow::Result<HookResult> {
         self.current_epoch += 1;
@@ -303,7 +307,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
     fn batch_hook(
         &mut self,
         params: &mut PPOParams,
-        module: &mut BurnPolicyValueModule<B, D>,
+        module: &mut BurnPolicyValueLearner<B, D>,
         losses: &mut BurnPolicyValueLosses<B>,
         data: &PPOBatchData<burn::Tensor<B, 1>>,
     ) -> anyhow::Result<HookResult> {
@@ -328,7 +332,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
                 .filter(|value| (**value - 1.).abs() > params.clip_range)
                 .count() as f32
                 / ratio.len() as f32;
-            report.collect_batch_data(PPOBatchStats {
+            report.collect_batch_data(PPOMinibatchStats {
                 clip_fraction,
                 policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
                 entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
@@ -352,11 +356,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueModule<B, D>>
     }
 }
 
-impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule> {
+impl PPOHook<CandlePolicyValueLearner> for DefaultPPOHook<CandlePolicyValueLearner> {
     fn before_learning_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
-        module: &mut CandlePolicyValueModule,
+        module: &mut CandlePolicyValueLearner,
         _batches: &[BT],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -373,7 +377,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
     fn rollout_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         params: &mut PPOParams,
-        module: &mut CandlePolicyValueModule,
+        module: &mut CandlePolicyValueLearner,
         batches: &[BT],
     ) -> anyhow::Result<HookResult> {
         self.current_epoch += 1;
@@ -400,7 +404,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
     fn batch_hook(
         &mut self,
         params: &mut PPOParams,
-        module: &mut CandlePolicyValueModule,
+        module: &mut CandlePolicyValueLearner,
         losses: &mut CandlePolicyValueLosses,
         data: &PPOBatchData<candle_core::Tensor>,
     ) -> anyhow::Result<HookResult> {
@@ -422,7 +426,7 @@ impl PPOHook<CandlePolicyValueModule> for DefaultPPOHook<CandlePolicyValueModule
                 .to_dtype(candle_core::DType::F32)?
                 .mean_all()?
                 .to_scalar::<f32>()?;
-            report.collect_batch_data(PPOBatchStats {
+            report.collect_batch_data(PPOMinibatchStats {
                 clip_fraction,
                 policy_loss: losses.policy_loss.to_scalar()?,
                 entropy_loss: entropy_loss.to_scalar()?,

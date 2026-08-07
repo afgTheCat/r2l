@@ -1,17 +1,17 @@
-//! Candle policy/value learning modules used by on-policy algorithms.
+//! Candle policy/value learners used by on-policy algorithms.
 //!
-//! The central public type here is [`crate::learning_module::PolicyValueModule`],
+//! The central public type here is [`crate::learning_module::PolicyValueLearner`],
 //! which combines a Candle policy, a value function, and optimizer state into
 //! one
-//! [`OnPolicyLearningModule`](r2l_core::on_policy::learning_module::OnPolicyLearningModule)
+//! [`OnPolicyLearner`](r2l_core::on_policy::learning_module::OnPolicyLearner)
 //! implementation.
 
 use anyhow::{Ok, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
-    models::{ActivationFunction, LearningModule, ValueFunction},
-    on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
+    models::{ActivationFunction, Learner, ValueFunction},
+    on_policy::{learning_module::OnPolicyLearner, losses::FromPolicyValueLosses},
 };
 
 use crate::{
@@ -20,7 +20,7 @@ use crate::{
     sequential::{Sequential, build_sequential},
 };
 
-/// Loss container used by Candle on-policy learning modules.
+/// Loss container used by Candle on-policy learners.
 ///
 /// This stores the policy loss, value loss, and an optional multiplier applied
 /// to the value loss during optimization.
@@ -107,7 +107,7 @@ impl SplitPolicyValueOptimizer {
 }
 
 /// The policy and the value function has different optimizers
-impl LearningModule for SplitPolicyValueOptimizer {
+impl Learner for SplitPolicyValueOptimizer {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
@@ -152,7 +152,7 @@ impl JointPolicyValueOptimizer {
     }
 }
 
-impl LearningModule for JointPolicyValueOptimizer {
+impl Learner for JointPolicyValueOptimizer {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
@@ -275,7 +275,7 @@ impl PolicyValueOptimizer {
     }
 }
 
-impl LearningModule for PolicyValueOptimizer {
+impl Learner for PolicyValueOptimizer {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -286,19 +286,19 @@ impl LearningModule for PolicyValueOptimizer {
     }
 }
 
-/// Candle on-policy learning module combining policy, value function, and
+/// Candle on-policy learner combining policy, value function, and
 /// optimizer state.
 ///
-/// This is the main Candle learning-module type consumed by the higher-level
+/// This is the main Candle learner type consumed by the higher-level
 /// A2C and PPO integrations in the workspace.
-pub struct PolicyValueModule {
+pub struct PolicyValueLearner {
     policy: CandlePolicyKind,
     optimizer: PolicyValueOptimizer,
     value_function: SequentialValueFunction,
     device: Device,
 }
 
-impl PolicyValueModule {
+impl PolicyValueLearner {
     /// Builds a policy/value module with a shared optimizer configuration.
     ///
     /// # Errors
@@ -388,7 +388,7 @@ impl PolicyValueModule {
     }
 }
 
-impl ValueFunction for PolicyValueModule {
+impl ValueFunction for PolicyValueLearner {
     type Tensor = Tensor;
 
     fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -396,7 +396,7 @@ impl ValueFunction for PolicyValueModule {
     }
 }
 
-impl LearningModule for PolicyValueModule {
+impl Learner for PolicyValueLearner {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -404,7 +404,7 @@ impl LearningModule for PolicyValueModule {
     }
 }
 
-impl OnPolicyLearningModule for PolicyValueModule {
+impl OnPolicyLearner for PolicyValueLearner {
     type LearningTensor = Tensor;
     type InferenceTensor = Tensor;
     type Policy = CandlePolicyKind;

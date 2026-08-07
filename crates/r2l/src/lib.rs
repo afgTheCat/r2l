@@ -1,19 +1,29 @@
-//! High-level builders and default hooks for training `r2l` agents.
+//! r2l is a reinforcement learning library written in rust. The goal of r2l is two-fold:
 //!
-//! Most users should start with [`PPOAlgorithmBuilder`] or
-//! [`A2CAlgorithmBuilder`]. These builders combine an environment, sampler,
-//! backend-specific agent, training schedule, and optional evaluator.
+//! - To provide a convinient high level builder API with a feature set similar to sb3
+//! - To have all the lower level builder types and triats be exposed
+//!
+//! In fact, the hihg level API is just an implementation of the lower level components --
+//! it serves as a testament to what is possible with the exposed pieces.
+//!
+//!
+//! ## Hello r2l
+//!
+//! Possibly one of the simplest hello world style app is:
 //!
 //! ```no_run
 //! use r2l::{LearningSchedule, PPOAlgorithmBuilder};
 //!
-//! let mut algorithm = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
-//!     .with_rollout_steps(1024)
-//!     .with_learning_schedule(LearningSchedule::total_step_bound(100_000))
-//!     .build()
-//!     .unwrap();
+//! let mut algorithm = PPOAlgorithmBuilder::gym("Pendulum-v1", 4).build().unwrap();
 //! algorithm.train().unwrap();
 //! ```
+//!
+//! While this example is small, using the [`PPOAlgorithmBuilder`], it is also highly
+//! customizable. Check the relevant page for [`PPOAlgorithmBuilder`]. If you wish to
+//! start out with A2C, check out [`A2CAlgorithmBuilder`].
+//!
+//! ## What is covered here
+//!
 
 #![warn(missing_docs)]
 
@@ -35,13 +45,13 @@ pub use builders::{
 };
 pub use evaluators::best_actor_evaluator::{EvaluationSettings, TrainingArtifactsConfig};
 pub use evaluators::simple_evaluator::Evaluator;
-pub use hooks::a2c::{A2CBatchStats, A2CStats};
+pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
 pub use hooks::on_policy::{
     DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule, OnPolicyCommand,
     OnPolicyCommandReceiver, OnPolicyCommandResult, OnPolicyCommandSender,
     on_policy_command_channel,
 };
-pub use hooks::ppo::{PPOBatchStats, PPOStats};
+pub use hooks::ppo::{PPOMinibatchStats, PPORolloutStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
 pub use r2l_core::{
     env::{

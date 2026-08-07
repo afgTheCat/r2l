@@ -1,7 +1,7 @@
 //! Core traits and data types shared by the `r2l` workspace.
 //!
 //! `r2l-core` is the contracts crate. It defines the small set of interfaces
-//! that environments, samplers, policies, agents, learning modules, and tensor
+//! that environments, samplers, policies, agents, learners, and tensor
 //! backends agree on. Backend-specific implementations live in crates such as
 //! `r2l-burn` and `r2l-candle`; concrete algorithms and builders live outside
 //! this crate as well.
@@ -17,7 +17,7 @@
 //! - [`Env`] and [`EnvBuilder`] for environment integrations.
 //! - [`R2lTensor`] for tensor types used by environments
 //!   and learning code.
-//! - [`Actor`], [`Policy`], [`ValueFunction`], and [`LearningModule`] for model
+//! - [`Actor`], [`Policy`], [`ValueFunction`], and [`Learner`] for model
 //!   and optimizer components.
 //! - [`TrajectoryBuffer`] and [`TrajectoryView`] for rollout storage.
 //! - [`Agent`], [`Sampler`], and [`OnPolicyAlgorithm`] for on-policy training
@@ -27,7 +27,7 @@
 //! [`Agent`]: crate::on_policy::algorithm::Agent
 //! [`Env`]: crate::env::Env
 //! [`EnvBuilder`]: crate::env::EnvBuilder
-//! [`LearningModule`]: crate::models::LearningModule
+//! [`Learner`]: crate::models::Learner
 //! [`OnPolicyAlgorithm`]: crate::on_policy::algorithm::OnPolicyAlgorithm
 //! [`Policy`]: crate::models::Policy
 //! [`R2lTensor`]: crate::tensor::R2lTensor
@@ -40,7 +40,7 @@
 pub mod buffers;
 /// Environment traits and space descriptions.
 pub mod env;
-/// Actor, policy, value-function, and learning-module traits.
+/// Actor, policy, value-function, and learner traits.
 pub mod models;
 /// Shared interfaces for on-policy training loops.
 pub mod on_policy;
@@ -89,13 +89,13 @@ macro_rules! return_on_hook_result {
 }
 
 /// Common imports for implementing environments, policies, agents, samplers,
-/// and learning modules.
+/// and learners.
 pub mod prelude {
     pub use crate::HookResult;
     pub use crate::buffers::Memory;
     pub use crate::env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Space};
-    pub use crate::models::{ActivationFunction, Actor, LearningModule, Policy, ValueFunction};
-    pub use crate::on_policy::learning_module::OnPolicyLearningModule;
+    pub use crate::models::{ActivationFunction, Actor, Learner, Policy, ValueFunction};
+    pub use crate::on_policy::learning_module::OnPolicyLearner;
     pub use crate::on_policy::losses::FromPolicyValueLosses;
     pub use crate::tensor::{R2lTensor, TensorData};
 }

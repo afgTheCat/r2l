@@ -5,7 +5,7 @@ use r2l_core::{
     buffers::TrajectoryBatch,
     models::Policy,
     on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
+        algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
     },
     tensor::R2lTensor,
 };
@@ -35,14 +35,14 @@ impl Default for VPGParams {
 }
 
 /// Prototype Vanilla Policy Gradient algorithm over finalized trajectory batches.
-pub struct VPG<Module: OnPolicyLearningModule> {
+pub struct VPG<Module: OnPolicyLearner> {
     /// VPG hyperparameters.
     pub params: VPGParams,
-    /// Learning module containing policy, value function, and optimizer state.
+    /// Learner containing policy, value function, and optimizer state.
     pub lm: Module,
 }
 
-impl<Module: OnPolicyLearningModule> VPG<Module> {
+impl<Module: OnPolicyLearner> VPG<Module> {
     fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
@@ -88,7 +88,7 @@ impl<Module: OnPolicyLearningModule> VPG<Module> {
     }
 }
 
-impl<M: OnPolicyLearningModule> Agent for VPG<M> {
+impl<M: OnPolicyLearner> Agent for VPG<M> {
     type Tensor = M::InferenceTensor;
     type Actor = M::InferencePolicy;
 

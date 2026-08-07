@@ -5,10 +5,11 @@ use std::{
 };
 
 use candle_core::Device;
-use r2l::{A2CAlgorithmBuilder, A2CStats, LearningSchedule, SamplerExecutionMode};
+use r2l::{A2CAlgorithmBuilder, A2CRolloutStats, LearningSchedule, SamplerExecutionMode};
 
 fn main() {
-    let (update_tx, update_rx): (Sender<A2CStats>, Receiver<A2CStats>) = mpsc::channel();
+    let (update_tx, update_rx): (Sender<A2CRolloutStats>, Receiver<A2CRolloutStats>) =
+        mpsc::channel();
 
     let a2c_builder = A2CAlgorithmBuilder::gym("Pendulum-v1", 10)
         .with_candle(Device::Cpu)

@@ -2,10 +2,11 @@ use burn::{module::AutodiffModule, tensor::backend::AutodiffBackend};
 use r2l_agents::on_policy_algorithms::a2c::A2C;
 use r2l_burn::{
     distributions::BurnPolicyKind,
-    learning_module::ActionSpacePolicyValueModule as BurnActionSpacePolicyValueModule,
+    learning_module::PolicyValueLearner as BurnPolicyValueLearner,
 };
 use r2l_candle::{
-    distributions::CandlePolicyKind, learning_module::PolicyValueModule as CandlePolicyValueModule,
+    distributions::CandlePolicyKind,
+    learning_module::PolicyValueLearner as CandlePolicyValueLearner,
 };
 use r2l_core::{buffers::TrajectoryBatch, on_policy::algorithm::Agent};
 
@@ -14,15 +15,15 @@ use crate::hooks::a2c::DefaultA2CHook;
 /// A2C agent specialized to the Burn backend.
 ///
 /// This wraps the core [`A2C`](r2l_agents::on_policy_algorithms::a2c::A2C)
-/// implementation with Burn learning modules and the default A2C training
+/// implementation with a Burn learner and the default A2C training
 /// hook.
 ///
 /// Use this type when you want an [`Agent`](r2l_core::on_policy::algorithm::Agent)
 /// backed by Burn instead of the default Candle backend.
 pub struct A2CBurnAgent<B: AutodiffBackend>(
     pub  A2C<
-        BurnActionSpacePolicyValueModule<B>,
-        DefaultA2CHook<BurnActionSpacePolicyValueModule<B>>,
+        BurnPolicyValueLearner<B>,
+        DefaultA2CHook<BurnPolicyValueLearner<B>>,
     >,
 );
 
@@ -50,14 +51,14 @@ impl<B: AutodiffBackend> Agent for A2CBurnAgent<B> {
 /// A2C agent specialized to the Candle backend.
 ///
 /// This wraps the core [`A2C`](r2l_agents::on_policy_algorithms::a2c::A2C)
-/// implementation with Candle learning modules and the default A2C training
+/// implementation with a Candle learner and the default A2C training
 /// hook.
 ///
 /// Use this type when you want an [`Agent`](r2l_core::on_policy::algorithm::Agent)
 /// on the default Candle backend, optionally selecting a device through
 /// [`with_candle`](crate::A2CAlgorithmBuilder::with_candle).
 pub struct A2CCandleAgent(
-    pub A2C<CandlePolicyValueModule, DefaultA2CHook<CandlePolicyValueModule>>,
+    pub A2C<CandlePolicyValueLearner, DefaultA2CHook<CandlePolicyValueLearner>>,
 );
 
 impl Agent for A2CCandleAgent {

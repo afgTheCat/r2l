@@ -4,7 +4,7 @@ use std::{io, sync::mpsc};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l::{
     LearningSchedule, OnPolicyCommandReceiver, OnPolicyCommandSender, PPOAlgorithmBuilder,
-    PPOStats, on_policy_command_channel,
+    PPORolloutStats, on_policy_command_channel,
 };
 use r2l_examples::EventBox;
 use ratatui::layout::Alignment;
@@ -24,10 +24,10 @@ const ENV_NAME: &str = "Pendulum-v1";
 #[derive(Debug)]
 struct App {
     exit: bool,
-    latest_update: Option<PPOStats>,
+    latest_update: Option<PPORolloutStats>,
     rx: Receiver<EventBox>,
     ppo_command: OnPolicyCommandSender,
-    best_update: Option<PPOStats>,
+    best_update: Option<PPORolloutStats>,
     average_rollout_rewards: Vec<f32>,
     total_rollouts: usize,
     current_rollout: usize,
@@ -86,7 +86,7 @@ impl App {
             terminal.draw(|frame| self.draw(frame))?;
             let event = self.rx.recv().unwrap();
             event
-                .downcast::<PPOStats>()
+                .downcast::<PPORolloutStats>()
                 .map(|progress| {
                     self.current_rollout += 1;
                     self.handle_progress(*progress);
@@ -102,7 +102,7 @@ impl App {
         Ok(())
     }
 
-    fn handle_progress(&mut self, progress: PPOStats) {
+    fn handle_progress(&mut self, progress: PPORolloutStats) {
         let average_reward = progress.average_reward;
         self.average_rollout_rewards.push(average_reward);
         match &self.best_update {
@@ -137,7 +137,7 @@ impl App {
         self.exit = true;
     }
 
-    fn ppo_progress_to_table<'a>(ppo_progress: &'a PPOStats, name: &'a str) -> Table<'a> {
+    fn ppo_progress_to_table<'a>(ppo_progress: &'a PPORolloutStats, name: &'a str) -> Table<'a> {
         let block = Block::bordered().title(name).border_set(border::THICK);
         let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
         let entropy_loss = ppo_progress.entropy_loss();
@@ -177,8 +177,8 @@ impl App {
     fn draw_statistics(
         statistics_area: Rect,
         buf: &mut Buffer,
-        latest_update: &PPOStats,
-        best_update: &PPOStats,
+        latest_update: &PPORolloutStats,
+        best_update: &PPORolloutStats,
     ) {
         let vertical_area =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
@@ -269,7 +269,7 @@ fn handle_input_events(tx: mpsc::Sender<EventBox>) {
 ///
 /// Returns an error if the algorithm cannot be built or training fails.
 pub fn train_ppo(
-    tx: Sender<PPOStats>,
+    tx: Sender<PPORolloutStats>,
     total_rollouts: usize,
     command_rx: OnPolicyCommandReceiver,
 ) -> anyhow::Result<()> {
@@ -296,7 +296,7 @@ pub fn train_ppo(
 /// # Panics
 ///
 /// Panics if the UI event receiver disconnects while updates are still arriving.
-pub fn adapt_ppo_events(update_rx: Receiver<PPOStats>, tx_to_updates: Sender<EventBox>) {
+pub fn adapt_ppo_events(update_rx: Receiver<PPORolloutStats>, tx_to_updates: Sender<EventBox>) {
     std::thread::spawn(move || {
         while let Ok(update) = update_rx.recv() {
             tx_to_updates.send(Box::new(update)).unwrap();
