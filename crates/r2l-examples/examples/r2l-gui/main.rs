@@ -34,7 +34,7 @@ impl App {
             },
             best_table: UpdateTable {
                 clip_range,
-                progress: Default::default(),
+                progress: PPOStats::default(),
             },
             average_rollout_rewards: vec![],
         }
@@ -76,12 +76,12 @@ impl eframe::App for App {
             // TODO: maybe we should shrink it within the rect
             recent_table_rect = recent_table_rect.shrink(10.);
             ui.scope_builder(UiBuilder::new().max_rect(recent_table_rect), |ui| {
-                self.recent_table.ui(ui)
+                self.recent_table.ui(ui);
             });
 
             best_table_rect = best_table_rect.shrink(10.);
             ui.scope_builder(UiBuilder::new().max_rect(best_table_rect), |ui| {
-                self.best_table.ui(ui)
+                self.best_table.ui(ui);
             });
 
             let (_progress_bar, plot) = other_widgets.split_top_bottom_at_fraction(0.1);
@@ -108,6 +108,11 @@ const MAX_GRAD_NORM: f32 = 0.5;
 const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
 
+/// Trains the PPO GUI example and reports progress through `tx`.
+///
+/// # Errors
+///
+/// Returns an error if the algorithm cannot be built or training fails.
 pub fn train_ppo(
     tx: Sender<PPOStats>,
     total_rollouts: usize,
@@ -148,10 +153,10 @@ fn main() -> eframe::Result {
     std::thread::spawn(
         move || match train_ppo(update_tx, total_rollouts, clip_range) {
             Ok(()) => {
-                println!("ppo trained normally")
+                println!("ppo trained normally");
             }
             Err(err) => {
-                eprintln!("ppo was not trained normally, err: {err}")
+                eprintln!("ppo was not trained normally, err: {err}");
             }
         },
     );

@@ -1,5 +1,5 @@
 use std::sync::mpsc::{Receiver, Sender};
-use std::{f64, io, sync::mpsc};
+use std::{io, sync::mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l::{
@@ -45,9 +45,9 @@ impl Widget for &App {
                 Constraint::Percentage(50),
             ]);
             let [statistics_area, progress_bar_area, chart_area] = horizontal_area.areas(area);
-            self.draw_statistics(statistics_area, buf, latest_update, best_update);
+            App::draw_statistics(statistics_area, buf, latest_update, best_update);
             let progress = self.current_rollout as f64 / self.total_rollouts as f64;
-            self.draw_progress_bar(progress_bar_area, buf, progress);
+            App::draw_progress_bar(progress_bar_area, buf, progress);
             self.draw_chart(chart_area, buf);
         } else {
             let [_, middle, _] = Layout::vertical([
@@ -93,7 +93,7 @@ impl App {
                 })
                 .or_else(|event| {
                     event.downcast::<KeyEvent>().map(|key_event| {
-                        self.handle_events(*key_event).unwrap();
+                        self.handle_events(*key_event);
                     })
                 })
                 .unwrap_or_else(|_| unreachable!("Unknown event type received"));
@@ -112,25 +112,24 @@ impl App {
             }
             _ => {}
         }
-        self.latest_update = Some(progress)
+        self.latest_update = Some(progress);
     }
 
     fn draw(&self, frame: &mut Frame) {
         frame.render_widget(self, frame.area());
     }
 
-    fn handle_events(&mut self, key_event: crossterm::event::KeyEvent) -> io::Result<()> {
+    fn handle_events(&mut self, key_event: crossterm::event::KeyEvent) {
         if key_event.kind == KeyEventKind::Press {
-            self.handle_key_event(key_event)
+            self.handle_key_event(key_event);
         }
-        Ok(())
     }
 
     // maybe something more eventually
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if let KeyCode::Char('q') = key_event.code {
             self.ppo_command.shutdown();
-            self.exit()
+            self.exit();
         }
     }
 
@@ -138,7 +137,7 @@ impl App {
         self.exit = true;
     }
 
-    fn ppo_progress_to_table<'a>(&self, ppo_progress: &'a PPOStats, name: &'a str) -> Table<'a> {
+    fn ppo_progress_to_table<'a>(ppo_progress: &'a PPOStats, name: &'a str) -> Table<'a> {
         let block = Block::bordered().title(name).border_set(border::THICK);
         let widths = [Constraint::Percentage(50), Constraint::Percentage(50)];
         let entropy_loss = ppo_progress.entropy_loss();
@@ -166,17 +165,16 @@ impl App {
             ]),
             Row::new(vec![
                 "Standard deviation".into(),
-                ppo_progress
-                    .std
-                    .map(|std| std.to_string())
-                    .unwrap_or_else(|| "n/a".to_string()),
+                ppo_progress.std.map_or_else(
+                    || "n/a".to_string(),
+                    |standard_deviation| standard_deviation.to_string(),
+                ),
             ]),
         ];
         Table::new(rows, widths).block(block)
     }
 
     fn draw_statistics(
-        &self,
         statistics_area: Rect,
         buf: &mut Buffer,
         latest_update: &PPOStats,
@@ -185,10 +183,8 @@ impl App {
         let vertical_area =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
         let [latest_stat_area, best_stat_area] = vertical_area.areas(statistics_area);
-        self.ppo_progress_to_table(latest_update, "Latest update")
-            .render(latest_stat_area, buf);
-        self.ppo_progress_to_table(best_update, "Best update")
-            .render(best_stat_area, buf);
+        Self::ppo_progress_to_table(latest_update, "Latest update").render(latest_stat_area, buf);
+        Self::ppo_progress_to_table(best_update, "Best update").render(best_stat_area, buf);
     }
 
     fn draw_chart(&self, chart_area: Rect, buf: &mut Buffer) {
@@ -244,7 +240,7 @@ impl App {
         }
     }
 
-    fn draw_progress_bar(&self, pb_area: Rect, buf: &mut Buffer, progress: f64) {
+    fn draw_progress_bar(pb_area: Rect, buf: &mut Buffer, progress: f64) {
         let block = Block::bordered()
             .title(Line::from(" Learning Progress "))
             .border_set(border::THICK);
@@ -261,12 +257,17 @@ fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     std::thread::spawn(move || {
         loop {
             if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
-                tx.send(Box::new(key_event)).unwrap()
+                tx.send(Box::new(key_event)).unwrap();
             }
         }
     });
 }
 
+/// Trains the PPO example and reports progress through `tx`.
+///
+/// # Errors
+///
+/// Returns an error if the algorithm cannot be built or training fails.
 pub fn train_ppo(
     tx: Sender<PPOStats>,
     total_rollouts: usize,
@@ -290,6 +291,11 @@ pub fn train_ppo(
     ppo.train()
 }
 
+/// Forwards PPO updates into the UI event channel.
+///
+/// # Panics
+///
+/// Panics if the UI event receiver disconnects while updates are still arriving.
 pub fn adapt_ppo_events(update_rx: Receiver<PPOStats>, tx_to_updates: Sender<EventBox>) {
     std::thread::spawn(move || {
         while let Ok(update) = update_rx.recv() {
@@ -309,7 +315,7 @@ fn main() -> io::Result<()> {
         move || match train_ppo(update_tx, total_rollouts, command_rx) {
             Ok(()) => {}
             Err(err) => {
-                eprintln!("ppo was not trained normally, err: {err}")
+                eprintln!("ppo was not trained normally, err: {err}");
             }
         },
     );
