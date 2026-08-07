@@ -220,6 +220,7 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     }
 
     /// Returns the number of environments represented by this builder.
+    #[must_use]
     pub fn num_envs(&self) -> usize {
         match self {
             Self::Homogeneous { n_envs, .. } => *n_envs,
@@ -228,6 +229,7 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     }
 
     /// Returns a representative environment builder.
+    #[must_use]
     pub fn env_builder(&self) -> Arc<EB> {
         match &self {
             Self::Homogeneous { builder, .. } => builder.clone(),

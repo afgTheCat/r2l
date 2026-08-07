@@ -10,7 +10,6 @@ use r2l_core::{
     models::{ActivationFunction, Actor, Policy},
     rng::with_rng,
 };
-use rand::RngExt;
 
 use crate::sequential::Sequential;
 
@@ -23,6 +22,7 @@ pub struct BernoulliDistribution<B: Backend> {
 
 impl<B: Backend> BernoulliDistribution<B> {
     /// Builds a Bernoulli policy network.
+    #[must_use]
     pub fn build(
         observation_size: usize,
         hidden_layers: &[usize],
@@ -49,7 +49,7 @@ impl<B: Backend> Actor for BernoulliDistribution<B> {
         let actions = probs
             .into_iter()
             .map(|prob| {
-                if with_rng(|rng| rng.random::<f32>()) < prob {
+                if with_rng(rand::RngExt::random::<f32>) < prob {
                     1.
                 } else {
                     0.

@@ -74,11 +74,13 @@ pub struct PolicyMetadata {
 
 impl PolicyMetadata {
     /// Converts the metadata into the string map accepted by safetensors.
+    #[must_use]
     pub fn to_safetensors_metadata(&self) -> HashMap<String, String> {
         HashMap::from([("activation".to_string(), self.activation.to_string())])
     }
 
     /// Builds policy metadata from the string map stored by safetensors.
+    #[must_use]
     pub fn from_safetensors_metadata(metadata: &HashMap<String, String>) -> Self {
         Self {
             activation: metadata.get("activation").unwrap().parse().unwrap(),

@@ -39,9 +39,9 @@ impl DiagGaussianDistribution {
         let noise = standard_normal(log_std.shape(), log_std.device())?;
         let device = vb.device().clone();
         Ok(Self {
-            log_std,
-            mu_net,
             noise,
+            mu_net,
+            log_std,
             device,
         })
     }
@@ -67,11 +67,13 @@ impl DiagGaussianDistribution {
     }
 
     /// Returns the Candle device used by this policy.
+    #[must_use]
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
     /// Returns the flattened observation size expected by this policy.
+    #[must_use]
     pub fn observation_size(&self) -> usize {
         self.mu_net.input_size()
     }
@@ -136,7 +138,7 @@ impl Policy for DiagGaussianDistribution {
 
     fn entropy(&self, _states: &[Tensor]) -> Result<Tensor> {
         let log_2pi_plus_1_div_2 = Tensor::full(
-            0.5 * ((2. * f32::consts::PI).ln() + 1.),
+            f32::midpoint((2. * f32::consts::PI).ln(), 1.),
             self.log_std.shape(),
             self.log_std.device(),
         )?;

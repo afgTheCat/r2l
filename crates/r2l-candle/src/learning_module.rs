@@ -45,6 +45,7 @@ impl FromPolicyValueLosses<Tensor> for PolicyValueLosses {
 
 impl PolicyValueLosses {
     /// Creates a loss container from policy and value losses.
+    #[must_use]
     pub fn new(policy_loss: Tensor, value_loss: Tensor) -> Self {
         Self {
             policy_loss,
@@ -73,6 +74,7 @@ pub struct SplitPolicyValueOptimizer {
 
 impl SplitPolicyValueOptimizer {
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
         self.policy_optimizer_with_grad.optimizer.learning_rate()
     }
@@ -115,7 +117,7 @@ impl LearningModule for SplitPolicyValueOptimizer {
         } else {
             self.value_optimizer_with_grad
                 .backward_step(&losses.value_loss)?;
-        };
+        }
         Ok(())
     }
 }
@@ -128,6 +130,7 @@ pub struct JointPolicyValueOptimizer {
 
 impl JointPolicyValueOptimizer {
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer_with_grad.optimizer.learning_rate()
     }
@@ -235,6 +238,7 @@ impl PolicyValueOptimizer {
 
 impl PolicyValueOptimizer {
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
         match self {
             Self::Joint(joint) => joint.policy_learning_rate(),
@@ -358,6 +362,7 @@ impl PolicyValueModule {
     }
 
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer.policy_learning_rate()
     }

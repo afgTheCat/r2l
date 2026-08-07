@@ -23,6 +23,7 @@ pub struct DiagGaussianDistribution<B: Backend> {
 
 impl<B: Backend> DiagGaussianDistribution<B> {
     /// Builds a diagonal-Gaussian policy network.
+    #[must_use]
     pub fn build(mu_layers: &[usize], activation: ActivationFunction, log_std_init: f32) -> Self {
         let device = Default::default();
         let action_size = *mu_layers.last().unwrap();
@@ -102,7 +103,7 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         let entropy_per_dim = log_std.clone()
             + Tensor::from_data(
                 TensorData::new(
-                    vec![0.5 * ((2. * f32::consts::PI).ln() + 1.); log_std.shape().num_elements()],
+                    vec![f32::midpoint((2. * f32::consts::PI).ln(), 1.); log_std.shape().num_elements()],
                     log_std.shape(),
                 ),
                 &device,

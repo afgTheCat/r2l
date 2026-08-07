@@ -55,6 +55,7 @@ pub struct A2CStats {
 
 impl A2CStats {
     /// Returns the mean entropy loss across collected minibatches.
+    #[must_use]
     pub fn entropy_loss(&self) -> f32 {
         mean(
             &self
@@ -66,6 +67,7 @@ impl A2CStats {
     }
 
     /// Returns the mean value loss across collected minibatches.
+    #[must_use]
     pub fn value_loss(&self) -> f32 {
         mean(
             &self
@@ -77,6 +79,7 @@ impl A2CStats {
     }
 
     /// Returns the mean policy loss across collected minibatches.
+    #[must_use]
     pub fn policy_loss(&self) -> f32 {
         mean(
             &self
@@ -103,7 +106,7 @@ impl std::fmt::Display for A2CStats {
             ("Learning rate", fmt_stat(self.learning_rate as f32)),
             (
                 "Standard deviation",
-                self.std.map(|std| std.to_string()).unwrap_or("n/a".into()),
+                self.std.map_or("n/a".into(), |std| std.to_string()),
             ),
         ];
 

@@ -123,11 +123,13 @@ impl Default for EvaluationSettings {
 
 impl EvaluationSettings {
     /// Creates evaluation settings with the default episode count, interval, and execution mode.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Sets the number of episodes collected during each evaluation pass.
+    #[must_use]
     pub fn with_episodes_per_evaluation(mut self, episodes_per_evaluation: usize) -> Self {
         assert!(
             episodes_per_evaluation > 0,
@@ -138,6 +140,7 @@ impl EvaluationSettings {
     }
 
     /// Sets how evaluation environments are executed.
+    #[must_use]
     pub fn with_evaluation_execution_mode(
         mut self,
         evaluation_execution_mode: SamplerExecutionMode,
@@ -147,6 +150,7 @@ impl EvaluationSettings {
     }
 
     /// Sets the number of training rollouts between evaluation passes.
+    #[must_use]
     pub fn with_rollouts_per_evaluation(mut self, rollouts_per_evaluation: usize) -> Self {
         assert!(
             rollouts_per_evaluation > 0,
@@ -180,24 +184,28 @@ impl TrainingArtifactsConfig {
     }
 
     /// Sets whether evaluation results are written during training.
+    #[must_use]
     pub fn with_evaluation_results(mut self, enabled: bool) -> Self {
         self.evaluation_results = enabled;
         self
     }
 
     /// Sets whether training performance metrics are written.
+    #[must_use]
     pub fn with_performance_metrics(mut self, enabled: bool) -> Self {
         self.performance_metrics = enabled;
         self
     }
 
     /// Sets whether the best policy is saved as inference-ready artifacts.
+    #[must_use]
     pub fn with_inference_artifacts(mut self, enabled: bool) -> Self {
         self.inference_artifacts = enabled;
         self
     }
 
     /// Sets the evaluation behavior used by evaluation results and inference artifacts.
+    #[must_use]
     pub fn with_evaluation_settings(mut self, evaluation_settings: EvaluationSettings) -> Self {
         self.evaluation_settings = evaluation_settings;
         self

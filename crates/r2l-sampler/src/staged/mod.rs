@@ -48,6 +48,7 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     /// Builds staged sampler state and its environment workers.
+    #[must_use]
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
@@ -66,10 +67,10 @@ impl<E: Env> StagedSamplerCore<E> {
             obs_normalizer.apply_slice_in_place(&mut last_states);
         }
         Self {
-            buffers,
             pool,
-            last_states,
             obs_normalizer,
+            last_states,
+            buffers,
         }
     }
 
@@ -158,9 +159,9 @@ impl<E: Env> StagedSamplerCore<E> {
             .map(|idx| last_states[*idx].clone())
             .collect::<Vec<_>>();
         let memories = multi_memory.into_memories(&next_states);
-        let terminations = memories.iter().map(|memory| memory.is_done()).collect();
+        let terminations = memories.iter().map(r2l_core::buffers::Memory::is_done).collect();
         for (idx, memory) in indices.iter().zip(memories) {
-            self.buffers[*idx].push(memory)
+            self.buffers[*idx].push(memory);
         }
         terminations
     }
@@ -169,7 +170,7 @@ impl<E: Env> StagedSamplerCore<E> {
         let multi_memory = self.pool.step();
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
-            obs_normalizer.apply_slice_in_place(&mut last_states)
+            obs_normalizer.apply_slice_in_place(&mut last_states);
         }
         let last_states = self.last_states.lock().unwrap();
         let memories = multi_memory.into_memories(&last_states);
@@ -180,7 +181,7 @@ impl<E: Env> StagedSamplerCore<E> {
 
     /// Clears all output trajectory buffers.
     pub fn clear_buffers(&mut self) {
-        self.buffers.iter_mut().for_each(|buffer| buffer.clear());
+        self.buffers.iter_mut().for_each(r2l_core::buffers::buffer::TrajectoryBuffer::clear);
     }
 
     /// Installs a clone of `policy` on every worker.
@@ -189,7 +190,7 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     /// Borrows all collected trajectories in worker order.
-    pub fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, E::Tensor>]> {
+    pub fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, E::Tensor>]> {
         self.buffers
             .iter()
             .map(|buffer| buffer.to_trajectory_view())
@@ -278,7 +279,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
         }
     }
 
-    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]> {
+    fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {
         self.core.trajectory_views()
     }
 

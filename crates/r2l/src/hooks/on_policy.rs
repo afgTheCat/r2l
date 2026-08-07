@@ -57,6 +57,7 @@ pub enum LearningSchedule {
 
 impl LearningSchedule {
     /// Creates a schedule bounded by total sampled environment steps.
+    #[must_use]
     pub fn total_step_bound(total_steps: usize) -> Self {
         Self::TotalStepBound {
             total_steps,
@@ -65,6 +66,7 @@ impl LearningSchedule {
     }
 
     /// Creates a schedule bounded by completed rollout collections.
+    #[must_use]
     pub fn rollout_bound(total_rollouts: usize) -> Self {
         Self::RolloutBound {
             total_rollouts,
@@ -84,6 +86,7 @@ pub enum LearningRateSchedule {
 
 impl LearningRateSchedule {
     /// Returns the learning rate for the remaining fraction of training.
+    #[must_use]
     pub fn value(self, progress_remaining: f64) -> f64 {
         match self {
             Self::Constant(learning_rate) => learning_rate,
@@ -122,6 +125,7 @@ pub struct OnPolicyCommandReceiver {
 
 impl OnPolicyCommandReceiver {
     /// Creates an algorithm-side endpoint from its command and result channels.
+    #[must_use]
     pub fn new(rx: Receiver<OnPolicyCommand>, tx: Sender<OnPolicyCommandResult>) -> Self {
         Self { rx, tx }
     }
@@ -138,11 +142,12 @@ pub struct OnPolicyCommandSender {
 
 impl OnPolicyCommandSender {
     /// Creates a user-side endpoint from its result and command channels.
+    #[must_use]
     pub fn new(rx: Receiver<OnPolicyCommandResult>, tx: Sender<OnPolicyCommand>) -> Self {
         Self { rx, tx }
     }
 
-    /// Shuts down the OnPolicyAlgorithm gracefully.
+    /// Shuts down the `OnPolicyAlgorithm` gracefully.
     pub fn shutdown(&self) {
         self.tx.send(OnPolicyCommand::Shutdown).unwrap();
         // empty the response queue
@@ -151,6 +156,7 @@ impl OnPolicyCommandSender {
 }
 
 /// Creates the algorithm-side receiver and user-side sender for on-policy commands.
+#[must_use]
 pub fn on_policy_command_channel() -> (OnPolicyCommandReceiver, OnPolicyCommandSender) {
     let (command_tx, command_rx) = std::sync::mpsc::channel();
     let (result_tx, result_rx) = std::sync::mpsc::channel();

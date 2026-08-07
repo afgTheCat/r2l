@@ -154,7 +154,7 @@ pub(crate) fn parse_obs(
         | Space::MultiDiscrete { shape, .. }
         | Space::MultiBinary { shape } => {
             let values = flatten_extract(observation)?;
-            Ok(TensorData::new(values, shape.to_vec()))
+            Ok(TensorData::new(values, shape.clone()))
         }
         Space::Tuple(spaces) => parse_obs_fields(
             spaces

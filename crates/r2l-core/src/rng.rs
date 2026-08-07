@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use rand::{RngExt, SeedableRng, rngs::StdRng};
+use rand::{SeedableRng, rngs::StdRng};
 
 thread_local! {
     static RNG: RefCell<StdRng> = RefCell::new(StdRng::seed_from_u64(0));
@@ -12,8 +12,9 @@ pub fn set_seed(seed: u64) {
 }
 
 /// Samples a `u64` from the current thread's random stream.
+#[must_use]
 pub fn sample_u64() -> u64 {
-    RNG.with_borrow_mut(|rng| rng.random::<u64>())
+    RNG.with_borrow_mut(rand::RngExt::random::<u64>)
 }
 
 /// Runs a closure with the policy/action-sampling random stream.

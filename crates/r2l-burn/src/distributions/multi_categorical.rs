@@ -28,6 +28,7 @@ pub struct MultiCategoricalDistribution<B: Backend> {
 
 impl<B: Backend> MultiCategoricalDistribution<B> {
     /// Builds a multi-categorical policy network.
+    #[must_use]
     pub fn build(
         observation_size: usize,
         hidden_layers: &[usize],

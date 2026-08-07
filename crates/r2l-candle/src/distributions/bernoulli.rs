@@ -5,7 +5,6 @@ use r2l_core::{
     models::{ActivationFunction, Actor, Policy, PolicyMetadata},
     rng::with_rng,
 };
-use rand::RngExt;
 use safetensors::serialize as st_serialize;
 
 use crate::sequential::{Sequential, build_sequential};
@@ -39,11 +38,13 @@ impl BernoulliDistribution {
     }
 
     /// Returns the Candle device used by this policy.
+    #[must_use]
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
     /// Returns the flattened observation size expected by this policy.
+    #[must_use]
     pub fn observation_size(&self) -> usize {
         self.logits.input_size()
     }
@@ -67,7 +68,7 @@ impl Actor for BernoulliDistribution {
         let actions = probs
             .into_iter()
             .map(|prob| {
-                if with_rng(|rng| rng.random::<f32>()) < prob {
+                if with_rng(rand::RngExt::random::<f32>) < prob {
                     1.
                 } else {
                     0.

@@ -37,6 +37,7 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
     /// `layers` follows the same convention as the feed-forward policies:
     /// first observation size, optional hidden encoder sizes, final action size.
     /// The recurrent hidden size is the encoder output size.
+    #[must_use]
     pub fn build(layers: &[usize]) -> Self {
         assert!(
             layers.len() >= 2,

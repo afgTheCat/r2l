@@ -52,8 +52,8 @@ pub struct Sequential<B: Backend> {
 
 impl<B: Backend> Sequential<B> {
     pub fn forward(&self, mut t: Tensor<B, 2>) -> Tensor<B, 2> {
-        for layer in self.layers.iter() {
-            t = layer.forward(t)
+        for layer in &self.layers {
+            t = layer.forward(t);
         }
         t
     }

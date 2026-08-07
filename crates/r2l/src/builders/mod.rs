@@ -59,7 +59,7 @@ pub type A2CCandle = A2C<CandlePolicyValueModule, DefaultA2CHook<CandlePolicyVal
 /// A2C agent produced by a Burn-backed algorithm builder.
 pub type A2CBurn<B> = A2C<BurnPolicyValueModule<B>, DefaultA2CHook<BurnPolicyValueModule<B>>>;
 
-/// AdamW hyperparameters used by an on-policy learning module.
+/// `AdamW` hyperparameters used by an on-policy learning module.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AdamWParams {
     /// Learning rate.
@@ -81,7 +81,7 @@ pub enum OnPolicyOptimizerLayout {
     Joint {
         /// Optional maximum gradient norm.
         max_grad_norm: Option<f32>,
-        /// Shared AdamW parameters.
+        /// Shared `AdamW` parameters.
         params: AdamWParams,
     },
     /// Policy and value networks use independent optimizers.
@@ -114,26 +114,31 @@ impl OnPolicyOptimizerLayout {
     }
 
     /// Sets the learning rate of every optimizer in the layout.
+    #[must_use]
     pub fn with_lr(self, lr: f64) -> Self {
         self.map_params(|params| params.lr = lr)
     }
 
     /// Sets the first-moment decay of every optimizer in the layout.
+    #[must_use]
     pub fn with_beta1(self, beta1: f64) -> Self {
         self.map_params(|params| params.beta1 = beta1)
     }
 
     /// Sets the second-moment decay of every optimizer in the layout.
+    #[must_use]
     pub fn with_beta2(self, beta2: f64) -> Self {
         self.map_params(|params| params.beta2 = beta2)
     }
 
     /// Sets the numerical-stability term of every optimizer in the layout.
+    #[must_use]
     pub fn with_epsilon(self, epsilon: f64) -> Self {
         self.map_params(|params| params.eps = epsilon)
     }
 
     /// Sets the weight decay of every optimizer in the layout.
+    #[must_use]
     pub fn with_weight_decay(self, weight_decay: f64) -> Self {
         self.map_params(|params| params.weight_decay = weight_decay)
     }
@@ -497,7 +502,7 @@ impl<E: Env> Builder<E> {
         let evaluator = self.evaluator::<A>(obs_normalizer);
         let performance_log = self
             .training_artifacts_config
-            .and_then(|c| c.into_performance_metrics());
+            .and_then(super::evaluators::best_actor_evaluator::TrainingArtifactsConfig::into_performance_metrics);
         DefaultOnPolicyAlgorithmHooks {
             learning_schedule: self.learning_schedule,
             learning_rate_schedule: self.learning_rate_schedule,
@@ -728,7 +733,7 @@ struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
 /// Both entry points default to Candle on the CPU, multi-threaded direct
 /// sampling with 1,024 steps per environment, and a training limit of 300
 /// rollouts. Shared learning defaults include `gamma = 0.98`, `lambda = 0.8`,
-/// minibatches of 64 samples, and a joint AdamW optimizer with a learning rate
+/// minibatches of 64 samples, and a joint `AdamW` optimizer with a learning rate
 /// of `3e-4`.
 pub struct OnPolicyAlgoBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     builder: Builder<E>,
@@ -859,28 +864,28 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
         self
     }
 
-    /// Sets the AdamW first-moment decay for every optimizer.
+    /// Sets the `AdamW` first-moment decay for every optimizer.
     pub fn with_beta1(mut self, beta1: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_beta1(beta1));
         self
     }
 
-    /// Sets the AdamW second-moment decay for every optimizer.
+    /// Sets the `AdamW` second-moment decay for every optimizer.
     pub fn with_beta2(mut self, beta2: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_beta2(beta2));
         self
     }
 
-    /// Sets the AdamW numerical-stability term for every optimizer.
+    /// Sets the `AdamW` numerical-stability term for every optimizer.
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_epsilon(epsilon));
         self
     }
 
-    /// Sets the AdamW weight decay for every optimizer.
+    /// Sets the `AdamW` weight decay for every optimizer.
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_weight_decay(weight_decay));

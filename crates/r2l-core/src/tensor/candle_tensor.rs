@@ -68,6 +68,7 @@ impl R2lTensor for Tensor {
 
 impl TensorData {
     /// Clamps each element between the corresponding values in `min` and `max`.
+    #[must_use]
     pub fn clamp(&self, min: &Self, max: &Self) -> Self {
         let data = izip!(&self.data, &min.data, &max.data)
             .map(|(value, min, max)| value.clamp(*min, *max))

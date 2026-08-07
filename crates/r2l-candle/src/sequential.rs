@@ -140,8 +140,8 @@ impl Sequential {
 impl Module for Sequential {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         let mut xs = xs.clone();
-        for layer in self.layers.iter() {
-            xs = layer.forward(&xs)?
+        for layer in &self.layers {
+            xs = layer.forward(&xs)?;
         }
         Ok(xs)
     }
@@ -161,7 +161,7 @@ pub(crate) fn build_sequential(
         let layer_pp = format!("{prefix}{layer_idx}");
         if layer_idx == num_layers - 1 {
             let layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
-            nn = nn.add_layer(Layer::linear(layer))
+            nn = nn.add_layer(Layer::linear(layer));
         } else {
             let lin_layer = LinearLayer::new(last_dim, *layer_size, vb, &layer_pp)?;
             nn = nn

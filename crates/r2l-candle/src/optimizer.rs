@@ -8,7 +8,7 @@ fn clip_grad(t: &Tensor, varmap: &VarMap, max_norm: f32) -> Result<GradStore> {
     let mut grad_store = t.backward()?;
     let mut var_ids = vec![];
     let all_vars = varmap.all_vars();
-    for var in all_vars.iter() {
+    for var in &all_vars {
         let id = var.id();
         if let Some(grad) = grad_store.get_id(id) {
             var_ids.push(id);

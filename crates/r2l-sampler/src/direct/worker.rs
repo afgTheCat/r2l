@@ -211,28 +211,28 @@ impl<T: R2lTensor> ThreadWorkers<T> {
     }
 
     pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
-        for worker_handle in self.worker_handles.iter() {
+        for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
         }
-        for worker_handle in self.worker_handles.iter() {
+        for worker_handle in &self.worker_handles {
             worker_handle.recv();
         }
     }
 
     pub fn collect_rollout(&self, bound: RolloutMode) {
-        for worker_handle in self.worker_handles.iter() {
+        for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::Collect(bound));
         }
-        for worker_handle in self.worker_handles.iter() {
+        for worker_handle in &self.worker_handles {
             worker_handle.recv();
         }
     }
 
     pub fn reset_all(&self) {
-        for worker_handle in self.worker_handles.iter() {
+        for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
         }
-        for worker_handle in self.worker_handles.iter() {
+        for worker_handle in &self.worker_handles {
             worker_handle.recv();
         }
     }
@@ -245,10 +245,10 @@ impl<T: R2lTensor> ThreadWorkers<T> {
     }
 
     pub fn clear_buffers(&mut self) {
-        for worker_handle in self.worker_handles.iter() {
+        for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::ClearBuffer);
         }
-        for worker_handle in self.worker_handles.iter() {
+        for worker_handle in &self.worker_handles {
             worker_handle.recv();
         }
     }
@@ -267,7 +267,7 @@ impl<E: Env> WorkerPool<E> {
     pub fn clear_buffers(&mut self) {
         match self {
             Self::Vec(workers) => {
-                workers.iter_mut().for_each(|w| w.clear());
+                workers.iter_mut().for_each(Worker::clear);
             }
             Self::Thread(thread) => {
                 thread.clear_buffers();
@@ -280,7 +280,7 @@ impl<E: Env> WorkerPool<E> {
         match self {
             Self::Vec(workers) => {
                 for worker in workers.iter_mut() {
-                    worker.actor = Some(Box::new(policy.clone()))
+                    worker.actor = Some(Box::new(policy.clone()));
                 }
             }
             Self::Thread(thread_workers) => {

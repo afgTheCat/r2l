@@ -29,23 +29,27 @@ impl Default for PolicyBuilder {
 
 impl PolicyBuilder {
     /// Creates a policy builder with the default two-layer architecture.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Sets the hidden layer sizes.
+    #[must_use]
     pub fn with_hidden_layers(mut self, hidden_layers: Vec<usize>) -> Self {
         self.hidden_layers = hidden_layers;
         self
     }
 
     /// Sets the activation function used between hidden layers.
+    #[must_use]
     pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
         self.activation_function = activation_function;
         self
     }
 
     /// Sets the initial log standard deviation for Gaussian policies.
+    #[must_use]
     pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
         self.log_std_init = log_std_init;
         self

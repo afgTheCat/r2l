@@ -62,6 +62,7 @@ impl<E: Env> DirectSamplerCore<E> {
     }
 
     /// Builds sampler state from an environment collection and execution mode.
+    #[must_use]
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
@@ -173,7 +174,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
         }
     }
 
-    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]> {
+    fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {
         self.core
             .buffers
             .lock_map(|buffer| buffer.to_trajectory_view())

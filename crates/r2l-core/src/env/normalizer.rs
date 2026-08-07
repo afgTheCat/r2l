@@ -72,6 +72,7 @@ pub struct ClippedNormalizerSnapshot {
 
 impl<T: R2lTensor> ClippedNormalizer<T> {
     /// Returns a handle to the same statistics using `normalizer_mode`.
+    #[must_use]
     pub fn with_mode(&self, normalizer_mode: NormalizerMode) -> Self {
         Self {
             normalizer_mode,
@@ -80,7 +81,7 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     }
 
     pub fn new(normalizer_mode: NormalizerMode, rm: RunningMeanStd<T>, clip: f32) -> Self {
-        let inner = ClippedRunningMean { clip, rm };
+        let inner = ClippedRunningMean { rm, clip };
         Self {
             normalizer_mode,
             inner: ClippedNormalizerInner(Arc::new(Mutex::new(inner))),
@@ -88,9 +89,10 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     }
 
     /// Creates a normalizer for observations of `shape`.
+    #[must_use]
     pub fn build(normalizer_mode: NormalizerMode, clip: f32, shape: Vec<usize>) -> Self {
         let rm = RunningMeanStd::new(shape);
-        let inner = ClippedRunningMean { clip, rm };
+        let inner = ClippedRunningMean { rm, clip };
         Self {
             normalizer_mode,
             inner: ClippedNormalizerInner(Arc::new(Mutex::new(inner))),
@@ -114,6 +116,7 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     }
 
     /// Captures the current statistics in a backend-independent form.
+    #[must_use]
     pub fn snapshot(&self) -> ClippedNormalizerSnapshot {
         let inner = self.inner.0.lock().unwrap();
         let (mean, obs_shape) = inner.rm.mean.to_vec_and_shape();
@@ -130,6 +133,7 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
 
 impl ClippedNormalizerSnapshot {
     /// Reconstructs a normalizer from this snapshot.
+    #[must_use]
     pub fn into_normalizer<T: R2lTensor>(self) -> ClippedNormalizer<T> {
         let mean = T::from_vec_and_shape(self.mean, self.obs_shape.clone());
         let var = T::from_vec_and_shape(self.var, self.obs_shape);

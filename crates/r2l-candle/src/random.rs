@@ -40,6 +40,7 @@ impl SimpleBackend for SeededVarMap {
 }
 
 /// Creates a variable builder that initializes new variables with r2l's seeded RNG.
+#[must_use]
 pub fn seeded_var_builder(varmap: &VarMap, dtype: DType, device: &Device) -> VarBuilder<'static> {
     VarBuilder::from_backend(
         Box::new(SeededVarMap(varmap.clone())),

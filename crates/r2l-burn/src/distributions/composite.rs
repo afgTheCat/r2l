@@ -80,6 +80,7 @@ pub struct CompositeDistribution<B: Backend> {
 
 impl<B: Backend> CompositeDistribution<B> {
     /// Builds one child policy per nested action space.
+    #[must_use]
     pub fn build<T: R2lTensor>(
         action_spaces: Vec<Space<T>>,
         policy_layers: &[usize],

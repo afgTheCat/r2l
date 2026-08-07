@@ -123,6 +123,7 @@ pub struct GymEnvBuilder(String);
 
 impl GymEnvBuilder {
     /// Creates a builder for the given Gymnasium environment id.
+    #[must_use]
     pub fn new(name: &str) -> Self {
         Self(name.to_owned())
     }

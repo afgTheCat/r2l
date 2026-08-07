@@ -57,11 +57,13 @@ impl CompositeDistribution {
     }
 
     /// Returns the Candle device used by this policy.
+    #[must_use]
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
     /// Returns the flattened observation size expected by this policy.
+    #[must_use]
     pub fn observation_size(&self) -> usize {
         self.observation_size
     }

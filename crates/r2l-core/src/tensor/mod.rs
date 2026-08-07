@@ -34,6 +34,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self;
 
     /// Constructs a new tensor based on the a vector and shape
+    #[must_use]
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
         Self::from_slice_and_shape(&data, shape)
     }
@@ -82,6 +83,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn sqr(&self) -> anyhow::Result<Self>;
 
     /// Creates a zero-filled tensor with `shape`.
+    #[must_use]
     fn zeros(shape: Vec<usize>) -> Self {
         let data = vec![0f32; shape.iter().product()];
         Self::from_vec_and_shape(data, shape)
@@ -135,6 +137,7 @@ pub struct TensorData {
 
 impl TensorData {
     /// Creates a one-dimensional tensor from a vector.
+    #[must_use]
     pub fn from_vec(data: Vec<f32>) -> Self {
         let shape = vec![data.len()];
         Self { data, shape }
@@ -144,12 +147,14 @@ impl TensorData {
     ///
     /// In debug builds, this checks that `shape.iter().product()` matches the
     /// number of values.
+    #[must_use]
     pub fn new(data: Vec<f32>, shape: Vec<usize>) -> Self {
-        debug_assert!(shape.iter().product::<usize>() == data.len());
+        debug_assert_eq!(shape.iter().product::<usize>(), data.len());
         Self { data, shape }
     }
 
     /// Consumes the tensor data and returns its flat values.
+    #[must_use]
     pub fn into_vec(self) -> Vec<f32> {
         self.data
     }

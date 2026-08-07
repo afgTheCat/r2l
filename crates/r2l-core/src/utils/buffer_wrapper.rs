@@ -39,7 +39,7 @@ pub enum TrajectoryViewsWrapper<'a, T: R2lTensor> {
     Owned(OwnedView<T>),
 }
 
-impl<'a, T: R2lTensor> TrajectoryViewsWrapper<'a, T> {
+impl<T: R2lTensor> TrajectoryViewsWrapper<'_, T> {
     pub fn from_view<'b, S: R2lTensor>(
         view: &'b TrajectoryView<'b, S>,
     ) -> TrajectoryViewsWrapper<'b, T> {
@@ -73,7 +73,7 @@ impl<'a, T: R2lTensor> TrajectoryViewsWrapper<'a, T> {
     }
 }
 
-impl<'a, T: R2lTensor> TrajectoryBatch<T> for TrajectoryViewsWrapper<'a, T> {
+impl<T: R2lTensor> TrajectoryBatch<T> for TrajectoryViewsWrapper<'_, T> {
     fn len(&self) -> usize {
         match self {
             Self::Borrowed(t) => t.len(),

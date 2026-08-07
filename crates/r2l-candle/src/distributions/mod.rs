@@ -54,6 +54,7 @@ pub enum CandlePolicyKind {
 
 impl CandlePolicyKind {
     /// Returns the Candle device used by the underlying policy.
+    #[must_use]
     pub fn device(&self) -> Device {
         match self {
             Self::Categorical(c) => c.device(),
@@ -65,6 +66,7 @@ impl CandlePolicyKind {
     }
 
     /// Returns the flattened observation size expected by the policy.
+    #[must_use]
     pub fn observation_size(&self) -> usize {
         match self {
             Self::Categorical(c) => c.observation_size(),
@@ -76,6 +78,7 @@ impl CandlePolicyKind {
     }
 
     /// Builds a Candle policy from serialized safetensors bytes.
+    #[must_use]
     pub fn from_bytes(bytes: &[u8], device: Device) -> Self {
         let (_, safe_tensors_metadata) = SafeTensors::read_metadata(bytes).unwrap();
         let metadata = PolicyMetadata::from_safetensors_metadata(
@@ -142,7 +145,7 @@ impl CandlePolicyKind {
                 let log_std = policy_varbuilder.get_with_hints(
                     size,
                     &format!("{prefix}.log_std"),
-                    Init::Const(log_std_init as f64),
+                    Init::Const(f64::from(log_std_init)),
                 )?;
                 Ok(Self::DiagGaussian(DiagGaussianDistribution::build(
                     observation_size,

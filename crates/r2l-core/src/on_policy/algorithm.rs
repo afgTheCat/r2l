@@ -42,7 +42,7 @@ pub trait Sampler {
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A);
 
     /// Creates a view for the agents.
-    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]>;
+    fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]>;
 
     /// Releases sampler resources before the training loop exits.
     fn shutdown(&mut self) {}

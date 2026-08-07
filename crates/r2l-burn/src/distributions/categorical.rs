@@ -31,6 +31,7 @@ pub struct CategoricalDistribution<B: Backend> {
 
 impl<B: Backend> CategoricalDistribution<B> {
     /// Builds a categorical policy network.
+    #[must_use]
     pub fn build(logits_layers: &[usize], activation: ActivationFunction) -> Self {
         let action_size = *logits_layers.last().unwrap();
         let logits: Sequential<B> = Sequential::build(logits_layers, activation);
