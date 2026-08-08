@@ -1,6 +1,4 @@
-use std::fmt::Write as _;
-use std::io::Write;
-use std::{fs::File, path::PathBuf, time::Instant};
+use std::{fmt::Write as _, path::PathBuf};
 
 use anyhow::Result;
 use r2l_core::{
@@ -19,21 +17,10 @@ use crate::{
         inference::{ACTOR_FILE, NORMALIZER_FILE},
         normalizer::NormalizerBuilder,
     },
-    hooks::{on_policy::PerformanceLog, sampler::EpisodeBoundHook},
+    hooks::sampler::EpisodeBoundHook,
 };
 
-fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
-    let path = if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir().unwrap().join(path)
-    };
-    assert!(!path.is_file());
-    path
-}
-
 const EVALUATIONS_FILE: &str = "evaluations.csv";
-const PERFORMANCE_FILE: &str = "performance.csv";
 
 pub(crate) enum EvaluationSampler<E: Env> {
     Direct(DirectSampler<E, EpisodeBoundHook<E>>),
@@ -170,97 +157,6 @@ impl EvaluationSettings {
     }
 }
 
-/// Selects the artifacts produced during training and where they are written.
-#[derive(Serialize, Deserialize)]
-pub struct TrainingArtifactsConfig {
-    pub(crate) output_dir: PathBuf,
-    pub(crate) evaluation_results: bool,
-    pub(crate) performance_metrics: bool,
-    pub(crate) inference_artifacts: bool,
-    pub(crate) evaluation_settings: EvaluationSettings,
-}
-
-impl TrainingArtifactsConfig {
-    /// Creates a configuration that writes all supported training artifacts.
-    pub fn new(output_dir: impl Into<PathBuf>) -> Self {
-        Self {
-            output_dir: resolve_and_validate_output_dir(output_dir.into()),
-            evaluation_results: true,
-            performance_metrics: true,
-            inference_artifacts: true,
-            evaluation_settings: EvaluationSettings::default(),
-        }
-    }
-
-    /// Sets whether evaluation results are written during training.
-    #[must_use]
-    pub fn with_evaluation_results(mut self, enabled: bool) -> Self {
-        self.evaluation_results = enabled;
-        self
-    }
-
-    /// Sets whether training performance metrics are written.
-    #[must_use]
-    pub fn with_performance_metrics(mut self, enabled: bool) -> Self {
-        self.performance_metrics = enabled;
-        self
-    }
-
-    /// Sets whether the best policy is saved as inference-ready artifacts.
-    #[must_use]
-    pub fn with_inference_artifacts(mut self, enabled: bool) -> Self {
-        self.inference_artifacts = enabled;
-        self
-    }
-
-    /// Sets the evaluation behavior used by evaluation results and inference artifacts.
-    #[must_use]
-    pub fn with_evaluation_settings(mut self, evaluation_settings: EvaluationSettings) -> Self {
-        self.evaluation_settings = evaluation_settings;
-        self
-    }
-
-    pub(crate) fn build_with_sampler<A: Actor + Clone, E: Env>(
-        self,
-        sampler: EvaluationSampler<E>,
-    ) -> BestActorEvaluator<A, E> {
-        BestActorEvaluator {
-            current_evaluator_step: 0,
-            rollouts_per_evaluation: self.evaluation_settings.rollouts_per_evaluation,
-            sampler,
-            output_dir: self.output_dir,
-            write_evaluation_results: self.evaluation_results,
-            write_inference_artifacts: self.inference_artifacts,
-            best_rewards: f32::MIN,
-            best_actor: None,
-            best_obs_normalizer: None,
-            eval_states: vec![],
-        }
-    }
-    pub(crate) fn into_performance_metrics(self) -> Option<PerformanceLog> {
-        if !self.performance_metrics {
-            return None;
-        }
-        let output_dir = self.output_dir.clone();
-        std::fs::create_dir_all(&output_dir).unwrap();
-        let mut file = File::create(output_dir.join(PERFORMANCE_FILE)).unwrap();
-        writeln!(
-            file,
-            "rollout,collect_ms,learn_ms,evaluate_ms,rollout_ms,total_ms"
-        )
-        .unwrap();
-        let now = Instant::now();
-        Some(PerformanceLog {
-            file,
-            training_started: now,
-            rollout_started: now,
-            phase_started: now,
-            collect_ms: 0.0,
-            rollout: 0,
-        })
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 struct EvalState {
     avg_reward: f32,
@@ -286,6 +182,27 @@ pub(crate) struct BestActorEvaluator<A: Actor, E: Env> {
 }
 
 impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
+    pub(crate) fn new(
+        sampler: EvaluationSampler<E>,
+        output_dir: PathBuf,
+        write_evaluation_results: bool,
+        write_inference_artifacts: bool,
+        rollouts_per_evaluation: usize,
+    ) -> Self {
+        Self {
+            sampler,
+            output_dir,
+            write_evaluation_results,
+            write_inference_artifacts,
+            best_actor: None,
+            best_obs_normalizer: None,
+            best_rewards: f32::MIN,
+            current_evaluator_step: 0,
+            rollouts_per_evaluation,
+            eval_states: vec![],
+        }
+    }
+
     /// Evaluates the runtime actor when the configured interval elapses.
     /// Returns whether an evaluation was performed.
     pub fn eval<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(

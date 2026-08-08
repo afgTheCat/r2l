@@ -41,10 +41,9 @@ pub type BurnBackend = Autodiff<NdArray>;
 pub use builders::{
     A2CAlgorithmBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceArtifacts, InferenceRunner,
     OnPolicyAlgoBuilder, OnPolicyOptimizerLayout, PPOAlgorithmBuilder, PPOBurn, PPOCandle,
-    PolicyBuilder,
+    PolicyBuilder, TrainingArtifactsConfig,
 };
-pub use evaluators::best_actor_evaluator::{EvaluationSettings, TrainingArtifactsConfig};
-pub use evaluators::simple_evaluator::Evaluator;
+pub use evaluators::best_actor_evaluator::EvaluationSettings;
 pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
 pub use hooks::on_policy::{
     DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule, OnPolicyCommand,
@@ -54,10 +53,7 @@ pub use hooks::on_policy::{
 pub use hooks::ppo::{PPOMinibatchStats, PPORolloutStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
 pub use r2l_core::{
-    env::{
-        Env, EnvBuilder, EnvDescription, Snapshot, Space,
-        normalizer::{ClippedNormalizer, NormalizerMode},
-    },
+    env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     models::ActivationFunction,
     on_policy::algorithm::OnPolicyAlgorithm,
     tensor::TensorData,

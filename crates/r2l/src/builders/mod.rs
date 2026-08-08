@@ -1,4 +1,8 @@
-use std::{marker::PhantomData, sync::mpsc::Sender};
+pub(crate) mod inference;
+pub(crate) mod normalizer;
+pub(crate) mod policy;
+
+use std::{marker::PhantomData, path::PathBuf, sync::mpsc::Sender};
 
 use burn::{
     backend::ndarray::NdArrayDevice, grad_clipping::GradientClippingConfig, optim::AdamWConfig,
@@ -6,6 +10,9 @@ use burn::{
 };
 use candle_core::{Device, DeviceLocation};
 use candle_nn::ParamsAdamW;
+pub use inference::{InferenceArtifacts, InferenceRunner};
+use inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
+pub use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
     ppo::{PPO, PPOHook, PPOParams},
@@ -31,12 +38,12 @@ use serde::{Deserialize, Serialize, de::Error as _};
 
 use crate::{
     A2CRolloutStats, PPORolloutStats,
-    evaluators::best_actor_evaluator::EvaluationSampler,
-    hooks::{a2c::DefaultA2CHookReporter, ppo::TargetKl},
+    evaluators::best_actor_evaluator::{EvaluationSampler, EvaluationSettings},
+    hooks::{a2c::DefaultA2CHookReporter, on_policy::TrainingTimingRecorder, ppo::TargetKl},
 };
 use crate::{
     BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
-    OnPolicyCommandReceiver, TrainingArtifactsConfig,
+    OnPolicyCommandReceiver,
 };
 use crate::{EpisodeBoundHook, StepBoundHook};
 use crate::{
@@ -44,14 +51,6 @@ use crate::{
     hooks::{a2c::DefaultA2CHook, ppo::DefaultPPOHook},
 };
 use crate::{hooks::ppo::DefaultPPOHookReporter, utils::RewardNormalizer};
-
-pub(crate) mod inference;
-pub(crate) mod normalizer;
-pub(crate) mod policy;
-
-pub use inference::{InferenceArtifacts, InferenceRunner};
-use inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
-pub use policy::PolicyBuilder;
 
 /// PPO agent produced by a Candle-backed algorithm builder.
 pub type PPOCandle = PPO<CandlePolicyValueLearner, DefaultPPOHook<CandlePolicyValueLearner>>;
@@ -75,6 +74,75 @@ pub struct AdamWParams {
     pub eps: f64,
     /// Weight-decay coefficient.
     pub weight_decay: f64,
+}
+
+/// Selects the artifacts produced during training and where they are written.
+#[derive(Serialize, Deserialize)]
+pub struct TrainingArtifactsConfig {
+    pub(crate) output_dir: PathBuf,
+    pub(crate) evaluation_results: bool,
+    pub(crate) training_timings: bool,
+    pub(crate) inference_artifacts: bool,
+    pub(crate) evaluation_settings: EvaluationSettings,
+}
+
+impl TrainingArtifactsConfig {
+    /// Creates a configuration that writes all supported training artifacts.
+    pub fn new(output_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            output_dir: resolve_and_validate_output_dir(output_dir.into()),
+            evaluation_results: true,
+            training_timings: true,
+            inference_artifacts: true,
+            evaluation_settings: EvaluationSettings::default(),
+        }
+    }
+
+    /// Sets whether evaluation results are written during training.
+    #[must_use]
+    pub fn with_evaluation_results(mut self, enabled: bool) -> Self {
+        self.evaluation_results = enabled;
+        self
+    }
+
+    /// Sets whether training timing measurements are written.
+    #[must_use]
+    pub fn with_training_timings(mut self, enabled: bool) -> Self {
+        self.training_timings = enabled;
+        self
+    }
+
+    /// Sets whether the best policy is saved as inference-ready artifacts.
+    #[must_use]
+    pub fn with_inference_artifacts(mut self, enabled: bool) -> Self {
+        self.inference_artifacts = enabled;
+        self
+    }
+
+    /// Sets the evaluation behavior used by evaluation results and inference artifacts.
+    #[must_use]
+    pub fn with_evaluation_settings(mut self, evaluation_settings: EvaluationSettings) -> Self {
+        self.evaluation_settings = evaluation_settings;
+        self
+    }
+
+    fn needs_evaluator(&self) -> bool {
+        self.evaluation_results || self.inference_artifacts
+    }
+
+    fn needs_timing_recorder(&self) -> bool {
+        self.training_timings
+    }
+}
+
+fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
+    let path = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir().unwrap().join(path)
+    };
+    assert!(!path.is_file());
+    path
 }
 
 /// Optimizer arrangement for the policy and value networks.
@@ -215,6 +283,18 @@ enum SamplerConfiguration<E: Env> {
         reward_normalizer: Option<RewardNormalizer>,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     },
+}
+
+impl<E: Env> SamplerConfiguration<E> {
+    fn obs_normalizer(&self) -> Option<ClippedNormalizer<E::Tensor>> {
+        match self {
+            Self::StagedStep {
+                obs_normalizer: Some(obs_normalizer),
+                ..
+            } => Some(obs_normalizer.clone()),
+            _ => None,
+        }
+    }
 }
 
 enum BackendConfiguration {
@@ -480,46 +560,47 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn evaluator<A: Agent>(
-        &mut self,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Option<BestActorEvaluator<A::Actor, E>> {
-        let config = self.training_artifacts.take()?;
-        if !config.evaluation_results && !config.inference_artifacts {
-            return None;
-        }
-        let evaluation_sampler = self.env_build_plan.build_evaluator_sampler(
-            config.evaluation_settings.episodes_per_evaluation,
-            config.evaluation_settings.evaluation_execution_mode,
-            obs_normalizer,
-        );
-        Some(config.build_with_sampler(evaluation_sampler))
-    }
-
     fn default_on_policy_hook<A: Agent, S: Sampler<Tensor = E::Tensor>>(
-        mut self,
-    ) -> DefaultOnPolicyAlgorithmHooks<A, S, E> {
-        let obs_normalizer = if let SamplerConfiguration::StagedStep {
-            obs_normalizer: Some(normalizer),
-            ..
-        } = &self.sampler_configuration
-        {
-            Some(normalizer.with_mode(NormalizerMode::ReadOnly))
+        self,
+    ) -> anyhow::Result<DefaultOnPolicyAlgorithmHooks<A, S, E>> {
+        let (evaluator, timing_recorder) = if let Some(config) = self.training_artifacts {
+            let evaluator = if config.needs_evaluator() {
+                let obs_normalizer = self
+                    .sampler_configuration
+                    .obs_normalizer()
+                    .map(|n| n.with_mode(NormalizerMode::ReadOnly));
+                let sampler = self.env_build_plan.build_evaluator_sampler(
+                    config.evaluation_settings.episodes_per_evaluation,
+                    config.evaluation_settings.evaluation_execution_mode,
+                    obs_normalizer,
+                );
+                Some(BestActorEvaluator::new(
+                    sampler,
+                    config.output_dir.clone(),
+                    config.evaluation_results,
+                    config.inference_artifacts,
+                    config.evaluation_settings.rollouts_per_evaluation,
+                ))
+            } else {
+                None
+            };
+            let timing_recorder = if config.needs_timing_recorder() {
+                Some(TrainingTimingRecorder::create(&config.output_dir)?)
+            } else {
+                None
+            };
+            (evaluator, timing_recorder)
         } else {
-            None
+            (None, None)
         };
-        let evaluator = self.evaluator::<A>(obs_normalizer);
-        let performance_log = self
-            .training_artifacts
-            .and_then(super::evaluators::best_actor_evaluator::TrainingArtifactsConfig::into_performance_metrics);
-        DefaultOnPolicyAlgorithmHooks {
+        Ok(DefaultOnPolicyAlgorithmHooks {
             learning_schedule: self.learning_schedule,
             learning_rate_schedule: self.learning_rate_schedule,
             evaluator,
-            performance_log,
+            timing_recorder,
             command_rx: self.policy_command_rx,
             _phantom: PhantomData,
-        }
+        })
     }
 
     fn direct_sampler_step_bound(&self) -> DirectSampler<E, StepBoundHook<E>> {
@@ -801,7 +882,7 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
         }
     }
 
-    /// Enables the evaluation, performance, and inference artifacts selected by `config`.
+    /// Enables the evaluation, training-timing, and inference artifacts selected by `config`.
     pub fn with_training_artifacts(mut self, config: TrainingArtifactsConfig) -> Self {
         self.builder.training_artifacts = Some(config);
         self
@@ -1012,7 +1093,7 @@ impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S,
         }
         let agent = (self.config.build_agent)(&mut self.builder);
         let sampler = (self.config.build_sampler)(&self.builder);
-        let hooks = self.builder.default_on_policy_hook();
+        let hooks = self.builder.default_on_policy_hook()?;
         Ok(OnPolicyAlgorithm::new(
             OnPolicyRuntime { agent, sampler },
             hooks,

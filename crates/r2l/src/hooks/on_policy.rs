@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::Write,
     marker::PhantomData,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::mpsc::{Receiver, Sender},
     time::Instant,
 };
@@ -19,17 +19,78 @@ use serde::{Deserialize, Serialize};
 
 use crate::evaluators::best_actor_evaluator::BestActorEvaluator;
 
-pub struct PerformanceLog {
-    pub file: File,
-    pub training_started: Instant,
-    pub rollout_started: Instant,
-    pub phase_started: Instant,
-    pub collect_ms: f64,
-    pub rollout: usize,
+const TRAINING_TIMINGS_FILE: &str = "training_timings.csv";
+
+pub(crate) struct TrainingTimingRecorder {
+    file: File,
+    training_started: Instant,
+    rollout_started: Instant,
+    phase_started: Instant,
+    collect_ms: f64,
+    rollout: usize,
 }
 
-fn elapsed_ms(started: Instant) -> f64 {
-    started.elapsed().as_secs_f64() * 1000.0
+impl TrainingTimingRecorder {
+    pub(crate) fn create(output_dir: &Path) -> Result<Self> {
+        std::fs::create_dir_all(output_dir)?;
+        let mut file = File::create(output_dir.join(TRAINING_TIMINGS_FILE))?;
+        writeln!(
+            file,
+            "rollout,collect_ms,learn_ms,evaluate_ms,rollout_ms,total_ms"
+        )?;
+        let now = Instant::now();
+        Ok(Self {
+            file,
+            training_started: now,
+            rollout_started: now,
+            phase_started: now,
+            collect_ms: 0.,
+            rollout: 0,
+        })
+    }
+
+    fn start_training(&mut self) {
+        let now = Instant::now();
+        self.training_started = now;
+        self.rollout_started = now;
+        self.phase_started = now;
+    }
+
+    fn finish_collection(&mut self) {
+        self.collect_ms = Self::elapsed_since(self.phase_started);
+    }
+
+    fn start_learning(&mut self) {
+        self.phase_started = Instant::now();
+    }
+
+    fn learning_elapsed_ms(&self) -> f64 {
+        Self::elapsed_since(self.phase_started)
+    }
+
+    fn finish_rollout(&mut self, learning_ms: f64, evaluation_ms: Option<f64>) -> Result<()> {
+        self.rollout += 1;
+        let evaluation_ms = evaluation_ms
+            .map(|duration| format!("{duration:.3}"))
+            .unwrap_or_default();
+        writeln!(
+            self.file,
+            "{},{:.3},{:.3},{},{:.3},{:.3}",
+            self.rollout,
+            self.collect_ms,
+            learning_ms,
+            evaluation_ms,
+            Self::elapsed_since(self.rollout_started),
+            Self::elapsed_since(self.training_started),
+        )?;
+        self.rollout_started = Instant::now();
+        self.phase_started = self.rollout_started;
+        Ok(())
+    }
+
+    fn elapsed_since(started: Instant) -> f64 {
+        started.elapsed().as_secs_f64() * 1000.0
+    }
 }
 
 /// Training-stop policy for [`DefaultOnPolicyAlgorithmHooks`].
@@ -181,7 +242,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S
     pub(crate) learning_schedule: LearningSchedule,
     pub(crate) learning_rate_schedule: Option<LearningRateSchedule>,
     pub(crate) evaluator: Option<BestActorEvaluator<A::Actor, E>>,
-    pub(crate) performance_log: Option<PerformanceLog>,
+    pub(crate) timing_recorder: Option<TrainingTimingRecorder>,
     pub(crate) command_rx: Option<OnPolicyCommandReceiver>,
     pub(crate) _phantom: PhantomData<(A, S, E)>,
 }
@@ -247,18 +308,15 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPoli
     type S = S;
 
     fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
-        if let Some(performance_log) = &mut self.performance_log {
-            let now = Instant::now();
-            performance_log.training_started = now;
-            performance_log.rollout_started = now;
-            performance_log.phase_started = now;
+        if let Some(timing_recorder) = &mut self.timing_recorder {
+            timing_recorder.start_training();
         }
         HookResult::Continue
     }
 
     fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
-        if let Some(performance_log) = &mut self.performance_log {
-            performance_log.collect_ms = elapsed_ms(performance_log.phase_started);
+        if let Some(timing_recorder) = &mut self.timing_recorder {
+            timing_recorder.finish_collection();
         }
         self.mark_progress(runtime);
         if let Some(learning_rate_schedule) = self.learning_rate_schedule {
@@ -272,8 +330,8 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPoli
             runtime.agent.set_learning_rate(learning_rate);
         }
         let command_result = self.process_pending_commands(runtime);
-        if let Some(performance_log) = &mut self.performance_log {
-            performance_log.phase_started = Instant::now();
+        if let Some(timing_recorder) = &mut self.timing_recorder {
+            timing_recorder.start_learning();
         }
         command_result
     }
@@ -283,14 +341,14 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPoli
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> HookResult {
         let learn_ms = self
-            .performance_log
+            .timing_recorder
             .as_ref()
-            .map_or(0.0, |log| elapsed_ms(log.phase_started));
+            .map_or(0.0, TrainingTimingRecorder::learning_elapsed_ms);
         let evaluate_ms = self.evaluator.as_mut().and_then(|evaluator| {
             let evaluation_started = Instant::now();
             evaluator
                 .eval(runtime)
-                .then(|| elapsed_ms(evaluation_started))
+                .then(|| TrainingTimingRecorder::elapsed_since(evaluation_started))
         });
         let command_res = self.process_pending_commands(runtime);
         let hook_result = if self.progress_remaining() <= 0. {
@@ -298,24 +356,10 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPoli
         } else {
             command_res
         };
-        if let Some(performance_log) = &mut self.performance_log {
-            performance_log.rollout += 1;
-            let evaluate_ms = evaluate_ms
-                .map(|duration| format!("{duration:.3}"))
-                .unwrap_or_default();
-            writeln!(
-                performance_log.file,
-                "{},{:.3},{:.3},{},{:.3},{:.3}",
-                performance_log.rollout,
-                performance_log.collect_ms,
-                learn_ms,
-                evaluate_ms,
-                elapsed_ms(performance_log.rollout_started),
-                elapsed_ms(performance_log.training_started),
-            )
-            .unwrap();
-            performance_log.rollout_started = Instant::now();
-            performance_log.phase_started = performance_log.rollout_started;
+        if let Some(timing_recorder) = &mut self.timing_recorder {
+            timing_recorder
+                .finish_rollout(learn_ms, evaluate_ms)
+                .expect("failed to record training timings");
         }
         hook_result
     }
