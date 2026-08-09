@@ -24,6 +24,12 @@
 //!
 //! ## What is covered here
 //!
+//! The current focus of r2l is on-policy algorithms. This release, we have `PPO` and
+//! `A2C` implemented, supporting the more simple policy types:
+//!
+//! - Diag gaussian
+//! - Categorical
+//! -
 
 #![warn(missing_docs)]
 

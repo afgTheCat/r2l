@@ -1,10 +1,10 @@
 # Getting started
 
-For most applications, `r2l` is the main dependency. It provides complete
-PPO and A2C builders while the lower-level workspace crates define environments,
+For most applications, `r2l` is the main dependency. It provides complete PPO
+and A2C builders while the lower-level workspace crates define environments,
 samplers, agents, and backend integrations. This getting started guide will be
-solely using the `r2l` crate, which itself builds on lower-level crates. If
-the current setup does not satisfy you, the lower level hooks allow for a lot of
+solely using the `r2l` crate, which itself builds on lower-level crates. If the
+current setup does not satisfy you, the lower level hooks allow for a lot of
 hackability.
 
 ## Shortest setup
@@ -49,7 +49,7 @@ fn main() {
     let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4);
     let artifacts_config = TrainingArtifactsConfig::new("runs/pendulum")
         .with_evaluation_results(true)
-        .with_performance_metrics(true)
+        .with_training_timings(true)
         .with_inference_artifacts(true);
     let mut algorithm = builder
         .with_training_artifacts(artifacts_config)
@@ -98,8 +98,8 @@ fn main() {
 ```
 
 The inference configuration describes only the policy shape and observation
-normalization settings. It does not contain information about how the policy
-was trained.
+normalization settings. It does not contain information about how the policy was
+trained.
 
 # Environments
 
@@ -127,8 +127,7 @@ let ppo = ppo_builder.build().unwrap();
 ```
 
 For a more detailed example of how to implement the `Env` and `EnvBuilder`
-traits, see the
-[environment building example](./examples/env_building.md).
+traits, see the [environment building example](./examples/env_building.md).
 
 # Hyperparameters
 
@@ -147,12 +146,12 @@ that are specific to a chosen backend when following compiler suggestions.
 ## Rollout collection
 
 `with_rollout_steps(n)` collects `n` steps per environment for each rollout.
-`with_rollout_episodes(n)` switches to episode-bounded sampling and collects
-`n` completed episodes per environment.
+`with_rollout_episodes(n)` switches to episode-bounded sampling and collects `n`
+completed episodes per environment.
 
 The builders default to `SamplerExecutionMode::MultiThreaded`, which runs
-workers on dedicated threads. Use `SamplerExecutionMode::SingleThreaded` to
-step workers sequentially on the calling thread:
+workers on dedicated threads. Use `SamplerExecutionMode::SingleThreaded` to step
+workers sequentially on the calling thread:
 
 ```rust,no_run
 # extern crate r2l;
