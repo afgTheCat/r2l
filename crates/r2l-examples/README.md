@@ -7,7 +7,7 @@ terminal/desktop user interfaces.
 Run one from the workspace root, for example:
 
 ```text
-cargo run -p r2l-examples --example ppo-inference
+cargo run -p r2l-examples --example ppo
 ```
 
 Gym-based examples require Python 3.11 or newer with `gymnasium` installed.

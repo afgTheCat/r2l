@@ -51,7 +51,11 @@ impl<T: R2lTensor> Space<T> {
         }
     }
 
-    /// Returns the flattened size of the space.
+    /// Returns the flattened model width for this space.
+    ///
+    /// Discrete spaces use one-hot observations and categorical logits, so
+    /// this returns their number of categories. Use [`Self::action_size`] for
+    /// the width of an encoded action.
     pub fn size(&self) -> usize {
         match &self {
             Self::Discrete(size) => *size,
@@ -60,6 +64,22 @@ impl<T: R2lTensor> Space<T> {
             | Self::MultiBinary { shape, .. } => shape.iter().product(),
             Self::Tuple(spaces) => spaces.iter().map(Self::size).sum(),
             Self::Dict(spaces) => spaces.values().map(Self::size).sum(),
+        }
+    }
+
+    /// Returns the number of scalar values used to encode an action.
+    ///
+    /// A discrete action is encoded as one category index, while discrete
+    /// observations continue to use the one-hot width returned by [`Self::size`].
+    #[must_use]
+    pub fn action_size(&self) -> usize {
+        match self {
+            Self::Discrete(_) => 1,
+            Self::Box { shape, .. }
+            | Self::MultiDiscrete { shape, .. }
+            | Self::MultiBinary { shape } => shape.iter().product(),
+            Self::Tuple(spaces) => spaces.iter().map(Self::action_size).sum(),
+            Self::Dict(spaces) => spaces.values().map(Self::action_size).sum(),
         }
     }
 }
@@ -84,7 +104,7 @@ impl<T: R2lTensor> EnvDescription<T> {
 
     /// Returns the flattened action-space size.
     pub fn action_size(&self) -> usize {
-        self.action_space.size()
+        self.action_space.action_size()
     }
 
     /// Returns the flattened observation-space size.
@@ -132,8 +152,16 @@ pub trait Env {
     type Tensor: R2lTensor;
 
     /// Resets the environment and returns the initial observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot be reset.
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
     /// Applies one action and returns the resulting transition snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot apply the action.
     fn step(&mut self, action: Self::Tensor) -> Result<Snapshot<Self::Tensor>>;
     /// Returns static observation/action space metadata.
     fn env_description(&self) -> EnvDescription<Self::Tensor>;
@@ -147,9 +175,17 @@ pub trait EnvBuilder: Sync + Send + 'static {
     type Env: Env;
 
     /// Builds a fresh environment instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot be constructed.
     fn build_env(&self) -> Result<Self::Env>;
 
     /// Returns the environment description for produced environments.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a representative environment cannot be constructed.
     fn env_description(&self) -> Result<EnvDescription<<Self::Env as Env>::Tensor>> {
         let env = self.build_env()?;
         Ok(env.env_description())
@@ -212,6 +248,10 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     }
 
     /// Builds the environment at `idx`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the selected builder cannot construct an environment.
     pub fn build_idx(&self, idx: usize) -> Result<EB::Env> {
         match &self {
             Self::Homogeneous { builder, .. } => builder.build_env(),
@@ -220,6 +260,7 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     }
 
     /// Returns the number of environments represented by this builder.
+    #[must_use]
     pub fn num_envs(&self) -> usize {
         match self {
             Self::Homogeneous { n_envs, .. } => *n_envs,
@@ -228,6 +269,7 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     }
 
     /// Returns a representative environment builder.
+    #[must_use]
     pub fn env_builder(&self) -> Arc<EB> {
         match &self {
             Self::Homogeneous { builder, .. } => builder.clone(),
@@ -236,6 +278,10 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     }
 
     /// Returns a representative environment description.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the selected builder cannot provide a description.
     pub fn env_description(&self) -> Result<EnvDescription<<EB::Env as Env>::Tensor>> {
         match &self {
             Self::Homogeneous { builder, n_envs: _ } => builder.env_description(),
@@ -251,4 +297,26 @@ pub fn action_ranges(nvec: &[usize]) -> impl Iterator<Item = (usize, usize)> + '
         *offset += *choices;
         Some((start, *choices))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Space;
+    use crate::tensor::TensorData;
+
+    #[test]
+    fn discrete_actions_use_one_scalar_index() {
+        let space: Space<TensorData> = Space::Tuple(vec![
+            Space::Discrete(4),
+            Space::Box {
+                min: None,
+                max: None,
+                shape: vec![2],
+            },
+            Space::MultiBinary { shape: vec![3] },
+        ]);
+
+        assert_eq!(space.size(), 9);
+        assert_eq!(space.action_size(), 6);
+    }
 }

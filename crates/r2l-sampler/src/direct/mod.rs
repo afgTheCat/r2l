@@ -46,19 +46,27 @@ pub trait DirectSamplerHook {
 
 /// Mutable direct-sampler state exposed to [`DirectSamplerHook`] implementations.
 pub struct DirectSamplerCore<E: Env> {
-    /// Per-environment output buffers.
-    pub buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
-    /// Inline or threaded environment workers.
-    pub worker_pool: WorkerPool<E>,
+    buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
+    worker_pool: WorkerPool<E>,
 }
 
 impl<E: Env> DirectSamplerCore<E> {
+    /// Returns the per-environment output buffers.
+    pub fn buffers_mut(&mut self) -> &mut ArrayHandle<TrajectoryBuffer<E::Tensor>> {
+        &mut self.buffers
+    }
+
     /// Resets every worker environment and clears its active episode state.
     pub fn reset_all_envs(&mut self) {
         self.worker_pool.reset_all_envs();
     }
 
     /// Builds sampler state from an environment collection and execution mode.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an environment cannot be built.
+    #[must_use]
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
@@ -115,6 +123,10 @@ pub struct DirectSampler<E: Env, H: DirectSamplerHook<E = E>> {
 }
 
 impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
+    pub fn new(core: DirectSamplerCore<E>, hook: H) -> Self {
+        Self { core, hook }
+    }
+
     /// Builds a raw sampler and its environment workers.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
@@ -125,6 +137,24 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
             core: DirectSamplerCore::build(env_builder, execution_mode),
             hook,
         }
+    }
+
+    /// Builds a homogeneous sampler from a shared environment builder.
+    pub fn build_from_env_builder(
+        env_builder: Arc<dyn EnvBuilder<Env = E>>,
+        num_envs: usize,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+    ) -> Self
+    where
+        E: 'static,
+    {
+        let env_builder = move || env_builder.build_env();
+        Self::build(
+            EnvBuilderType::homogeneous(env_builder, num_envs),
+            hook,
+            execution_mode,
+        )
     }
 }
 
@@ -138,7 +168,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
         self.core.worker_pool.clear_buffers();
-        self.core.worker_pool.set_actor(actor.clone());
+        self.core.worker_pool.set_actor(&actor);
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {
@@ -148,7 +178,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
         }
     }
 
-    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]> {
+    fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {
         self.core
             .buffers
             .lock_map(|buffer| buffer.to_trajectory_view())

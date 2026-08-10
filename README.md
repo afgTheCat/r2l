@@ -4,32 +4,14 @@
 > **Pre-alpha:** This library is under active development. APIs may change
 > between releases.
 
-## Why **r2l**
-
-The goal of **r2l** is to be a customizable, ergonomic and easily embeddable
-library. To be more exact:
-
-- **Customizable**: users have fine-grained control over _how_ agents are
-  trained. **r2l** defines how the components interact while exposing training
-  lifecycle hooks for application-specific behavior.
-- **Ergonomic**: most users are not necessarily concerned with implementation
-  details. High-level builders provide common configurations without requiring
-  a complete algorithm implementation.
-- **Embeddable**: **r2l** uses traits instead of requiring one deep-learning
-  framework. Candle and Burn backends are currently supported.
-
-The scope of **r2l** is what Stable Baselines3 covers (by version 0.1.0) and
-Tianshou (by version 1.0.0). On top of core algorithms, a hyperparameter tuning
-library is to be included in the future.
-
 ## Getting started
 
 With `gymnasium` installed, a complete training and inference workflow looks
 like this:
 
 ```rust,no_run
-use r2l_api::{
-    BestActorEvaluatorConfig, InferenceArtifacts, LearningSchedule,
+use r2l::{
+    InferenceArtifacts, LearningSchedule, TrainingArtifactsConfig,
     PPOAlgorithmBuilder,
 };
 use r2l_gym::GymEnv;
@@ -39,9 +21,9 @@ const ARTIFACT_DIR: &str = "runs/pendulum";
 
 fn main() {
     // Train the agent and persist the best policy for inference.
-    let evaluator_config = BestActorEvaluatorConfig::new(ARTIFACT_DIR);
+    let artifacts_config = TrainingArtifactsConfig::new(ARTIFACT_DIR);
     let mut ppo = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
-        .with_evaluator(evaluator_config)
+        .with_training_artifacts(artifacts_config)
         .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)
         .with_gamma(0.9)
@@ -61,13 +43,13 @@ fn main() {
 }
 ```
 
-The evaluator periodically measures the current policy and persists the best
-one as an inference-ready bundle. The bundle contains the policy configuration,
+The evaluator periodically measures the current policy and persists the best one
+as an inference-ready bundle. The bundle contains the policy configuration,
 SafeTensors weights, and observation-normalizer state when normalization is
 enabled. Run this example from the workspace root with:
 
 ```text
-cargo run -p r2l-examples --example ppo-inference
+cargo run -p r2l-examples --example ppo
 ```
 
 For more information, read the [book](https://afgthecat.github.io/r2l/).

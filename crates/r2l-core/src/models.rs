@@ -74,11 +74,17 @@ pub struct PolicyMetadata {
 
 impl PolicyMetadata {
     /// Converts the metadata into the string map accepted by safetensors.
+    #[must_use]
     pub fn to_safetensors_metadata(&self) -> HashMap<String, String> {
         HashMap::from([("activation".to_string(), self.activation.to_string())])
     }
 
     /// Builds policy metadata from the string map stored by safetensors.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the activation entry is missing or invalid.
+    #[must_use]
     pub fn from_safetensors_metadata(metadata: &HashMap<String, String>) -> Self {
         Self {
             activation: metadata.get("activation").unwrap().parse().unwrap(),
@@ -95,15 +101,28 @@ pub trait Actor: Send + 'static {
     type Tensor: R2lTensor;
 
     /// Selects an action for a single observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if action inference fails.
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
 
     /// Selects the modal action for a single observation without sampling.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if action inference fails.
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
+}
 
-    /// Tries to serialize the Actor
-    fn try_serialize(&self) -> Option<Vec<u8>> {
-        None
-    }
+/// A policy that can be serialized as a safetensors artifact.
+pub trait ToSafetensors {
+    /// Serializes this policy as safetensors bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy parameters cannot be serialized.
+    fn to_safetensors(&self) -> Result<Vec<u8>>;
 }
 
 /// Trainable action distribution interface used by on-policy algorithms.
@@ -112,6 +131,10 @@ pub trait Actor: Send + 'static {
 /// gradient losses and entropy bonuses over a batch.
 pub trait Policy: Actor {
     /// Computes log probabilities for batched observation/action pairs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy cannot evaluate the batch.
     fn log_probs(
         &self,
         observations: &[Self::Tensor],
@@ -119,24 +142,30 @@ pub trait Policy: Actor {
     ) -> Result<Self::Tensor>;
 
     /// Returns a representative action standard deviation when available.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the standard deviation cannot be computed.
     fn std(&self) -> Result<f32>;
 
     /// Computes the policy entropy for a batch of states.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the entropy cannot be computed.
     fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor>;
-
-    /// Resamples exploration noise for policies that use state-independent
-    /// noise. Implementations without such noise may keep the default no-op.
-    fn resample_noise(&mut self) -> Result<()> {
-        Ok(())
-    }
 }
 
-/// Component that applies backend-specific optimizer updates.
-pub trait LearningModule {
+/// Component that learns from backend-specific loss values.
+pub trait Learner {
     /// Loss bundle consumed by this module.
     type Losses;
 
     /// Applies one optimization update from precomputed losses.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the optimizer update fails.
     fn update(&mut self, losses: Self::Losses) -> Result<()>;
 }
 
@@ -146,5 +175,9 @@ pub trait ValueFunction {
     type Tensor: Clone;
 
     /// Estimates values for a batch of observations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if value inference fails.
     fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor>;
 }

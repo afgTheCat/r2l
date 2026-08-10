@@ -1,19 +1,22 @@
-## Getting started
+# Getting started
 
-For most applications, `r2l-api` is the main dependency. It provides complete
-PPO and A2C builders while the lower-level workspace crates define
-environments, samplers, agents, and backend integrations.
+For most applications, `r2l` is the main dependency. It provides complete PPO
+and A2C builders while the lower-level workspace crates define environments,
+samplers, agents, and backend integrations. This getting started guide will be
+solely using the `r2l` crate, which itself builds on lower-level crates. If the
+current setup does not satisfy you, the lower level hooks allow for a lot of
+hackability.
+
+## Shortest setup
 
 The shortest Gymnasium-based PPO setup is:
 
-```rust
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, StepHookBound};
+```rust,no_run
+# extern crate r2l;
+use r2l::PPOAlgorithmBuilder;
 
 fn main() {
-    let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
-        .with_burn()
-        .with_rollout_bound(StepHookBound::new(1024))
-        .with_learning_schedule(LearningSchedule::total_step_bound(100_000));
+    let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4);
     let mut algorithm = builder.build().unwrap();
     algorithm.train().unwrap();
 }
@@ -21,33 +24,115 @@ fn main() {
 
 This requires Python 3.11 or newer and the `gymnasium` Python package. A
 Gymnasium environment id is passed to `GymEnvBuilder`, which maps supported
-Gymnasium spaces to `r2l` space descriptions.
+Gymnasium spaces to `r2l` space descriptions. The builders support other
+environment types through a different construction, which will be introduced
+later on.
 
-## Environments
+## Saving training artifacts
 
-Native environments implement `Env`. An environment returns an initial
-observation from `reset`, accepts one action in `step`, and describes its
-observation and action spaces.
+We rarely want to train algorithms for the sake of it. Once an algorithm is
+learned, we are usually curious about
 
-```rust,noplayground
+- how the chosen hyperparameters affect learning performance
+- how to run inference using the model
+- less often, maybe we are curious about the running performance of the
+  algorithm
+
+`r2l` allows saving these artifacts using the `with_training_artifacts` builder
+method.
+
+```rust,no_run
+# extern crate r2l;
+use r2l::{PPOAlgorithmBuilder, TrainingArtifactsConfig};
+
+fn main() {
+    let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4);
+    let artifacts_config = TrainingArtifactsConfig::new("runs/pendulum")
+        .with_evaluation_results(true)
+        .with_training_timings(true)
+        .with_inference_artifacts(true);
+    let mut algorithm = builder
+        .with_training_artifacts(artifacts_config)
+        .build()
+        .unwrap();
+    algorithm.train().unwrap();
+}
+```
+
+Under the hood, `r2l` will evaluate the performance of the policy by launching a
+clean environment after each training round, and remember the best performing
+policy. These evaluation settings can be customized as well, by setting
+`EvaluationSettings`. Once training is done the following new files are created
+in the artifacts folder:
+
+```sh
+$ tree runs/pendulum
+runs/pendulum
+├── actor.safetensors
+├── evaluations.csv
+├── inference.yaml
+└── performance.csv
+
+1 directory, 4 files
+```
+
+## Running inference
+
+Using the inference artifacts and a new environment, you can create an
+`InferenceRunner`.
+
+```rust,no_run
+# extern crate r2l;
+# extern crate r2l_gym;
+use r2l::InferenceArtifacts;
+use r2l_gym::GymEnv;
+
+fn main() {
+    let inference_artifacts = InferenceArtifacts::load("runs/pendulum").unwrap();
+    let env = GymEnv::new("Pendulum-v1", Some("human".to_owned())).unwrap();
+    let mut inference = inference_artifacts.build(env).unwrap();
+    for _ in 0..4 {
+        inference.run_episode();
+    }
+}
+```
+
+The inference configuration describes only the policy shape and observation
+normalization settings. It does not contain information about how the policy was
+trained.
+
+# Environments
+
+Environments implement the `Env` trait.
+
+```rust,ignore
 {{#include ../../crates/r2l-core/src/env/mod.rs:env}}
 ```
 
-Algorithms receive an `EnvBuilder` rather than a concrete environment so that
-each sampler worker can construct its environment in the place where it runs.
+Algorithm builders receive an `EnvBuilder` rather than a concrete environment so
+that each sampler worker can construct its environment in the place where it
+runs.
+
+```rust,ignore
+{{#include ../../crates/r2l-core/src/env/mod.rs:env_builder}}
+```
+
 A closure or function returning `anyhow::Result<E>` automatically implements
 `EnvBuilder`.
 
-The complete workspace example demonstrates a custom environment, a custom
-builder, a function builder, a closure builder, and `GymEnvBuilder`:
-
-```rust,noplayground
-{{#include ../../crates/r2l-examples/examples/env_building/main.rs:env_builders}}
+```rust,ignore
+let env_builder = || Ok(MyEnv);
+let ppo_builder = PPOAlgorithmBuilder::new(env_builder, 10);
+let ppo = ppo_builder.build().unwrap();
 ```
 
-`r2l-gym` currently maps `Discrete`, `Box`, `MultiDiscrete`, `MultiBinary`,
-`Tuple`, and `Dict` spaces. Structured observations are flattened into
-`TensorData`; discrete observations are one-hot encoded.
+For a more detailed example of how to implement the `Env` and `EnvBuilder`
+traits, see the [environment building example](./examples/env_building.md).
+
+# Hyperparameters
+
+Both the PPO and A2C builders expose a great deal of hyperparameters that can be
+tuned.
 
 ## Backends
 
@@ -60,19 +145,20 @@ that are specific to a chosen backend when following compiler suggestions.
 
 ## Rollout collection
 
-`StepHookBound::new(n)` collects `n` steps per environment for each rollout.
-`EpisodeHookBound::new(n)` collects `n` completed episodes per environment.
-Install either with `with_rollout_bound`.
+`with_rollout_steps(n)` collects `n` steps per environment for each rollout.
+`with_rollout_episodes(n)` switches to episode-bounded sampling and collects `n`
+completed episodes per environment.
 
-The default `SamplerExecutionMode::SingleThreaded` steps workers sequentially
-on the calling thread. `SamplerExecutionMode::MultiThreaded` runs workers on
-dedicated threads:
+The builders default to `SamplerExecutionMode::MultiThreaded`, which runs
+workers on dedicated threads. Use `SamplerExecutionMode::SingleThreaded` to step
+workers sequentially on the calling thread:
 
-```rust
-use r2l_api::{PPOAlgorithmBuilder, SamplerExecutionMode};
+```rust,no_run
+# extern crate r2l;
+use r2l::{PPOAlgorithmBuilder, SamplerExecutionMode};
 
 let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
-    .with_execution_mode(SamplerExecutionMode::MultiThreaded);
+    .with_execution_mode(SamplerExecutionMode::SingleThreaded);
 ```
 
 Gymnasium calls still execute under Python's interpreter lock, so threaded
@@ -93,22 +179,6 @@ environment steps across all workers.
 `LearningRateSchedule::Linear(rate)` decays it from `rate` to zero over the
 configured training schedule.
 
-## Complete examples
-
-The PPO example covers Burn training, rollout configuration, saving the best
-actor, loading it from SafeTensors, and evaluation:
-
-```rust,noplayground
-{{#include ../../crates/r2l-examples/examples/ppo/main.rs:ppo}}
-```
-
-The A2C example covers backend selection, statistics reporting, and a Candle
-configuration:
-
-```rust,noplayground
-{{#include ../../crates/r2l-examples/examples/a2c/main.rs:a2c}}
-```
-
 For the underlying traits and hook points, continue with
 [On-policy algorithms](./on_policy_algorithms.md). For exact builder methods,
-use the [`r2l-api` reference](https://docs.rs/r2l-api/0.0.2/r2l_api/).
+use the [`r2l` reference](https://docs.rs/r2l/0.0.2/r2l/).

@@ -1,16 +1,16 @@
 use egui::{Id, Margin};
 use egui_table::{Column, HeaderCellInfo};
-use r2l_api::PPOStats;
+use r2l::PPORolloutStats;
 
 #[derive(Default)]
 pub struct UpdateTable {
-    pub progress: PPOStats,
+    pub progress: PPORolloutStats,
     pub clip_range: f32,
 }
 
 impl UpdateTable {
-    pub fn set_progress(&mut self, progress: PPOStats) {
-        self.progress = progress
+    pub fn set_progress(&mut self, progress: PPORolloutStats) {
+        self.progress = progress;
     }
 
     fn label_by_idx(&self, row_idx: u64, col_idx: usize) -> String {
@@ -66,10 +66,10 @@ impl UpdateTable {
             7 => select_row_or_col!("progress".to_owned(), "To be added".to_owned()),
             8 => select_row_or_col!(
                 "std".to_owned(),
-                self.progress
-                    .std
-                    .map(|std| std.to_string())
-                    .unwrap_or_else(|| "n/a".to_string())
+                self.progress.std.map_or_else(
+                    || "n/a".to_string(),
+                    |standard_deviation| standard_deviation.to_string(),
+                )
             ),
             9 => select_row_or_col!(
                 "average_reward".to_owned(),

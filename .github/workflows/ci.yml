@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  mdbook-test:
+    name: mdBook tests
+    runs-on: ubuntu-latest
+    env:
+      MDBOOK_VERSION: 0.5.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mdBook
+        run: cargo install --locked --version ${MDBOOK_VERSION} mdbook
+      - name: Build book dependencies
+        run: cargo build -p r2l
+      - name: Test book examples
+        run: mdbook test -L target/debug/deps book

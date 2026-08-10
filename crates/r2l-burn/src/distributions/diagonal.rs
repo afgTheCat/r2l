@@ -6,7 +6,7 @@ use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor};
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
-use r2l_core::models::{ActivationFunction, Actor, Policy};
+use r2l_core::models::{ActivationFunction, Actor, Policy, ToSafetensors};
 
 use crate::sequential::Sequential;
 
@@ -23,6 +23,11 @@ pub struct DiagGaussianDistribution<B: Backend> {
 
 impl<B: Backend> DiagGaussianDistribution<B> {
     /// Builds a diagonal-Gaussian policy network.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `mu_layers` is empty.
+    #[must_use]
     pub fn build(mu_layers: &[usize], activation: ActivationFunction, log_std_init: f32) -> Self {
         let device = Default::default();
         let action_size = *mu_layers.last().unwrap();
@@ -38,6 +43,10 @@ impl<B: Backend> DiagGaussianDistribution<B> {
     }
 
     /// Builds a diagonal-Guassian policy using a safetensor store
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stored network dimensions or parameters are invalid.
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let mu_layers = Sequential::<B>::dims_from_store("mu_net", store);
         let mut distribution = Self::build(&mu_layers, ActivationFunction::default(), 0.0);
@@ -65,12 +74,13 @@ impl<B: Backend> Actor for DiagGaussianDistribution<B> {
         let observation: Tensor<B, 2> = observation.unsqueeze();
         Ok(self.mu_net.forward(observation).squeeze_dims(&[0]))
     }
+}
 
-    // This will serialize the model to safetesnors
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for DiagGaussianDistribution<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self).unwrap();
-        store.get_bytes().ok()
+        store.collect_from(self)?;
+        Ok(store.get_bytes()?)
     }
 }
 
@@ -102,7 +112,10 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         let entropy_per_dim = log_std.clone()
             + Tensor::from_data(
                 TensorData::new(
-                    vec![0.5 * ((2. * f32::consts::PI).ln() + 1.); log_std.shape().num_elements()],
+                    vec![
+                        f32::midpoint((2. * f32::consts::PI).ln(), 1.);
+                        log_std.shape().num_elements()
+                    ],
                     log_std.shape(),
                 ),
                 &device,
@@ -113,9 +126,5 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
     fn std(&self) -> Result<f32> {
         let std = self.log_std.val().exp().mean().into_scalar().to_f32();
         Ok(std)
-    }
-
-    fn resample_noise(&mut self) -> Result<()> {
-        todo!()
     }
 }

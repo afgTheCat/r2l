@@ -7,22 +7,25 @@ use burn::{
 };
 use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
-use rand::RngExt;
 
 use crate::sequential::Sequential;
 
-/// Bernoulli Burn policy for Gymnasium `MultiBinary` action spaces.
+/// Independent Bernoulli policy for Gymnasium `MultiBinary` action spaces.
+///
+/// This is equivalent to a multi-categorical policy with two categories per
+/// action component, but uses one logit per component instead of two.
 #[derive(Debug, Module)]
-pub struct BernoulliDistribution<B: Backend> {
+pub struct MultiBernoulliDistribution<B: Backend> {
     logits: Sequential<B>,
     action_size: usize,
 }
 
-impl<B: Backend> BernoulliDistribution<B> {
-    /// Builds a Bernoulli policy network.
+impl<B: Backend> MultiBernoulliDistribution<B> {
+    /// Builds a multi-Bernoulli policy network.
+    #[must_use]
     pub fn build(
         observation_size: usize,
         hidden_layers: &[usize],
@@ -38,7 +41,7 @@ impl<B: Backend> BernoulliDistribution<B> {
     }
 }
 
-impl<B: Backend> Actor for BernoulliDistribution<B> {
+impl<B: Backend> Actor for MultiBernoulliDistribution<B> {
     type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
@@ -49,7 +52,7 @@ impl<B: Backend> Actor for BernoulliDistribution<B> {
         let actions = probs
             .into_iter()
             .map(|prob| {
-                if with_rng(|rng| rng.random::<f32>()) < prob {
+                if with_rng(rand::RngExt::random::<f32>) < prob {
                     1.
                 } else {
                     0.
@@ -76,15 +79,17 @@ impl<B: Backend> Actor for BernoulliDistribution<B> {
             &device,
         ))
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for MultiBernoulliDistribution<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self).unwrap();
-        store.get_bytes().ok()
+        store.collect_from(self)?;
+        Ok(store.get_bytes()?)
     }
 }
 
-impl<B: Backend> Policy for BernoulliDistribution<B> {
+impl<B: Backend> Policy for MultiBernoulliDistribution<B> {
     fn log_probs(
         &self,
         states: &[Self::Tensor],
@@ -109,6 +114,6 @@ impl<B: Backend> Policy for BernoulliDistribution<B> {
     }
 
     fn std(&self) -> anyhow::Result<f32> {
-        bail!("standard deviation is not defined for Bernoulli distributions")
+        bail!("standard deviation is not defined for multi-Bernoulli distributions")
     }
 }

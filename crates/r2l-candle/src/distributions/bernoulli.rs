@@ -2,24 +2,30 @@ use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
 use candle_nn::{Module, VarBuilder, ops::sigmoid};
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     rng::with_rng,
 };
-use rand::RngExt;
 use safetensors::serialize as st_serialize;
 
 use crate::sequential::{Sequential, build_sequential};
 
-/// Bernoulli Candle policy for Gymnasium `MultiBinary` action spaces.
+/// Independent Bernoulli policy for Gymnasium `MultiBinary` action spaces.
+///
+/// This is equivalent to a multi-categorical policy with two categories per
+/// action component, but uses one logit per component instead of two.
 #[derive(Clone, Debug)]
-pub struct BernoulliDistribution {
+pub struct MultiBernoulliDistribution {
     logits: Sequential,
     action_size: usize,
     device: Device,
 }
 
-impl BernoulliDistribution {
-    /// Builds a Bernoulli policy network.
+impl MultiBernoulliDistribution {
+    /// Builds a multi-Bernoulli policy network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network parameters cannot be initialized.
     pub fn build(
         observation_size: usize,
         action_size: usize,
@@ -39,11 +45,13 @@ impl BernoulliDistribution {
     }
 
     /// Returns the Candle device used by this policy.
+    #[must_use]
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
     /// Returns the flattened observation size expected by this policy.
+    #[must_use]
     pub fn observation_size(&self) -> usize {
         self.logits.input_size()
     }
@@ -53,7 +61,7 @@ impl BernoulliDistribution {
     }
 }
 
-impl Actor for BernoulliDistribution {
+impl Actor for MultiBernoulliDistribution {
     type Tensor = Tensor;
 
     fn action(&self, observation: Tensor) -> Result<Tensor> {
@@ -67,7 +75,7 @@ impl Actor for BernoulliDistribution {
         let actions = probs
             .into_iter()
             .map(|prob| {
-                if with_rng(|rng| rng.random::<f32>()) < prob {
+                if with_rng(rand::RngExt::random::<f32>) < prob {
                     1.
                 } else {
                     0.
@@ -86,17 +94,19 @@ impl Actor for BernoulliDistribution {
             .collect();
         Ok(Tensor::from_vec(actions, self.action_size, &self.device)?.detach())
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for MultiBernoulliDistribution {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.logits.activation(),
         }
         .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata)).ok()
+        Ok(st_serialize(self.named_tensors("policy"), Some(metadata))?)
     }
 }
 
-impl Policy for BernoulliDistribution {
+impl Policy for MultiBernoulliDistribution {
     fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
         let states = Tensor::stack(states, 0)?;
         let actions = Tensor::stack(actions, 0)?;
@@ -117,6 +127,6 @@ impl Policy for BernoulliDistribution {
     }
 
     fn std(&self) -> Result<f32> {
-        bail!("standard deviation is not defined for Bernoulli distributions")
+        bail!("standard deviation is not defined for multi-Bernoulli distributions")
     }
 }

@@ -1,9 +1,6 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
-use r2l_api::{
-    BestActorEvaluatorConfig, LearningRateSchedule, LearningSchedule, PPOAlgorithmBuilder,
-    StepHookBound,
-};
+use r2l::{LearningRateSchedule, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
 use serde::{Deserialize, Deserializer, Serialize, de};
 use yaml_serde::Value;
 
@@ -153,11 +150,11 @@ impl RlZooEnvironmentConfig {
         seed: u64,
     ) -> anyhow::Result<()> {
         let obs_clip = self.normalize.norm_obs().then_some(10.0);
-        let evaluator_config = BestActorEvaluatorConfig::new(output_dir);
+        let artifacts_config = TrainingArtifactsConfig::new(output_dir);
         let mut builder = PPOAlgorithmBuilder::gym(env_name, self.n_envs)
-            .with_rollout_bound(StepHookBound::new(self.n_steps))
+            .with_rollout_steps(self.n_steps)
             .with_learning_schedule(LearningSchedule::total_step_bound(self.n_timesteps))
-            .with_evaluator(evaluator_config)
+            .with_training_artifacts(artifacts_config)
             .with_observation_normalizer(obs_clip)
             .with_lambda(self.gae_lambda)
             .with_gamma(self.gamma)

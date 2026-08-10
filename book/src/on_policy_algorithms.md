@@ -34,24 +34,24 @@ worker thread. Gymnasium environments still execute Python code under Python's
 interpreter lock, so threaded sampling should not be assumed to improve
 Gymnasium throughput.
 
-Rollout collection is hook-driven. `StepHookBound` and `EpisodeHookBound`
-provide the standard fixed-step and fixed-episode policies through the
-high-level API.
+Rollout collection is hook-driven. The high-level algorithm builders expose
+the standard policies through `with_rollout_steps` and
+`with_rollout_episodes`.
 
 ![Sampler overview](./images/sampler.png)
 
 ## Agents
 
 `r2l-agents` contains the lower-level PPO, A2C, and VPG learning logic.
-`r2l-api` composes those agents with Candle or Burn learning modules and
+`r2l` composes those agents with Candle or Burn learning modules and
 provides defaults for loss configuration, reporting, evaluation, and learning
 schedules.
 
-Most applications should construct a complete run with
-`PPOAlgorithmBuilder` or `A2CAlgorithmBuilder`. The lower-level
-`PPOAgentBuilder`, `A2CAgentBuilder`, and `ConfiguredSamplerBuilder` are
-intended for custom compositions. Custom sampler builders can implement the
-`SamplerBuilder` trait to plug into `OnPolicyAlgorithmBuilder`.
+Applications construct complete runs with `PPOAlgorithmBuilder` or
+`A2CAlgorithmBuilder`. Backend and sampler choices change the concrete builder
+type while preserving the shared configuration. Applications that need custom
+agents, samplers, or hook compositions can use the lower-level traits from
+`r2l-core`, `r2l-agents`, and `r2l-sampler` directly.
 
 ## PPO hooks
 
@@ -61,7 +61,7 @@ The PPO agent exposes hooks at three points:
 2. after each PPO epoch, where the hook decides whether another epoch runs;
 3. after a minibatch loss is computed and before the optimizer update.
 
-The default `r2l-api` hook uses these points for advantage normalization,
+The default `r2l` hook uses these points for advantage normalization,
 entropy and value-loss coefficients, target-KL stopping, progress reporting,
 and statistics.
 

@@ -9,7 +9,6 @@ mod direct;
 mod staged;
 // pub mod staged2;
 
-pub use direct::worker::WorkerPool;
 pub use direct::{DirectSampler, DirectSamplerCore, DirectSamplerHook, SamplerHookResult};
 use serde::{Deserialize, Serialize};
 pub use staged::{StagedSampler, StagedSamplerCore, StagedSamplerHook};

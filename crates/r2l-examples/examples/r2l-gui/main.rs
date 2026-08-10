@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l_api::{LearningSchedule, PPOAlgorithmBuilder, PPOStats, StepHookBound};
+use r2l::{LearningSchedule, PPOAlgorithmBuilder, PPORolloutStats};
 use r2l_examples::EventBox;
 use r2l_sampler::SamplerExecutionMode;
 
@@ -34,7 +34,7 @@ impl App {
             },
             best_table: UpdateTable {
                 clip_range,
-                progress: Default::default(),
+                progress: PPORolloutStats::default(),
             },
             average_rollout_rewards: vec![],
         }
@@ -49,7 +49,7 @@ impl eframe::App for App {
             let Ok(event) = event else {
                 break;
             };
-            let Ok(progress) = event.downcast::<PPOStats>() else {
+            let Ok(progress) = event.downcast::<PPORolloutStats>() else {
                 break;
             };
             let average_reward = progress.average_reward;
@@ -76,12 +76,12 @@ impl eframe::App for App {
             // TODO: maybe we should shrink it within the rect
             recent_table_rect = recent_table_rect.shrink(10.);
             ui.scope_builder(UiBuilder::new().max_rect(recent_table_rect), |ui| {
-                self.recent_table.ui(ui)
+                self.recent_table.ui(ui);
             });
 
             best_table_rect = best_table_rect.shrink(10.);
             ui.scope_builder(UiBuilder::new().max_rect(best_table_rect), |ui| {
-                self.best_table.ui(ui)
+                self.best_table.ui(ui);
             });
 
             let (_progress_bar, plot) = other_widgets.split_top_bottom_at_fraction(0.1);
@@ -108,8 +108,13 @@ const MAX_GRAD_NORM: f32 = 0.5;
 const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
 
+/// Trains the PPO GUI example and reports progress through `tx`.
+///
+/// # Errors
+///
+/// Returns an error if the algorithm cannot be built or training fails.
 pub fn train_ppo(
-    tx: Sender<PPOStats>,
+    tx: Sender<PPORolloutStats>,
     total_rollouts: usize,
     clip_range: f32,
 ) -> anyhow::Result<()> {
@@ -119,7 +124,7 @@ pub fn train_ppo(
         .with_entropy_coeff(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
-        .with_rollout_bound(StepHookBound::new(2048))
+        .with_rollout_steps(2048)
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_clip_range(clip_range)
         .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
@@ -136,7 +141,8 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     let (event_tx, event_rx): (Sender<EventBox>, Receiver<EventBox>) = mpsc::channel();
-    let (update_tx, update_rx): (Sender<PPOStats>, Receiver<PPOStats>) = mpsc::channel();
+    let (update_tx, update_rx): (Sender<PPORolloutStats>, Receiver<PPORolloutStats>) =
+        mpsc::channel();
     let tx_to_events = event_tx.clone();
     std::thread::spawn(move || {
         while let Ok(update) = update_rx.recv() {
@@ -148,10 +154,10 @@ fn main() -> eframe::Result {
     std::thread::spawn(
         move || match train_ppo(update_tx, total_rollouts, clip_range) {
             Ok(()) => {
-                println!("ppo trained normally")
+                println!("ppo trained normally");
             }
             Err(err) => {
-                eprintln!("ppo was not trained normally, err: {err}")
+                eprintln!("ppo was not trained normally, err: {err}");
             }
         },
     );

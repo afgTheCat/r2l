@@ -1,17 +1,17 @@
-//! Candle policy/value learning modules used by on-policy algorithms.
+//! Candle policy/value learners used by on-policy algorithms.
 //!
-//! The central public type here is [`crate::learning_module::PolicyValueModule`],
+//! The central public type here is [`crate::learning_module::PolicyValueLearner`],
 //! which combines a Candle policy, a value function, and optimizer state into
 //! one
-//! [`OnPolicyLearningModule`](r2l_core::on_policy::learning_module::OnPolicyLearningModule)
+//! [`OnPolicyLearner`](r2l_core::on_policy::learning_module::OnPolicyLearner)
 //! implementation.
 
 use anyhow::{Ok, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
-    models::{ActivationFunction, LearningModule, ValueFunction},
-    on_policy::{learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses},
+    models::{ActivationFunction, Learner, ValueFunction},
+    on_policy::{learning_module::OnPolicyLearner, losses::FromPolicyValueLosses},
 };
 
 use crate::{
@@ -20,7 +20,7 @@ use crate::{
     sequential::{Sequential, build_sequential},
 };
 
-/// Loss container used by Candle on-policy learning modules.
+/// Loss container used by Candle on-policy learners.
 ///
 /// This stores the policy loss, value loss, and an optional multiplier applied
 /// to the value loss during optimization.
@@ -45,6 +45,7 @@ impl FromPolicyValueLosses<Tensor> for PolicyValueLosses {
 
 impl PolicyValueLosses {
     /// Creates a loss container from policy and value losses.
+    #[must_use]
     pub fn new(policy_loss: Tensor, value_loss: Tensor) -> Self {
         Self {
             policy_loss,
@@ -54,8 +55,12 @@ impl PolicyValueLosses {
     }
 
     /// Adds an entropy term into the policy loss.
-    pub fn add_entropy_loss(&mut self, entropy_loss: Tensor) -> Result<()> {
-        self.policy_loss = self.policy_loss.add(&entropy_loss)?;
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor addition fails.
+    pub fn add_entropy_loss(&mut self, entropy_loss: &Tensor) -> Result<()> {
+        self.policy_loss = (&self.policy_loss + entropy_loss)?;
         Ok(())
     }
 
@@ -73,6 +78,7 @@ pub struct SplitPolicyValueOptimizer {
 
 impl SplitPolicyValueOptimizer {
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
         self.policy_optimizer_with_grad.optimizer.learning_rate()
     }
@@ -101,7 +107,7 @@ impl SplitPolicyValueOptimizer {
 }
 
 /// The policy and the value function has different optimizers
-impl LearningModule for SplitPolicyValueOptimizer {
+impl Learner for SplitPolicyValueOptimizer {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
@@ -115,7 +121,7 @@ impl LearningModule for SplitPolicyValueOptimizer {
         } else {
             self.value_optimizer_with_grad
                 .backward_step(&losses.value_loss)?;
-        };
+        }
         Ok(())
     }
 }
@@ -128,6 +134,7 @@ pub struct JointPolicyValueOptimizer {
 
 impl JointPolicyValueOptimizer {
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer_with_grad.optimizer.learning_rate()
     }
@@ -145,7 +152,7 @@ impl JointPolicyValueOptimizer {
     }
 }
 
-impl LearningModule for JointPolicyValueOptimizer {
+impl Learner for JointPolicyValueOptimizer {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
@@ -199,6 +206,10 @@ pub enum PolicyValueOptimizer {
 
 impl PolicyValueOptimizer {
     /// Builds a joint policy/value optimizer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the optimizer cannot be initialized.
     pub fn joint(
         vm: VarMap,
         params: ParamsAdamW,
@@ -212,6 +223,10 @@ impl PolicyValueOptimizer {
     }
 
     /// Builds separate policy and value optimizers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either optimizer cannot be initialized.
     pub fn split(
         policy_vm: VarMap,
         critic_vm: VarMap,
@@ -220,8 +235,8 @@ impl PolicyValueOptimizer {
         policy_max_grad_norm: Option<f32>,
         value_max_grad_norm: Option<f32>,
     ) -> candle_core::Result<Self> {
-        let policy_optimizer = AdamW::new(policy_vm.all_vars(), policy_params.clone())?;
-        let value_optimizer = AdamW::new(critic_vm.all_vars(), value_params.clone())?;
+        let policy_optimizer = AdamW::new(policy_vm.all_vars(), policy_params)?;
+        let value_optimizer = AdamW::new(critic_vm.all_vars(), value_params)?;
         let policy_optimizer_with_grad =
             OptimizerWithMaxGrad::new(policy_optimizer, policy_max_grad_norm, policy_vm);
         let value_optimizer_with_grad =
@@ -235,6 +250,7 @@ impl PolicyValueOptimizer {
 
 impl PolicyValueOptimizer {
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
         match self {
             Self::Joint(joint) => joint.policy_learning_rate(),
@@ -259,7 +275,7 @@ impl PolicyValueOptimizer {
     }
 }
 
-impl LearningModule for PolicyValueOptimizer {
+impl Learner for PolicyValueOptimizer {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -270,20 +286,24 @@ impl LearningModule for PolicyValueOptimizer {
     }
 }
 
-/// Candle on-policy learning module combining policy, value function, and
+/// Candle on-policy learner combining policy, value function, and
 /// optimizer state.
 ///
-/// This is the main Candle learning-module type consumed by the higher-level
+/// This is the main Candle learner type consumed by the higher-level
 /// A2C and PPO integrations in the workspace.
-pub struct PolicyValueModule {
+pub struct PolicyValueLearner {
     policy: CandlePolicyKind,
     optimizer: PolicyValueOptimizer,
     value_function: SequentialValueFunction,
     device: Device,
 }
 
-impl PolicyValueModule {
+impl PolicyValueLearner {
     /// Builds a policy/value module with a shared optimizer configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value network or optimizer cannot be initialized.
     pub fn build_joint(
         policy: CandlePolicyKind,
         value_hidden_layers: &[usize],
@@ -313,6 +333,10 @@ impl PolicyValueModule {
     }
 
     /// Builds a policy/value module with separate policy and value optimizers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value network or either optimizer cannot be initialized.
     #[allow(clippy::too_many_arguments)]
     pub fn build_split(
         policy: CandlePolicyKind,
@@ -358,12 +382,13 @@ impl PolicyValueModule {
     }
 
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer.policy_learning_rate()
     }
 }
 
-impl ValueFunction for PolicyValueModule {
+impl ValueFunction for PolicyValueLearner {
     type Tensor = Tensor;
 
     fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
@@ -371,7 +396,7 @@ impl ValueFunction for PolicyValueModule {
     }
 }
 
-impl LearningModule for PolicyValueModule {
+impl Learner for PolicyValueLearner {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
@@ -379,7 +404,7 @@ impl LearningModule for PolicyValueModule {
     }
 }
 
-impl OnPolicyLearningModule for PolicyValueModule {
+impl OnPolicyLearner for PolicyValueLearner {
     type LearningTensor = Tensor;
     type InferenceTensor = Tensor;
     type Policy = CandlePolicyKind;

@@ -4,7 +4,7 @@ use std::f32;
 use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{Module, VarBuilder};
-use r2l_core::models::{ActivationFunction, Actor, Policy, PolicyMetadata};
+use r2l_core::models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors};
 use safetensors::serialize as st_serialize;
 
 use crate::{
@@ -19,7 +19,6 @@ use crate::{
 /// `r2l-core` [`Actor`] and [`Policy`] traits.
 #[derive(Debug, Clone)]
 pub struct DiagGaussianDistribution {
-    noise: Tensor,
     mu_net: Sequential,
     log_std: Tensor,
     device: Device,
@@ -27,6 +26,10 @@ pub struct DiagGaussianDistribution {
 
 impl DiagGaussianDistribution {
     /// Builds a diagonal-Gaussian policy network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network cannot be created.
     pub fn build(
         observation_size: usize,
         layers: &[usize],
@@ -36,23 +39,22 @@ impl DiagGaussianDistribution {
         activation: ActivationFunction,
     ) -> Result<Self> {
         let mu_net = build_sequential(observation_size, layers, vb, prefix, activation)?;
-        let noise = standard_normal(log_std.shape(), log_std.device())?;
         let device = vb.device().clone();
         Ok(Self {
-            log_std,
             mu_net,
-            noise,
+            log_std,
             device,
         })
     }
 
     pub(crate) fn from_parts(
         tensors: HashMap<String, Tensor>,
-        device: Device,
-        metadata: PolicyMetadata,
+        device: &Device,
+        metadata: &PolicyMetadata,
     ) -> Self {
+        let activation = metadata.activation;
         let (observation_size, layers) = network_shape(&tensors, "policy");
-        let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
+        let vb = VarBuilder::from_tensors(tensors, DType::F32, device);
         let action_size = *layers.last().unwrap();
         let log_std = vb.get(action_size, "policy.log_std").unwrap();
         Self::build(
@@ -61,17 +63,19 @@ impl DiagGaussianDistribution {
             &vb,
             log_std,
             "policy",
-            metadata.activation,
+            activation,
         )
         .unwrap()
     }
 
     /// Returns the Candle device used by this policy.
+    #[must_use]
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
     /// Returns the flattened observation size expected by this policy.
+    #[must_use]
     pub fn observation_size(&self) -> usize {
         self.mu_net.input_size()
     }
@@ -106,15 +110,17 @@ impl Actor for DiagGaussianDistribution {
         let observation = observation.unsqueeze(0)?;
         Ok(self.mu_net.forward(&observation)?.squeeze(0)?.detach())
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for DiagGaussianDistribution {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.mu_net.activation(),
         }
         .to_safetensors_metadata();
         let mut tensors = self.mu_net.named_tensors("policy");
         tensors.push(("policy.log_std".to_string(), self.log_std.clone()));
-        st_serialize(tensors, Some(metadata)).ok()
+        Ok(st_serialize(tensors, Some(metadata))?)
     }
 }
 
@@ -136,7 +142,7 @@ impl Policy for DiagGaussianDistribution {
 
     fn entropy(&self, _states: &[Tensor]) -> Result<Tensor> {
         let log_2pi_plus_1_div_2 = Tensor::full(
-            0.5 * ((2. * f32::consts::PI).ln() + 1.),
+            f32::midpoint((2. * f32::consts::PI).ln(), 1.),
             self.log_std.shape(),
             self.log_std.device(),
         )?;
@@ -147,10 +153,5 @@ impl Policy for DiagGaussianDistribution {
     fn std(&self) -> Result<f32> {
         let std = self.log_std.exp()?.mean_all()?.to_scalar::<f32>()?;
         Ok(std)
-    }
-
-    fn resample_noise(&mut self) -> Result<()> {
-        self.noise = standard_normal(self.noise.shape(), self.noise.device())?;
-        Ok(())
     }
 }

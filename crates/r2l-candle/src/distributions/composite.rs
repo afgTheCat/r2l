@@ -3,7 +3,7 @@ use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use r2l_core::{
     env::Space,
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     tensor::R2lTensor,
 };
 use safetensors::serialize as st_serialize;
@@ -22,6 +22,10 @@ pub struct CompositeDistribution {
 
 impl CompositeDistribution {
     /// Builds one child policy per nested action space.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any child policy cannot be built.
     pub fn build<T: R2lTensor>(
         action_spaces: Vec<Space<T>>,
         policy_varbuilder: &VarBuilder,
@@ -34,7 +38,7 @@ impl CompositeDistribution {
         let mut policies = Vec::new();
         let mut action_sizes = Vec::new();
         for (idx, action_space) in action_spaces.into_iter().enumerate() {
-            let action_size = action_space.size();
+            let action_size = action_space.action_size();
             let child_prefix = format!("{prefix}.{idx}");
             policies.push(CandlePolicyKind::build_with_prefix(
                 action_space,
@@ -57,11 +61,13 @@ impl CompositeDistribution {
     }
 
     /// Returns the Candle device used by this policy.
+    #[must_use]
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
     /// Returns the flattened observation size expected by this policy.
+    #[must_use]
     pub fn observation_size(&self) -> usize {
         self.observation_size
     }
@@ -92,13 +98,15 @@ impl Actor for CompositeDistribution {
         }
         Ok(Tensor::cat(&actions, 0)?.detach())
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for CompositeDistribution {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.activation,
         }
         .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata)).ok()
+        Ok(st_serialize(self.named_tensors("policy"), Some(metadata))?)
     }
 }
 
@@ -127,12 +135,5 @@ impl Policy for CompositeDistribution {
 
     fn std(&self) -> Result<f32> {
         bail!("standard deviation is not defined for composite distributions")
-    }
-
-    fn resample_noise(&mut self) -> Result<()> {
-        for policy in &mut self.policies {
-            policy.resample_noise()?;
-        }
-        Ok(())
     }
 }

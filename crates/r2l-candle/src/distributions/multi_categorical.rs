@@ -6,7 +6,7 @@ use candle_nn::{
 };
 use r2l_core::{
     env::action_ranges,
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistribution;
@@ -25,6 +25,10 @@ pub struct MultiCategoricalDistribution {
 
 impl MultiCategoricalDistribution {
     /// Builds a policy network whose output is split according to `nvec`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network parameters cannot be initialized.
     pub fn build(
         observation_size: usize,
         nvec: Vec<usize>,
@@ -45,11 +49,13 @@ impl MultiCategoricalDistribution {
     }
 
     /// Returns the Candle device used by this policy.
+    #[must_use]
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
     /// Returns the flattened observation size expected by this policy.
+    #[must_use]
     pub fn observation_size(&self) -> usize {
         self.logits.input_size()
     }
@@ -96,13 +102,15 @@ impl Actor for MultiCategoricalDistribution {
         }
         Ok(Tensor::from_vec(actions, self.nvec.len(), &self.device)?.detach())
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for MultiCategoricalDistribution {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.logits.activation(),
         }
         .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata)).ok()
+        Ok(st_serialize(self.named_tensors("policy"), Some(metadata))?)
     }
 }
 

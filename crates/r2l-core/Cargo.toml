@@ -23,3 +23,6 @@ candle = ["dep:candle-core"]
 burn = ["dep:burn"]
 cuda = ["candle", "candle-core/cuda"]
 default = ["candle", "burn"]
+
+[lints]
+workspace = true

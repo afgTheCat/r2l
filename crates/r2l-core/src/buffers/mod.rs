@@ -41,6 +41,7 @@ pub struct MultiMemory<T: R2lTensor> {
 
 impl<T: R2lTensor> MultiMemory<T> {
     /// Creates empty transition storage for up to `capacity` environments.
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             last_states: Vec::with_capacity(capacity),

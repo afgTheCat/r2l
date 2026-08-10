@@ -1,6 +1,6 @@
 // ANCHOR: env_builders
 use anyhow::{Ok, Result};
-use r2l_api::{Env, EnvBuilder, EnvDescription, PPOAlgorithmBuilder, Snapshot, Space, TensorData};
+use r2l::{Env, EnvBuilder, EnvDescription, PPOAlgorithmBuilder, Snapshot, Space, TensorData};
 use r2l_gym::GymEnvBuilder;
 
 // Not a working implementation an actual env

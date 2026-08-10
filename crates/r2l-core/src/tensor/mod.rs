@@ -34,6 +34,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Self;
 
     /// Constructs a new tensor based on the a vector and shape
+    #[must_use]
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Self {
         Self::from_slice_and_shape(&data, shape)
     }
@@ -55,39 +56,80 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     }
 
     /// Elementwise addition.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn add(&self, other: &Self) -> anyhow::Result<Self>;
 
     /// Elementwise subtraction.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn sub(&self, other: &Self) -> anyhow::Result<Self>;
 
     /// Elementwise multiplication.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn mul(&self, other: &Self) -> anyhow::Result<Self>;
 
     /// Elementwise exponential.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn exp(&self) -> anyhow::Result<Self>;
 
     /// Clamps each element to the inclusive range `[min, max]`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn clamp(&self, min: f32, max: f32) -> anyhow::Result<Self>;
 
     /// Elementwise minimum between two tensors.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn minimum(&self, other: &Self) -> anyhow::Result<Self>;
 
     /// Elementwise negation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn neg(&self) -> anyhow::Result<Self>;
 
     /// Mean reduction over all elements.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the reduction.
     fn mean(&self) -> anyhow::Result<Self>;
 
     /// Elementwise square.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn sqr(&self) -> anyhow::Result<Self>;
 
     /// Creates a zero-filled tensor with `shape`.
+    #[must_use]
     fn zeros(shape: Vec<usize>) -> Self {
         let data = vec![0f32; shape.iter().product()];
         Self::from_vec_and_shape(data, shape)
     }
 
     /// Multiplies every element by `scalar`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
     fn mul_scalar(&self, scalar: f32) -> anyhow::Result<Self>;
 
     /// Adds a non-empty slice of equally shaped tensors.
@@ -135,6 +177,7 @@ pub struct TensorData {
 
 impl TensorData {
     /// Creates a one-dimensional tensor from a vector.
+    #[must_use]
     pub fn from_vec(data: Vec<f32>) -> Self {
         let shape = vec![data.len()];
         Self { data, shape }
@@ -144,12 +187,14 @@ impl TensorData {
     ///
     /// In debug builds, this checks that `shape.iter().product()` matches the
     /// number of values.
+    #[must_use]
     pub fn new(data: Vec<f32>, shape: Vec<usize>) -> Self {
-        debug_assert!(shape.iter().product::<usize>() == data.len());
+        debug_assert_eq!(shape.iter().product::<usize>(), data.len());
         Self { data, shape }
     }
 
     /// Consumes the tensor data and returns its flat values.
+    #[must_use]
     pub fn into_vec(self) -> Vec<f32> {
         self.data
     }

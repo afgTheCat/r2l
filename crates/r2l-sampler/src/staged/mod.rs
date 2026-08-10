@@ -1,5 +1,7 @@
 mod worker;
 
+use std::sync::Arc;
+
 use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
 use itertools::Itertools;
 use r2l_core::{
@@ -11,7 +13,7 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-pub use crate::{
+use crate::{
     RolloutMode, SamplerExecutionMode, SamplerHookResult,
     staged::{
         worker::ThreadHandle,
@@ -33,20 +35,26 @@ pub trait StagedSamplerHook {
 
 /// Mutable staged-sampler state exposed to hook implementations.
 pub struct StagedSamplerCore<E: Env> {
-    /// Inline or threaded environment workers.
-    pub pool: WorkerPool<E>,
-    /// Optional shared observation normalizer.
-    pub obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    /// Most recent, normalized observation for each environment.
-    pub last_states: ArrayHandle<E::Tensor>,
-    /// Per-environment output trajectory buffers.
-    pub buffers: Vec<TrajectoryBuffer<E::Tensor>>,
+    pool: WorkerPool<E>,
+    obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    last_states: ArrayHandle<E::Tensor>,
+    buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
 
 impl<E: Env> StagedSamplerCore<E> {
+    /// Returns the per-environment output trajectory buffers mutably.
+    pub fn buffers_mut(&mut self) -> &mut Vec<TrajectoryBuffer<E::Tensor>> {
+        &mut self.buffers
+    }
+
     /// Builds staged sampler state and its environment workers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an environment cannot be built or reset.
+    #[must_use]
     pub fn build<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+        env_builder: &EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     ) -> Self {
@@ -63,15 +71,15 @@ impl<E: Env> StagedSamplerCore<E> {
             obs_normalizer.apply_slice_in_place(&mut last_states);
         }
         Self {
-            buffers,
             pool,
-            last_states,
             obs_normalizer,
+            last_states,
+            buffers,
         }
     }
 
     fn build_vec_workers<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+        env_builder: &EnvBuilderType<EB>,
         num_envs: usize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
         let mut envs = Vec::with_capacity(num_envs);
@@ -88,7 +96,7 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     fn build_thread_workers<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+        env_builder: &EnvBuilderType<EB>,
         num_envs: usize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
         let mut worker_handles = Vec::with_capacity(num_envs);
@@ -155,9 +163,12 @@ impl<E: Env> StagedSamplerCore<E> {
             .map(|idx| last_states[*idx].clone())
             .collect::<Vec<_>>();
         let memories = multi_memory.into_memories(&next_states);
-        let terminations = memories.iter().map(|memory| memory.is_done()).collect();
+        let terminations = memories
+            .iter()
+            .map(r2l_core::buffers::Memory::is_done)
+            .collect();
         for (idx, memory) in indices.iter().zip(memories) {
-            self.buffers[*idx].push(memory)
+            self.buffers[*idx].push(memory);
         }
         terminations
     }
@@ -166,7 +177,7 @@ impl<E: Env> StagedSamplerCore<E> {
         let multi_memory = self.pool.step();
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
-            obs_normalizer.apply_slice_in_place(&mut last_states)
+            obs_normalizer.apply_slice_in_place(&mut last_states);
         }
         let last_states = self.last_states.lock().unwrap();
         let memories = multi_memory.into_memories(&last_states);
@@ -177,16 +188,18 @@ impl<E: Env> StagedSamplerCore<E> {
 
     /// Clears all output trajectory buffers.
     pub fn clear_buffers(&mut self) {
-        self.buffers.iter_mut().for_each(|buffer| buffer.clear());
+        self.buffers
+            .iter_mut()
+            .for_each(r2l_core::buffers::buffer::TrajectoryBuffer::clear);
     }
 
     /// Installs a clone of `policy` on every worker.
-    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
+    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) {
         self.pool.set_policy(policy);
     }
 
     /// Borrows all collected trajectories in worker order.
-    pub fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, E::Tensor>]> {
+    pub fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, E::Tensor>]> {
         self.buffers
             .iter()
             .map(|buffer| buffer.to_trajectory_view())
@@ -201,14 +214,24 @@ impl<E: Env> StagedSamplerCore<E> {
 
 /// Observation-normalizing rollout sampler controlled by a hook.
 pub struct StagedSampler<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> {
-    pub core: StagedSamplerCore<E>,
-    pub hook: H,
+    core: StagedSamplerCore<E>,
+    hook: H,
 }
 
 impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H> {
+    /// Creates a staged sampler from its core state and hook.
+    pub fn new(core: StagedSamplerCore<E>, hook: H) -> Self {
+        Self { core, hook }
+    }
+
+    /// Returns the shared observation normalizer, when configured.
+    pub fn obs_normalizer(&self) -> Option<&ClippedNormalizer<E::Tensor>> {
+        self.core.obs_normalizer.as_ref()
+    }
+
     /// Builds a sampler with an existing shared observation normalizer.
     pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+        env_builder: &EnvBuilderType<EB>,
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
@@ -217,6 +240,26 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
             core: StagedSamplerCore::build(env_builder, execution_mode, obs_normalizer),
             hook,
         }
+    }
+
+    /// Builds a homogeneous sampler from a shared environment builder.
+    pub fn build_from_env_builder(
+        env_builder: Arc<dyn EnvBuilder<Env = E>>,
+        num_envs: usize,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    ) -> Self
+    where
+        E: 'static,
+    {
+        let env_builder = move || env_builder.build_env();
+        Self::build_with_obs_normalizer(
+            &EnvBuilderType::homogeneous(env_builder, num_envs),
+            hook,
+            execution_mode,
+            obs_normalizer,
+        )
     }
 }
 
@@ -235,7 +278,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
         self.core.clear_buffers();
-        self.core.set_policy(actor.clone());
+        self.core.set_policy(&actor);
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {
@@ -245,7 +288,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
         }
     }
 
-    fn trajectory_views<'a>(&'a mut self) -> impl AsRef<[TrajectoryView<'a, Self::Tensor>]> {
+    fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {
         self.core.trajectory_views()
     }
 

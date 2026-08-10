@@ -116,7 +116,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
         multi_memory
     }
 
-    fn set_policy<A: Actor<Tensor = T> + Clone>(&mut self, policy: A) {
+    fn set_policy<A: Actor<Tensor = T> + Clone>(&mut self, policy: &A) {
         for worker in &mut self.workers {
             worker.set_policy(Box::new(policy.clone()));
         }
@@ -271,7 +271,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         multi_memory
     }
 
-    fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: A) {
+    fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: &A) {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
         }
@@ -325,7 +325,7 @@ impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
         }
     }
 
-    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: A) {
+    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) {
         match self {
             Self::Vec(workers) => workers.set_policy(policy),
             Self::Thread(workers) => workers.set_policy(policy),

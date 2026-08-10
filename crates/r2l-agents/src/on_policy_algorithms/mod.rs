@@ -30,6 +30,7 @@ pub struct Advantages(pub Vec<Vec<f32>>);
 
 impl Advantages {
     /// Samples advantage values at the provided `(buffer_index, step_index)` pairs.
+    #[must_use]
     pub fn sample(&self, indices: &[(usize, usize)]) -> Vec<f32> {
         indices
             .iter()
@@ -49,7 +50,7 @@ impl Advantages {
             .sum::<f32>()
             / len as f32;
         let std = variance.sqrt() + 1e-8;
-        for advantages in self.0.iter_mut() {
+        for advantages in &mut self.0 {
             for x in advantages.iter_mut() {
                 *x = (*x - mean) / std;
             }
@@ -63,6 +64,7 @@ pub struct Returns(pub Vec<Vec<f32>>);
 
 impl Returns {
     /// Samples return values at the provided `(buffer_index, step_index)` pairs.
+    #[must_use]
     pub fn sample(&self, indices: &[(usize, usize)]) -> Vec<f32> {
         indices
             .iter()
@@ -77,6 +79,7 @@ pub struct Logps(pub Vec<Vec<f32>>);
 
 impl Logps {
     /// Samples log-probability values at the provided `(buffer_index, step_index)` pairs.
+    #[must_use]
     pub fn sample(&self, indices: &[(usize, usize)]) -> Vec<f32> {
         indices
             .iter()
@@ -123,6 +126,10 @@ fn batch_advantages_and_returns<
 }
 
 /// Computes generalized advantage estimates and return targets for each batch.
+///
+/// # Errors
+///
+/// Returns an error if value inference fails.
 pub fn batches_advantages_and_returns<
     T1: R2lTensor,
     T2: R2lTensor,
@@ -162,6 +169,10 @@ pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -
 }
 
 /// Computes action log-probabilities for every transition in each batch.
+///
+/// # Errors
+///
+/// Returns an error if policy evaluation fails.
 pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
     batches: &[B],
     policy: &impl Policy<Tensor = T>,

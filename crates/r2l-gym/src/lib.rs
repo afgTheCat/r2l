@@ -52,6 +52,10 @@ impl GymEnv {
     /// Creates a Gymnasium environment by name.
     ///
     /// `render_mode` is forwarded to `gymnasium.make` when provided.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if Gymnasium cannot create or inspect the environment.
     pub fn new(name: &str, render_mode: Option<String>) -> Result<GymEnv> {
         let env = Python::with_gil(|py| {
             let gym = py.import("gymnasium")?;
@@ -116,13 +120,14 @@ impl Env for GymEnv {
 /// Builder for named Gymnasium environments.
 ///
 /// This is the standard way to plug Gymnasium environments into higher-level
-/// `r2l` builders such as `r2l_api::PPOAlgorithmBuilder` and
-/// `r2l_api::A2CAlgorithmBuilder`.
+/// high-level builders such as `r2l::PPOAlgorithmBuilder` and
+/// `r2l::A2CAlgorithmBuilder`.
 #[derive(Serialize, Deserialize)]
 pub struct GymEnvBuilder(String);
 
 impl GymEnvBuilder {
     /// Creates a builder for the given Gymnasium environment id.
+    #[must_use]
     pub fn new(name: &str) -> Self {
         Self(name.to_owned())
     }

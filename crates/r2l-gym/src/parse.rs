@@ -75,11 +75,7 @@ pub(crate) fn parse_action<'py>(
             "float32",
         ),
         Space::Box { shape, .. } => action_array(py, action.to_vec(), shape, "float32"),
-        Space::Discrete(_) => action
-            .iter()
-            .position(|i| *i > 0.)
-            .unwrap()
-            .into_bound_py_any(py),
+        Space::Discrete(_) => (action[0] as usize).into_bound_py_any(py),
         Space::MultiDiscrete { shape, .. } => action_array(py, action.to_vec(), shape, "int64"),
         Space::MultiBinary { shape } => action_array(
             py,
@@ -125,7 +121,7 @@ fn parse_child_actions<'py, 'space>(
     let mut offset = 0;
     let mut actions = Vec::new();
     for space in spaces {
-        let end = offset + space.size();
+        let end = offset + space.action_size();
         actions.push(parse_action(py, &action[offset..end], space)?);
         offset = end;
     }
@@ -154,7 +150,7 @@ pub(crate) fn parse_obs(
         | Space::MultiDiscrete { shape, .. }
         | Space::MultiBinary { shape } => {
             let values = flatten_extract(observation)?;
-            Ok(TensorData::new(values, shape.to_vec()))
+            Ok(TensorData::new(values, shape.clone()))
         }
         Space::Tuple(spaces) => parse_obs_fields(
             spaces

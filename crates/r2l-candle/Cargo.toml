@@ -25,3 +25,7 @@ derive_more = { version = "2.0.1", features = ["full"] }
 anyhow = { workspace = true }
 safetensors = { workspace = true }
 itertools = { workspace = true }
+
+
+[lints]
+workspace = true

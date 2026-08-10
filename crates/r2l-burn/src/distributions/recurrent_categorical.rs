@@ -10,7 +10,7 @@ use burn::{
 };
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistribution;
@@ -37,6 +37,11 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
     /// `layers` follows the same convention as the feed-forward policies:
     /// first observation size, optional hidden encoder sizes, final action size.
     /// The recurrent hidden size is the encoder output size.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `layers` contains fewer than two entries.
+    #[must_use]
     pub fn build(layers: &[usize]) -> Self {
         assert!(
             layers.len() >= 2,
@@ -80,6 +85,10 @@ impl<B: Backend> RecurrentCategoricalDistribution<B> {
     }
 
     /// Builds a recurrent categorical policy using a safetensor store.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stored network dimensions or parameters are missing or invalid.
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let mut encoder_layers = Sequential::<B>::dims_from_store("encoder", store);
         let action_size = store
@@ -107,10 +116,9 @@ impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
         let action_probs: Vec<f32> = softmax(logits, 1).to_data().to_vec().unwrap();
         let distribution = WeightedIndex::new(&action_probs).unwrap();
         let action = with_rng(|rng| distribution.sample(rng));
-        let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
-        action_mask[action] = 1.;
+        debug_assert!(action < self.action_size);
         Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
+            TensorData::new(vec![action as f32], vec![1]),
             &device,
         ))
     }
@@ -125,18 +133,19 @@ impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
             .max_by(|(_, left), (_, right)| left.total_cmp(right))
             .map(|(index, _)| index)
             .unwrap();
-        let mut action_mask = vec![0.0; self.action_size];
-        action_mask[action] = 1.0;
+        debug_assert!(action < self.action_size);
         Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
+            TensorData::new(vec![action as f32], vec![1]),
             &device,
         ))
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for RecurrentCategoricalDistribution<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self).unwrap();
-        store.get_bytes().ok()
+        store.collect_from(self)?;
+        Ok(store.get_bytes()?)
     }
 }
 
@@ -150,8 +159,7 @@ impl<B: Backend> Policy for RecurrentCategoricalDistribution<B> {
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
         let logits = self.logits(states);
         let log_probs = log_softmax(logits, 1);
-        let log_probs = (actions * log_probs).sum_dim(1);
-        Ok(log_probs.squeeze())
+        Ok(log_probs.gather(1, actions.int()).squeeze_dim::<1>(1))
     }
 
     fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {

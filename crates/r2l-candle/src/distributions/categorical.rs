@@ -7,7 +7,7 @@ use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
 use itertools::Itertools;
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistributiion;
@@ -18,7 +18,7 @@ use crate::sequential::{Sequential, build_sequential, network_shape};
 
 /// Categorical Candle policy for discrete action spaces.
 ///
-/// This policy produces one-hot actions sampled from logits predicted by a
+/// This policy produces category indices sampled from logits predicted by a
 /// feed-forward network and implements the `r2l-core` [`Actor`] and [`Policy`]
 /// traits.
 #[derive(Clone, Debug)]
@@ -30,6 +30,10 @@ pub struct CategoricalDistribution {
 
 impl CategoricalDistribution {
     /// Builds a categorical policy network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network parameters cannot be initialized.
     pub fn build(
         observation_size: usize,
         action_size: usize,
@@ -50,8 +54,9 @@ impl CategoricalDistribution {
     pub(crate) fn from_parts(
         tensors: HashMap<String, Tensor>,
         device: Device,
-        metadata: PolicyMetadata,
+        metadata: &PolicyMetadata,
     ) -> Self {
+        let activation = metadata.activation;
         let (observation_size, layers) = network_shape(&tensors, "policy");
         let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
         let action_size = *layers.last().unwrap();
@@ -62,17 +67,19 @@ impl CategoricalDistribution {
             &vb,
             device,
             "policy",
-            metadata.activation,
+            activation,
         )
         .unwrap()
     }
 
     /// Returns the Candle device used by this policy.
+    #[must_use]
     pub fn device(&self) -> Device {
         self.device.clone()
     }
 
     /// Returns the flattened observation size expected by this policy.
+    #[must_use]
     pub fn observation_size(&self) -> usize {
         self.logits.input_size()
     }
@@ -95,10 +102,8 @@ impl Actor for CategoricalDistribution {
         let action_probs: Vec<f32> = softmax(&logits, 1)?.squeeze(0)?.to_vec1()?;
         let distribution = WeightedIndex::new(&action_probs).map_err(Error::wrap)?;
         let action = with_rng(|rng| distribution.sample(rng));
-        let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
-        action_mask[action] = 1.;
-        let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
-        Ok(action)
+        debug_assert!(action < self.action_size);
+        Ok(Tensor::from_vec(vec![action as f32], 1, &self.device)?.detach())
     }
 
     fn mode_action(&self, observation: Tensor) -> Result<Tensor> {
@@ -108,17 +113,21 @@ impl Actor for CategoricalDistribution {
             .iter()
             .position_max_by(|a, b| a.total_cmp(b))
             .unwrap();
-        let mut action_mask = vec![0.0; self.action_size];
-        action_mask[action] = 1.0;
-        Ok(Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach())
+        debug_assert!(action < self.action_size);
+        Ok(Tensor::from_vec(vec![action as f32], 1, &self.device)?.detach())
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for CategoricalDistribution {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.logits.activation(),
         }
         .to_safetensors_metadata();
-        st_serialize(self.logits.named_tensors("policy"), Some(metadata)).ok()
+        Ok(st_serialize(
+            self.logits.named_tensors("policy"),
+            Some(metadata),
+        )?)
     }
 }
 
@@ -128,8 +137,9 @@ impl Policy for CategoricalDistribution {
         let actions = Tensor::stack(actions, 0)?;
         let logits = self.logits.forward(&states)?;
         let log_probs = log_softmax(&logits, 1)?;
-        let log_probs = actions.mul(&log_probs)?.sum(1)?;
-        Ok(log_probs)
+        Ok(log_probs
+            .gather(&actions.to_dtype(DType::U32)?, 1)?
+            .squeeze(1)?)
     }
 
     fn entropy(&self, states: &[Tensor]) -> Result<Tensor> {

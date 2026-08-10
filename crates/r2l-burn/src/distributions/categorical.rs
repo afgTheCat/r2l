@@ -10,7 +10,7 @@ use burn::{
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
 use itertools::Itertools;
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistributiion;
@@ -20,7 +20,7 @@ use crate::sequential::Sequential;
 
 /// Categorical Burn policy for discrete action spaces.
 ///
-/// This policy produces one-hot actions sampled from logits predicted by a
+/// This policy produces category indices sampled from logits predicted by a
 /// feed-forward network and implements the `r2l-core` [`Actor`] and [`Policy`]
 /// traits.
 #[derive(Debug, Module)]
@@ -31,6 +31,11 @@ pub struct CategoricalDistribution<B: Backend> {
 
 impl<B: Backend> CategoricalDistribution<B> {
     /// Builds a categorical policy network.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `logits_layers` is empty.
+    #[must_use]
     pub fn build(logits_layers: &[usize], activation: ActivationFunction) -> Self {
         let action_size = *logits_layers.last().unwrap();
         let logits: Sequential<B> = Sequential::build(logits_layers, activation);
@@ -41,6 +46,10 @@ impl<B: Backend> CategoricalDistribution<B> {
     }
 
     /// Builds a categoriacal policy using a safetensor store
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stored network dimensions or parameters are invalid.
     pub fn from_store(store: &mut SafetensorsStore) -> Self {
         let logits_layers = Sequential::<B>::dims_from_store("logits", store);
         let mut distribution = Self::build(&logits_layers, ActivationFunction::default());
@@ -61,12 +70,9 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
         let action_probs: Vec<f32> = softmax(logits, 1).to_data().to_vec().unwrap();
         let distribution = WeightedIndex::new(&action_probs).unwrap();
         let action = with_rng(|rng| distribution.sample(rng));
-        let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
-        action_mask[action] = 1.;
-        Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
-            &device,
-        ))
+        debug_assert!(action < self.action_size);
+        let action = Tensor::from_data(TensorData::new(vec![action as f32], vec![1]), &device);
+        Ok(action)
     }
 
     fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
@@ -77,19 +83,17 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
             .iter()
             .position_max_by(|a, b| a.total_cmp(b))
             .unwrap();
-        let mut action_mask = vec![0.0; self.action_size];
-        action_mask[action] = 1.0;
-        Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
-            &device,
-        ))
+        debug_assert!(action < self.action_size);
+        let action = Tensor::from_data(TensorData::new(vec![action as f32], vec![1]), &device);
+        Ok(action)
     }
+}
 
-    // This will serialize the model to safetesnors
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for CategoricalDistribution<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self).unwrap();
-        store.get_bytes().ok()
+        store.collect_from(self)?;
+        Ok(store.get_bytes()?)
     }
 }
 
@@ -104,8 +108,7 @@ impl<B: Backend> Policy for CategoricalDistribution<B> {
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
         let logits = self.logits.forward(states);
         let log_probs = log_softmax(logits, 1);
-        let log_probs = (actions * log_probs).sum_dim(1);
-        Ok(log_probs.squeeze())
+        Ok(log_probs.gather(1, actions.int()).squeeze_dim::<1>(1))
     }
 
     fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {

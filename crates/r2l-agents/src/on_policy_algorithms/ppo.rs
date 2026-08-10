@@ -3,9 +3,9 @@
 use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryBatch,
-    models::{LearningModule, Policy},
+    models::{Learner, Policy},
     on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearningModule, losses::FromPolicyValueLosses,
+        algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
     },
     tensor::R2lTensor,
 };
@@ -60,8 +60,12 @@ pub struct PPOBatchData<T: R2lTensor> {
 }
 
 /// Hook interface for customizing PPO training over [`TrajectoryBatch`] inputs.
-pub trait PPOHook<M: OnPolicyLearningModule> {
+pub trait PPOHook<M: OnPolicyLearner> {
     /// Runs after advantages and returns are computed and before PPO epochs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hook cannot complete.
     fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -74,6 +78,10 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
     }
 
     /// Runs after each PPO epoch and controls whether another epoch is performed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hook cannot complete.
     fn rollout_hook<B: TrajectoryBatch<M::InferenceTensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -84,11 +92,15 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
     }
 
     /// Runs after minibatch losses are computed and before the optimizer update.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hook cannot complete.
     fn batch_hook(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
-        _losses: &mut <M as LearningModule>::Losses,
+        _losses: &mut <M as Learner>::Losses,
         _data: &PPOBatchData<M::LearningTensor>,
     ) -> anyhow::Result<HookResult> {
         Ok(HookResult::Continue)
@@ -96,16 +108,16 @@ pub trait PPOHook<M: OnPolicyLearningModule> {
 }
 
 /// Prototype PPO variant over finalized trajectory batches.
-pub struct PPO<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> {
+pub struct PPO<Module: OnPolicyLearner, Hooks: PPOHook<Module>> {
     /// PPO hyperparameters.
     pub params: PPOParams,
-    /// Learning module containing policy, value function, and optimizer state.
+    /// Learner containing policy, value function, and optimizer state.
     pub lm: Module,
     /// Hook implementation used to customize learning behavior.
     pub hooks: Hooks,
 }
 
-impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
+impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
     fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
@@ -155,12 +167,12 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
     fn learning_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
-        advantages: Advantages,
-        returns: Returns,
-        logps: Logps,
+        advantages: &Advantages,
+        returns: &Returns,
+        logps: &Logps,
     ) -> anyhow::Result<()> {
         loop {
-            self.batch_loop(batches, &advantages, &logps, &returns)?;
+            self.batch_loop(batches, advantages, logps, returns)?;
             let rollout_hook_res = self
                 .hooks
                 .rollout_hook(&mut self.params, &mut self.lm, batches);
@@ -169,6 +181,10 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
     }
 
     /// Prototype learning entrypoint over finalized trajectory batches.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if tensor computation, a hook, or the optimizer update fails.
     pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
         batches: &[B],
@@ -189,12 +205,12 @@ impl<Module: OnPolicyLearningModule, Hooks: PPOHook<Module>> PPO<Module, Hooks> 
         )?);
         let actor = self.lm.inference_policy();
         let logps = logps(batches, &actor)?;
-        self.learning_loop(batches, advantages, returns, logps)?;
+        self.learning_loop(batches, &advantages, &returns, &logps)?;
         Ok(())
     }
 }
 
-impl<M: OnPolicyLearningModule, H: PPOHook<M>> Agent for PPO<M, H> {
+impl<M: OnPolicyLearner, H: PPOHook<M>> Agent for PPO<M, H> {
     type Tensor = M::InferenceTensor;
     type Actor = M::InferencePolicy;
 
