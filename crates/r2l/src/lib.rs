@@ -30,7 +30,7 @@
 //! - Diag gaussian
 //! - Categorical
 //! - Multi categorical
-//! - MultiBernoulliDistribution
+//! - Multi bernoully distribution
 //! - Composite distribution
 
 #![warn(missing_docs)]
