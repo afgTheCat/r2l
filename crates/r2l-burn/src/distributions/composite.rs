@@ -8,7 +8,7 @@ use r2l_core::{
 };
 
 use crate::distributions::{
-    bernoulli::BernoulliDistribution, categorical::CategoricalDistribution,
+    bernoulli::MultiBernoulliDistribution, categorical::CategoricalDistribution,
     diagonal::DiagGaussianDistribution, multi_categorical::MultiCategoricalDistribution,
 };
 
@@ -17,7 +17,7 @@ enum CompositePolicyChildren<B: Backend> {
     Categorical(CategoricalDistribution<B>),
     Diag(DiagGaussianDistribution<B>),
     MultiCategorical(MultiCategoricalDistribution<B>),
-    Bernoulli(BernoulliDistribution<B>),
+    MultiBernoulli(MultiBernoulliDistribution<B>),
 }
 
 impl<B: Backend> CompositePolicyChildren<B> {
@@ -26,7 +26,7 @@ impl<B: Backend> CompositePolicyChildren<B> {
             Self::Categorical(policy) => policy.action(observation),
             Self::Diag(policy) => policy.action(observation),
             Self::MultiCategorical(policy) => policy.action(observation),
-            Self::Bernoulli(policy) => policy.action(observation),
+            Self::MultiBernoulli(policy) => policy.action(observation),
         }
     }
 
@@ -35,7 +35,7 @@ impl<B: Backend> CompositePolicyChildren<B> {
             Self::Categorical(policy) => policy.mode_action(observation),
             Self::Diag(policy) => policy.mode_action(observation),
             Self::MultiCategorical(policy) => policy.mode_action(observation),
-            Self::Bernoulli(policy) => policy.mode_action(observation),
+            Self::MultiBernoulli(policy) => policy.mode_action(observation),
         }
     }
 
@@ -48,7 +48,7 @@ impl<B: Backend> CompositePolicyChildren<B> {
             Self::Categorical(policy) => policy.log_probs(states, actions),
             Self::Diag(policy) => policy.log_probs(states, actions),
             Self::MultiCategorical(policy) => policy.log_probs(states, actions),
-            Self::Bernoulli(policy) => policy.log_probs(states, actions),
+            Self::MultiBernoulli(policy) => policy.log_probs(states, actions),
         }
     }
 
@@ -57,16 +57,7 @@ impl<B: Backend> CompositePolicyChildren<B> {
             Self::Categorical(policy) => policy.entropy(states),
             Self::Diag(policy) => policy.entropy(states),
             Self::MultiCategorical(policy) => policy.entropy(states),
-            Self::Bernoulli(policy) => policy.entropy(states),
-        }
-    }
-
-    fn resample_noise(&mut self) -> anyhow::Result<()> {
-        match self {
-            Self::Categorical(policy) => policy.resample_noise(),
-            Self::Diag(policy) => policy.resample_noise(),
-            Self::MultiCategorical(policy) => policy.resample_noise(),
-            Self::Bernoulli(policy) => policy.resample_noise(),
+            Self::MultiBernoulli(policy) => policy.entropy(states),
         }
     }
 }
@@ -151,8 +142,8 @@ impl<B: Backend> CompositeDistribution<B> {
                 action_sizes.push(action_size);
             }
             Space::MultiBinary { .. } => {
-                policies.push(CompositePolicyChildren::Bernoulli(
-                    BernoulliDistribution::build(
+                policies.push(CompositePolicyChildren::MultiBernoulli(
+                    MultiBernoulliDistribution::build(
                         policy_layers[0],
                         &policy_layers[1..policy_layers.len() - 1],
                         action_size,
@@ -246,12 +237,5 @@ impl<B: Backend> Policy for CompositeDistribution<B> {
 
     fn std(&self) -> anyhow::Result<f32> {
         bail!("standard deviation is not defined for composite distributions")
-    }
-
-    fn resample_noise(&mut self) -> anyhow::Result<()> {
-        for policy in &mut self.policies {
-            policy.resample_noise()?;
-        }
-        Ok(())
     }
 }

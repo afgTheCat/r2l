@@ -19,7 +19,6 @@ use crate::{
 /// `r2l-core` [`Actor`] and [`Policy`] traits.
 #[derive(Debug, Clone)]
 pub struct DiagGaussianDistribution {
-    noise: Tensor,
     mu_net: Sequential,
     log_std: Tensor,
     device: Device,
@@ -30,7 +29,7 @@ impl DiagGaussianDistribution {
     ///
     /// # Errors
     ///
-    /// Returns an error if the network or initial noise cannot be created.
+    /// Returns an error if the network cannot be created.
     pub fn build(
         observation_size: usize,
         layers: &[usize],
@@ -40,10 +39,8 @@ impl DiagGaussianDistribution {
         activation: ActivationFunction,
     ) -> Result<Self> {
         let mu_net = build_sequential(observation_size, layers, vb, prefix, activation)?;
-        let noise = standard_normal(log_std.shape(), log_std.device())?;
         let device = vb.device().clone();
         Ok(Self {
-            noise,
             mu_net,
             log_std,
             device,
@@ -156,10 +153,5 @@ impl Policy for DiagGaussianDistribution {
     fn std(&self) -> Result<f32> {
         let std = self.log_std.exp()?.mean_all()?.to_scalar::<f32>()?;
         Ok(std)
-    }
-
-    fn resample_noise(&mut self) -> Result<()> {
-        self.noise = standard_normal(self.noise.shape(), self.noise.device())?;
-        Ok(())
     }
 }

@@ -154,16 +154,6 @@ pub trait Policy: Actor {
     ///
     /// Returns an error if the entropy cannot be computed.
     fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor>;
-
-    /// Resamples exploration noise for policies that use state-independent
-    /// noise. Implementations without such noise may keep the default no-op.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if exploration noise cannot be resampled.
-    fn resample_noise(&mut self) -> Result<()> {
-        Ok(())
-    }
 }
 
 /// Component that learns from backend-specific loss values.

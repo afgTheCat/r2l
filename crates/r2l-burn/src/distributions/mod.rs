@@ -14,11 +14,11 @@ use r2l_core::{
 };
 
 use crate::distributions::{
-    bernoulli::BernoulliDistribution, categorical::CategoricalDistribution,
+    bernoulli::MultiBernoulliDistribution, categorical::CategoricalDistribution,
     composite::CompositeDistribution, diagonal::DiagGaussianDistribution,
     multi_categorical::MultiCategoricalDistribution,
 };
-/// Bernoulli policy distribution for multi-binary action spaces.
+/// Multi-Bernoulli policy distribution for multi-binary action spaces.
 pub mod bernoulli;
 /// Categorical policy distribution for discrete action spaces.
 pub mod categorical;
@@ -45,7 +45,7 @@ pub enum BurnPolicyKind<B: Backend> {
     /// Policy for multi-discrete action spaces.
     MultiCategorical(MultiCategoricalDistribution<B>),
     /// Policy for multi-binary action spaces.
-    Bernoulli(BernoulliDistribution<B>),
+    MultiBernoulli(MultiBernoulliDistribution<B>),
     /// Policy for tuple and dict action spaces.
     Composite(CompositeDistribution<B>),
 }
@@ -62,7 +62,7 @@ impl<B: Backend> BurnPolicyKind<B> {
             Self::Categorical(policy) => policy.load_from(&mut store)?,
             Self::Diag(policy) => policy.load_from(&mut store)?,
             Self::MultiCategorical(policy) => policy.load_from(&mut store)?,
-            Self::Bernoulli(policy) => policy.load_from(&mut store)?,
+            Self::MultiBernoulli(policy) => policy.load_from(&mut store)?,
             Self::Composite(policy) => policy.load_from(&mut store)?,
         };
         Ok(self)
@@ -100,12 +100,12 @@ impl<B: Backend> BurnPolicyKind<B> {
         ))
     }
 
-    fn bernoulli(
+    fn multi_bernoulli(
         policy_layers: &[usize],
         action_size: usize,
         activation: ActivationFunction,
     ) -> Self {
-        BurnPolicyKind::Bernoulli(BernoulliDistribution::build(
+        BurnPolicyKind::MultiBernoulli(MultiBernoulliDistribution::build(
             policy_layers[0],
             &policy_layers[1..policy_layers.len() - 1],
             action_size,
@@ -129,7 +129,7 @@ impl<B: Backend> BurnPolicyKind<B> {
             }
             Space::MultiBinary { shape } => {
                 let size = shape.iter().product();
-                Self::bernoulli(policy_layers, size, activation)
+                Self::multi_bernoulli(policy_layers, size, activation)
             }
             Space::Tuple(spaces) => BurnPolicyKind::Composite(CompositeDistribution::build(
                 spaces,
@@ -155,7 +155,7 @@ impl<B: Backend> Actor for BurnPolicyKind<B> {
             Self::Categorical(cat) => cat.action(observation),
             Self::Diag(diag) => diag.action(observation),
             Self::MultiCategorical(multi) => multi.action(observation),
-            Self::Bernoulli(bernoulli) => bernoulli.action(observation),
+            Self::MultiBernoulli(bernoulli) => bernoulli.action(observation),
             Self::Composite(composite) => composite.action(observation),
         }
     }
@@ -165,7 +165,7 @@ impl<B: Backend> Actor for BurnPolicyKind<B> {
             Self::Categorical(cat) => cat.mode_action(observation),
             Self::Diag(diag) => diag.mode_action(observation),
             Self::MultiCategorical(multi) => multi.mode_action(observation),
-            Self::Bernoulli(bernoulli) => bernoulli.mode_action(observation),
+            Self::MultiBernoulli(bernoulli) => bernoulli.mode_action(observation),
             Self::Composite(composite) => composite.mode_action(observation),
         }
     }
@@ -177,7 +177,7 @@ impl<B: Backend> ToSafetensors for BurnPolicyKind<B> {
             Self::Categorical(cat) => cat.to_safetensors(),
             Self::Diag(diag) => diag.to_safetensors(),
             Self::MultiCategorical(multi) => multi.to_safetensors(),
-            Self::Bernoulli(bernoulli) => bernoulli.to_safetensors(),
+            Self::MultiBernoulli(bernoulli) => bernoulli.to_safetensors(),
             Self::Composite(composite) => composite.to_safetensors(),
         }
     }
@@ -193,7 +193,7 @@ impl<B: Backend> Policy for BurnPolicyKind<B> {
             Self::Categorical(cat) => cat.log_probs(observations, actions),
             Self::Diag(diag) => diag.log_probs(observations, actions),
             Self::MultiCategorical(multi) => multi.log_probs(observations, actions),
-            Self::Bernoulli(bernoulli) => bernoulli.log_probs(observations, actions),
+            Self::MultiBernoulli(bernoulli) => bernoulli.log_probs(observations, actions),
             Self::Composite(composite) => composite.log_probs(observations, actions),
         }
     }
@@ -203,7 +203,7 @@ impl<B: Backend> Policy for BurnPolicyKind<B> {
             Self::Categorical(cat) => cat.std(),
             Self::Diag(diag) => diag.std(),
             Self::MultiCategorical(multi) => multi.std(),
-            Self::Bernoulli(bernoulli) => bernoulli.std(),
+            Self::MultiBernoulli(bernoulli) => bernoulli.std(),
             Self::Composite(composite) => composite.std(),
         }
     }
@@ -213,18 +213,8 @@ impl<B: Backend> Policy for BurnPolicyKind<B> {
             Self::Categorical(cat) => cat.entropy(states),
             Self::Diag(diag) => diag.entropy(states),
             Self::MultiCategorical(multi) => multi.entropy(states),
-            Self::Bernoulli(bernoulli) => bernoulli.entropy(states),
+            Self::MultiBernoulli(bernoulli) => bernoulli.entropy(states),
             Self::Composite(composite) => composite.entropy(states),
-        }
-    }
-
-    fn resample_noise(&mut self) -> anyhow::Result<()> {
-        match self {
-            Self::Categorical(cat) => cat.resample_noise(),
-            Self::Diag(diag) => diag.resample_noise(),
-            Self::MultiCategorical(multi) => multi.resample_noise(),
-            Self::Bernoulli(bernoulli) => bernoulli.resample_noise(),
-            Self::Composite(composite) => composite.resample_noise(),
         }
     }
 }

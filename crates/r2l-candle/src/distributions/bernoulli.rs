@@ -9,16 +9,19 @@ use safetensors::serialize as st_serialize;
 
 use crate::sequential::{Sequential, build_sequential};
 
-/// Bernoulli Candle policy for Gymnasium `MultiBinary` action spaces.
+/// Independent Bernoulli policy for Gymnasium `MultiBinary` action spaces.
+///
+/// This is equivalent to a multi-categorical policy with two categories per
+/// action component, but uses one logit per component instead of two.
 #[derive(Clone, Debug)]
-pub struct BernoulliDistribution {
+pub struct MultiBernoulliDistribution {
     logits: Sequential,
     action_size: usize,
     device: Device,
 }
 
-impl BernoulliDistribution {
-    /// Builds a Bernoulli policy network.
+impl MultiBernoulliDistribution {
+    /// Builds a multi-Bernoulli policy network.
     ///
     /// # Errors
     ///
@@ -58,7 +61,7 @@ impl BernoulliDistribution {
     }
 }
 
-impl Actor for BernoulliDistribution {
+impl Actor for MultiBernoulliDistribution {
     type Tensor = Tensor;
 
     fn action(&self, observation: Tensor) -> Result<Tensor> {
@@ -93,7 +96,7 @@ impl Actor for BernoulliDistribution {
     }
 }
 
-impl ToSafetensors for BernoulliDistribution {
+impl ToSafetensors for MultiBernoulliDistribution {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.logits.activation(),
@@ -103,7 +106,7 @@ impl ToSafetensors for BernoulliDistribution {
     }
 }
 
-impl Policy for BernoulliDistribution {
+impl Policy for MultiBernoulliDistribution {
     fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
         let states = Tensor::stack(states, 0)?;
         let actions = Tensor::stack(actions, 0)?;
@@ -124,6 +127,6 @@ impl Policy for BernoulliDistribution {
     }
 
     fn std(&self) -> Result<f32> {
-        bail!("standard deviation is not defined for Bernoulli distributions")
+        bail!("standard deviation is not defined for multi-Bernoulli distributions")
     }
 }

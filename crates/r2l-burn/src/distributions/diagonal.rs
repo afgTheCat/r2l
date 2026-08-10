@@ -127,8 +127,4 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         let std = self.log_std.val().exp().mean().into_scalar().to_f32();
         Ok(std)
     }
-
-    fn resample_noise(&mut self) -> Result<()> {
-        todo!()
-    }
 }

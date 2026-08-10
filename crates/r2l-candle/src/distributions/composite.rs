@@ -136,11 +136,4 @@ impl Policy for CompositeDistribution {
     fn std(&self) -> Result<f32> {
         bail!("standard deviation is not defined for composite distributions")
     }
-
-    fn resample_noise(&mut self) -> Result<()> {
-        for policy in &mut self.policies {
-            policy.resample_noise()?;
-        }
-        Ok(())
-    }
 }

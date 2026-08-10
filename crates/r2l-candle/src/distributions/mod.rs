@@ -5,7 +5,7 @@
 //! an enum that erases the concrete policy type behind one Candle-facing policy
 //! interface.
 
-/// Bernoulli policy distribution for multi-binary action spaces.
+/// Multi-Bernoulli policy distribution for multi-binary action spaces.
 pub mod bernoulli;
 /// Categorical policy distribution for discrete action spaces.
 pub mod categorical;
@@ -19,7 +19,7 @@ pub mod multi_categorical;
 use std::{f32, fmt::Debug};
 
 use anyhow::Result;
-use bernoulli::BernoulliDistribution;
+use bernoulli::MultiBernoulliDistribution;
 use candle_core::{Device, Tensor};
 use candle_nn::{Init, VarBuilder};
 use categorical::CategoricalDistribution;
@@ -47,7 +47,7 @@ pub enum CandlePolicyKind {
     /// Policy for multi-discrete action spaces.
     MultiCategorical(MultiCategoricalDistribution),
     /// Policy for multi-binary action spaces.
-    Bernoulli(BernoulliDistribution),
+    MultiBernoulli(MultiBernoulliDistribution),
     /// Policy for tuple and dict action spaces.
     Composite(CompositeDistribution),
 }
@@ -60,7 +60,7 @@ impl CandlePolicyKind {
             Self::Categorical(c) => c.device(),
             Self::DiagGaussian(d) => d.device(),
             Self::MultiCategorical(m) => m.device(),
-            Self::Bernoulli(b) => b.device(),
+            Self::MultiBernoulli(b) => b.device(),
             Self::Composite(c) => c.device(),
         }
     }
@@ -72,7 +72,7 @@ impl CandlePolicyKind {
             Self::Categorical(c) => c.observation_size(),
             Self::DiagGaussian(d) => d.observation_size(),
             Self::MultiCategorical(m) => m.observation_size(),
-            Self::Bernoulli(b) => b.observation_size(),
+            Self::MultiBernoulli(b) => b.observation_size(),
             Self::Composite(c) => c.observation_size(),
         }
     }
@@ -177,7 +177,7 @@ impl CandlePolicyKind {
             }
             Space::MultiBinary { shape } => {
                 let size = shape.iter().product();
-                Ok(Self::Bernoulli(BernoulliDistribution::build(
+                Ok(Self::MultiBernoulli(MultiBernoulliDistribution::build(
                     observation_size,
                     size,
                     hidden_layers,
@@ -213,7 +213,7 @@ impl CandlePolicyKind {
             Self::Categorical(policy) => policy.named_tensors(prefix),
             Self::DiagGaussian(policy) => policy.named_tensors(prefix),
             Self::MultiCategorical(policy) => policy.named_tensors(prefix),
-            Self::Bernoulli(policy) => policy.named_tensors(prefix),
+            Self::MultiBernoulli(policy) => policy.named_tensors(prefix),
             Self::Composite(policy) => policy.named_tensors(prefix),
         }
     }
@@ -227,7 +227,7 @@ impl Actor for CandlePolicyKind {
             Self::Categorical(cat) => cat.action(observation),
             Self::DiagGaussian(diag) => diag.action(observation),
             Self::MultiCategorical(multi) => multi.action(observation),
-            Self::Bernoulli(bernoulli) => bernoulli.action(observation),
+            Self::MultiBernoulli(bernoulli) => bernoulli.action(observation),
             Self::Composite(composite) => composite.action(observation),
         }
     }
@@ -237,7 +237,7 @@ impl Actor for CandlePolicyKind {
             Self::Categorical(cat) => cat.mode_action(observation),
             Self::DiagGaussian(diag) => diag.mode_action(observation),
             Self::MultiCategorical(multi) => multi.mode_action(observation),
-            Self::Bernoulli(bernoulli) => bernoulli.mode_action(observation),
+            Self::MultiBernoulli(bernoulli) => bernoulli.mode_action(observation),
             Self::Composite(composite) => composite.mode_action(observation),
         }
     }
@@ -249,7 +249,7 @@ impl ToSafetensors for CandlePolicyKind {
             Self::Categorical(cat) => cat.to_safetensors(),
             Self::DiagGaussian(diag) => diag.to_safetensors(),
             Self::MultiCategorical(multi) => multi.to_safetensors(),
-            Self::Bernoulli(bernoulli) => bernoulli.to_safetensors(),
+            Self::MultiBernoulli(bernoulli) => bernoulli.to_safetensors(),
             Self::Composite(composite) => composite.to_safetensors(),
         }
     }
@@ -261,7 +261,7 @@ impl Policy for CandlePolicyKind {
             Self::Categorical(cat) => cat.log_probs(states, actions),
             Self::DiagGaussian(diag) => diag.log_probs(states, actions),
             Self::MultiCategorical(multi) => multi.log_probs(states, actions),
-            Self::Bernoulli(bernoulli) => bernoulli.log_probs(states, actions),
+            Self::MultiBernoulli(bernoulli) => bernoulli.log_probs(states, actions),
             Self::Composite(composite) => composite.log_probs(states, actions),
         }
     }
@@ -271,7 +271,7 @@ impl Policy for CandlePolicyKind {
             Self::Categorical(cat) => cat.entropy(states),
             Self::DiagGaussian(diag) => diag.entropy(states),
             Self::MultiCategorical(multi) => multi.entropy(states),
-            Self::Bernoulli(bernoulli) => bernoulli.entropy(states),
+            Self::MultiBernoulli(bernoulli) => bernoulli.entropy(states),
             Self::Composite(composite) => composite.entropy(states),
         }
     }
@@ -281,18 +281,8 @@ impl Policy for CandlePolicyKind {
             Self::Categorical(cat) => cat.std(),
             Self::DiagGaussian(diag) => diag.std(),
             Self::MultiCategorical(multi) => multi.std(),
-            Self::Bernoulli(bernoulli) => bernoulli.std(),
+            Self::MultiBernoulli(bernoulli) => bernoulli.std(),
             Self::Composite(composite) => composite.std(),
-        }
-    }
-
-    fn resample_noise(&mut self) -> Result<()> {
-        match self {
-            Self::Categorical(cat) => cat.resample_noise(),
-            Self::DiagGaussian(diag) => diag.resample_noise(),
-            Self::MultiCategorical(multi) => multi.resample_noise(),
-            Self::Bernoulli(bernoulli) => bernoulli.resample_noise(),
-            Self::Composite(composite) => composite.resample_noise(),
         }
     }
 }
