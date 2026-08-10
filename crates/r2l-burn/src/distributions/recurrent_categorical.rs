@@ -116,10 +116,9 @@ impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
         let action_probs: Vec<f32> = softmax(logits, 1).to_data().to_vec().unwrap();
         let distribution = WeightedIndex::new(&action_probs).unwrap();
         let action = with_rng(|rng| distribution.sample(rng));
-        let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
-        action_mask[action] = 1.;
+        debug_assert!(action < self.action_size);
         Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
+            TensorData::new(vec![action as f32], vec![1]),
             &device,
         ))
     }
@@ -134,10 +133,9 @@ impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
             .max_by(|(_, left), (_, right)| left.total_cmp(right))
             .map(|(index, _)| index)
             .unwrap();
-        let mut action_mask = vec![0.0; self.action_size];
-        action_mask[action] = 1.0;
+        debug_assert!(action < self.action_size);
         Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
+            TensorData::new(vec![action as f32], vec![1]),
             &device,
         ))
     }
@@ -161,8 +159,7 @@ impl<B: Backend> Policy for RecurrentCategoricalDistribution<B> {
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
         let logits = self.logits(states);
         let log_probs = log_softmax(logits, 1);
-        let log_probs = (actions * log_probs).sum_dim(1);
-        Ok(log_probs.squeeze())
+        Ok(log_probs.gather(1, actions.int()).squeeze_dim::<1>(1))
     }
 
     fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {

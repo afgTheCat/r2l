@@ -22,13 +22,14 @@
 //! customizable. Check the relevant page for [`PPOAlgorithmBuilder`]. If you wish to
 //! start out with A2C, check out [`A2CAlgorithmBuilder`].
 //!
-//! ## What is covered here
+//! ## What is in this crate
 //!
 //! The current focus of r2l is on-policy algorithms. This release, we have `PPO` and
 //! `A2C` implemented, supporting the more simple policy types:
 //!
 //! - Diag gaussian
 //! - Categorical
+//! - Multi categorical
 //! -
 
 #![warn(missing_docs)]

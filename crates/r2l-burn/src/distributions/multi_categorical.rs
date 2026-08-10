@@ -81,7 +81,7 @@ impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
                     .iter()
                     .enumerate()
                     .max_by(|(_, left), (_, right)| left.total_cmp(right))
-                    .Tmap(|(index, _)| index as f32)
+                    .map(|(index, _)| index as f32)
                     .unwrap()
             })
             .collect();

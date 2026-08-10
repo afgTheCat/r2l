@@ -18,7 +18,7 @@ use crate::sequential::{Sequential, build_sequential, network_shape};
 
 /// Categorical Candle policy for discrete action spaces.
 ///
-/// This policy produces one-hot actions sampled from logits predicted by a
+/// This policy produces category indices sampled from logits predicted by a
 /// feed-forward network and implements the `r2l-core` [`Actor`] and [`Policy`]
 /// traits.
 #[derive(Clone, Debug)]
@@ -102,10 +102,8 @@ impl Actor for CategoricalDistribution {
         let action_probs: Vec<f32> = softmax(&logits, 1)?.squeeze(0)?.to_vec1()?;
         let distribution = WeightedIndex::new(&action_probs).map_err(Error::wrap)?;
         let action = with_rng(|rng| distribution.sample(rng));
-        let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
-        action_mask[action] = 1.;
-        let action = Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach();
-        Ok(action)
+        debug_assert!(action < self.action_size);
+        Ok(Tensor::from_vec(vec![action as f32], 1, &self.device)?.detach())
     }
 
     fn mode_action(&self, observation: Tensor) -> Result<Tensor> {
@@ -115,9 +113,8 @@ impl Actor for CategoricalDistribution {
             .iter()
             .position_max_by(|a, b| a.total_cmp(b))
             .unwrap();
-        let mut action_mask = vec![0.0; self.action_size];
-        action_mask[action] = 1.0;
-        Ok(Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach())
+        debug_assert!(action < self.action_size);
+        Ok(Tensor::from_vec(vec![action as f32], 1, &self.device)?.detach())
     }
 }
 
@@ -140,8 +137,9 @@ impl Policy for CategoricalDistribution {
         let actions = Tensor::stack(actions, 0)?;
         let logits = self.logits.forward(&states)?;
         let log_probs = log_softmax(&logits, 1)?;
-        let log_probs = actions.mul(&log_probs)?.sum(1)?;
-        Ok(log_probs)
+        Ok(log_probs
+            .gather(&actions.to_dtype(DType::U32)?, 1)?
+            .squeeze(1)?)
     }
 
     fn entropy(&self, states: &[Tensor]) -> Result<Tensor> {

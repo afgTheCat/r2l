@@ -20,7 +20,7 @@ use crate::sequential::Sequential;
 
 /// Categorical Burn policy for discrete action spaces.
 ///
-/// This policy produces one-hot actions sampled from logits predicted by a
+/// This policy produces category indices sampled from logits predicted by a
 /// feed-forward network and implements the `r2l-core` [`Actor`] and [`Policy`]
 /// traits.
 #[derive(Debug, Module)]
@@ -70,12 +70,9 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
         let action_probs: Vec<f32> = softmax(logits, 1).to_data().to_vec().unwrap();
         let distribution = WeightedIndex::new(&action_probs).unwrap();
         let action = with_rng(|rng| distribution.sample(rng));
-        let mut action_mask: Vec<f32> = vec![0.0; self.action_size];
-        action_mask[action] = 1.;
-        Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
-            &device,
-        ))
+        debug_assert!(action < self.action_size);
+        let action = Tensor::from_data(TensorData::new(vec![action as f32], vec![1]), &device);
+        Ok(action)
     }
 
     fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
@@ -86,12 +83,9 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
             .iter()
             .position_max_by(|a, b| a.total_cmp(b))
             .unwrap();
-        let mut action_mask = vec![0.0; self.action_size];
-        action_mask[action] = 1.0;
-        Ok(Tensor::from_data(
-            TensorData::new(action_mask, vec![self.action_size]),
-            &device,
-        ))
+        debug_assert!(action < self.action_size);
+        let action = Tensor::from_data(TensorData::new(vec![action as f32], vec![1]), &device);
+        Ok(action)
     }
 }
 
@@ -114,8 +108,7 @@ impl<B: Backend> Policy for CategoricalDistribution<B> {
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
         let logits = self.logits.forward(states);
         let log_probs = log_softmax(logits, 1);
-        let log_probs = (actions * log_probs).sum_dim(1);
-        Ok(log_probs.squeeze())
+        Ok(log_probs.gather(1, actions.int()).squeeze_dim::<1>(1))
     }
 
     fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {

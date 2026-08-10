@@ -38,7 +38,7 @@ impl CompositeDistribution {
         let mut policies = Vec::new();
         let mut action_sizes = Vec::new();
         for (idx, action_space) in action_spaces.into_iter().enumerate() {
-            let action_size = action_space.size();
+            let action_size = action_space.action_size();
             let child_prefix = format!("{prefix}.{idx}");
             policies.push(CandlePolicyKind::build_with_prefix(
                 action_space,

@@ -113,13 +113,13 @@ impl<B: Backend> CompositeDistribution<B> {
         policies: &mut Vec<CompositePolicyChildren<B>>,
         action_sizes: &mut Vec<usize>,
     ) {
-        let action_size = action_space.size();
+        let action_size = action_space.action_size();
         match action_space {
-            Space::Discrete(_) => {
+            Space::Discrete(choices) => {
                 let child_layers = [
                     &[policy_layers[0]],
                     &policy_layers[1..policy_layers.len() - 1],
-                    &[action_size],
+                    &[choices],
                 ]
                 .concat();
                 policies.push(CompositePolicyChildren::Categorical(
