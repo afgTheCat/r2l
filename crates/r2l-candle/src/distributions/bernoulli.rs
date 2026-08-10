@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
 use candle_nn::{Module, VarBuilder, ops::sigmoid};
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     rng::with_rng,
 };
 use safetensors::serialize as st_serialize;
@@ -91,13 +91,15 @@ impl Actor for BernoulliDistribution {
             .collect();
         Ok(Tensor::from_vec(actions, self.action_size, &self.device)?.detach())
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for BernoulliDistribution {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.logits.activation(),
         }
         .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata)).ok()
+        Ok(st_serialize(self.named_tensors("policy"), Some(metadata))?)
     }
 }
 

@@ -26,9 +26,9 @@ burn = { version = "0.21.0", features = ["ndarray", "autodiff"] }
 burn-store = { version = "0.21.0" }
 candle-core = { version = "0.11.0" }
 candle-nn = { version = "0.11.0" }
-either = "1.15.0"
+either = "1.17.0"
 crossbeam = "0.8.4"
-rand = "0.10.0"
+rand = "0.10.2"
 rand_distr = "0.6.0"
 anyhow = { version = "1.0.102" }
 bimodal-array = { version = "0.1.4" }

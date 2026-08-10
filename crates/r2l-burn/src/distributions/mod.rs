@@ -9,7 +9,7 @@ use burn::{Tensor, module::Module, prelude::Backend};
 use burn_store::{ModuleSnapshot, SafetensorsStore};
 use r2l_core::{
     env::Space,
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     tensor::R2lTensor,
 };
 
@@ -169,14 +169,16 @@ impl<B: Backend> Actor for BurnPolicyKind<B> {
             Self::Composite(composite) => composite.mode_action(observation),
         }
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for BurnPolicyKind<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         match self {
-            Self::Categorical(cat) => cat.try_serialize(),
-            Self::Diag(diag) => diag.try_serialize(),
-            Self::MultiCategorical(multi) => multi.try_serialize(),
-            Self::Bernoulli(bernoulli) => bernoulli.try_serialize(),
-            Self::Composite(composite) => composite.try_serialize(),
+            Self::Categorical(cat) => cat.to_safetensors(),
+            Self::Diag(diag) => diag.to_safetensors(),
+            Self::MultiCategorical(multi) => multi.to_safetensors(),
+            Self::Bernoulli(bernoulli) => bernoulli.to_safetensors(),
+            Self::Composite(composite) => composite.to_safetensors(),
         }
     }
 }

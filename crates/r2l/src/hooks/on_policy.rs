@@ -11,7 +11,7 @@ use anyhow::Result;
 use r2l_core::{
     HookResult,
     env::Env,
-    models::Actor,
+    models::ToSafetensors,
     on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
@@ -247,7 +247,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S
     pub(crate) _phantom: PhantomData<(A, S, E)>,
 }
 
-impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
+impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
     DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
     fn process_pending_commands(&self, runtime: &mut OnPolicyRuntime<A, S>) -> HookResult {
@@ -262,7 +262,7 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
                 }
                 OnPolicyCommand::SerializeCurrentPolicy(path) => {
                     let path = PathBuf::from(path);
-                    let policy_serialized = runtime.actor().try_serialize().unwrap();
+                    let policy_serialized = runtime.actor().to_safetensors().unwrap();
                     std::fs::write(path, policy_serialized).unwrap();
                     command_rx
                         .tx
@@ -301,8 +301,8 @@ impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
     }
 }
 
-impl<A: Agent, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>> OnPolicyAlgorithmHooks
-    for DefaultOnPolicyAlgorithmHooks<A, S, E>
+impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
+    OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
     type A = A;
     type S = S;

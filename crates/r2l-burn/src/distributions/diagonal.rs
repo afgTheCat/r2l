@@ -6,7 +6,7 @@ use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor};
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
-use r2l_core::models::{ActivationFunction, Actor, Policy};
+use r2l_core::models::{ActivationFunction, Actor, Policy, ToSafetensors};
 
 use crate::sequential::Sequential;
 
@@ -74,12 +74,13 @@ impl<B: Backend> Actor for DiagGaussianDistribution<B> {
         let observation: Tensor<B, 2> = observation.unsqueeze();
         Ok(self.mu_net.forward(observation).squeeze_dims(&[0]))
     }
+}
 
-    // This will serialize the model to safetesnors
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for DiagGaussianDistribution<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self).unwrap();
-        store.get_bytes().ok()
+        store.collect_from(self)?;
+        Ok(store.get_bytes()?)
     }
 }
 

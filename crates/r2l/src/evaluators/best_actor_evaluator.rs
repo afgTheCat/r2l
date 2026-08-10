@@ -5,7 +5,7 @@ use r2l_core::{
     ActorWrapper,
     buffers::TrajectoryBatch,
     env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
-    models::Actor,
+    models::{Actor, ToSafetensors},
     on_policy::algorithm::{Agent, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
@@ -181,7 +181,7 @@ pub(crate) struct BestActorEvaluator<A: Actor, E: Env> {
     eval_states: Vec<EvalState>,
 }
 
-impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
+impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
     pub(crate) fn new(
         sampler: EvaluationSampler<E>,
         output_dir: PathBuf,
@@ -253,8 +253,8 @@ impl<A: Actor + Clone, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
         std::fs::create_dir_all(&self.output_dir)?;
         if self.write_inference_artifacts
             && let Some(actor) = &self.best_actor
-            && let Some(bytes) = actor.try_serialize()
         {
+            let bytes = actor.to_safetensors()?;
             std::fs::write(self.output_dir.join(ACTOR_FILE), bytes)?;
             if let Some(normalizer) = &self.best_obs_normalizer {
                 let normalizer_path = self.output_dir.join(NORMALIZER_FILE);

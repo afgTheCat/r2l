@@ -10,7 +10,7 @@ use burn::{
 };
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistribution;
@@ -141,11 +141,13 @@ impl<B: Backend> Actor for RecurrentCategoricalDistribution<B> {
             &device,
         ))
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for RecurrentCategoricalDistribution<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self).unwrap();
-        store.get_bytes().ok()
+        store.collect_from(self)?;
+        Ok(store.get_bytes()?)
     }
 }
 

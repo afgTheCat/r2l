@@ -7,7 +7,7 @@ use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
 use itertools::Itertools;
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistributiion;
@@ -119,13 +119,18 @@ impl Actor for CategoricalDistribution {
         action_mask[action] = 1.0;
         Ok(Tensor::from_vec(action_mask, self.action_size, &self.device)?.detach())
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for CategoricalDistribution {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.logits.activation(),
         }
         .to_safetensors_metadata();
-        st_serialize(self.logits.named_tensors("policy"), Some(metadata)).ok()
+        Ok(st_serialize(
+            self.logits.named_tensors("policy"),
+            Some(metadata),
+        )?)
     }
 }
 

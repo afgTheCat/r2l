@@ -3,7 +3,7 @@ use burn::{Tensor, module::Module, prelude::Backend};
 use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
     env::Space,
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     tensor::R2lTensor,
 };
 
@@ -207,11 +207,13 @@ impl<B: Backend> Actor for CompositeDistribution<B> {
         }
         Ok(Tensor::cat(actions, 0))
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for CompositeDistribution<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self).unwrap();
-        store.get_bytes().ok()
+        store.collect_from(self)?;
+        Ok(store.get_bytes()?)
     }
 }
 

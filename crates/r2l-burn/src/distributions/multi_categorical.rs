@@ -11,7 +11,7 @@ use burn::{
 use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
     env::action_ranges,
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistribution;
@@ -81,7 +81,7 @@ impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
                     .iter()
                     .enumerate()
                     .max_by(|(_, left), (_, right)| left.total_cmp(right))
-                    .map(|(index, _)| index as f32)
+                    .Tmap(|(index, _)| index as f32)
                     .unwrap()
             })
             .collect();
@@ -90,11 +90,13 @@ impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
             &device,
         ))
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for MultiCategoricalDistribution<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self).unwrap();
-        store.get_bytes().ok()
+        store.collect_from(self)?;
+        Ok(store.get_bytes()?)
     }
 }
 

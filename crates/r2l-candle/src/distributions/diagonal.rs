@@ -4,7 +4,7 @@ use std::f32;
 use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{Module, VarBuilder};
-use r2l_core::models::{ActivationFunction, Actor, Policy, PolicyMetadata};
+use r2l_core::models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors};
 use safetensors::serialize as st_serialize;
 
 use crate::{
@@ -113,15 +113,17 @@ impl Actor for DiagGaussianDistribution {
         let observation = observation.unsqueeze(0)?;
         Ok(self.mu_net.forward(&observation)?.squeeze(0)?.detach())
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for DiagGaussianDistribution {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.mu_net.activation(),
         }
         .to_safetensors_metadata();
         let mut tensors = self.mu_net.named_tensors("policy");
         tensors.push(("policy.log_std".to_string(), self.log_std.clone()));
-        st_serialize(tensors, Some(metadata)).ok()
+        Ok(st_serialize(tensors, Some(metadata))?)
     }
 }
 

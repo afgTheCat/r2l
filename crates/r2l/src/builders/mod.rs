@@ -23,7 +23,7 @@ use r2l_core::env::EnvDescription;
 use r2l_core::env::normalizer::{ClippedNormalizer, NormalizerMode};
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
-    models::ActivationFunction,
+    models::{ActivationFunction, ToSafetensors},
     on_policy::{
         algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime, Sampler},
         learning_module::OnPolicyLearner,
@@ -560,7 +560,7 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn default_on_policy_hook<A: Agent, S: Sampler<Tensor = E::Tensor>>(
+    fn default_on_policy_hook<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>>(
         self,
     ) -> anyhow::Result<DefaultOnPolicyAlgorithmHooks<A, S, E>> {
         let (evaluator, timing_recorder) = if let Some(config) = self.training_artifacts {
@@ -831,7 +831,9 @@ pub struct OnPolicyAlgoBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>>
     config: Config<A, S, E>,
 }
 
-impl<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A, S, E> {
+impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
+    OnPolicyAlgoBuilder<A, S, E>
+{
     fn configured<EB: EnvBuilder<Env = E>>(
         env_builder: EB,
         n_envs: usize,
@@ -1132,6 +1134,7 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOBurn<BurnBac
 impl<M, S, E> OnPolicyAlgoBuilder<PPO<M, DefaultPPOHook<M>>, S, E>
 where
     M: OnPolicyLearner,
+    M::InferencePolicy: ToSafetensors,
     DefaultPPOHook<M>: PPOHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
@@ -1218,6 +1221,7 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CBurn<BurnBac
 impl<M, S, E> OnPolicyAlgoBuilder<A2C<M, DefaultA2CHook<M>>, S, E>
 where
     M: OnPolicyLearner,
+    M::InferencePolicy: ToSafetensors,
     DefaultA2CHook<M>: A2CHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
@@ -1234,7 +1238,9 @@ where
     }
 }
 
-impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>, E> {
+impl<A: Agent<Actor: ToSafetensors>, E: Env>
+    OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>, E>
+{
     /// Sets the number of steps collected per environment and rollout.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
         let SamplerConfiguration::DirectStep {
@@ -1308,7 +1314,9 @@ impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>
     }
 }
 
-impl<A: Agent, E: Env> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>, E> {
+impl<A: Agent<Actor: ToSafetensors>, E: Env>
+    OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>
+{
     /// Sets the number of steps collected per environment and rollout.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
         let SamplerConfiguration::StagedStep {

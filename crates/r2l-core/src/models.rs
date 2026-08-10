@@ -113,11 +113,16 @@ pub trait Actor: Send + 'static {
     ///
     /// Returns an error if action inference fails.
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor>;
+}
 
-    /// Tries to serialize the Actor
-    fn try_serialize(&self) -> Option<Vec<u8>> {
-        None
-    }
+/// A policy that can be serialized as a safetensors artifact.
+pub trait ToSafetensors {
+    /// Serializes this policy as safetensors bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy parameters cannot be serialized.
+    fn to_safetensors(&self) -> Result<Vec<u8>>;
 }
 
 /// Trainable action distribution interface used by on-policy algorithms.

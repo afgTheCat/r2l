@@ -3,7 +3,7 @@ use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use r2l_core::{
     env::Space,
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     tensor::R2lTensor,
 };
 use safetensors::serialize as st_serialize;
@@ -98,13 +98,15 @@ impl Actor for CompositeDistribution {
         }
         Ok(Tensor::cat(&actions, 0)?.detach())
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for CompositeDistribution {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.activation,
         }
         .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata)).ok()
+        Ok(st_serialize(self.named_tensors("policy"), Some(metadata))?)
     }
 }
 

@@ -28,7 +28,7 @@ use diagonal::DiagGaussianDistribution;
 use multi_categorical::MultiCategoricalDistribution;
 use r2l_core::{
     env::Space,
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata},
+    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     tensor::R2lTensor,
 };
 use safetensors::SafeTensors;
@@ -241,14 +241,16 @@ impl Actor for CandlePolicyKind {
             Self::Composite(composite) => composite.mode_action(observation),
         }
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl ToSafetensors for CandlePolicyKind {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         match self {
-            Self::Categorical(cat) => cat.try_serialize(),
-            Self::DiagGaussian(diag) => diag.try_serialize(),
-            Self::MultiCategorical(multi) => multi.try_serialize(),
-            Self::Bernoulli(bernoulli) => bernoulli.try_serialize(),
-            Self::Composite(composite) => composite.try_serialize(),
+            Self::Categorical(cat) => cat.to_safetensors(),
+            Self::DiagGaussian(diag) => diag.to_safetensors(),
+            Self::MultiCategorical(multi) => multi.to_safetensors(),
+            Self::Bernoulli(bernoulli) => bernoulli.to_safetensors(),
+            Self::Composite(composite) => composite.to_safetensors(),
         }
     }
 }

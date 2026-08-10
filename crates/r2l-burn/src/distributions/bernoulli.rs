@@ -7,7 +7,7 @@ use burn::{
 };
 use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
 
@@ -76,11 +76,13 @@ impl<B: Backend> Actor for BernoulliDistribution<B> {
             &device,
         ))
     }
+}
 
-    fn try_serialize(&self) -> Option<Vec<u8>> {
+impl<B: Backend> ToSafetensors for BernoulliDistribution<B> {
+    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self).unwrap();
-        store.get_bytes().ok()
+        store.collect_from(self)?;
+        Ok(store.get_bytes()?)
     }
 }
 
