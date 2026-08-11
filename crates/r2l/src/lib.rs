@@ -1,37 +1,40 @@
-//! r2l is a reinforcement learning library written in rust. The goal of r2l is two-fold:
+//! r2l is a reinforcement learning library for Rust. It provides high-level PPO and A2C
+//! training builders while exposing lower-level components for customization.
 //!
-//! - To provide a convinient high level builder API with a feature set similar to sb3
-//! - To have all the lower level builder types and triats be exposed
+//! ## Quick start
 //!
-//! In fact, the hihg level API is just an implementation of the lower level components --
-//! it serves as a testament to what is possible with the exposed pieces.
-//!
-//!
-//! ## Hello r2l
-//!
-//! Possibly one of the simplest hello world style app is:
+//! The Gymnasium integration requires Python with Gymnasium installed.
 //!
 //! ```no_run
-//! use r2l::{LearningSchedule, PPOAlgorithmBuilder};
+//! use r2l::PPOAlgorithmBuilder;
 //!
-//! let mut algorithm = PPOAlgorithmBuilder::gym("Pendulum-v1", 4).build().unwrap();
+//! let mut algorithm = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
+//!     .build()
+//!     .unwrap();
 //! algorithm.train().unwrap();
 //! ```
 //!
-//! While this example is small, using the [`PPOAlgorithmBuilder`], it is also highly
-//! customizable. Check the relevant page for [`PPOAlgorithmBuilder`]. If you wish to
-//! start out with A2C, check out [`A2CAlgorithmBuilder`].
+//! [`PPOAlgorithmBuilder`] and [`A2CAlgorithmBuilder`] are the main entry points for
+//! configuring and training agents.
 //!
-//! ## What is in this crate
+//! For a more in-depth tutorial, see
+//! [the Getting started chapter of the book](https://afgthecat.github.io/r2l/user_guide.html).
+//! Complete workflows are available in the
+//! [repository examples](https://github.com/afgTheCat/r2l/tree/main/crates/r2l-examples/examples).
 //!
-//! The current focus of r2l is on-policy algorithms. This release, we have `PPO` and
-//! `A2C` implemented, supporting the more simple policy types:
+//! ## Current capabilities
 //!
-//! - Diag gaussian
-//! - Categorical
-//! - Multi categorical
-//! - Multi bernoully distribution
-//! - Composite distribution
+//! r2l currently provides:
+//!
+//! - on-policy training with PPO and A2C,
+//! - Candle and Burn policy/value backends,
+//! - native environment abstractions and a Gymnasium adapter,
+//! - categorical, diagonal-Gaussian, multi-categorical, multi-Bernoulli, and
+//!   composite policies for common Gymnasium action spaces,
+//! - observation and reward normalization, evaluation, and learning-rate scheduling
+//!   utilities, and
+//! - persistence of trained policies using [`TrainingArtifactsConfig`] and
+//!   [`InferenceArtifacts`] for later inference.
 
 #![warn(missing_docs)]
 
