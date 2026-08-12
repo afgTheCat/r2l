@@ -101,12 +101,13 @@ impl Actor for CompositeDistribution {
 }
 
 impl ToSafetensors for CompositeDistribution {
-    fn to_safetensors(&self) -> Result<Vec<u8>> {
+    fn to_safetensors(&self) -> std::result::Result<Vec<u8>, r2l_core::error::Error> {
         let metadata = PolicyMetadata {
             activation: self.activation,
         }
         .to_safetensors_metadata();
-        Ok(st_serialize(self.named_tensors("policy"), Some(metadata))?)
+        st_serialize(self.named_tensors("policy"), Some(metadata))
+            .map_err(r2l_core::error::Error::wrap)
     }
 }
 

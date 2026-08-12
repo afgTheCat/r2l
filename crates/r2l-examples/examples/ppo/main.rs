@@ -9,6 +9,7 @@ fn main() {
     // Train the agent and persist the best policy for inference.
     let artifacts_config = TrainingArtifactsConfig::new(ARTIFACT_DIR);
     let mut ppo = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
+        .unwrap()
         .with_training_artifacts(artifacts_config)
         .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)

@@ -9,7 +9,6 @@ use r2l_core::{
     },
     tensor::R2lTensor,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     HookResult,
@@ -20,7 +19,7 @@ use crate::{
 };
 
 /// Hyperparameters controlling PPO training behavior.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct PPOParams {
     /// Clipping range applied to the PPO policy ratio.
     pub clip_range: f32,

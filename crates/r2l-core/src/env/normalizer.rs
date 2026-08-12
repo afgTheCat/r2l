@@ -17,7 +17,7 @@ pub enum NormalizerMode {
 
 const EPSILON: f32 = 1e-8;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 struct ClippedRunningMean<T: R2lTensor> {
     rm: RunningMeanStd<T>,
     clip: f32,
@@ -43,7 +43,6 @@ impl<T: R2lTensor> ClippedRunningMean<T> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
 struct ClippedNormalizerInner<T: R2lTensor>(Arc<Mutex<ClippedRunningMean<T>>>);
 
 impl<T: R2lTensor> Clone for ClippedNormalizerInner<T> {
@@ -53,7 +52,7 @@ impl<T: R2lTensor> Clone for ClippedNormalizerInner<T> {
 }
 
 /// Shared, clipped observation normalizer backed by running statistics.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct ClippedNormalizer<T: R2lTensor> {
     normalizer_mode: NormalizerMode,
     inner: ClippedNormalizerInner<T>,

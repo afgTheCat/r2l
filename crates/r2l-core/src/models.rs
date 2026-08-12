@@ -78,18 +78,6 @@ impl PolicyMetadata {
     pub fn to_safetensors_metadata(&self) -> HashMap<String, String> {
         HashMap::from([("activation".to_string(), self.activation.to_string())])
     }
-
-    /// Builds policy metadata from the string map stored by safetensors.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the activation entry is missing or invalid.
-    #[must_use]
-    pub fn from_safetensors_metadata(metadata: &HashMap<String, String>) -> Self {
-        Self {
-            activation: metadata.get("activation").unwrap().parse().unwrap(),
-        }
-    }
 }
 
 /// A policy-like object that can choose an action for one observation.
@@ -122,7 +110,7 @@ pub trait ToSafetensors {
     /// # Errors
     ///
     /// Returns an error if the policy parameters cannot be serialized.
-    fn to_safetensors(&self) -> Result<Vec<u8>>;
+    fn to_safetensors(&self) -> std::result::Result<Vec<u8>, crate::error::Error>;
 }
 
 /// Trainable action distribution interface used by on-policy algorithms.

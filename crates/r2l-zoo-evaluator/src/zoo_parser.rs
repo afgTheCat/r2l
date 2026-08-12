@@ -1,12 +1,12 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use r2l::{LearningRateSchedule, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
-use serde::{Deserialize, Deserializer, Serialize, de};
+use serde::{Deserialize, Deserializer, de};
 use yaml_serde::Value;
 
 use crate::Backend;
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum RlZooSchedule {
     Constant(f64),
     Linear(f64),
@@ -52,7 +52,7 @@ impl<'de> Deserialize<'de> for RlZooSchedule {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub enum RlZooNormalize {
     Enabled(bool),
     Options { norm_obs: bool, norm_reward: bool },
@@ -116,7 +116,8 @@ fn parse_python_bool_option(value: &str, key: &str) -> Option<bool> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
 pub struct RlZooEnvironmentConfig {
     n_envs: usize,
     n_timesteps: usize,
@@ -151,7 +152,7 @@ impl RlZooEnvironmentConfig {
     ) -> anyhow::Result<()> {
         let obs_clip = self.normalize.norm_obs().then_some(10.0);
         let artifacts_config = TrainingArtifactsConfig::new(output_dir);
-        let mut builder = PPOAlgorithmBuilder::gym(env_name, self.n_envs)
+        let mut builder = PPOAlgorithmBuilder::gym(env_name, self.n_envs)?
             .with_rollout_steps(self.n_steps)
             .with_learning_schedule(LearningSchedule::total_step_bound(self.n_timesteps))
             .with_training_artifacts(artifacts_config)

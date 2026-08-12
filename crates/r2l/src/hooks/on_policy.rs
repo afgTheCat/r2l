@@ -7,15 +7,14 @@ use std::{
     time::Instant,
 };
 
-use anyhow::Result;
 use r2l_core::{
     HookResult,
     env::Env,
+    error::{Error, ResourceInterrupted},
     models::ToSafetensors,
     on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::evaluators::best_actor_evaluator::BestActorEvaluator;
 
@@ -31,7 +30,7 @@ pub(crate) struct TrainingTimingRecorder {
 }
 
 impl TrainingTimingRecorder {
-    pub(crate) fn create(output_dir: &Path) -> Result<Self> {
+    pub(crate) fn create(output_dir: &Path) -> std::io::Result<Self> {
         std::fs::create_dir_all(output_dir)?;
         let mut file = File::create(output_dir.join(TRAINING_TIMINGS_FILE))?;
         writeln!(
@@ -68,7 +67,11 @@ impl TrainingTimingRecorder {
         Self::elapsed_since(self.phase_started)
     }
 
-    fn finish_rollout(&mut self, learning_ms: f64, evaluation_ms: Option<f64>) -> Result<()> {
+    fn finish_rollout(
+        &mut self,
+        learning_ms: f64,
+        evaluation_ms: Option<f64>,
+    ) -> std::io::Result<()> {
         self.rollout += 1;
         let evaluation_ms = evaluation_ms
             .map(|duration| format!("{duration:.3}"))
@@ -98,7 +101,7 @@ impl TrainingTimingRecorder {
 /// This determines when the outer on-policy training loop should terminate,
 /// either after a fixed number of rollouts or after a fixed number of sampled
 /// environment steps.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum LearningSchedule {
     /// Stop after `total_rollouts` completed rollout collections.
     RolloutBound {
@@ -137,7 +140,7 @@ impl LearningSchedule {
 }
 
 /// Learning-rate policy applied over the progress of an on-policy training run.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum LearningRateSchedule {
     /// Keep the learning rate fixed throughout training.
     Constant(f64),
@@ -172,8 +175,8 @@ pub enum OnPolicyCommandResult {
     Stopping,
     /// Training stopped completely, runtime cleanup has happened
     Stopped,
-    /// The current runtime actor was serialized.
-    CurrentPolicySerialized,
+    /// Result of attempting to serialize the current runtime actor.
+    CurrentPolicySerialized(std::result::Result<(), Error>),
 }
 
 /// Algorithm-side endpoint for receiving on-policy commands.
@@ -210,13 +213,19 @@ impl OnPolicyCommandSender {
 
     /// Shuts down the `OnPolicyAlgorithm` gracefully.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the command receiver has disconnected.
-    pub fn shutdown(&self) {
-        self.tx.send(OnPolicyCommand::Shutdown).unwrap();
+    /// Returns an error if the training-side command receiver has disconnected.
+    pub fn shutdown(&self) -> std::result::Result<(), Error> {
+        self.tx.send(OnPolicyCommand::Shutdown).map_err(|error| {
+            Error::ResourceInterrupted(ResourceInterrupted {
+                resource: "on-policy command channel".into(),
+                details: error.to_string(),
+            })
+        })?;
         // empty the response queue
         while self.rx.recv().is_ok() {}
+        Ok(())
     }
 }
 
@@ -257,17 +266,18 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
         while let Ok(command) = command_rx.rx.try_recv() {
             match command {
                 OnPolicyCommand::Shutdown => {
-                    command_rx.tx.send(OnPolicyCommandResult::Stopping).unwrap();
+                    let _ = command_rx.tx.send(OnPolicyCommandResult::Stopping);
                     return HookResult::Break;
                 }
                 OnPolicyCommand::SerializeCurrentPolicy(path) => {
                     let path = PathBuf::from(path);
-                    let policy_serialized = runtime.actor().to_safetensors().unwrap();
-                    std::fs::write(path, policy_serialized).unwrap();
-                    command_rx
+                    let result = runtime
+                        .actor()
+                        .to_safetensors()
+                        .and_then(|bytes| std::fs::write(path, bytes).map_err(Error::wrap));
+                    let _ = command_rx
                         .tx
-                        .send(OnPolicyCommandResult::CurrentPolicySerialized)
-                        .unwrap();
+                        .send(OnPolicyCommandResult::CurrentPolicySerialized(result));
                 }
             }
         }
@@ -307,14 +317,20 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
     type A = A;
     type S = S;
 
-    fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
+    fn init_hook(
+        &mut self,
+        _runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
+    ) -> std::result::Result<HookResult, Error> {
         if let Some(timing_recorder) = &mut self.timing_recorder {
             timing_recorder.start_training();
         }
-        HookResult::Continue
+        Ok(HookResult::Continue)
     }
 
-    fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
+    fn post_rollout_hook(
+        &mut self,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
+    ) -> std::result::Result<HookResult, Error> {
         if let Some(timing_recorder) = &mut self.timing_recorder {
             timing_recorder.finish_collection();
         }
@@ -333,23 +349,25 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
         if let Some(timing_recorder) = &mut self.timing_recorder {
             timing_recorder.start_learning();
         }
-        command_result
+        Ok(command_result)
     }
 
     fn post_training_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> HookResult {
+    ) -> std::result::Result<HookResult, Error> {
         let learn_ms = self
             .timing_recorder
             .as_ref()
             .map_or(0.0, TrainingTimingRecorder::learning_elapsed_ms);
-        let evaluate_ms = self.evaluator.as_mut().and_then(|evaluator| {
+        let evaluate_ms = if let Some(evaluator) = &mut self.evaluator {
             let evaluation_started = Instant::now();
             evaluator
-                .eval(runtime)
+                .eval(runtime)?
                 .then(|| TrainingTimingRecorder::elapsed_since(evaluation_started))
-        });
+        } else {
+            None
+        };
         let command_res = self.process_pending_commands(runtime);
         let hook_result = if self.progress_remaining() <= 0. {
             HookResult::Break
@@ -359,19 +377,22 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
         if let Some(timing_recorder) = &mut self.timing_recorder {
             timing_recorder
                 .finish_rollout(learn_ms, evaluate_ms)
-                .expect("failed to record training timings");
+                .map_err(Error::wrap)?;
         }
-        hook_result
+        Ok(hook_result)
     }
 
-    fn shutdown_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> Result<()> {
+    fn shutdown_hook(
+        &mut self,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
+    ) -> std::result::Result<(), Error> {
         if let Some(evaluator) = &mut self.evaluator {
             evaluator.try_write_artifacts()?;
             evaluator.shutdown();
         }
         runtime.shutdown();
         if let Some(command_rx) = &self.command_rx {
-            command_rx.tx.send(OnPolicyCommandResult::Stopped).unwrap();
+            let _ = command_rx.tx.send(OnPolicyCommandResult::Stopped);
         }
         Ok(())
     }

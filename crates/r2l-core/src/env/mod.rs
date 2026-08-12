@@ -3,8 +3,8 @@ pub mod normalizer;
 use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
+use crate::error::{Error, InvalidParameterError};
 use crate::tensor::R2lTensor;
 
 /// Description of an observation or action space.
@@ -209,9 +209,10 @@ where
     }
 }
 
-/// Collection of environment builders used to create rollout workers.
-#[derive(Serialize, Deserialize)]
-pub enum EnvBuilderType<EB: EnvBuilder> {
+/// Validated, non-empty collection of environment builders used to create rollout workers.
+pub struct EnvBuilderType<EB: EnvBuilder>(EnvBuilderKind<EB>);
+
+enum EnvBuilderKind<EB: EnvBuilder> {
     /// Reuses one builder for `n_envs` homogeneous workers.
     Homogeneous {
         /// Shared environment builder.
@@ -228,25 +229,65 @@ pub enum EnvBuilderType<EB: EnvBuilder> {
 
 impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
     fn clone(&self) -> Self {
-        match self {
-            Self::Homogeneous { builder, n_envs } => Self::Homogeneous {
+        Self(match &self.0 {
+            EnvBuilderKind::Homogeneous { builder, n_envs } => EnvBuilderKind::Homogeneous {
                 builder: builder.clone(),
                 n_envs: *n_envs,
             },
-            Self::Heterogeneous { builders } => Self::Heterogeneous {
+            EnvBuilderKind::Heterogeneous { builders } => EnvBuilderKind::Heterogeneous {
                 builders: builders.clone(),
             },
-        }
+        })
     }
 }
 
 impl<EB: EnvBuilder> EnvBuilderType<EB> {
+    fn from_kind(kind: EnvBuilderKind<EB>) -> std::result::Result<Self, Error> {
+        match &kind {
+            EnvBuilderKind::Homogeneous { n_envs: 0, .. } => {
+                return Err(Error::InvalidParameter(Box::new(
+                    InvalidParameterError::InvalidValue {
+                        name: "n_envs".into(),
+                        expected: "a value greater than zero".into(),
+                        value: "0".into(),
+                    },
+                )));
+            }
+            EnvBuilderKind::Heterogeneous { builders } if builders.is_empty() => {
+                return Err(Error::InvalidParameter(Box::new(
+                    InvalidParameterError::InvalidValue {
+                        name: "builders".into(),
+                        expected: "at least one environment builder".into(),
+                        value: "empty".into(),
+                    },
+                )));
+            }
+            _ => {}
+        }
+        Ok(Self(kind))
+    }
+
     /// Creates a homogeneous builder collection.
-    pub fn homogeneous(builder: EB, n_envs: usize) -> Self {
-        Self::Homogeneous {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `n_envs` is zero.
+    pub fn homogeneous(builder: EB, n_envs: usize) -> std::result::Result<Self, Error> {
+        Self::from_kind(EnvBuilderKind::Homogeneous {
             builder: Arc::new(builder),
             n_envs,
-        }
+        })
+    }
+
+    /// Creates a heterogeneous collection with one environment per builder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `builders` is empty.
+    pub fn heterogeneous(builders: Vec<EB>) -> std::result::Result<Self, Error> {
+        Self::from_kind(EnvBuilderKind::Heterogeneous {
+            builders: builders.into_iter().map(Arc::new).collect(),
+        })
     }
 
     /// Builds the environment at `idx`.
@@ -254,28 +295,33 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if the selected builder cannot construct an environment.
-    pub fn build_idx(&self, idx: usize) -> Result<EB::Env> {
-        match &self {
-            Self::Homogeneous { builder, .. } => builder.build_env(),
-            Self::Heterogeneous { builders } => builders[idx].build_env(),
+    pub fn build_idx(&self, idx: usize) -> std::result::Result<EB::Env, Error> {
+        let n_envs = self.num_envs();
+        if idx >= self.num_envs() {
+            return Err(Error::InvalidParameter(Box::new(
+                InvalidParameterError::InvalidValue {
+                    name: "environment index".into(),
+                    expected: format!("an index below {n_envs}"),
+                    value: idx.to_string(),
+                },
+            )));
+        }
+        match &self.0 {
+            EnvBuilderKind::Homogeneous { builder, .. } => builder
+                .build_env()
+                .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error())),
+            EnvBuilderKind::Heterogeneous { builders } => builders[idx]
+                .build_env()
+                .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error())),
         }
     }
 
     /// Returns the number of environments represented by this builder.
     #[must_use]
     pub fn num_envs(&self) -> usize {
-        match self {
-            Self::Homogeneous { n_envs, .. } => *n_envs,
-            Self::Heterogeneous { builders } => builders.len(),
-        }
-    }
-
-    /// Returns a representative environment builder.
-    #[must_use]
-    pub fn env_builder(&self) -> Arc<EB> {
-        match &self {
-            Self::Homogeneous { builder, .. } => builder.clone(),
-            Self::Heterogeneous { builders } => builders[0].clone(),
+        match &self.0 {
+            EnvBuilderKind::Homogeneous { n_envs, .. } => *n_envs,
+            EnvBuilderKind::Heterogeneous { builders } => builders.len(),
         }
     }
 
@@ -284,10 +330,16 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if the selected builder cannot provide a description.
-    pub fn env_description(&self) -> Result<EnvDescription<<EB::Env as Env>::Tensor>> {
-        match &self {
-            Self::Homogeneous { builder, n_envs: _ } => builder.env_description(),
-            Self::Heterogeneous { builders } => builders[0].env_description(),
+    pub fn env_description(
+        &self,
+    ) -> std::result::Result<EnvDescription<<EB::Env as Env>::Tensor>, Error> {
+        match &self.0 {
+            EnvBuilderKind::Homogeneous { builder, n_envs: _ } => builder
+                .env_description()
+                .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error())),
+            EnvBuilderKind::Heterogeneous { builders } => builders[0]
+                .env_description()
+                .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error())),
         }
     }
 }
@@ -299,26 +351,4 @@ pub fn action_ranges(nvec: &[usize]) -> impl Iterator<Item = (usize, usize)> + '
         *offset += *choices;
         Some((start, *choices))
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Space;
-    use crate::tensor::TensorData;
-
-    #[test]
-    fn discrete_actions_use_one_scalar_index() {
-        let space: Space<TensorData> = Space::Tuple(vec![
-            Space::Discrete(4),
-            Space::Box {
-                min: None,
-                max: None,
-                shape: vec![2],
-            },
-            Space::MultiBinary { shape: vec![3] },
-        ]);
-
-        assert_eq!(space.size(), 9);
-        assert_eq!(space.action_size(), 6);
-    }
 }

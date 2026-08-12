@@ -33,6 +33,16 @@ pub struct ValueWithDtype {
 /// Reason a parameter is invalid.
 #[derive(Debug, thiserror::Error)]
 pub enum InvalidParameterError {
+    /// A value does not satisfy the parameter's requirements.
+    #[error("invalid value for `{name}`: expected {expected}, got {value}")]
+    InvalidValue {
+        /// Parameter name.
+        name: String,
+        /// Description of accepted values.
+        expected: String,
+        /// Supplied value.
+        value: String,
+    },
     /// The value is outside the accepted inclusive range.
     #[error("value {current_value:?} is outside the range {min:?}..={max:?}")]
     InvalidRange {
@@ -102,6 +112,14 @@ impl StdError for BrokenArtifacts {
     }
 }
 
+impl From<BrokenArtifact> for Error {
+    fn from(artifact: BrokenArtifact) -> Self {
+        Self::BrokenArtifacts(BrokenArtifacts {
+            broken: vec![artifact],
+        })
+    }
+}
+
 /// A dependency required for an operation is unavailable.
 #[derive(Debug, thiserror::Error)]
 #[error("missing {dependency_type} dependency `{name}`")]
@@ -138,7 +156,7 @@ pub struct ResourceInterrupted {
 pub enum Error {
     /// A supplied parameter is invalid.
     #[error("invalid parameter: {0}")]
-    InvalidParameter(#[source] InvalidParameterError),
+    InvalidParameter(#[source] Box<InvalidParameterError>),
 
     /// An operation cannot run in the current state.
     #[error("invalid state for `{operation}`: {details}")]

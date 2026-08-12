@@ -54,14 +54,27 @@ impl<B: Backend> BurnPolicyKind<B> {
     /// # Errors
     ///
     /// Returns an error if the stored policy parameters cannot be loaded.
-    pub fn load_from_bytes(mut self, bytes: Vec<u8>) -> anyhow::Result<Self> {
+    pub fn load_from_bytes(
+        mut self,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<Self, r2l_core::error::Error> {
         let mut store = SafetensorsStore::from_bytes(Some(bytes));
         match &mut self {
-            Self::Categorical(policy) => policy.load_from(&mut store)?,
-            Self::Diag(policy) => policy.load_from(&mut store)?,
-            Self::MultiCategorical(policy) => policy.load_from(&mut store)?,
-            Self::MultiBernoulli(policy) => policy.load_from(&mut store)?,
-            Self::Composite(policy) => policy.load_from(&mut store)?,
+            Self::Categorical(policy) => policy
+                .load_from(&mut store)
+                .map_err(r2l_core::error::Error::wrap)?,
+            Self::Diag(policy) => policy
+                .load_from(&mut store)
+                .map_err(r2l_core::error::Error::wrap)?,
+            Self::MultiCategorical(policy) => policy
+                .load_from(&mut store)
+                .map_err(r2l_core::error::Error::wrap)?,
+            Self::MultiBernoulli(policy) => policy
+                .load_from(&mut store)
+                .map_err(r2l_core::error::Error::wrap)?,
+            Self::Composite(policy) => policy
+                .load_from(&mut store)
+                .map_err(r2l_core::error::Error::wrap)?,
         };
         Ok(self)
     }
@@ -170,7 +183,7 @@ impl<B: Backend> Actor for BurnPolicyKind<B> {
 }
 
 impl<B: Backend> ToSafetensors for BurnPolicyKind<B> {
-    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
+    fn to_safetensors(&self) -> std::result::Result<Vec<u8>, r2l_core::error::Error> {
         match self {
             Self::Categorical(cat) => cat.to_safetensors(),
             Self::Diag(diag) => diag.to_safetensors(),

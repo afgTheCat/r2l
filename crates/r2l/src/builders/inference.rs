@@ -8,6 +8,7 @@ use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     ActorWrapper,
     env::{Env, Snapshot, normalizer::ClippedNormalizer},
+    error::{BoxedError, BrokenArtifact, Error},
     models::Actor,
     rng::sample_u64,
     tensor::R2lTensor,
@@ -20,6 +21,49 @@ use super::{BurnBackendConfig, CandleBackend, PolicyBuilder};
 pub(crate) const INFERENCE_CONFIG_FILE: &str = "inference.yaml";
 pub(crate) const ACTOR_FILE: &str = "actor.safetensors";
 pub(crate) const NORMALIZER_FILE: &str = "normalizer.yaml";
+
+struct ArtifactFile {
+    path: PathBuf,
+    artifact_type: &'static str,
+}
+
+impl ArtifactFile {
+    fn new(path: PathBuf, artifact_type: &'static str) -> Self {
+        Self {
+            path,
+            artifact_type,
+        }
+    }
+
+    fn read(&self) -> Result<Vec<u8>, Error> {
+        std::fs::read(&self.path).map_err(|error| self.read_error(error))
+    }
+
+    fn read_to_string(&self) -> Result<String, Error> {
+        std::fs::read_to_string(&self.path).map_err(|error| self.read_error(error))
+    }
+
+    fn read_error(&self, error: std::io::Error) -> Error {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            BrokenArtifact::Missing {
+                path: self.path.clone(),
+                artifact_type: self.artifact_type.into(),
+            }
+            .into()
+        } else {
+            Error::wrap(error)
+        }
+    }
+
+    fn decode_error(&self, source: BoxedError) -> Error {
+        BrokenArtifact::Decode {
+            path: self.path.clone(),
+            artifact_type: self.artifact_type.into(),
+            source,
+        }
+        .into()
+    }
+}
 
 /// Observation processing applied during inference.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -62,19 +106,23 @@ impl InferenceConfig {
     }
 
     /// Writes this configuration to `inference.yaml` in `inference_dir`.
-    pub(crate) fn write_to_dir(&self, inference_dir: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub(crate) fn write_to_dir(&self, inference_dir: impl AsRef<Path>) -> Result<(), Error> {
         let inference_dir = inference_dir.as_ref();
-        std::fs::create_dir_all(inference_dir)?;
-        let serialized = yaml_serde::to_string(self)?;
-        std::fs::write(inference_dir.join(INFERENCE_CONFIG_FILE), serialized)?;
+        std::fs::create_dir_all(inference_dir).map_err(Error::wrap)?;
+        let serialized = yaml_serde::to_string(self).map_err(Error::wrap)?;
+        std::fs::write(inference_dir.join(INFERENCE_CONFIG_FILE), serialized)
+            .map_err(Error::wrap)?;
         Ok(())
     }
 
     /// Loads `inference.yaml` from `inference_dir`.
-    pub(crate) fn load_from_dir(inference_dir: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let serialized =
-            std::fs::read_to_string(inference_dir.as_ref().join(INFERENCE_CONFIG_FILE))?;
-        Ok(yaml_serde::from_str(&serialized)?)
+    pub(crate) fn load_from_dir(inference_dir: impl AsRef<Path>) -> Result<Self, Error> {
+        let artifact = ArtifactFile::new(
+            inference_dir.as_ref().join(INFERENCE_CONFIG_FILE),
+            "inference configuration",
+        );
+        let serialized = artifact.read_to_string()?;
+        yaml_serde::from_str(&serialized).map_err(|error| artifact.decode_error(Box::new(error)))
     }
 }
 
@@ -91,7 +139,7 @@ impl InferenceArtifacts {
     /// # Errors
     ///
     /// Returns an error if the configuration cannot be read or deserialized.
-    pub fn load(directory: impl Into<PathBuf>) -> anyhow::Result<Self> {
+    pub fn load(directory: impl Into<PathBuf>) -> Result<Self, Error> {
         let directory = directory.into();
         let config = InferenceConfig::load_from_dir(&directory)?;
         Ok(Self { config, directory })
@@ -102,24 +150,28 @@ impl InferenceArtifacts {
     /// # Errors
     ///
     /// Returns an error if an artifact cannot be read or the configured model cannot be built.
-    pub fn build<E: Env>(self, env: E) -> anyhow::Result<InferenceRunner<E>> {
+    pub fn build<E: Env>(self, env: E) -> Result<InferenceRunner<E>, Error> {
         let obs_normalizer = match self.config.observation_mode {
             InferenceObservationMode::Raw => None,
             InferenceObservationMode::Normalized => {
-                let serialized = std::fs::read_to_string(self.directory.join(NORMALIZER_FILE))?;
-                let normalizer_builder: NormalizerBuilder = yaml_serde::from_str(&serialized)?;
+                let artifact = ArtifactFile::new(
+                    self.directory.join(NORMALIZER_FILE),
+                    "observation normalizer",
+                );
+                let serialized = artifact.read_to_string()?;
+                let normalizer_builder: NormalizerBuilder = yaml_serde::from_str(&serialized)
+                    .map_err(|error| artifact.decode_error(Box::new(error)))?;
                 Some(normalizer_builder.into_normalizer())
             }
         };
         let env_description = env.env_description();
-        let actor_bytes = std::fs::read(self.directory.join(ACTOR_FILE))?;
+        let actor_artifact = ArtifactFile::new(self.directory.join(ACTOR_FILE), "actor");
+        let actor_bytes = actor_artifact.read()?;
         let actor = match self.config.backend {
             InferenceBackend::Candle(backend) => {
-                let var_builder = VarBuilder::from_buffered_safetensors(
-                    actor_bytes,
-                    DType::F32,
-                    &backend.device,
-                )?;
+                let var_builder =
+                    VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &backend.device)
+                        .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 let actor = CandlePolicyKind::build(
                     env_description.action_space.clone(),
                     &var_builder,
@@ -127,7 +179,8 @@ impl InferenceArtifacts {
                     env_description.observation_space.size(),
                     self.config.policy_builder.activation_function,
                     self.config.policy_builder.log_std_init,
-                )?;
+                )
+                .map_err(|error| actor_artifact.decode_error(error.into_boxed_dyn_error()))?;
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
             InferenceBackend::Burn(_) => {
@@ -138,11 +191,13 @@ impl InferenceArtifacts {
                         env_description.observation_space.size(),
                         env_description.action_space,
                     )
-                    .load_from_bytes(actor_bytes)?;
+                    .load_from_bytes(actor_bytes)
+                    .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))
             }
         };
         InferenceRunner::new(env, obs_normalizer, actor)
+            .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error()))
     }
 }
 

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use candle_core::{Result, Tensor};
 use candle_nn::init::{FanInOut, NonLinearity, NormalOrUniform};
 use candle_nn::{Activation, Init, Linear, Module, VarBuilder};
@@ -154,6 +152,9 @@ pub(crate) fn build_sequential(
     prefix: &str,
     activation: ActivationFunction,
 ) -> Result<Sequential> {
+    if layers.is_empty() {
+        candle_core::bail!("policy network must contain at least one output layer");
+    }
     let mut last_dim = input_dim;
     let mut nn = Sequential::default();
     let num_layers = layers.len();
@@ -171,27 +172,6 @@ pub(crate) fn build_sequential(
         last_dim = *layer_size;
     }
     Ok(nn)
-}
-
-pub(crate) fn network_shape(
-    tensors: &HashMap<String, Tensor>,
-    prefix: &str,
-) -> (usize, Vec<usize>) {
-    let first_weight = tensors.get(&format!("{prefix}0.weight")).unwrap();
-    let first_dims = first_weight.dims();
-
-    let observation_size = first_dims[1];
-    let mut layers = Vec::new();
-
-    for layer_idx in 0.. {
-        let Some(weight) = tensors.get(&format!("{prefix}{layer_idx}.weight")) else {
-            break;
-        };
-        let dims = weight.dims();
-        layers.push(dims[0]);
-    }
-
-    (observation_size, layers)
 }
 
 impl Sequential {

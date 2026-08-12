@@ -13,7 +13,6 @@ r2l-core = { workspace = true }
 anyhow = { workspace = true }
 rand = { workspace = true }
 derive_more = { version = "2.0.1", features = ["full"] }
-serde = { workspace = true }
 
 [lints]
 workspace = true

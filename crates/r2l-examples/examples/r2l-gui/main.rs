@@ -118,7 +118,7 @@ pub fn train_ppo(
     total_rollouts: usize,
     clip_range: f32,
 ) -> anyhow::Result<()> {
-    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
+    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)?
         .with_burn()
         .with_seed(0)
         .with_entropy_coeff(ENT_COEFF)

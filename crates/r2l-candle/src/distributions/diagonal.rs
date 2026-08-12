@@ -1,15 +1,14 @@
-use std::collections::HashMap;
 use std::f32;
 
 use anyhow::Result;
-use candle_core::{DType, Device, Tensor};
+use candle_core::{Device, Tensor};
 use candle_nn::{Module, VarBuilder};
 use r2l_core::models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors};
 use safetensors::serialize as st_serialize;
 
 use crate::{
     random::standard_normal,
-    sequential::{Sequential, build_sequential, network_shape},
+    sequential::{Sequential, build_sequential},
 };
 
 /// Diagonal-Gaussian Candle policy for Box action spaces.
@@ -45,27 +44,6 @@ impl DiagGaussianDistribution {
             log_std,
             device,
         })
-    }
-
-    pub(crate) fn from_parts(
-        tensors: HashMap<String, Tensor>,
-        device: &Device,
-        metadata: &PolicyMetadata,
-    ) -> Self {
-        let activation = metadata.activation;
-        let (observation_size, layers) = network_shape(&tensors, "policy");
-        let vb = VarBuilder::from_tensors(tensors, DType::F32, device);
-        let action_size = *layers.last().unwrap();
-        let log_std = vb.get(action_size, "policy.log_std").unwrap();
-        Self::build(
-            observation_size,
-            &layers,
-            &vb,
-            log_std,
-            "policy",
-            activation,
-        )
-        .unwrap()
     }
 
     /// Returns the Candle device used by this policy.
@@ -113,14 +91,14 @@ impl Actor for DiagGaussianDistribution {
 }
 
 impl ToSafetensors for DiagGaussianDistribution {
-    fn to_safetensors(&self) -> Result<Vec<u8>> {
+    fn to_safetensors(&self) -> std::result::Result<Vec<u8>, r2l_core::error::Error> {
         let metadata = PolicyMetadata {
             activation: self.mu_net.activation(),
         }
         .to_safetensors_metadata();
         let mut tensors = self.mu_net.named_tensors("policy");
         tensors.push(("policy.log_std".to_string(), self.log_std.clone()));
-        Ok(st_serialize(tensors, Some(metadata))?)
+        st_serialize(tensors, Some(metadata)).map_err(r2l_core::error::Error::wrap)
     }
 }
 

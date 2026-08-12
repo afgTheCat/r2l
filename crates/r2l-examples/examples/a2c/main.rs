@@ -12,6 +12,7 @@ fn main() {
         mpsc::channel();
 
     let a2c_builder = A2CAlgorithmBuilder::gym("Pendulum-v1", 10)
+        .unwrap()
         .with_candle(Device::Cpu)
         .with_seed(0)
         .with_entropy_coeff(0.2)

@@ -1,9 +1,7 @@
-use serde::{Deserialize, Serialize};
-
 use crate::tensor::R2lTensor;
 
 /// Online per-element mean and variance for tensor samples.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct RunningMeanStd<T: R2lTensor> {
     /// Current per-element mean.
     pub mean: T,

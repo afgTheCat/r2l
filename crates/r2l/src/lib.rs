@@ -9,6 +9,7 @@
 //! use r2l::PPOAlgorithmBuilder;
 //!
 //! let mut algorithm = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
+//!     .unwrap()
 //!     .build()
 //!     .unwrap();
 //! algorithm.train().unwrap();

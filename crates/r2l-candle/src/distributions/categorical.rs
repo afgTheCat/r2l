@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::{Result, bail};
 use candle_core::{DType, Device, Error, Tensor};
 use candle_nn::VarBuilder;
@@ -14,7 +12,7 @@ use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 use safetensors::serialize as st_serialize;
 
-use crate::sequential::{Sequential, build_sequential, network_shape};
+use crate::sequential::{Sequential, build_sequential};
 
 /// Categorical Candle policy for discrete action spaces.
 ///
@@ -49,27 +47,6 @@ impl CategoricalDistribution {
             logits,
             device,
         })
-    }
-
-    pub(crate) fn from_parts(
-        tensors: HashMap<String, Tensor>,
-        device: Device,
-        metadata: &PolicyMetadata,
-    ) -> Self {
-        let activation = metadata.activation;
-        let (observation_size, layers) = network_shape(&tensors, "policy");
-        let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
-        let action_size = *layers.last().unwrap();
-        Self::build(
-            observation_size,
-            action_size,
-            &layers,
-            &vb,
-            device,
-            "policy",
-            activation,
-        )
-        .unwrap()
     }
 
     /// Returns the Candle device used by this policy.
@@ -119,15 +96,13 @@ impl Actor for CategoricalDistribution {
 }
 
 impl ToSafetensors for CategoricalDistribution {
-    fn to_safetensors(&self) -> Result<Vec<u8>> {
+    fn to_safetensors(&self) -> std::result::Result<Vec<u8>, r2l_core::error::Error> {
         let metadata = PolicyMetadata {
             activation: self.logits.activation(),
         }
         .to_safetensors_metadata();
-        Ok(st_serialize(
-            self.logits.named_tensors("policy"),
-            Some(metadata),
-        )?)
+        st_serialize(self.logits.named_tensors("policy"), Some(metadata))
+            .map_err(r2l_core::error::Error::wrap)
     }
 }
 

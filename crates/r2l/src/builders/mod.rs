@@ -62,7 +62,7 @@ pub type A2CCandle = A2C<CandlePolicyValueLearner, DefaultA2CHook<CandlePolicyVa
 pub type A2CBurn<B> = A2C<BurnPolicyValueLearner<B>, DefaultA2CHook<BurnPolicyValueLearner<B>>>;
 
 /// `AdamW` hyperparameters used by an on-policy learner.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct AdamWParams {
     /// Learning rate.
     pub lr: f64,
@@ -77,7 +77,6 @@ pub struct AdamWParams {
 }
 
 /// Selects the artifacts produced during training and where they are written.
-#[derive(Serialize, Deserialize)]
 pub struct TrainingArtifactsConfig {
     pub(crate) output_dir: PathBuf,
     pub(crate) evaluation_results: bool,
@@ -146,7 +145,7 @@ fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
 }
 
 /// Optimizer arrangement for the policy and value networks.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub enum OnPolicyOptimizerLayout {
     /// One optimizer updates both networks.
     Joint {
@@ -409,12 +408,11 @@ impl<E: Env> Builder<E> {
         algorithm_configuration: AlgorithmConfiguration,
         backend_configuration: BackendConfiguration,
         sampler_configuration: SamplerConfiguration<E>,
-    ) -> Self {
-        let env_desription = env_builder.env_description().unwrap();
-        Self {
-            env_build_plan: Box::new(TypedEnvBuildPlan {
-                env_builder: EnvBuilderType::homogeneous(env_builder, n_envs),
-            }),
+    ) -> std::result::Result<Self, r2l_core::error::Error> {
+        let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
+        let env_desription = env_builder.env_description()?;
+        Ok(Self {
+            env_build_plan: Box::new(TypedEnvBuildPlan { env_builder }),
             env_desription,
             n_envs,
             sampler_configuration,
@@ -445,7 +443,7 @@ impl<E: Env> Builder<E> {
             sample_size: 64,
             seed: None,
             sampler_execution_mode: SamplerExecutionMode::MultiThreaded,
-        }
+        })
     }
 
     fn update_optimizer_layout(
@@ -842,20 +840,20 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         sampler_configuration: SamplerConfiguration<E>,
         build_agent: fn(&mut Builder<E>) -> A,
         build_sampler: fn(&Builder<E>) -> S,
-    ) -> Self {
-        Self {
+    ) -> std::result::Result<Self, r2l_core::error::Error> {
+        Ok(Self {
             builder: Builder::new(
                 env_builder,
                 n_envs,
                 algorithm_configuration,
                 backend_configuration,
                 sampler_configuration,
-            ),
+            )?,
             config: Config {
                 build_agent,
                 build_sampler,
             },
-        }
+        })
     }
 
     fn with_agent<A2: Agent>(
@@ -1357,7 +1355,14 @@ pub type A2CAlgorithmBuilder<E> =
 
 impl<E: Env> PPOAlgorithmBuilder<E> {
     /// Creates a PPO builder using `n_envs` homogeneous environments.
-    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `n_envs` is zero.
+    pub fn new<EB: EnvBuilder<Env = E>>(
+        env_builder: EB,
+        n_envs: usize,
+    ) -> std::result::Result<Self, r2l_core::error::Error> {
         Self::configured(
             env_builder,
             n_envs,
@@ -1383,7 +1388,14 @@ impl<E: Env> PPOAlgorithmBuilder<E> {
 
 impl<E: Env> A2CAlgorithmBuilder<E> {
     /// Creates an A2C builder using `n_envs` homogeneous environments.
-    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `n_envs` is zero.
+    pub fn new<EB: EnvBuilder<Env = E>>(
+        env_builder: EB,
+        n_envs: usize,
+    ) -> std::result::Result<Self, r2l_core::error::Error> {
         Self::configured(
             env_builder,
             n_envs,
@@ -1406,14 +1418,28 @@ impl<E: Env> A2CAlgorithmBuilder<E> {
 
 impl PPOAlgorithmBuilder<GymEnv> {
     /// Creates a PPO builder for a Gymnasium environment.
-    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `n_envs` is zero.
+    pub fn gym<EB: Into<GymEnvBuilder>>(
+        env_builder: EB,
+        n_envs: usize,
+    ) -> std::result::Result<Self, r2l_core::error::Error> {
         Self::new(env_builder.into(), n_envs)
     }
 }
 
 impl A2CAlgorithmBuilder<GymEnv> {
     /// Creates an A2C builder for a Gymnasium environment.
-    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `n_envs` is zero.
+    pub fn gym<EB: Into<GymEnvBuilder>>(
+        env_builder: EB,
+        n_envs: usize,
+    ) -> std::result::Result<Self, r2l_core::error::Error> {
         Self::new(env_builder.into(), n_envs)
     }
 }

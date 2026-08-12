@@ -7,6 +7,7 @@ use itertools::Itertools;
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
     env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
+    error::Error,
     models::Actor,
     on_policy::algorithm::Sampler,
     rng::sample_u64,
@@ -106,7 +107,7 @@ impl<E: Env> StagedSamplerCore<E> {
                 let (result_tx, result_rx) = crossbeam::channel::unbounded();
                 worker_handles.push(ThreadHandle::new(command_tx, result_rx));
                 let env_builder = env_builder.clone();
-                let env_builder = move || env_builder.build_idx(idx);
+                let env_builder = move || env_builder.build_idx(idx).map_err(anyhow::Error::new);
                 ThreadWorkerFactory::new(command_rx, result_tx, env_builder.clone(), sample_u64())
             })
             .collect();
@@ -243,23 +244,27 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     }
 
     /// Builds a homogeneous sampler from a shared environment builder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `num_envs` is zero.
     pub fn build_from_env_builder(
         env_builder: Arc<dyn EnvBuilder<Env = E>>,
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Self
+    ) -> std::result::Result<Self, Error>
     where
         E: 'static,
     {
         let env_builder = move || env_builder.build_env();
-        Self::build_with_obs_normalizer(
-            &EnvBuilderType::homogeneous(env_builder, num_envs),
+        Ok(Self::build_with_obs_normalizer(
+            &EnvBuilderType::homogeneous(env_builder, num_envs)?,
             hook,
             execution_mode,
             obs_normalizer,
-        )
+        ))
     }
 }
 

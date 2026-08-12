@@ -1,16 +1,15 @@
 use std::{fmt::Write as _, path::PathBuf};
 
-use anyhow::Result;
 use r2l_core::{
     ActorWrapper,
     buffers::TrajectoryBatch,
     env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
+    error::Error,
     models::{Actor, ToSafetensors},
     on_policy::algorithm::{Agent, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
 use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
-use serde::{Deserialize, Serialize};
 
 use crate::{
     builders::{
@@ -92,7 +91,6 @@ impl<E: Env> EvaluationSampler<E> {
 }
 
 /// Configures how policies are evaluated during training.
-#[derive(Serialize, Deserialize)]
 pub struct EvaluationSettings {
     pub(crate) episodes_per_evaluation: usize,
     pub(crate) evaluation_execution_mode: SamplerExecutionMode,
@@ -157,7 +155,6 @@ impl EvaluationSettings {
     }
 }
 
-#[derive(Serialize, Deserialize)]
 struct EvalState {
     avg_reward: f32,
     total_episodes: f32,
@@ -208,7 +205,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
     pub fn eval<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
         &mut self,
         rt: &mut OnPolicyRuntime<AG, TS>,
-    ) -> bool {
+    ) -> std::result::Result<bool, Error> {
         self.current_evaluator_step += 1;
         if self
             .current_evaluator_step
@@ -216,10 +213,10 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         {
             let actor = rt.actor();
             let adapted_actor = ActorWrapper::new(rt.actor());
-            self.eval_adapted(adapted_actor, actor);
-            true
+            self.eval_adapted(adapted_actor, actor)?;
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -228,7 +225,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         &mut self,
         adapted_actor: impl Actor<Tensor = E::Tensor> + Clone,
         actor: A,
-    ) {
+    ) -> std::result::Result<(), Error> {
         let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor);
         let avg_reward = total_reward / total_episodes;
         if self.write_evaluation_results {
@@ -243,22 +240,27 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
                 self.best_actor = Some(actor);
                 self.best_obs_normalizer = self.sampler.normalizer_snapshot();
             }
-            self.try_write_artifacts()
-                .expect("failed to write training artifacts");
+            self.try_write_artifacts()?;
         }
+        Ok(())
     }
 
     /// Writes the enabled inference artifacts and evaluation results.
-    pub fn try_write_artifacts(&self) -> Result<()> {
-        std::fs::create_dir_all(&self.output_dir)?;
-        if self.write_inference_artifacts
-            && let Some(actor) = &self.best_actor
-        {
+    pub fn try_write_artifacts(&self) -> std::result::Result<(), Error> {
+        std::fs::create_dir_all(&self.output_dir).map_err(Error::wrap)?;
+        if self.write_inference_artifacts {
+            let Some(actor) = &self.best_actor else {
+                return Err(Error::InvalidState {
+                    operation: "Serializing actor".into(),
+                    details: "No actor was cached, serialization is not possible".into(),
+                });
+            };
             let bytes = actor.to_safetensors()?;
-            std::fs::write(self.output_dir.join(ACTOR_FILE), bytes)?;
+            std::fs::write(self.output_dir.join(ACTOR_FILE), bytes).map_err(Error::wrap)?;
             if let Some(normalizer) = &self.best_obs_normalizer {
                 let normalizer_path = self.output_dir.join(NORMALIZER_FILE);
-                std::fs::write(normalizer_path, yaml_serde::to_string(normalizer)?)?;
+                let serialized = yaml_serde::to_string(normalizer).map_err(Error::wrap)?;
+                std::fs::write(normalizer_path, serialized).map_err(Error::wrap)?;
             }
         }
         if self.write_evaluation_results {
@@ -268,9 +270,10 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
                     csv,
                     "{},{}",
                     eval_state.avg_reward, eval_state.total_episodes
-                )?;
+                )
+                .map_err(Error::wrap)?;
             }
-            std::fs::write(self.output_dir.join(EVALUATIONS_FILE), csv)?;
+            std::fs::write(self.output_dir.join(EVALUATIONS_FILE), csv).map_err(Error::wrap)?;
         }
         Ok(())
     }

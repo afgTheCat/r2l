@@ -273,7 +273,7 @@ pub fn train_ppo(
     total_rollouts: usize,
     command_rx: OnPolicyCommandReceiver,
 ) -> anyhow::Result<()> {
-    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 4)
+    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 4)?
         .with_candle(candle_core::Device::Cpu)
         .with_execution_mode(r2l::SamplerExecutionMode::MultiThreaded)
         .with_clip_range(0.2)

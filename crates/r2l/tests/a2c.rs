@@ -29,6 +29,7 @@ fn configure_candle_a2c_test(config: &A2CTestConfig) {
     let (update_tx, update_rx) = mpsc::channel();
 
     let mut a2c_builder = A2CAlgorithmBuilder::gym(config.env_name, config.n_envs)
+        .unwrap()
         .with_candle(Device::Cpu)
         .with_entropy_coeff(config.entropy_coeff)
         .with_lambda(config.gae_lambda)

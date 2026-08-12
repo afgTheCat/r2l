@@ -201,10 +201,12 @@ impl<B: Backend> Actor for CompositeDistribution<B> {
 }
 
 impl<B: Backend> ToSafetensors for CompositeDistribution<B> {
-    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
+    fn to_safetensors(&self) -> std::result::Result<Vec<u8>, r2l_core::error::Error> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self)?;
-        Ok(store.get_bytes()?)
+        store
+            .collect_from(self)
+            .map_err(r2l_core::error::Error::wrap)?;
+        store.get_bytes().map_err(r2l_core::error::Error::wrap)
     }
 }
 

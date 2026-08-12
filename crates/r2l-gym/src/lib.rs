@@ -29,7 +29,6 @@ use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     tensor::TensorData,
 };
-use serde::{Deserialize, Serialize};
 
 /// Python-backed Gymnasium environment implementing `r2l`'s [`Env`] trait.
 ///
@@ -122,7 +121,6 @@ impl Env for GymEnv {
 /// This is the standard way to plug Gymnasium environments into higher-level
 /// high-level builders such as `r2l::PPOAlgorithmBuilder` and
 /// `r2l::A2CAlgorithmBuilder`.
-#[derive(Serialize, Deserialize)]
 pub struct GymEnvBuilder(String);
 
 impl GymEnvBuilder {
