@@ -253,12 +253,18 @@ pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S
     pub(crate) evaluator: Option<BestActorEvaluator<A::Actor, E>>,
     pub(crate) timing_recorder: Option<TrainingTimingRecorder>,
     pub(crate) command_rx: Option<OnPolicyCommandReceiver>,
+    pub(crate) error: Option<Error>,
     pub(crate) _phantom: PhantomData<(A, S, E)>,
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
     DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
+    fn break_with_error(&mut self, error: Error) -> HookResult {
+        self.error.get_or_insert(error);
+        HookResult::Break
+    }
+
     fn process_pending_commands(&self, runtime: &mut OnPolicyRuntime<A, S>) -> HookResult {
         let Some(command_rx) = &self.command_rx else {
             return HookResult::Continue;
@@ -317,20 +323,14 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
     type A = A;
     type S = S;
 
-    fn init_hook(
-        &mut self,
-        _runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> std::result::Result<HookResult, Error> {
+    fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
         if let Some(timing_recorder) = &mut self.timing_recorder {
             timing_recorder.start_training();
         }
-        Ok(HookResult::Continue)
+        HookResult::Continue
     }
 
-    fn post_rollout_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> std::result::Result<HookResult, Error> {
+    fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
         if let Some(timing_recorder) = &mut self.timing_recorder {
             timing_recorder.finish_collection();
         }
@@ -349,22 +349,25 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
         if let Some(timing_recorder) = &mut self.timing_recorder {
             timing_recorder.start_learning();
         }
-        Ok(command_result)
+        command_result
     }
 
     fn post_training_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> std::result::Result<HookResult, Error> {
+    ) -> HookResult {
         let learn_ms = self
             .timing_recorder
             .as_ref()
             .map_or(0.0, TrainingTimingRecorder::learning_elapsed_ms);
         let evaluate_ms = if let Some(evaluator) = &mut self.evaluator {
             let evaluation_started = Instant::now();
-            evaluator
-                .eval(runtime)?
-                .then(|| TrainingTimingRecorder::elapsed_since(evaluation_started))
+            match evaluator.eval(runtime) {
+                Ok(evaluated) => {
+                    evaluated.then(|| TrainingTimingRecorder::elapsed_since(evaluation_started))
+                }
+                Err(error) => return self.break_with_error(error),
+            }
         } else {
             None
         };
@@ -375,25 +378,31 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
             command_res
         };
         if let Some(timing_recorder) = &mut self.timing_recorder {
-            timing_recorder
-                .finish_rollout(learn_ms, evaluate_ms)
-                .map_err(Error::wrap)?;
+            if let Err(error) = timing_recorder.finish_rollout(learn_ms, evaluate_ms) {
+                return self.break_with_error(Error::wrap(error));
+            }
         }
-        Ok(hook_result)
+        hook_result
     }
 
     fn shutdown_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> std::result::Result<(), Error> {
-        if let Some(evaluator) = &mut self.evaluator {
-            evaluator.try_write_artifacts()?;
+        let artifact_result = if let Some(evaluator) = &mut self.evaluator {
+            let result = evaluator.try_write_artifacts();
             evaluator.shutdown();
-        }
+            result
+        } else {
+            Ok(())
+        };
         runtime.shutdown();
         if let Some(command_rx) = &self.command_rx {
             let _ = command_rx.tx.send(OnPolicyCommandResult::Stopped);
         }
-        Ok(())
+        match self.error.take() {
+            Some(error) => Err(error),
+            None => artifact_result,
+        }
     }
 }

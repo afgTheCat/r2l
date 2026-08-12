@@ -288,7 +288,8 @@ pub fn train_ppo(
         .with_reporter(Some(tx))
         .with_command_rx(command_rx);
     let mut ppo = ppo_builder.build()?;
-    ppo.train()
+    ppo.train()?;
+    Ok(())
 }
 
 /// Forwards PPO updates into the UI event channel.

@@ -1,10 +1,8 @@
-use anyhow::Result;
-
 use crate::{
     HookResult, break_on_hook_result,
     buffers::{TrajectoryBatch, buffer::TrajectoryView},
+    error::Error,
     models::Actor,
-    return_on_hook_result,
     tensor::R2lTensor,
     utils::{actor_wrapper::ActorWrapper, buffer_wrapper::TrajectoryViewsWrapper},
 };
@@ -25,7 +23,10 @@ pub trait Agent {
     /// # Errors
     ///
     /// Returns an error if the agent update fails.
-    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()>;
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(
+        &mut self,
+        buffers: &[B],
+    ) -> std::result::Result<(), Error>;
 
     /// Sets the learning rate used by future updates.
     fn set_learning_rate(&mut self, learning_rate: f64);
@@ -78,7 +79,7 @@ impl<A: Agent, S: Sampler> OnPolicyRuntime<A, S> {
     /// # Errors
     ///
     /// Returns an error if the agent cannot learn from the collected trajectories.
-    pub fn learn(&mut self) -> Result<()> {
+    pub fn learn(&mut self) -> std::result::Result<(), Error> {
         let views = self.sampler.trajectory_views();
         let buffers = views
             .as_ref()
@@ -108,34 +109,14 @@ pub trait OnPolicyAlgorithmHooks {
     type S: Sampler;
 
     /// Called once before rollout/training starts.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if hook initialization fails.
-    fn init_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> std::result::Result<HookResult, crate::error::Error>;
+    fn init_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult;
 
     /// Called after rollouts are collected and before agent learning.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if post-rollout processing fails.
-    fn post_rollout_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> std::result::Result<HookResult, crate::error::Error>;
+    fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult;
 
     /// Called after the agent has learned from the latest rollouts.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if post-training processing fails.
-    fn post_training_hook(
-        &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> std::result::Result<HookResult, crate::error::Error>;
+    fn post_training_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>)
+    -> HookResult;
 
     /// Called once when the loop exits.
     ///
@@ -145,7 +126,7 @@ pub trait OnPolicyAlgorithmHooks {
     fn shutdown_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> std::result::Result<(), crate::error::Error>;
+    ) -> std::result::Result<(), Error>;
 }
 
 /// Generic on-policy training loop combining a runtime with lifecycle hooks.
@@ -166,19 +147,30 @@ impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgo
     ///
     /// # Errors
     ///
-    /// Returns an error if learning or hook shutdown fails.
-    pub fn train(&mut self) -> Result<()> {
-        return_on_hook_result!(self.hooks.init_hook(&mut self.runtime)?);
-        loop {
-            self.runtime.collect();
-            break_on_hook_result!(self.hooks.post_rollout_hook(&mut self.runtime)?);
+    /// Returns an error if learning fails or a hook reports a deferred failure
+    /// during shutdown.
+    pub fn train(&mut self) -> std::result::Result<(), Error> {
+        let mut training_error = None;
+        if matches!(
+            self.hooks.init_hook(&mut self.runtime),
+            HookResult::Continue
+        ) {
+            loop {
+                self.runtime.collect();
+                break_on_hook_result!(self.hooks.post_rollout_hook(&mut self.runtime));
 
-            self.runtime.learn()?;
-            let hook_result = self.hooks.post_training_hook(&mut self.runtime)?;
-            break_on_hook_result!(hook_result);
+                if let Err(error) = self.runtime.learn() {
+                    training_error = Some(error);
+                    break;
+                }
+                break_on_hook_result!(self.hooks.post_training_hook(&mut self.runtime));
+            }
         }
 
-        self.hooks.shutdown_hook(&mut self.runtime)?;
-        Ok(())
+        let shutdown_result = self.hooks.shutdown_hook(&mut self.runtime);
+        match training_error {
+            Some(error) => Err(error),
+            None => shutdown_result,
+        }
     }
 }

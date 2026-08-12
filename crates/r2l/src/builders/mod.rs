@@ -597,6 +597,7 @@ impl<E: Env> Builder<E> {
             evaluator,
             timing_recorder,
             command_rx: self.policy_command_rx,
+            error: None,
             _phantom: PhantomData,
         })
     }

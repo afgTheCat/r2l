@@ -130,7 +130,8 @@ pub fn train_ppo(
         .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
         .with_reporter(Some(tx));
     let mut ppo = ppo_builder.build()?;
-    ppo.train()
+    ppo.train()?;
+    Ok(())
 }
 
 fn main() -> eframe::Result {

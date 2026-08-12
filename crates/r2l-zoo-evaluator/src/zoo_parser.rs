@@ -172,9 +172,10 @@ impl RlZooEnvironmentConfig {
             builder = builder.with_reward_normalizer(self.gamma, 10.0);
         }
         match backend {
-            Backend::Burn => builder.with_burn().build()?.train(),
-            Backend::Candle => builder.build()?.train(),
-        }
+            Backend::Burn => builder.with_burn().build()?.train()?,
+            Backend::Candle => builder.build()?.train()?,
+        };
+        Ok(())
     }
 }
 

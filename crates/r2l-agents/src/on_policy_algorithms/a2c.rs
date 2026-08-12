@@ -185,8 +185,12 @@ impl<M: OnPolicyLearner, H: A2CHook<M>> Agent for A2C<M, H> {
         self.lm.inference_policy()
     }
 
-    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(
+        &mut self,
+        buffers: &[B],
+    ) -> std::result::Result<(), r2l_core::error::Error> {
         A2C::learn(self, buffers)
+            .map_err(|error| r2l_core::error::Error::Wrapped(error.into_boxed_dyn_error()))
     }
 
     fn set_learning_rate(&mut self, learning_rate: f64) {
