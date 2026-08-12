@@ -157,12 +157,14 @@ pub trait Env {
     ///
     /// Returns an error if the environment cannot be reset.
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
+
     /// Applies one action and returns the resulting transition snapshot.
     ///
     /// # Errors
     ///
     /// Returns an error if the environment cannot apply the action.
     fn step(&mut self, action: Self::Tensor) -> Result<Snapshot<Self::Tensor>>;
+
     /// Returns static observation/action space metadata.
     fn env_description(&self) -> EnvDescription<Self::Tensor>;
 }

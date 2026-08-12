@@ -40,6 +40,8 @@
 pub mod buffers;
 /// Environment traits and space descriptions.
 pub mod env;
+/// Error types
+pub mod error;
 /// Actor, policy, value-function, and learner traits.
 pub mod models;
 /// Shared interfaces for on-policy training loops.

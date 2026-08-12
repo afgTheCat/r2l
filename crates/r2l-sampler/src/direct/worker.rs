@@ -122,7 +122,7 @@ impl<E: Env> Worker<E> {
 
     pub fn collect(&mut self, bound: RolloutMode) {
         let Some(actor) = &mut self.actor else {
-            todo!()
+            unreachable!()
         };
         let mut buffer = self.buffer.lock().unwrap();
         match bound {

@@ -28,8 +28,6 @@ pub mod composite;
 pub mod diagonal;
 /// Multi-categorical policy distribution for multi-discrete action spaces.
 pub mod multi_categorical;
-/// Recurrent categorical policy distribution for discrete action spaces.
-pub mod recurrent_categorical;
 
 /// Erased Burn policy type covering the supported action-space variants.
 ///

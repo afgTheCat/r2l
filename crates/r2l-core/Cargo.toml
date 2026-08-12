@@ -17,6 +17,7 @@ candle-core = { workspace = true, optional = true }
 burn = { workspace = true, optional = true }
 itertools = { workspace = true }
 serde = { workspace = true }
+thiserror = { workspace = true }
 
 [features]
 candle = ["dep:candle-core"]
