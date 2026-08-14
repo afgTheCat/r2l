@@ -1,5 +1,4 @@
 // ANCHOR: env_builders
-use anyhow::{Ok, Result};
 use r2l::{Env, EnvBuilder, EnvDescription, PPOAlgorithmBuilder, Snapshot, Space, TensorData};
 use r2l_gym::GymEnvBuilder;
 
@@ -9,11 +8,14 @@ pub struct MyEnv;
 impl Env for MyEnv {
     type Tensor = TensorData;
 
-    fn reset(&mut self, _seed: u64) -> Result<Self::Tensor> {
+    fn reset(&mut self, seed: u64) -> std::result::Result<Self::Tensor, r2l_core::error::Error> {
         Ok(TensorData::new(vec![0., 0.], vec![2]))
     }
 
-    fn step(&mut self, _action: Self::Tensor) -> Result<Snapshot<Self::Tensor>> {
+    fn step(
+        &mut self,
+        action: Self::Tensor,
+    ) -> std::result::Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
         let state = TensorData::new(vec![0., 0.], vec![2]);
         let reward = 0.;
         let terminated = false;
@@ -38,12 +40,12 @@ struct MyEnvBuilder;
 impl EnvBuilder for MyEnvBuilder {
     type Env = MyEnv;
 
-    fn build_env(&self) -> Result<Self::Env> {
+    fn build_env(&self) -> std::result::Result<Self::Env, r2l_core::error::Error> {
         Ok(MyEnv)
     }
 }
 
-fn build_env() -> Result<MyEnv> {
+fn build_env() -> Result<MyEnv, r2l_core::error::Error> {
     Ok(MyEnv)
 }
 

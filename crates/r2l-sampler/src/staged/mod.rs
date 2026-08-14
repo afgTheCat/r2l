@@ -107,7 +107,7 @@ impl<E: Env> StagedSamplerCore<E> {
                 let (result_tx, result_rx) = crossbeam::channel::unbounded();
                 worker_handles.push(ThreadHandle::new(command_tx, result_rx));
                 let env_builder = env_builder.clone();
-                let env_builder = move || env_builder.build_idx(idx).map_err(anyhow::Error::new);
+                let env_builder = move || env_builder.build_idx(idx);
                 ThreadWorkerFactory::new(command_rx, result_tx, env_builder.clone(), sample_u64())
             })
             .collect();

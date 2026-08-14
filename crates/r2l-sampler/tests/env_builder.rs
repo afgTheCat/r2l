@@ -3,7 +3,6 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use anyhow::Result;
 use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     tensor::TensorData,
@@ -18,11 +17,14 @@ struct TestEnv;
 impl Env for TestEnv {
     type Tensor = TensorData;
 
-    fn reset(&mut self, _seed: u64) -> Result<Self::Tensor> {
+    fn reset(&mut self, seed: u64) -> std::result::Result<Self::Tensor, r2l_core::error::Error> {
         Ok(TensorData::new(vec![0.0], vec![1]))
     }
 
-    fn step(&mut self, _action: Self::Tensor) -> Result<Snapshot<Self::Tensor>> {
+    fn step(
+        &mut self,
+        action: Self::Tensor,
+    ) -> std::result::Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
         Ok(Snapshot::new(
             TensorData::new(vec![0.0], vec![1]),
             0.0,

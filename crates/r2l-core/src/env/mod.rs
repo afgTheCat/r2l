@@ -2,8 +2,6 @@ pub mod normalizer;
 
 use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
-use anyhow::Result;
-
 use crate::error::{Error, InvalidParameterError};
 use crate::tensor::R2lTensor;
 
@@ -156,14 +154,17 @@ pub trait Env {
     /// # Errors
     ///
     /// Returns an error if the environment cannot be reset.
-    fn reset(&mut self, seed: u64) -> Result<Self::Tensor>;
+    fn reset(&mut self, seed: u64) -> std::result::Result<Self::Tensor, crate::error::Error>;
 
     /// Applies one action and returns the resulting transition snapshot.
     ///
     /// # Errors
     ///
     /// Returns an error if the environment cannot apply the action.
-    fn step(&mut self, action: Self::Tensor) -> Result<Snapshot<Self::Tensor>>;
+    fn step(
+        &mut self,
+        action: Self::Tensor,
+    ) -> std::result::Result<Snapshot<Self::Tensor>, crate::error::Error>;
 
     /// Returns static observation/action space metadata.
     fn env_description(&self) -> EnvDescription<Self::Tensor>;
@@ -181,14 +182,16 @@ pub trait EnvBuilder: Sync + Send + 'static {
     /// # Errors
     ///
     /// Returns an error if the environment cannot be constructed.
-    fn build_env(&self) -> Result<Self::Env>;
+    fn build_env(&self) -> std::result::Result<Self::Env, crate::error::Error>;
 
     /// Returns the environment description for produced environments.
     ///
     /// # Errors
     ///
     /// Returns an error if a representative environment cannot be constructed.
-    fn env_description(&self) -> Result<EnvDescription<<Self::Env as Env>::Tensor>> {
+    fn env_description(
+        &self,
+    ) -> std::result::Result<EnvDescription<<Self::Env as Env>::Tensor>, crate::error::Error> {
         let env = self.build_env()?;
         Ok(env.env_description())
     }
@@ -200,11 +203,11 @@ pub type TensorOfEnvBuilder<EB> = <<EB as EnvBuilder>::Env as Env>::Tensor;
 
 impl<E: Env, F: Sync + Send + 'static> EnvBuilder for F
 where
-    F: Fn() -> Result<E>,
+    F: Fn() -> std::result::Result<E, crate::error::Error>,
 {
     type Env = E;
 
-    fn build_env(&self) -> Result<Self::Env> {
+    fn build_env(&self) -> std::result::Result<E, crate::error::Error> {
         (self)()
     }
 }
@@ -307,12 +310,8 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
             )));
         }
         match &self.0 {
-            EnvBuilderKind::Homogeneous { builder, .. } => builder
-                .build_env()
-                .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error())),
-            EnvBuilderKind::Heterogeneous { builders } => builders[idx]
-                .build_env()
-                .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error())),
+            EnvBuilderKind::Homogeneous { builder, .. } => builder.build_env(),
+            EnvBuilderKind::Heterogeneous { builders } => builders[idx].build_env(),
         }
     }
 
@@ -334,12 +333,8 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
         &self,
     ) -> std::result::Result<EnvDescription<<EB::Env as Env>::Tensor>, Error> {
         match &self.0 {
-            EnvBuilderKind::Homogeneous { builder, n_envs: _ } => builder
-                .env_description()
-                .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error())),
-            EnvBuilderKind::Heterogeneous { builders } => builders[0]
-                .env_description()
-                .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error())),
+            EnvBuilderKind::Homogeneous { builder, n_envs: _ } => builder.env_description(),
+            EnvBuilderKind::Heterogeneous { builders } => builders[0].env_description(),
         }
     }
 }
