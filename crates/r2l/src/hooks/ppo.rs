@@ -14,7 +14,7 @@ use r2l_candle::learning_module::{
     PolicyValueLearner as CandlePolicyValueLearner, PolicyValueLosses as CandlePolicyValueLosses,
 };
 use r2l_core::{
-    HookResult, buffers::TrajectoryBatch, models::Policy,
+    HookResult, buffers::TrajectoryBatch, error::Result, models::Policy,
     on_policy::learning_module::OnPolicyLearner,
 };
 
@@ -265,7 +265,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
         _batches: &[BT],
         advantages: &mut Advantages,
         _returns: &mut Returns,
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         self.current_epoch = 0;
         self.rollout_idx += 1;
         if self.normalize_advantage {
@@ -282,7 +282,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
         params: &mut PPOParams,
         module: &mut BurnPolicyValueLearner<B, D>,
         batches: &[BT],
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         self.current_epoch += 1;
         let target_kl_exceeded = if let Some(target_kl) = &mut self.target_kl {
             target_kl.target_kl_exceeded()
@@ -293,7 +293,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
         if should_stop {
             if let Some(reporter) = &mut self.reporter {
                 reporter.update_average_reward(batches);
-                reporter.report.std = module.policy().std().ok();
+                reporter.report.std = module.policy().std()?;
                 reporter.report.learning_rate = module.policy_learning_rate();
                 reporter.report.clip_range = params.clip_range;
                 reporter.send_report(self.rollout_idx);
@@ -310,7 +310,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
         module: &mut BurnPolicyValueLearner<B, D>,
         losses: &mut BurnPolicyValueLosses<B>,
         data: &PPOBatchData<burn::Tensor<B, 1>>,
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
         let entropy = module.policy().entropy(&data.observations).unwrap();
         let entropy_loss = entropy.neg() * self.entropy_coeff;
@@ -364,7 +364,7 @@ impl PPOHook<CandlePolicyValueLearner> for DefaultPPOHook<CandlePolicyValueLearn
         _batches: &[BT],
         advantages: &mut Advantages,
         _returns: &mut Returns,
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         self.rollout_idx += 1;
         self.current_epoch = 0;
         if self.normalize_advantage {
@@ -379,7 +379,7 @@ impl PPOHook<CandlePolicyValueLearner> for DefaultPPOHook<CandlePolicyValueLearn
         params: &mut PPOParams,
         module: &mut CandlePolicyValueLearner,
         batches: &[BT],
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         self.current_epoch += 1;
         let target_kl_exceeded = if let Some(target_kl) = &mut self.target_kl {
             target_kl.target_kl_exceeded()
@@ -390,7 +390,7 @@ impl PPOHook<CandlePolicyValueLearner> for DefaultPPOHook<CandlePolicyValueLearn
         if should_stop {
             if let Some(reporter) = &mut self.reporter {
                 reporter.update_average_reward(batches);
-                reporter.report.std = module.policy().std().ok();
+                reporter.report.std = module.policy().std()?;
                 reporter.report.learning_rate = module.policy_learning_rate();
                 reporter.report.clip_range = params.clip_range;
                 reporter.send_report(self.rollout_idx);
@@ -407,7 +407,7 @@ impl PPOHook<CandlePolicyValueLearner> for DefaultPPOHook<CandlePolicyValueLearn
         module: &mut CandlePolicyValueLearner,
         losses: &mut CandlePolicyValueLosses,
         data: &PPOBatchData<candle_core::Tensor>,
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
         let entropy = module.policy().entropy(&data.observations).unwrap();
         let device = entropy.device();

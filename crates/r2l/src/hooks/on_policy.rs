@@ -176,7 +176,7 @@ pub enum OnPolicyCommandResult {
     /// Training stopped completely, runtime cleanup has happened
     Stopped,
     /// Result of attempting to serialize the current runtime actor.
-    CurrentPolicySerialized(std::result::Result<(), Error>),
+    CurrentPolicySerialized(Result<(), Error>),
 }
 
 /// Algorithm-side endpoint for receiving on-policy commands.
@@ -216,7 +216,7 @@ impl OnPolicyCommandSender {
     /// # Errors
     ///
     /// Returns an error if the training-side command receiver has disconnected.
-    pub fn shutdown(&self) -> std::result::Result<(), Error> {
+    pub fn shutdown(&self) -> Result<(), Error> {
         self.tx.send(OnPolicyCommand::Shutdown).map_err(|error| {
             Error::ResourceInterrupted(ResourceInterrupted {
                 resource: "on-policy command channel".into(),
@@ -388,7 +388,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
     fn shutdown_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> std::result::Result<(), Error> {
+    ) -> Result<(), Error> {
         let artifact_result = if let Some(evaluator) = &mut self.evaluator {
             let result = evaluator.try_write_artifacts();
             evaluator.shutdown();

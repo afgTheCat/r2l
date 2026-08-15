@@ -1,8 +1,8 @@
 //! Prototype A2C training path that consumes trajectory batches directly.
 
-use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryBatch,
+    error::Result,
     models::{Learner, Policy},
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
@@ -63,7 +63,7 @@ pub trait A2CHook<M: OnPolicyLearner> {
         _batches: &[B],
         _advantages: &mut Advantages,
         _returns: &mut Returns,
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
@@ -78,7 +78,7 @@ pub trait A2CHook<M: OnPolicyLearner> {
         _module: &mut M,
         _losses: &mut <M as Learner>::Losses,
         _data: &A2CBatchData<M::LearningTensor>,
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
@@ -92,7 +92,7 @@ pub trait A2CHook<M: OnPolicyLearner> {
         _params: &mut A2CParams,
         _module: &mut M,
         _batches: &[B],
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         Ok(HookResult::Continue)
     }
 }
@@ -113,7 +113,7 @@ impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
         batches: &[B],
         advantages: &Advantages,
         returns: &Returns,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let mut batch_indices = ShuffledBatchIndices::new(batches, self.params.sample_size);
         let lm = &mut self.lm;
         loop {
@@ -121,8 +121,8 @@ impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
                 return Ok(());
             };
             let (observations, actions) = sample(batches, &indices, Module::lifter);
-            let advantages = lm.tensor_from_slice(&advantages.sample(&indices));
-            let returns = lm.tensor_from_slice(&returns.sample(&indices));
+            let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
+            let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
             let logp = lm.policy().log_probs(&observations, &actions)?;
             let values_pred = lm.values(&observations)?;
             let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
@@ -185,12 +185,8 @@ impl<M: OnPolicyLearner, H: A2CHook<M>> Agent for A2C<M, H> {
         self.lm.inference_policy()
     }
 
-    fn learn<B: TrajectoryBatch<Self::Tensor>>(
-        &mut self,
-        buffers: &[B],
-    ) -> std::result::Result<(), r2l_core::error::Error> {
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
         A2C::learn(self, buffers)
-            .map_err(|error| r2l_core::error::Error::Wrapped(error.into_boxed_dyn_error()))
     }
 
     fn set_learning_rate(&mut self, learning_rate: f64) {

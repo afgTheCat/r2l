@@ -17,16 +17,16 @@ struct TestEnv;
 impl Env for TestEnv {
     type Tensor = TensorData;
 
-    fn reset(&mut self, seed: u64) -> std::result::Result<Self::Tensor, r2l_core::error::Error> {
-        Ok(TensorData::new(vec![0.0], vec![1]))
+    fn reset(&mut self, seed: u64) -> Result<Self::Tensor, r2l_core::error::Error> {
+        Ok(TensorData::new(vec![0.0], vec![1])?)
     }
 
     fn step(
         &mut self,
         action: Self::Tensor,
-    ) -> std::result::Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
+    ) -> Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
         Ok(Snapshot::new(
-            TensorData::new(vec![0.0], vec![1]),
+            TensorData::new(vec![0.0], vec![1])?,
             0.0,
             false,
             false,

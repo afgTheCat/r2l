@@ -161,7 +161,7 @@ impl InferenceArtifacts {
                 let serialized = artifact.read_to_string()?;
                 let normalizer_builder: NormalizerBuilder = yaml_serde::from_str(&serialized)
                     .map_err(|error| artifact.decode_error(Box::new(error)))?;
-                Some(normalizer_builder.into_normalizer())
+                Some(normalizer_builder.into_normalizer()?)
             }
         };
         let env_description = env.env_description();
@@ -180,7 +180,7 @@ impl InferenceArtifacts {
                     self.config.policy_builder.activation_function,
                     self.config.policy_builder.log_std_init,
                 )
-                .map_err(|error| actor_artifact.decode_error(error.into_boxed_dyn_error()))?;
+                .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
             InferenceBackend::Burn(_) => {
@@ -190,14 +190,13 @@ impl InferenceArtifacts {
                     .build_burn::<NdArray, _>(
                         env_description.observation_space.size(),
                         env_description.action_space,
-                    )
+                    )?
                     .load_from_bytes(actor_bytes)
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))
             }
         };
         InferenceRunner::new(env, obs_normalizer, actor)
-            .map_err(|error| Error::Wrapped(error.into_boxed_dyn_error()))
     }
 }
 
@@ -213,14 +212,14 @@ enum InferenceActor<T: R2lTensor> {
 impl<T: R2lTensor> Actor for InferenceActor<T> {
     type Tensor = T;
 
-    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor, Error> {
         match self {
             Self::Candle(actor) => actor.action(observation),
             Self::Burn(actor) => actor.action(observation),
         }
     }
 
-    fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor, Error> {
         match self {
             Self::Candle(actor) => actor.mode_action(observation),
             Self::Burn(actor) => actor.mode_action(observation),
@@ -241,10 +240,10 @@ impl<E: Env> InferenceRunner<E> {
         mut env: E,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
         actor: InferenceActor<E::Tensor>,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, Error> {
         let mut last_state = env.reset(sample_u64())?;
         if let Some(obs_normalizer) = &obs_normalizer {
-            obs_normalizer.apply_tensor_in_place(&mut last_state);
+            obs_normalizer.apply_tensor_in_place(&mut last_state)?;
         }
         Ok(Self {
             env,
@@ -259,10 +258,10 @@ impl<E: Env> InferenceRunner<E> {
     /// # Errors
     ///
     /// Returns an error if the environment cannot be reset.
-    pub fn reset(&mut self) -> anyhow::Result<()> {
+    pub fn reset(&mut self) -> Result<(), Error> {
         let mut last_state = self.env.reset(sample_u64())?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
-            obs_normalizer.apply_tensor_in_place(&mut last_state);
+            obs_normalizer.apply_tensor_in_place(&mut last_state)?;
         }
         self.last_state = last_state;
         Ok(())
@@ -273,11 +272,11 @@ impl<E: Env> InferenceRunner<E> {
     /// # Errors
     ///
     /// Returns an error if action inference or the environment step fails.
-    pub fn mode_step(&mut self) -> anyhow::Result<Snapshot<E::Tensor>> {
+    pub fn mode_step(&mut self) -> Result<Snapshot<E::Tensor>, Error> {
         let action = self.actor.mode_action(self.last_state.clone())?;
         let mut snapshot = self.env.step(action)?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
-            obs_normalizer.apply_tensor_in_place(&mut snapshot.state);
+            obs_normalizer.apply_tensor_in_place(&mut snapshot.state)?;
         }
         self.last_state = snapshot.state.clone();
         Ok(snapshot)
@@ -288,11 +287,11 @@ impl<E: Env> InferenceRunner<E> {
     /// # Errors
     ///
     /// Returns an error if action inference or the environment step fails.
-    pub fn step(&mut self) -> anyhow::Result<Snapshot<E::Tensor>> {
+    pub fn step(&mut self) -> Result<Snapshot<E::Tensor>, Error> {
         let action = self.actor.action(self.last_state.clone())?;
         let mut snapshot = self.env.step(action)?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
-            obs_normalizer.apply_tensor_in_place(&mut snapshot.state);
+            obs_normalizer.apply_tensor_in_place(&mut snapshot.state)?;
         }
         self.last_state = snapshot.state.clone();
         Ok(snapshot)

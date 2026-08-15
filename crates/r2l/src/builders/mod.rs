@@ -23,6 +23,7 @@ use r2l_core::env::EnvDescription;
 use r2l_core::env::normalizer::{ClippedNormalizer, NormalizerMode};
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
+    error::Error,
     models::{ActivationFunction, ToSafetensors},
     on_policy::{
         algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime, Sampler},
@@ -321,7 +322,7 @@ trait EnvBuildPlan<E: Env> {
         episodes_per_evaluation: usize,
         evaluation_execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> EvaluationSampler<E>;
+    ) -> Result<EvaluationSampler<E>, Error>;
 
     fn build_direct_sampler_core(
         &self,
@@ -332,7 +333,7 @@ trait EnvBuildPlan<E: Env> {
         &self,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> StagedSamplerCore<E>;
+    ) -> Result<StagedSamplerCore<E>, Error>;
 }
 
 struct TypedEnvBuildPlan<EB: EnvBuilder> {
@@ -345,7 +346,7 @@ impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
         episodes_per_evaluation: usize,
         evaluation_execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
-    ) -> EvaluationSampler<EB::Env> {
+    ) -> Result<EvaluationSampler<EB::Env>, Error> {
         EvaluationSampler::build(
             self.env_builder.clone(),
             episodes_per_evaluation,
@@ -365,7 +366,7 @@ impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
         &self,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
-    ) -> StagedSamplerCore<EB::Env> {
+    ) -> Result<StagedSamplerCore<EB::Env>, Error> {
         StagedSamplerCore::build(&self.env_builder, execution_mode, obs_normalizer)
     }
 }
@@ -408,7 +409,7 @@ impl<E: Env> Builder<E> {
         algorithm_configuration: AlgorithmConfiguration,
         backend_configuration: BackendConfiguration,
         sampler_configuration: SamplerConfiguration<E>,
-    ) -> std::result::Result<Self, r2l_core::error::Error> {
+    ) -> Result<Self, r2l_core::error::Error> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
         let env_desription = env_builder.env_description()?;
         Ok(Self {
@@ -453,7 +454,7 @@ impl<E: Env> Builder<E> {
         self.optimizer_layout = update(self.optimizer_layout.clone());
     }
 
-    fn build_candle_learner(&self, device: &Device) -> anyhow::Result<CandlePolicyValueLearner> {
+    fn build_candle_learner(&self, device: &Device) -> Result<CandlePolicyValueLearner, Error> {
         let observation_size = self.env_desription.observation_size();
         let (policy, policy_varmap) = self.policy_config.build_candle_with_varmap(
             observation_size,
@@ -491,14 +492,14 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn build_burn_learner<B: AutodiffBackend>(&self) -> BurnPolicyValueLearner<B> {
+    fn build_burn_learner<B: AutodiffBackend>(&self) -> Result<BurnPolicyValueLearner<B>, Error> {
         let observation_size = self.env_desription.observation_size();
         let policy = self
             .policy_config
-            .build_burn::<B, _>(observation_size, self.env_desription.action_space.clone());
+            .build_burn::<B, _>(observation_size, self.env_desription.action_space.clone())?;
         let activation_function = self.policy_config.activation_function;
         let value_layers = &[&[observation_size][..], &self.value_hidden_layers[..], &[1]].concat();
-        match &self.optimizer_layout {
+        Ok(match &self.optimizer_layout {
             OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
                 params,
@@ -532,7 +533,7 @@ impl<E: Env> Builder<E> {
                     value_params.lr,
                 )
             }
-        }
+        })
     }
 
     fn candle_optimizer_params(params: &AdamWParams) -> ParamsAdamW {
@@ -560,7 +561,7 @@ impl<E: Env> Builder<E> {
 
     fn default_on_policy_hook<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>>(
         self,
-    ) -> anyhow::Result<DefaultOnPolicyAlgorithmHooks<A, S, E>> {
+    ) -> Result<DefaultOnPolicyAlgorithmHooks<A, S, E>, Error> {
         let (evaluator, timing_recorder) = if let Some(config) = self.training_artifacts {
             let evaluator = if config.needs_evaluator() {
                 let obs_normalizer = self
@@ -571,7 +572,7 @@ impl<E: Env> Builder<E> {
                     config.evaluation_settings.episodes_per_evaluation,
                     config.evaluation_settings.evaluation_execution_mode,
                     obs_normalizer,
-                );
+                )?;
                 Some(BestActorEvaluator::new(
                     sampler,
                     config.output_dir.clone(),
@@ -583,7 +584,7 @@ impl<E: Env> Builder<E> {
                 None
             };
             let timing_recorder = if config.needs_timing_recorder() {
-                Some(TrainingTimingRecorder::create(&config.output_dir)?)
+                Some(TrainingTimingRecorder::create(&config.output_dir).map_err(Error::wrap)?)
             } else {
                 None
             };
@@ -602,7 +603,7 @@ impl<E: Env> Builder<E> {
         })
     }
 
-    fn direct_sampler_step_bound(&self) -> DirectSampler<E, StepBoundHook<E>> {
+    fn direct_sampler_step_bound(&self) -> Result<DirectSampler<E, StepBoundHook<E>>, Error> {
         let SamplerConfiguration::DirectStep {
             rollout_steps,
             reward_normalizer,
@@ -614,10 +615,10 @@ impl<E: Env> Builder<E> {
             .env_build_plan
             .build_direct_sampler_core(self.sampler_execution_mode);
         let step_bound_hook = StepBoundHook::new(*rollout_steps, reward_normalizer.clone());
-        DirectSampler::new(sampler_core, step_bound_hook)
+        Ok(DirectSampler::new(sampler_core, step_bound_hook))
     }
 
-    fn direct_sampler_episode_bound(&self) -> DirectSampler<E, EpisodeBoundHook<E>> {
+    fn direct_sampler_episode_bound(&self) -> Result<DirectSampler<E, EpisodeBoundHook<E>>, Error> {
         let SamplerConfiguration::DirectEpisode { rollout_episodes } = &self.sampler_configuration
         else {
             unreachable!("direct episode-bound sampler type must use matching configuration")
@@ -626,10 +627,10 @@ impl<E: Env> Builder<E> {
             .env_build_plan
             .build_direct_sampler_core(self.sampler_execution_mode);
         let episode_bound_hook = EpisodeBoundHook::new(*rollout_episodes);
-        DirectSampler::new(sampler_core, episode_bound_hook)
+        Ok(DirectSampler::new(sampler_core, episode_bound_hook))
     }
 
-    fn staged_sampler_step_bound(&self) -> StagedSampler<E, StepBoundHook<E>> {
+    fn staged_sampler_step_bound(&self) -> Result<StagedSampler<E, StepBoundHook<E>>, Error> {
         let SamplerConfiguration::StagedStep {
             rollout_steps,
             reward_normalizer,
@@ -643,12 +644,12 @@ impl<E: Env> Builder<E> {
             .map(|normalizer| normalizer.with_mode(NormalizerMode::Update));
         let sampler_core = self
             .env_build_plan
-            .build_staged_sampler_core(self.sampler_execution_mode, obs_normalizer);
+            .build_staged_sampler_core(self.sampler_execution_mode, obs_normalizer)?;
         let step_bound_hook = StepBoundHook::new(*rollout_steps, reward_normalizer.clone());
-        StagedSampler::new(sampler_core, step_bound_hook)
+        Ok(StagedSampler::new(sampler_core, step_bound_hook))
     }
 
-    fn write_inference_config(&self, backend: InferenceBackend) -> anyhow::Result<()> {
+    fn write_inference_config(&self, backend: InferenceBackend) -> Result<(), Error> {
         if let Some(config) = &self.training_artifacts
             && config.inference_artifacts
         {
@@ -732,84 +733,80 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn ppo_candle_agent(&mut self) -> PPOCandle {
+    fn ppo_candle_agent(&mut self) -> Result<PPOCandle, Error> {
         let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
             unreachable!("Candle agent type must use Candle backend configuration")
         };
         let backend = backend.clone();
-        self.write_inference_config(InferenceBackend::Candle(backend.clone()))
-            .unwrap();
+        self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
         if let Some(seed) = self.seed {
             backend.seed(seed);
         }
-        let learner = self.build_candle_learner(&backend.device).unwrap();
+        let learner = self.build_candle_learner(&backend.device)?;
         let hooks = self.ppo_hook();
-        PPO {
+        Ok(PPO {
             lm: learner,
             hooks,
             params: self.ppo_params(),
-        }
+        })
     }
 
-    fn ppo_burn_agent(&mut self) -> PPOBurn<BurnBackend> {
+    fn ppo_burn_agent(&mut self) -> Result<PPOBurn<BurnBackend>, Error> {
         let BackendConfiguration::Burn(backend) = self.backend_configuration else {
             unreachable!("Burn agent type must use Burn backend configuration")
         };
-        self.write_inference_config(InferenceBackend::Burn(backend))
-            .unwrap();
+        self.write_inference_config(InferenceBackend::Burn(backend))?;
         if let Some(seed) = self.seed {
             BurnBackend::seed(&NdArrayDevice::default(), seed);
         }
-        let learner = self.build_burn_learner::<BurnBackend>();
+        let learner = self.build_burn_learner::<BurnBackend>()?;
         let hooks = self.ppo_hook();
-        PPO {
+        Ok(PPO {
             lm: learner,
             hooks,
             params: self.ppo_params(),
-        }
+        })
     }
 
-    fn a2c_candle_agent(&mut self) -> A2CCandle {
+    fn a2c_candle_agent(&mut self) -> Result<A2CCandle, Error> {
         let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
             unreachable!("Candle agent type must use Candle backend configuration")
         };
         let backend = backend.clone();
-        self.write_inference_config(InferenceBackend::Candle(backend.clone()))
-            .unwrap();
+        self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
         if let Some(seed) = self.seed {
             backend.seed(seed);
         }
-        let learner = self.build_candle_learner(&backend.device).unwrap();
+        let learner = self.build_candle_learner(&backend.device)?;
         let hooks = self.a2c_hook();
-        A2C {
+        Ok(A2C {
             lm: learner,
             hooks,
             params: self.a2c_params(),
-        }
+        })
     }
 
-    fn a2c_burn_agent(&mut self) -> A2CBurn<BurnBackend> {
+    fn a2c_burn_agent(&mut self) -> Result<A2CBurn<BurnBackend>, Error> {
         let BackendConfiguration::Burn(backend) = self.backend_configuration else {
             unreachable!("Burn agent type must use Burn backend configuration")
         };
-        self.write_inference_config(InferenceBackend::Burn(backend))
-            .unwrap();
+        self.write_inference_config(InferenceBackend::Burn(backend))?;
         if let Some(seed) = self.seed {
             BurnBackend::seed(&NdArrayDevice::default(), seed);
         }
-        let learner = self.build_burn_learner::<BurnBackend>();
+        let learner = self.build_burn_learner::<BurnBackend>()?;
         let hooks = self.a2c_hook();
-        A2C {
+        Ok(A2C {
             lm: learner,
             hooks,
             params: self.a2c_params(),
-        }
+        })
     }
 }
 
 struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
-    build_agent: fn(&mut Builder<E>) -> A,
-    build_sampler: fn(&Builder<E>) -> S,
+    build_agent: fn(&mut Builder<E>) -> Result<A, Error>,
+    build_sampler: fn(&Builder<E>) -> Result<S, Error>,
 }
 
 /// Configures and builds a complete PPO or A2C training algorithm.
@@ -839,9 +836,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         algorithm_configuration: AlgorithmConfiguration,
         backend_configuration: BackendConfiguration,
         sampler_configuration: SamplerConfiguration<E>,
-        build_agent: fn(&mut Builder<E>) -> A,
-        build_sampler: fn(&Builder<E>) -> S,
-    ) -> std::result::Result<Self, r2l_core::error::Error> {
+        build_agent: fn(&mut Builder<E>) -> Result<A, Error>,
+        build_sampler: fn(&Builder<E>) -> Result<S, Error>,
+    ) -> Result<Self, r2l_core::error::Error> {
         Ok(Self {
             builder: Builder::new(
                 env_builder,
@@ -859,7 +856,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     fn with_agent<A2: Agent>(
         self,
-        build_agent: fn(&mut Builder<E>) -> A2,
+        build_agent: fn(&mut Builder<E>) -> Result<A2, Error>,
     ) -> OnPolicyAlgoBuilder<A2, S, E> {
         OnPolicyAlgoBuilder {
             builder: self.builder,
@@ -872,7 +869,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     fn with_sampler<S2: Sampler<Tensor = E::Tensor>>(
         self,
-        build_sampler: fn(&Builder<E>) -> S2,
+        build_sampler: fn(&Builder<E>) -> Result<S2, Error>,
     ) -> OnPolicyAlgoBuilder<A, S2, E> {
         OnPolicyAlgoBuilder {
             builder: self.builder,
@@ -1088,12 +1085,12 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// Returns an error if the configured training algorithm cannot be constructed.
     pub fn build(
         mut self,
-    ) -> anyhow::Result<OnPolicyAlgorithm<A, S, DefaultOnPolicyAlgorithmHooks<A, S, E>>> {
+    ) -> Result<OnPolicyAlgorithm<A, S, DefaultOnPolicyAlgorithmHooks<A, S, E>>, Error> {
         if let Some(seed) = self.builder.seed {
             set_seed(seed);
         }
-        let agent = (self.config.build_agent)(&mut self.builder);
-        let sampler = (self.config.build_sampler)(&self.builder);
+        let agent = (self.config.build_agent)(&mut self.builder)?;
+        let sampler = (self.config.build_sampler)(&self.builder)?;
         let hooks = self.builder.default_on_policy_hook()?;
         Ok(OnPolicyAlgorithm::new(
             OnPolicyRuntime { agent, sampler },
@@ -1276,14 +1273,16 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     pub fn with_observation_normalizer(
         mut self,
         obs_clip: Option<f32>,
-    ) -> OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>, E> {
-        let obs_normalizer = obs_clip.map(|clip| {
-            ClippedNormalizer::build(
-                NormalizerMode::Update,
-                clip,
-                vec![self.builder.env_desription.observation_space.size()],
-            )
-        });
+    ) -> Result<OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>, Error> {
+        let obs_normalizer = obs_clip
+            .map(|clip| {
+                ClippedNormalizer::build(
+                    NormalizerMode::Update,
+                    clip,
+                    vec![self.builder.env_desription.observation_space.size()],
+                )
+            })
+            .transpose()?;
         let SamplerConfiguration::DirectStep {
             rollout_steps,
             reward_normalizer,
@@ -1296,7 +1295,7 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
             reward_normalizer,
             obs_normalizer,
         };
-        self.with_sampler(Builder::staged_sampler_step_bound)
+        Ok(self.with_sampler(Builder::staged_sampler_step_bound))
     }
 
     /// Selects direct sampling bounded by completed episodes per environment.
@@ -1363,7 +1362,7 @@ impl<E: Env> PPOAlgorithmBuilder<E> {
     pub fn new<EB: EnvBuilder<Env = E>>(
         env_builder: EB,
         n_envs: usize,
-    ) -> std::result::Result<Self, r2l_core::error::Error> {
+    ) -> Result<Self, r2l_core::error::Error> {
         Self::configured(
             env_builder,
             n_envs,
@@ -1396,7 +1395,7 @@ impl<E: Env> A2CAlgorithmBuilder<E> {
     pub fn new<EB: EnvBuilder<Env = E>>(
         env_builder: EB,
         n_envs: usize,
-    ) -> std::result::Result<Self, r2l_core::error::Error> {
+    ) -> Result<Self, r2l_core::error::Error> {
         Self::configured(
             env_builder,
             n_envs,
@@ -1426,7 +1425,7 @@ impl PPOAlgorithmBuilder<GymEnv> {
     pub fn gym<EB: Into<GymEnvBuilder>>(
         env_builder: EB,
         n_envs: usize,
-    ) -> std::result::Result<Self, r2l_core::error::Error> {
+    ) -> Result<Self, r2l_core::error::Error> {
         Self::new(env_builder.into(), n_envs)
     }
 }
@@ -1440,7 +1439,7 @@ impl A2CAlgorithmBuilder<GymEnv> {
     pub fn gym<EB: Into<GymEnvBuilder>>(
         env_builder: EB,
         n_envs: usize,
-    ) -> std::result::Result<Self, r2l_core::error::Error> {
+    ) -> Result<Self, r2l_core::error::Error> {
         Self::new(env_builder.into(), n_envs)
     }
 }

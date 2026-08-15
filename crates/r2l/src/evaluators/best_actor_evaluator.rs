@@ -32,24 +32,28 @@ impl<E: Env> EvaluationSampler<E> {
         n_episodes: usize,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Self {
+    ) -> Result<Self, Error> {
         let hook = EpisodeBoundHook::new(n_episodes);
         if let Some(obs_normalizer) = obs_normalizer {
-            Self::Staged(StagedSampler::build_with_obs_normalizer(
+            Ok(Self::Staged(StagedSampler::build_with_obs_normalizer(
                 &env_builder,
                 hook,
                 execution_mode,
                 Some(obs_normalizer),
-            ))
+            )?))
         } else {
-            Self::Direct(DirectSampler::build(env_builder, hook, execution_mode))
+            Ok(Self::Direct(DirectSampler::build(
+                env_builder,
+                hook,
+                execution_mode,
+            )))
         }
     }
 
     fn evaluate<A: Actor<Tensor = E::Tensor> + Clone>(
         &mut self,
         actor: A,
-    ) -> std::result::Result<(f32, f32), Error> {
+    ) -> Result<(f32, f32), Error> {
         match self {
             Self::Direct(sampler) => Self::evaluate_with_sampler(sampler, actor),
             Self::Staged(sampler) => Self::evaluate_with_sampler(sampler, actor),
@@ -59,7 +63,7 @@ impl<E: Env> EvaluationSampler<E> {
     fn evaluate_with_sampler<S: Sampler<Tensor = E::Tensor>>(
         sampler: &mut S,
         actor: impl Actor<Tensor = E::Tensor> + Clone,
-    ) -> std::result::Result<(f32, f32), Error> {
+    ) -> Result<(f32, f32), Error> {
         sampler.reset_all_envs()?;
         sampler.collect_rollouts(actor)?;
         let trajectories = sampler.trajectory_views();
@@ -76,12 +80,14 @@ impl<E: Env> EvaluationSampler<E> {
         Ok((total_reward, total_episodes))
     }
 
-    fn normalizer_snapshot(&self) -> Option<NormalizerBuilder> {
+    fn normalizer_snapshot(&self) -> Result<Option<NormalizerBuilder>, Error> {
         match self {
-            Self::Direct(_) => None,
+            Self::Direct(_) => Ok(None),
             Self::Staged(sampler) => sampler
                 .obs_normalizer()
-                .map(NormalizerBuilder::from_normalizer),
+                .map(NormalizerBuilder::from_normalizer)
+                .transpose()
+                .map_err(Into::into),
         }
     }
 
@@ -208,7 +214,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
     pub fn eval<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
         &mut self,
         rt: &mut OnPolicyRuntime<AG, TS>,
-    ) -> std::result::Result<bool, Error> {
+    ) -> Result<bool, Error> {
         self.current_evaluator_step += 1;
         if self
             .current_evaluator_step
@@ -228,7 +234,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         &mut self,
         adapted_actor: impl Actor<Tensor = E::Tensor> + Clone,
         actor: A,
-    ) -> std::result::Result<(), Error> {
+    ) -> Result<(), Error> {
         let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor)?;
         let avg_reward = total_reward / total_episodes;
         if self.write_evaluation_results {
@@ -241,7 +247,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
             self.best_rewards = avg_reward;
             if self.write_inference_artifacts {
                 self.best_actor = Some(actor);
-                self.best_obs_normalizer = self.sampler.normalizer_snapshot();
+                self.best_obs_normalizer = self.sampler.normalizer_snapshot()?;
             }
             self.try_write_artifacts()?;
         }
@@ -249,7 +255,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
     }
 
     /// Writes the enabled inference artifacts and evaluation results.
-    pub fn try_write_artifacts(&self) -> std::result::Result<(), Error> {
+    pub fn try_write_artifacts(&self) -> Result<(), Error> {
         std::fs::create_dir_all(&self.output_dir).map_err(Error::wrap)?;
         if self.write_inference_artifacts {
             let Some(actor) = &self.best_actor else {

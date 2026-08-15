@@ -1,8 +1,8 @@
-use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use r2l_core::{
     env::Space,
+    error::{Result, TensorError},
     models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     tensor::R2lTensor,
 };
@@ -50,6 +50,12 @@ impl CompositeDistribution {
                 &child_prefix,
             )?);
             action_sizes.push(action_size);
+        }
+        if policies.is_empty() {
+            return Err(TensorError::EmptyInput {
+                operation: "build composite policy".into(),
+            }
+            .into());
         }
         Ok(Self {
             policies,
@@ -101,7 +107,7 @@ impl Actor for CompositeDistribution {
 }
 
 impl ToSafetensors for CompositeDistribution {
-    fn to_safetensors(&self) -> std::result::Result<Vec<u8>, r2l_core::error::Error> {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let metadata = PolicyMetadata {
             activation: self.activation,
         }
@@ -113,6 +119,8 @@ impl ToSafetensors for CompositeDistribution {
 
 impl Policy for CompositeDistribution {
     fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!states.is_empty());
+        debug_assert_eq!(states.len(), actions.len());
         let mut offset = 0;
         let mut log_probs = Vec::new();
         for (policy, action_size) in self.policies.iter().zip(&self.action_sizes) {
@@ -127,6 +135,7 @@ impl Policy for CompositeDistribution {
     }
 
     fn entropy(&self, states: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!states.is_empty());
         let mut entropies = Vec::new();
         for policy in &self.policies {
             entropies.push(policy.entropy(states)?);
@@ -134,7 +143,7 @@ impl Policy for CompositeDistribution {
         Ok(Tensor::stack(&entropies, 0)?.sum_all()?)
     }
 
-    fn std(&self) -> Result<f32> {
-        bail!("standard deviation is not defined for composite distributions")
+    fn std(&self) -> Result<Option<f32>> {
+        Ok(None)
     }
 }

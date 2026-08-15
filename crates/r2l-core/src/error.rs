@@ -4,6 +4,9 @@ use std::{error::Error as StdError, fmt, path::PathBuf};
 /// `r2l-core`.
 pub type BoxedError = Box<dyn StdError + Send + Sync + 'static>;
 
+/// Result type returned by fallible `r2l` operations.
+pub type Result<T> = std::result::Result<T, Error>;
+
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self}")
@@ -141,6 +144,59 @@ pub struct EnvironmentError {
     pub source: BoxedError,
 }
 
+/// Reason a tensor operation failed.
+#[derive(Debug, thiserror::Error)]
+pub enum TensorError {
+    /// Two operands do not have compatible shapes.
+    #[error("shape mismatch for tensor operation `{operation}`: left {left:?}, right {right:?}")]
+    ShapeMismatch {
+        /// Operation requiring compatible shapes.
+        operation: String,
+        /// Left-hand tensor shape.
+        left: Vec<usize>,
+        /// Right-hand tensor shape.
+        right: Vec<usize>,
+    },
+    /// Flat data does not contain the number of elements required by its shape.
+    #[error("invalid tensor shape {shape:?}: expected {expected} values, got {actual}")]
+    InvalidShape {
+        /// Requested tensor shape.
+        shape: Vec<usize>,
+        /// Number of values required by the shape.
+        expected: usize,
+        /// Number of supplied values.
+        actual: usize,
+    },
+    /// An operation requires at least one input element or tensor.
+    #[error("tensor operation `{operation}` requires non-empty input")]
+    EmptyInput {
+        /// Operation that received empty input.
+        operation: String,
+    },
+    /// A tensor backend could not execute an operation.
+    #[error("tensor operation `{operation}` failed: {source}")]
+    Operation {
+        /// Operation attempted by the backend.
+        operation: String,
+        /// Underlying backend error.
+        #[source]
+        source: BoxedError,
+    },
+}
+
+impl TensorError {
+    /// Wraps a backend failure with the operation being attempted.
+    pub fn operation(
+        operation: impl Into<String>,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self::Operation {
+            operation: operation.into(),
+            source: Box::new(source),
+        }
+    }
+}
+
 /// An external resource stopped before completing an operation.
 #[derive(Debug, thiserror::Error)]
 #[error("{resource} was interrupted: {details}")]
@@ -187,6 +243,10 @@ pub enum Error {
     /// An environment operation failed.
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
+
+    /// A tensor operation or tensor value is invalid.
+    #[error(transparent)]
+    Tensor(#[from] TensorError),
 
     /// An external resource was interrupted.
     #[error(transparent)]

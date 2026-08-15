@@ -1,9 +1,8 @@
 use std::{collections::HashMap, fmt, str::FromStr};
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::tensor::R2lTensor;
+use crate::{error::Result, tensor::R2lTensor};
 
 /// Activation function used between hidden layers in feed-forward networks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -110,7 +109,7 @@ pub trait ToSafetensors {
     /// # Errors
     ///
     /// Returns an error if the policy parameters cannot be serialized.
-    fn to_safetensors(&self) -> std::result::Result<Vec<u8>, crate::error::Error>;
+    fn to_safetensors(&self) -> Result<Vec<u8>>;
 }
 
 /// Trainable action distribution interface used by on-policy algorithms.
@@ -134,7 +133,8 @@ pub trait Policy: Actor {
     /// # Errors
     ///
     /// Returns an error if the standard deviation cannot be computed.
-    fn std(&self) -> Result<f32>;
+    /// Returns `Ok(None)` when the policy has no meaningful scalar standard deviation.
+    fn std(&self) -> Result<Option<f32>>;
 
     /// Computes the policy entropy for a batch of states.
     ///

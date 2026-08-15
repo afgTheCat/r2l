@@ -1,8 +1,8 @@
 //! Prototype VPG training path that consumes trajectory batches directly.
 
-use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryBatch,
+    error::Result,
     models::Policy,
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
@@ -48,7 +48,7 @@ impl<Module: OnPolicyLearner> VPG<Module> {
         batches: &[B],
         advantages: &Advantages,
         returns: &Returns,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let mut batch_indices = ShuffledBatchIndices::new(batches, self.params.sample_size);
         let lm = &mut self.lm;
         loop {
@@ -56,8 +56,8 @@ impl<Module: OnPolicyLearner> VPG<Module> {
                 return Ok(());
             };
             let (observations, actions) = sample(batches, &indices, Module::lifter);
-            let advantages = lm.tensor_from_slice(&advantages.sample(&indices));
-            let returns = lm.tensor_from_slice(&returns.sample(&indices));
+            let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
+            let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
             let logp = lm.policy().log_probs(&observations, &actions)?;
             let values_pred = lm.values(&observations)?;
             let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
@@ -96,12 +96,8 @@ impl<M: OnPolicyLearner> Agent for VPG<M> {
         self.lm.inference_policy()
     }
 
-    fn learn<B: TrajectoryBatch<Self::Tensor>>(
-        &mut self,
-        buffers: &[B],
-    ) -> std::result::Result<(), r2l_core::error::Error> {
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<()> {
         VPG::learn(self, buffers)
-            .map_err(|error| r2l_core::error::Error::Wrapped(error.into_boxed_dyn_error()))
     }
 
     fn set_learning_rate(&mut self, learning_rate: f64) {

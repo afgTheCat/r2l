@@ -65,7 +65,7 @@ impl PolicyBuilder {
         observation_size: usize,
         action_space: Space<T>,
         device: &Device,
-    ) -> anyhow::Result<CandlePolicyKind> {
+    ) -> r2l_core::error::Result<CandlePolicyKind> {
         let (policy, _) = self.build_candle_with_varmap(observation_size, action_space, device)?;
         Ok(policy)
     }
@@ -75,7 +75,7 @@ impl PolicyBuilder {
         observation_size: usize,
         action_space: Space<T>,
         device: &Device,
-    ) -> anyhow::Result<(CandlePolicyKind, VarMap)> {
+    ) -> r2l_core::error::Result<(CandlePolicyKind, VarMap)> {
         let varmap = VarMap::new();
         let var_builder = r2l_candle::seeded_var_builder(&varmap, DType::F32, device);
         let policy = CandlePolicyKind::build(
@@ -94,7 +94,7 @@ impl PolicyBuilder {
         &self,
         observation_size: usize,
         action_space: Space<T>,
-    ) -> BurnPolicyKind<B> {
+    ) -> r2l_core::error::Result<BurnPolicyKind<B>> {
         let action_size = action_space.size();
         let policy_layers = [&[observation_size][..], &self.hidden_layers, &[action_size]].concat();
         BurnPolicyKind::build(

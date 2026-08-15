@@ -6,10 +6,10 @@
 //! [`OnPolicyLearner`](r2l_core::on_policy::learning_module::OnPolicyLearner)
 //! implementation.
 
-use anyhow::{Ok, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
+    error::Result,
     models::{ActivationFunction, Learner, ValueFunction},
     on_policy::{learning_module::OnPolicyLearner, losses::FromPolicyValueLosses},
 };
@@ -190,6 +190,7 @@ impl ValueFunction for SequentialValueFunction {
     type Tensor = Tensor;
 
     fn values(&self, observations: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!observations.is_empty());
         let observations = Tensor::stack(observations, 0)?;
         let value = self.value_net.forward(&observations)?.squeeze(1)?;
         Ok(value)
@@ -278,7 +279,7 @@ impl PolicyValueOptimizer {
 impl Learner for PolicyValueOptimizer {
     type Losses = PolicyValueLosses;
 
-    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
+    fn update(&mut self, losses: Self::Losses) -> Result<()> {
         match self {
             Self::Joint(lm) => lm.update(losses),
             Self::Split(lm) => lm.update(losses),
@@ -391,7 +392,8 @@ impl PolicyValueLearner {
 impl ValueFunction for PolicyValueLearner {
     type Tensor = Tensor;
 
-    fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
+        debug_assert!(!observations.is_empty());
         self.value_function.values(observations)
     }
 }
@@ -399,7 +401,7 @@ impl ValueFunction for PolicyValueLearner {
 impl Learner for PolicyValueLearner {
     type Losses = PolicyValueLosses;
 
-    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
+    fn update(&mut self, losses: Self::Losses) -> Result<()> {
         self.optimizer.update(losses)
     }
 }
@@ -422,8 +424,8 @@ impl OnPolicyLearner for PolicyValueLearner {
         self.optimizer.set_learning_rate(learning_rate);
     }
 
-    fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
-        Tensor::from_slice(slice, slice.len(), &self.device).unwrap()
+    fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
+        Ok(Tensor::from_slice(slice, slice.len(), &self.device)?)
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {

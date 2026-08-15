@@ -58,7 +58,7 @@ impl GymEnvPyhon {
         py: Python<'a>,
         name: &str,
         render_mode: Option<String>,
-    ) -> std::result::Result<Self, r2l_core::error::Error> {
+    ) -> Result<Self, r2l_core::error::Error> {
         let new = || {
             let gym = py.import("gymnasium")?;
             let kwargs = PyDict::new(py);
@@ -75,7 +75,7 @@ impl GymEnvPyhon {
     fn observation_space<'a>(
         &self,
         py: Python<'a>,
-    ) -> std::result::Result<Space<TensorData>, r2l_core::error::Error> {
+    ) -> Result<Space<TensorData>, r2l_core::error::Error> {
         let observation_space = || {
             let gym_spaces = py.import("gymnasium.spaces")?;
             let observation_space = self.0.getattr(py, "observation_space")?.into_bound(py);
@@ -89,7 +89,7 @@ impl GymEnvPyhon {
     fn action_space<'a>(
         &self,
         py: Python<'a>,
-    ) -> std::result::Result<Space<TensorData>, r2l_core::error::Error> {
+    ) -> Result<Space<TensorData>, r2l_core::error::Error> {
         let action_space = || {
             let gym_spaces = py.import("gymnasium.spaces")?;
             let action_space = self.0.getattr(py, "action_space")?.into_bound(py);
@@ -104,7 +104,7 @@ impl GymEnvPyhon {
         py: Python<'a>,
         seed: u64,
         observation_space: &Space<TensorData>,
-    ) -> std::result::Result<TensorData, r2l_core::error::Error> {
+    ) -> Result<TensorData, r2l_core::error::Error> {
         let reset = || {
             let kwargs = PyDict::new(py);
             kwargs.set_item("seed", seed)?;
@@ -121,7 +121,7 @@ impl GymEnvPyhon {
         action: TensorData,
         action_space: &Space<TensorData>,
         observation_space: &Space<TensorData>,
-    ) -> std::result::Result<Snapshot<TensorData>, r2l_core::error::Error> {
+    ) -> Result<Snapshot<TensorData>, r2l_core::error::Error> {
         let step = || {
             let action = parse_action(py, &action.into_vec(), &action_space)?;
             let step = self.0.call_method(py, "step", (action,), None)?;
@@ -162,10 +162,7 @@ impl GymEnv {
     /// # Errors
     ///
     /// Returns an error if Gymnasium cannot create or inspect the environment.
-    pub fn new(
-        name: &str,
-        render_mode: Option<String>,
-    ) -> std::result::Result<GymEnv, r2l_core::error::Error> {
+    pub fn new(name: &str, render_mode: Option<String>) -> Result<GymEnv, r2l_core::error::Error> {
         Python::with_gil(|py| {
             let gym_env_inner = GymEnvPyhon::new(py, name, render_mode)?;
             let observation_space = gym_env_inner.observation_space(py)?;
@@ -182,14 +179,14 @@ impl GymEnv {
 impl Env for GymEnv {
     type Tensor = TensorData;
 
-    fn reset(&mut self, seed: u64) -> std::result::Result<Self::Tensor, r2l_core::error::Error> {
+    fn reset(&mut self, seed: u64) -> Result<Self::Tensor, r2l_core::error::Error> {
         Python::with_gil(|py| self.env.reset(py, seed, &self.observation_space))
     }
 
     fn step(
         &mut self,
         action: Self::Tensor,
-    ) -> std::result::Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
+    ) -> Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
         Python::with_gil(|py| {
             self.env
                 .step(py, action, &self.action_space, &self.observation_space)
@@ -234,7 +231,7 @@ impl From<&str> for GymEnvBuilder {
 impl EnvBuilder for GymEnvBuilder {
     type Env = GymEnv;
 
-    fn build_env(&self) -> std::result::Result<Self::Env, r2l_core::error::Error> {
+    fn build_env(&self) -> Result<Self::Env, r2l_core::error::Error> {
         GymEnv::new(&self.0, None)
     }
 }

@@ -18,7 +18,6 @@ pub mod multi_categorical;
 
 use std::{f32, fmt::Debug};
 
-use anyhow::Result;
 use bernoulli::MultiBernoulliDistribution;
 use candle_core::{Device, Tensor};
 use candle_nn::{Init, VarBuilder};
@@ -28,6 +27,7 @@ use diagonal::DiagGaussianDistribution;
 use multi_categorical::MultiCategoricalDistribution;
 use r2l_core::{
     env::Space,
+    error::Result,
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
     tensor::R2lTensor,
 };
@@ -140,9 +140,12 @@ impl CandlePolicyKind {
                 )?))
             }
             Space::MultiDiscrete { nvec, .. } => {
+                let nvec = nvec
+                    .to_vec()
+                    .map_err(|error| candle_core::Error::Msg(error.to_string()))?;
                 Ok(Self::MultiCategorical(MultiCategoricalDistribution::build(
                     observation_size,
-                    nvec.to_vec().into_iter().map(|n| n as usize).collect(),
+                    nvec.into_iter().map(|n| n as usize).collect(),
                     hidden_layers,
                     policy_varbuilder,
                     policy_varbuilder.device().clone(),
@@ -219,7 +222,7 @@ impl Actor for CandlePolicyKind {
 }
 
 impl ToSafetensors for CandlePolicyKind {
-    fn to_safetensors(&self) -> std::result::Result<Vec<u8>, r2l_core::error::Error> {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         match self {
             Self::Categorical(cat) => cat.to_safetensors(),
             Self::DiagGaussian(diag) => diag.to_safetensors(),
@@ -251,7 +254,7 @@ impl Policy for CandlePolicyKind {
         }
     }
 
-    fn std(&self) -> Result<f32> {
+    fn std(&self) -> Result<Option<f32>> {
         match self {
             Self::Categorical(cat) => cat.std(),
             Self::DiagGaussian(diag) => diag.std(),

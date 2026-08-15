@@ -156,7 +156,7 @@ impl RlZooEnvironmentConfig {
             .with_rollout_steps(self.n_steps)
             .with_learning_schedule(LearningSchedule::total_step_bound(self.n_timesteps))
             .with_training_artifacts(artifacts_config)
-            .with_observation_normalizer(obs_clip)
+            .with_observation_normalizer(obs_clip)?
             .with_lambda(self.gae_lambda)
             .with_gamma(self.gamma)
             .with_total_epochs(self.n_epochs)

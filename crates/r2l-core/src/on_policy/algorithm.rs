@@ -24,10 +24,7 @@ pub trait Agent {
     /// # Errors
     ///
     /// Returns an error if the agent update fails.
-    fn learn<B: TrajectoryBatch<Self::Tensor>>(
-        &mut self,
-        buffers: &[B],
-    ) -> std::result::Result<(), Error>;
+    fn learn<B: TrajectoryBatch<Self::Tensor>>(&mut self, buffers: &[B]) -> Result<(), Error>;
 
     /// Sets the learning rate used by future updates.
     fn set_learning_rate(&mut self, learning_rate: f64);
@@ -46,7 +43,7 @@ pub trait Sampler {
     /// # Errors
     ///
     /// Returns an error if an environment cannot be reset.
-    fn reset_all_envs(&mut self) -> std::result::Result<(), Error> {
+    fn reset_all_envs(&mut self) -> Result<(), Error> {
         Ok(())
     }
 
@@ -58,7 +55,7 @@ pub trait Sampler {
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
         actor: A,
-    ) -> std::result::Result<(), Error>;
+    ) -> Result<(), Error>;
 
     /// Creates a view for the agents.
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]>;
@@ -81,7 +78,7 @@ impl<A: Agent, S: Sampler> OnPolicyRuntime<A, S> {
     /// # Errors
     ///
     /// Returns an error if the sampler cannot collect the rollouts.
-    pub fn collect(&mut self) -> std::result::Result<(), Error> {
+    pub fn collect(&mut self) -> Result<(), Error> {
         let actor = self.agent.actor();
         let actor = ActorWrapper::new(actor);
         self.sampler.collect_rollouts(actor)
@@ -97,13 +94,13 @@ impl<A: Agent, S: Sampler> OnPolicyRuntime<A, S> {
     /// # Errors
     ///
     /// Returns an error if the agent cannot learn from the collected trajectories.
-    pub fn learn(&mut self) -> std::result::Result<(), Error> {
+    pub fn learn(&mut self) -> Result<(), Error> {
         let views = self.sampler.trajectory_views();
         let buffers = views
             .as_ref()
             .iter()
             .map(TrajectoryViewsWrapper::from_view)
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, _>>()?;
         self.agent.learn(&buffers)
     }
 
@@ -144,7 +141,7 @@ pub trait OnPolicyAlgorithmHooks {
     fn shutdown_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
-    ) -> std::result::Result<(), Error>;
+    ) -> Result<(), Error>;
 }
 
 /// Generic on-policy training loop combining a runtime with lifecycle hooks.
@@ -156,7 +153,7 @@ pub struct OnPolicyAlgorithm<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A =
 }
 
 impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgorithm<A, S, H> {
-    fn training_loop(&mut self) -> std::result::Result<(), Error> {
+    fn training_loop(&mut self) -> Result<(), Error> {
         return_on_hook_result!(self.hooks.init_hook(&mut self.runtime));
         loop {
             self.runtime.collect()?;
@@ -181,7 +178,7 @@ impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgo
     ///
     /// Returns an error if learning fails or a hook reports a deferred failure
     /// during shutdown.
-    pub fn train(&mut self) -> std::result::Result<(), Error> {
+    pub fn train(&mut self) -> Result<(), Error> {
         let training_result = self.training_loop();
         let shutdown_result = self.hooks.shutdown_hook(&mut self.runtime);
         training_result.and(shutdown_result)

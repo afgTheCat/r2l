@@ -1,5 +1,6 @@
 use pyo3::{
     Bound, FromPyObject, IntoPyObjectExt, PyResult, Python,
+    exceptions::PyValueError,
     types::{PyAny, PyAnyMethods, PyDict, PyDictMethods, PyModule, PyTuple},
 };
 use r2l_core::{env::Space, tensor::TensorData};
@@ -17,8 +18,14 @@ pub(crate) fn parse_gym_space(
         let low = flatten_extract(&space.getattr("low")?)?;
         let high = flatten_extract(&space.getattr("high")?)?;
         Ok(Space::Box {
-            min: Some(TensorData::new(low, shape.clone())),
-            max: Some(TensorData::new(high, shape.clone())),
+            min: Some(
+                TensorData::new(low, shape.clone())
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            ),
+            max: Some(
+                TensorData::new(high, shape.clone())
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            ),
             shape,
         })
     } else if is_space("MultiDiscrete")? {
@@ -27,7 +34,8 @@ pub(crate) fn parse_gym_space(
         let nvec: Vec<usize> = flatten_extract(&nvec)?;
         let nvec = nvec.into_iter().map(|n| n as f32).collect();
         Ok(Space::MultiDiscrete {
-            nvec: TensorData::new(nvec, shape.clone()),
+            nvec: TensorData::new(nvec, shape.clone())
+                .map_err(|error| PyValueError::new_err(error.to_string()))?,
             shape,
         })
     } else if is_space("MultiBinary")? {
@@ -69,7 +77,9 @@ pub(crate) fn parse_action<'py>(
         } => action_array(
             py,
             TensorData::new(action.to_vec(), shape.clone())
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
                 .clamp(min, max)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
                 .into_vec(),
             shape,
             "float32",
@@ -144,13 +154,15 @@ pub(crate) fn parse_obs(
             let idx: usize = observation.extract()?;
             let mut values = vec![0.; *size];
             values[idx] = 1.;
-            Ok(TensorData::new(values, vec![*size]))
+            TensorData::new(values, vec![*size])
+                .map_err(|error| PyValueError::new_err(error.to_string()))
         }
         Space::Box { shape, .. }
         | Space::MultiDiscrete { shape, .. }
         | Space::MultiBinary { shape } => {
             let values = flatten_extract(observation)?;
-            Ok(TensorData::new(values, shape.clone()))
+            TensorData::new(values, shape.clone())
+                .map_err(|error| PyValueError::new_err(error.to_string()))
         }
         Space::Tuple(spaces) => parse_obs_fields(
             spaces

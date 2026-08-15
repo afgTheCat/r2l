@@ -1,6 +1,5 @@
 use std::{marker::PhantomData, sync::mpsc::Sender};
 
-use anyhow::Result;
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
 use r2l_agents::on_policy_algorithms::{
@@ -15,7 +14,7 @@ use r2l_candle::learning_module::{
     PolicyValueLearner as CandlePolicyValueLearner, PolicyValueLosses as CandlePolicyValueLosses,
 };
 use r2l_core::{
-    HookResult, buffers::TrajectoryBatch, models::Policy,
+    HookResult, buffers::TrajectoryBatch, error::Result, models::Policy,
     on_policy::learning_module::OnPolicyLearner,
 };
 
@@ -278,7 +277,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
     ) -> Result<HookResult> {
         if let Some(reporter) = &mut self.reporter {
             reporter.update_average_reward(buffers);
-            reporter.report.std = module.policy().std().ok();
+            reporter.report.std = module.policy().std()?;
             reporter.report.learning_rate = module.policy_learning_rate();
             reporter.send_report();
         }
@@ -336,7 +335,7 @@ impl A2CHook<CandlePolicyValueLearner> for DefaultA2CHook<CandlePolicyValueLearn
     ) -> Result<HookResult> {
         if let Some(reporter) = &mut self.reporter {
             reporter.update_average_reward(buffers);
-            reporter.report.std = module.policy().std().ok();
+            reporter.report.std = module.policy().std()?;
             reporter.report.learning_rate = module.policy_learning_rate();
             reporter.send_report();
         }

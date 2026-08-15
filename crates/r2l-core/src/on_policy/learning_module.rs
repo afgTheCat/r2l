@@ -1,4 +1,5 @@
 use crate::{
+    error::Result,
     models::{Learner, Policy, ValueFunction},
     on_policy::losses::FromPolicyValueLosses,
     tensor::R2lTensor,
@@ -27,7 +28,7 @@ pub trait OnPolicyLearner:
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;
 
     /// Creates a learning tensor from flat scalar data.
-    fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor;
+    fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor>;
 
     /// Returns a policy suitable for rollout/inference.
     fn inference_policy(&self) -> Self::InferencePolicy;

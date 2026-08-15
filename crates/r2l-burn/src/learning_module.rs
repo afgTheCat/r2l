@@ -13,6 +13,7 @@ use burn::{
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_core::{
+    error::Result,
     models::{ActivationFunction, Learner, Policy, ValueFunction},
     on_policy::{learning_module::OnPolicyLearner, losses::FromPolicyValueLosses},
 };
@@ -137,7 +138,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
 impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for JointPolicyValueLearner<B, M> {
     type Losses = PolicyValueLosses<B>;
 
-    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
+    fn update(&mut self, losses: Self::Losses) -> Result<()> {
         let loss = if let Some(vf_coeff) = losses.vf_coeff {
             losses.policy_loss + losses.value_loss.mul_scalar(vf_coeff)
         } else {
@@ -154,7 +155,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for JointPolicyValueLearner<B
 impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueLearner<B, M> {
     type Tensor = Tensor<B, 1>;
 
-    fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
+        debug_assert!(!observations.is_empty());
         let observation: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
         let value = self.model.value_net.forward(observation);
         Ok(value.squeeze())
@@ -179,8 +181,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueL
         self.set_learning_rate(learning_rate);
     }
 
-    fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
-        Tensor::from_data(slice, &Default::default())
+    fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
+        Ok(Tensor::from_data(slice, &Default::default()))
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
@@ -240,7 +242,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
 impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for SplitPolicyValueLearner<B, M> {
     type Losses = PolicyValueLosses<B>;
 
-    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
+    fn update(&mut self, losses: Self::Losses) -> Result<()> {
         let policy_grads = losses.policy_loss.backward();
         let policy_grads = GradientsParams::from_grads(policy_grads, &self.policy);
         self.policy = self
@@ -263,7 +265,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for SplitPolicyValueLearner<B
 impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueLearner<B, M> {
     type Tensor = Tensor<B, 1>;
 
-    fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
+        debug_assert!(!observations.is_empty());
         let observation: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
         let value = self.value_net.forward(observation);
         Ok(value.squeeze())
@@ -288,8 +291,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for SplitPolicyValueL
         self.set_learning_rate(learning_rate);
     }
 
-    fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
-        Tensor::from_data(slice, &Default::default())
+    fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
+        Ok(Tensor::from_data(slice, &Default::default()))
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
@@ -372,7 +375,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
 impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for PolicyValueLearner<B, M> {
     type Losses = PolicyValueLosses<B>;
 
-    fn update(&mut self, losses: Self::Losses) -> anyhow::Result<()> {
+    fn update(&mut self, losses: Self::Losses) -> Result<()> {
         match self {
             Self::Joint(lm) => lm.update(losses),
             Self::Split(lm) => lm.update(losses),
@@ -383,7 +386,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for PolicyValueLearner<B, M> 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueLearner<B, M> {
     type Tensor = Tensor<B, 1>;
 
-    fn values(&self, observations: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
+        debug_assert!(!observations.is_empty());
         match self {
             Self::Joint(lm) => lm.values(observations),
             Self::Split(lm) => lm.values(observations),
@@ -415,7 +419,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for PolicyValueLearne
         self.set_learning_rate(learning_rate);
     }
 
-    fn tensor_from_slice(&self, slice: &[f32]) -> Self::LearningTensor {
+    fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
         match self {
             Self::Joint(lm) => lm.tensor_from_slice(slice),
             Self::Split(lm) => lm.tensor_from_slice(slice),

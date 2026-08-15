@@ -58,7 +58,7 @@ impl<E: Env> DirectSamplerCore<E> {
     }
 
     /// Resets every worker environment and clears its active episode state.
-    pub fn reset_all_envs(&mut self) -> std::result::Result<(), Error> {
+    pub fn reset_all_envs(&mut self) -> Result<(), Error> {
         self.worker_pool.reset_all_envs()
     }
 
@@ -150,7 +150,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
-    ) -> std::result::Result<Self, Error>
+    ) -> Result<Self, Error>
     where
         E: 'static,
     {
@@ -166,7 +166,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
 impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
     type Tensor = E::Tensor;
 
-    fn reset_all_envs(&mut self) -> std::result::Result<(), Error> {
+    fn reset_all_envs(&mut self) -> Result<(), Error> {
         self.core.reset_all_envs()?;
         self.hook.reset();
         Ok(())
@@ -175,7 +175,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
         actor: A,
-    ) -> std::result::Result<(), Error> {
+    ) -> Result<(), Error> {
         self.core.worker_pool.clear_buffers();
         self.core.worker_pool.set_actor(&actor);
         loop {
