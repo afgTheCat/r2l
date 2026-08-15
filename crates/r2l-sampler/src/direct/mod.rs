@@ -58,8 +58,8 @@ impl<E: Env> DirectSamplerCore<E> {
     }
 
     /// Resets every worker environment and clears its active episode state.
-    pub fn reset_all_envs(&mut self) {
-        self.worker_pool.reset_all_envs();
+    pub fn reset_all_envs(&mut self) -> std::result::Result<(), Error> {
+        self.worker_pool.reset_all_envs()
     }
 
     /// Builds sampler state from an environment collection and execution mode.
@@ -166,21 +166,26 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
 impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
     type Tensor = E::Tensor;
 
-    fn reset_all_envs(&mut self) {
-        self.core.reset_all_envs();
+    fn reset_all_envs(&mut self) -> std::result::Result<(), Error> {
+        self.core.reset_all_envs()?;
         self.hook.reset();
+        Ok(())
     }
 
-    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        actor: A,
+    ) -> std::result::Result<(), Error> {
         self.core.worker_pool.clear_buffers();
         self.core.worker_pool.set_actor(&actor);
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {
-                SamplerHookResult::Bound(bound) => self.core.worker_pool.collect(bound),
+                SamplerHookResult::Bound(bound) => self.core.worker_pool.collect(bound)?,
                 SamplerHookResult::Stop => break,
             }
         }
+        Ok(())
     }
 
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {

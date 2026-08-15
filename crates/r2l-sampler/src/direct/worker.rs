@@ -5,6 +5,7 @@ use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{Memory, buffer::TrajectoryBuffer},
     env::{Env, Snapshot},
+    error::Error,
     models::Actor,
     rng::sample_u64,
     tensor::R2lTensor,
@@ -22,11 +23,11 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
     actor: &mut Box<dyn Actor<Tensor = T>>,
     last_state: Option<T>,
-) -> Memory<T> {
+) -> std::result::Result<Memory<T>, Error> {
     let state = if let Some(state) = last_state {
         state
     } else {
-        env.reset(sample_u64()).unwrap()
+        env.reset(sample_u64())?
     };
     let action = actor.action(state.clone()).unwrap();
     let Snapshot {
@@ -34,19 +35,19 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
         reward,
         terminated,
         truncated,
-    } = env.step(action.clone()).unwrap();
+    } = env.step(action.clone())?;
     let done = terminated || truncated;
     if done {
-        next_state = env.reset(sample_u64()).unwrap();
+        next_state = env.reset(sample_u64())?;
     }
-    Memory {
+    Ok(Memory {
         state,
         next_state,
         action,
         reward,
         terminated,
         truncated,
-    }
+    })
 }
 
 pub enum WorkerCommand<T: R2lTensor> {
@@ -59,8 +60,8 @@ pub enum WorkerCommand<T: R2lTensor> {
 
 pub enum WorkerResult {
     PolicySet,
-    Collected,
-    EnvReset,
+    Collected(std::result::Result<(), Error>),
+    EnvReset(std::result::Result<(), Error>),
     BufferCleared,
     Shutdown,
 }
@@ -120,7 +121,7 @@ impl<E: Env> Worker<E> {
         self.buffer.lock().unwrap().clear();
     }
 
-    pub fn collect(&mut self, bound: RolloutMode) {
+    pub fn collect(&mut self, bound: RolloutMode) -> std::result::Result<(), Error> {
         let Some(actor) = &mut self.actor else {
             unreachable!()
         };
@@ -130,7 +131,7 @@ impl<E: Env> Worker<E> {
                 let mut episodes = 0;
                 loop {
                     let last_state = self.last_state.take();
-                    let memory = step_env(&mut self.env, actor, last_state);
+                    let memory = step_env(&mut self.env, actor, last_state)?;
                     let terminates = memory.is_done();
                     self.last_state = Some(memory.next_state.clone());
                     buffer.push(memory);
@@ -145,19 +146,21 @@ impl<E: Env> Worker<E> {
             RolloutMode::StepBound { n_steps } => {
                 for _ in 0..n_steps {
                     let last_state = self.last_state.take();
-                    let memory = step_env(&mut self.env, actor, last_state);
+                    let memory = step_env(&mut self.env, actor, last_state)?;
                     self.last_state = Some(memory.next_state.clone());
                     buffer.push(memory);
                 }
             }
         }
+        Ok(())
     }
 
     // resets the initial state and clears the buffer. Used by the Evaluator hook
-    pub fn reset(&mut self, seed: u64) {
-        let state = self.env.reset(seed).unwrap();
+    pub fn reset(&mut self, seed: u64) -> std::result::Result<(), Error> {
+        let state = self.env.reset(seed)?;
         self.last_state = Some(state);
         self.buffer.lock().unwrap().clear();
+        Ok(())
     }
 }
 
@@ -181,16 +184,16 @@ impl<E: Env> ThreadWorker<E> {
                     self.tx.send(WorkerResult::PolicySet).unwrap();
                 }
                 WorkerCommand::Collect(bound) => {
-                    self.worker.collect(bound);
-                    self.tx.send(WorkerResult::Collected).unwrap();
+                    let result = self.worker.collect(bound);
+                    self.tx.send(WorkerResult::Collected(result)).unwrap();
                 }
                 WorkerCommand::Shutdown => {
                     self.tx.send(WorkerResult::Shutdown).unwrap();
                     break;
                 }
                 WorkerCommand::ResetEnv(seed) => {
-                    self.worker.reset(seed);
-                    self.tx.send(WorkerResult::EnvReset).unwrap();
+                    let result = self.worker.reset(seed);
+                    self.tx.send(WorkerResult::EnvReset(result)).unwrap();
                 }
                 WorkerCommand::ClearBuffer => {
                     self.worker.clear();
@@ -219,22 +222,36 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         }
     }
 
-    pub fn collect_rollout(&self, bound: RolloutMode) {
+    pub fn collect_rollout(&self, bound: RolloutMode) -> std::result::Result<(), Error> {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::Collect(bound));
         }
+        let mut result = Ok(());
         for worker_handle in &self.worker_handles {
-            worker_handle.recv();
+            let WorkerResult::Collected(worker_result) = worker_handle.recv() else {
+                unreachable!()
+            };
+            if result.is_ok() {
+                result = worker_result;
+            }
         }
+        result
     }
 
-    pub fn reset_all(&self) {
+    pub fn reset_all(&self) -> std::result::Result<(), Error> {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
         }
+        let mut result = Ok(());
         for worker_handle in &self.worker_handles {
-            worker_handle.recv();
+            let WorkerResult::EnvReset(worker_result) = worker_handle.recv() else {
+                unreachable!()
+            };
+            if result.is_ok() {
+                result = worker_result;
+            }
         }
+        result
     }
 
     pub fn shutdown(&mut self) {
@@ -290,16 +307,15 @@ impl<E: Env> WorkerPool<E> {
     }
 
     /// Collects one bounded rollout on every worker.
-    pub fn collect(&mut self, bound: RolloutMode) {
+    pub fn collect(&mut self, bound: RolloutMode) -> std::result::Result<(), Error> {
         match self {
             Self::Vec(workers) => {
                 for worker in workers {
-                    worker.collect(bound);
+                    worker.collect(bound)?;
                 }
+                Ok(())
             }
-            Self::Thread(thread_workers) => {
-                thread_workers.collect_rollout(bound);
-            }
+            Self::Thread(thread_workers) => thread_workers.collect_rollout(bound),
         }
     }
 
@@ -316,16 +332,15 @@ impl<E: Env> WorkerPool<E> {
     }
 
     /// Resets all worker environments with fresh seeds.
-    pub fn reset_all_envs(&mut self) {
+    pub fn reset_all_envs(&mut self) -> std::result::Result<(), Error> {
         match self {
             Self::Vec(workers) => {
                 for worker in workers {
-                    worker.reset(sample_u64());
+                    worker.reset(sample_u64())?;
                 }
+                Ok(())
             }
-            Self::Thread(workers) => {
-                workers.reset_all();
-            }
+            Self::Thread(workers) => workers.reset_all(),
         }
     }
 }

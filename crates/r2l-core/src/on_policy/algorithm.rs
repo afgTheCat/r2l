@@ -3,6 +3,7 @@ use crate::{
     buffers::{TrajectoryBatch, buffer::TrajectoryView},
     error::Error,
     models::Actor,
+    return_on_hook_result,
     tensor::R2lTensor,
     utils::{actor_wrapper::ActorWrapper, buffer_wrapper::TrajectoryViewsWrapper},
 };
@@ -41,10 +42,23 @@ pub trait Sampler {
     type Tensor: R2lTensor;
 
     /// Resets all environments managed by the sampler.
-    fn reset_all_envs(&mut self) {}
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an environment cannot be reset.
+    fn reset_all_envs(&mut self) -> std::result::Result<(), Error> {
+        Ok(())
+    }
 
     /// Collects rollout data using the provided actor.
-    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A);
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an environment operation fails during collection.
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        actor: A,
+    ) -> std::result::Result<(), Error>;
 
     /// Creates a view for the agents.
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]>;
@@ -63,10 +77,14 @@ pub struct OnPolicyRuntime<A: Agent, S: Sampler> {
 
 impl<A: Agent, S: Sampler> OnPolicyRuntime<A, S> {
     /// Collects a fresh set of rollouts using the sampler-facing actor.
-    pub fn collect(&mut self) {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the sampler cannot collect the rollouts.
+    pub fn collect(&mut self) -> std::result::Result<(), Error> {
         let actor = self.agent.actor();
         let actor = ActorWrapper::new(actor);
-        self.sampler.collect_rollouts(actor);
+        self.sampler.collect_rollouts(actor)
     }
 
     /// Returns the last collected trajectory containers from the sampler.
@@ -138,6 +156,20 @@ pub struct OnPolicyAlgorithm<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A =
 }
 
 impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgorithm<A, S, H> {
+    fn training_loop(&mut self) -> std::result::Result<(), Error> {
+        return_on_hook_result!(self.hooks.init_hook(&mut self.runtime));
+        loop {
+            self.runtime.collect()?;
+            break_on_hook_result!(self.hooks.post_rollout_hook(&mut self.runtime));
+
+            self.runtime.learn()?;
+            break_on_hook_result!(self.hooks.post_training_hook(&mut self.runtime));
+        }
+        Ok(())
+    }
+}
+
+impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgorithm<A, S, H> {
     /// Creates an on-policy algorithm from its runtime and lifecycle hooks.
     pub fn new(runtime: OnPolicyRuntime<A, S>, hooks: H) -> Self {
         Self { runtime, hooks }
@@ -150,27 +182,8 @@ impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgo
     /// Returns an error if learning fails or a hook reports a deferred failure
     /// during shutdown.
     pub fn train(&mut self) -> std::result::Result<(), Error> {
-        let mut training_error = None;
-        if matches!(
-            self.hooks.init_hook(&mut self.runtime),
-            HookResult::Continue
-        ) {
-            loop {
-                self.runtime.collect();
-                break_on_hook_result!(self.hooks.post_rollout_hook(&mut self.runtime));
-
-                if let Err(error) = self.runtime.learn() {
-                    training_error = Some(error);
-                    break;
-                }
-                break_on_hook_result!(self.hooks.post_training_hook(&mut self.runtime));
-            }
-        }
-
+        let training_result = self.training_loop();
         let shutdown_result = self.hooks.shutdown_hook(&mut self.runtime);
-        match training_error {
-            Some(error) => Err(error),
-            None => shutdown_result,
-        }
+        training_result.and(shutdown_result)
     }
 }

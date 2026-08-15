@@ -117,11 +117,11 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     /// Collects a bounded rollout from the worker pool.
-    pub fn collect(&mut self, bound: RolloutMode) {
+    pub fn collect(&mut self, bound: RolloutMode) -> std::result::Result<(), Error> {
         match bound {
             RolloutMode::StepBound { n_steps } => {
                 for _ in 0..n_steps {
-                    self.step();
+                    self.step()?;
                 }
             }
             RolloutMode::EpisodeBound { n_episodes } => {
@@ -134,7 +134,7 @@ impl<E: Env> StagedSamplerCore<E> {
                     if worker_idxs.is_empty() {
                         break;
                     }
-                    let terminations = self.step_indexed(&worker_idxs);
+                    let terminations = self.step_indexed(&worker_idxs)?;
                     for (idx, terminated) in worker_idxs.into_iter().zip(terminations) {
                         if terminated {
                             episode_counts[idx] += 1;
@@ -143,10 +143,11 @@ impl<E: Env> StagedSamplerCore<E> {
                 }
             }
         }
+        Ok(())
     }
 
-    fn step_indexed(&mut self, indices: &[usize]) -> Vec<bool> {
-        let multi_memory = self.pool.step_indexed(indices);
+    fn step_indexed(&mut self, indices: &[usize]) -> std::result::Result<Vec<bool>, Error> {
+        let multi_memory = self.pool.step_indexed(indices)?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
             let mut next_states = indices
@@ -171,11 +172,11 @@ impl<E: Env> StagedSamplerCore<E> {
         for (idx, memory) in indices.iter().zip(memories) {
             self.buffers[*idx].push(memory);
         }
-        terminations
+        Ok(terminations)
     }
 
-    fn step(&mut self) {
-        let multi_memory = self.pool.step();
+    fn step(&mut self) -> std::result::Result<(), Error> {
+        let multi_memory = self.pool.step()?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
             obs_normalizer.apply_slice_in_place(&mut last_states);
@@ -185,6 +186,7 @@ impl<E: Env> StagedSamplerCore<E> {
         for (idx, memory) in memories.into_iter().enumerate() {
             self.buffers[idx].push(memory);
         }
+        Ok(())
     }
 
     /// Clears all output trajectory buffers.
@@ -271,26 +273,31 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
 impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedSampler<E, H> {
     type Tensor = E::Tensor;
 
-    fn reset_all_envs(&mut self) {
-        self.core.pool.reset_all();
+    fn reset_all_envs(&mut self) -> std::result::Result<(), Error> {
+        self.core.pool.reset_all()?;
         if let Some(obs_normalizer) = &self.core.obs_normalizer {
             let mut last_states = self.core.last_states.lock().unwrap();
             obs_normalizer.apply_slice_in_place(&mut last_states);
         }
         self.core.clear_buffers();
         self.hook.reset();
+        Ok(())
     }
 
-    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        actor: A,
+    ) -> std::result::Result<(), Error> {
         self.core.clear_buffers();
         self.core.set_policy(&actor);
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {
-                SamplerHookResult::Bound(bound) => self.core.collect(bound),
+                SamplerHookResult::Bound(bound) => self.core.collect(bound)?,
                 SamplerHookResult::Stop => break,
             }
         }
+        Ok(())
     }
 
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {

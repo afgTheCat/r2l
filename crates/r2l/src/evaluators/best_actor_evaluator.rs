@@ -46,7 +46,10 @@ impl<E: Env> EvaluationSampler<E> {
         }
     }
 
-    fn evaluate<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: A) -> (f32, f32) {
+    fn evaluate<A: Actor<Tensor = E::Tensor> + Clone>(
+        &mut self,
+        actor: A,
+    ) -> std::result::Result<(f32, f32), Error> {
         match self {
             Self::Direct(sampler) => Self::evaluate_with_sampler(sampler, actor),
             Self::Staged(sampler) => Self::evaluate_with_sampler(sampler, actor),
@@ -56,9 +59,9 @@ impl<E: Env> EvaluationSampler<E> {
     fn evaluate_with_sampler<S: Sampler<Tensor = E::Tensor>>(
         sampler: &mut S,
         actor: impl Actor<Tensor = E::Tensor> + Clone,
-    ) -> (f32, f32) {
-        sampler.reset_all_envs();
-        sampler.collect_rollouts(actor);
+    ) -> std::result::Result<(f32, f32), Error> {
+        sampler.reset_all_envs()?;
+        sampler.collect_rollouts(actor)?;
         let trajectories = sampler.trajectory_views();
         let total_reward = trajectories
             .as_ref()
@@ -70,7 +73,7 @@ impl<E: Env> EvaluationSampler<E> {
             .iter()
             .map(|trajectory| trajectory.episode_terminations() as f32)
             .sum();
-        (total_reward, total_episodes)
+        Ok((total_reward, total_episodes))
     }
 
     fn normalizer_snapshot(&self) -> Option<NormalizerBuilder> {
@@ -226,7 +229,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         adapted_actor: impl Actor<Tensor = E::Tensor> + Clone,
         actor: A,
     ) -> std::result::Result<(), Error> {
-        let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor);
+        let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor)?;
         let avg_reward = total_reward / total_episodes;
         if self.write_evaluation_results {
             self.eval_states.push(EvalState {
