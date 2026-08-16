@@ -395,8 +395,8 @@ struct TrainingLoopState {
     steps_taken: usize,
 }
 
-/// Default lifecycle coordination for an on-policy training loop.
-pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
+/// Lifecycle hooks for an on-policy training loop.
+pub struct OnPolicyTrainingHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     state: TrainingLoopState,
     learning_schedule: LearningSchedule,
     learning_rate_scheduler: LearningRateScheduler,
@@ -408,7 +408,7 @@ pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
-    DefaultOnPolicyAlgorithmHooks<A, S, E>
+    OnPolicyTrainingHooks<A, S, E>
 {
     pub(crate) fn new(
         learning_schedule: LearningSchedule,
@@ -477,7 +477,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgorithmHooks
-    for DefaultOnPolicyAlgorithmHooks<A, S, E>
+    for OnPolicyTrainingHooks<A, S, E>
 {
     type A = A;
     type S = S;

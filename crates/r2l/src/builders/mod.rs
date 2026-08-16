@@ -37,7 +37,7 @@ use r2l_sampler::{
 };
 use serde::{Deserialize, Serialize, de::Error as _};
 
-use crate::hooks::on_policy::DefaultOnPolicyAlgorithmHooks;
+use crate::hooks::on_policy::OnPolicyTrainingHooks;
 use crate::{
     A2CRolloutStats, PPORolloutStats,
     evaluators::best_actor_evaluator::{EvaluationSampler, EvaluationSettings},
@@ -563,7 +563,7 @@ impl<E: Env> Builder<E> {
 
     fn default_on_policy_hook<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>>(
         self,
-    ) -> Result<DefaultOnPolicyAlgorithmHooks<A, S, E>, Error> {
+    ) -> Result<OnPolicyTrainingHooks<A, S, E>, Error> {
         let (evaluator, timing_recorder) = if let Some(config) = self.training_artifacts {
             let evaluator = if config.needs_evaluator() {
                 let obs_normalizer = self
@@ -599,7 +599,7 @@ impl<E: Env> Builder<E> {
                 TrainingTimingRecorder::disabled(),
             )
         };
-        Ok(DefaultOnPolicyAlgorithmHooks::new(
+        Ok(OnPolicyTrainingHooks::new(
             self.learning_schedule,
             self.learning_rate_schedule,
             evaluator,
@@ -1090,7 +1090,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// Returns an error if the configured training algorithm cannot be constructed.
     pub fn build(
         mut self,
-    ) -> Result<OnPolicyAlgorithm<A, S, DefaultOnPolicyAlgorithmHooks<A, S, E>>, Error> {
+    ) -> Result<OnPolicyAlgorithm<A, S, OnPolicyTrainingHooks<A, S, E>>, Error> {
         if let Some(seed) = self.builder.seed {
             set_seed(seed);
         }

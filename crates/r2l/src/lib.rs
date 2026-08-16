@@ -60,9 +60,8 @@ pub use builders::{
 pub use evaluators::best_actor_evaluator::EvaluationSettings;
 pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
 pub use hooks::on_policy::{
-    DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule, OnPolicyCommand,
-    OnPolicyCommandReceiver, OnPolicyCommandResult, OnPolicyCommandSender,
-    on_policy_command_channel,
+    LearningRateSchedule, LearningSchedule, OnPolicyCommand, OnPolicyCommandReceiver,
+    OnPolicyCommandResult, OnPolicyCommandSender, OnPolicyTrainingHooks, on_policy_command_channel,
 };
 pub use hooks::ppo::{PPOMinibatchStats, PPORolloutStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
