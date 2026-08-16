@@ -182,8 +182,6 @@ pub(crate) struct BestActorEvaluator<A: Actor, E: Env> {
     best_actor: Option<A>,
     best_obs_normalizer: Option<NormalizerBuilder>,
     best_rewards: f32,
-    current_evaluator_step: usize,
-    rollouts_per_evaluation: usize,
     eval_states: Vec<EvalState>,
 }
 
@@ -193,7 +191,6 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         output_dir: PathBuf,
         write_evaluation_results: bool,
         write_inference_artifacts: bool,
-        rollouts_per_evaluation: usize,
     ) -> Self {
         Self {
             sampler,
@@ -203,45 +200,18 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
             best_actor: None,
             best_obs_normalizer: None,
             best_rewards: f32::MIN,
-            current_evaluator_step: 0,
-            rollouts_per_evaluation,
             eval_states: vec![],
         }
     }
 
-    /// Returns whether the next call to [`Self::eval`] will perform an evaluation.
-    #[must_use]
-    pub fn evaluation_due(&self) -> bool {
-        (self.current_evaluator_step + 1).is_multiple_of(self.rollouts_per_evaluation)
-    }
-
-    pub fn eval_always<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
+    pub fn evaluate<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
         &mut self,
         rt: &mut OnPolicyRuntime<AG, TS>,
     ) -> Result<(), Error> {
-        self.current_evaluator_step += 1;
         let actor = rt.actor();
         let adapted_actor = ActorWrapper::new(rt.actor());
         self.eval_adapted(adapted_actor, actor)?;
         Ok(())
-    }
-
-    /// Evaluates the runtime actor when the configured interval elapses.
-    /// Returns whether an evaluation was performed.
-    pub fn eval<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
-        &mut self,
-        rt: &mut OnPolicyRuntime<AG, TS>,
-    ) -> Result<bool, Error> {
-        let evaluation_due = self.evaluation_due();
-        self.current_evaluator_step += 1;
-        if evaluation_due {
-            let actor = rt.actor();
-            let adapted_actor = ActorWrapper::new(rt.actor());
-            self.eval_adapted(adapted_actor, actor)?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
     }
 
     /// Evaluates the actor and persists it if it outperforms the current best actor.

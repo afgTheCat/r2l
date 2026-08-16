@@ -37,15 +37,17 @@ use r2l_sampler::{
 };
 use serde::{Deserialize, Serialize, de::Error as _};
 
+use crate::hooks::on_policy2::DefaultOnPolicyAlgorithmHooks;
 use crate::{
     A2CRolloutStats, PPORolloutStats,
     evaluators::best_actor_evaluator::{EvaluationSampler, EvaluationSettings},
-    hooks::{a2c::DefaultA2CHookReporter, on_policy::TrainingTimingRecorder, ppo::TargetKl},
+    hooks::{
+        a2c::DefaultA2CHookReporter,
+        on_policy2::{OnPolicyCommandHandler, ScheduledEvaluator, TrainingTimingRecorder},
+        ppo::TargetKl,
+    },
 };
-use crate::{
-    BurnBackend, DefaultOnPolicyAlgorithmHooks, LearningRateSchedule, LearningSchedule,
-    OnPolicyCommandReceiver,
-};
+use crate::{BurnBackend, LearningRateSchedule, LearningSchedule, OnPolicyCommandReceiver};
 use crate::{EpisodeBoundHook, StepBoundHook};
 use crate::{
     evaluators::best_actor_evaluator::BestActorEvaluator,
@@ -573,34 +575,37 @@ impl<E: Env> Builder<E> {
                     config.evaluation_settings.evaluation_execution_mode,
                     obs_normalizer,
                 )?;
-                Some(BestActorEvaluator::new(
-                    sampler,
-                    config.output_dir.clone(),
-                    config.evaluation_results,
-                    config.inference_artifacts,
+                ScheduledEvaluator::new(
+                    BestActorEvaluator::new(
+                        sampler,
+                        config.output_dir.clone(),
+                        config.evaluation_results,
+                        config.inference_artifacts,
+                    ),
                     config.evaluation_settings.rollouts_per_evaluation,
-                ))
+                )
             } else {
-                None
+                ScheduledEvaluator::disabled()
             };
             let timing_recorder = if config.needs_timing_recorder() {
-                Some(TrainingTimingRecorder::create(&config.output_dir).map_err(Error::wrap)?)
+                TrainingTimingRecorder::create(&config.output_dir)?
             } else {
-                None
+                TrainingTimingRecorder::disabled()
             };
             (evaluator, timing_recorder)
         } else {
-            (None, None)
+            (
+                ScheduledEvaluator::disabled(),
+                TrainingTimingRecorder::disabled(),
+            )
         };
-        Ok(DefaultOnPolicyAlgorithmHooks {
-            learning_schedule: self.learning_schedule,
-            learning_rate_schedule: self.learning_rate_schedule,
+        Ok(DefaultOnPolicyAlgorithmHooks::new(
+            self.learning_schedule,
+            self.learning_rate_schedule,
             evaluator,
+            OnPolicyCommandHandler::new(self.policy_command_rx),
             timing_recorder,
-            command_rx: self.policy_command_rx,
-            error: None,
-            _phantom: PhantomData,
-        })
+        ))
     }
 
     fn direct_sampler_step_bound(&self) -> Result<DirectSampler<E, StepBoundHook<E>>, Error> {

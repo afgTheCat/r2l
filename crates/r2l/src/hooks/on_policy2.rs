@@ -1,6 +1,8 @@
 use std::{
     fs::File,
+    io::Write,
     marker::PhantomData,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -12,16 +14,51 @@ use r2l_core::{
     on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum TrainingLoopPhase {
+use crate::{
+    evaluators::best_actor_evaluator::BestActorEvaluator,
+    hooks::on_policy::{OnPolicyCommand, OnPolicyCommandReceiver, OnPolicyCommandResult},
+};
+
+const TRAINING_TIMINGS_FILE: &str = "training_timings.csv";
+
+#[derive(Clone, Copy)]
+enum TrainingPhase {
     Collection,
     Training,
-    Evaluation,
 }
 
-enum LearningSchedule {
-    RolloutBound { total_rollouts: usize },
-    TotalStepBound { total_steps: usize },
+/// Training-stop policy for the on-policy training loop.
+#[derive(Debug, Clone, Copy)]
+pub enum LearningSchedule {
+    /// Stop after `total_rollouts` completed rollouts.
+    RolloutBound {
+        /// Number of rollouts after which training stops.
+        total_rollouts: usize,
+    },
+    /// Stop after at least `total_steps` sampled environment steps.
+    TotalStepBound {
+        /// Number of sampled steps after which training stops.
+        total_steps: usize,
+    },
+}
+
+impl LearningSchedule {
+    /// Creates a schedule bounded by total sampled environment steps.
+    #[must_use]
+    pub fn total_step_bound(total_steps: usize) -> Self {
+        assert!(total_steps > 0, "total steps must be greater than zero");
+        Self::TotalStepBound { total_steps }
+    }
+
+    /// Creates a schedule bounded by completed rollouts.
+    #[must_use]
+    pub fn rollout_bound(total_rollouts: usize) -> Self {
+        assert!(
+            total_rollouts > 0,
+            "total rollouts must be greater than zero"
+        );
+        Self::RolloutBound { total_rollouts }
+    }
 }
 
 /// Learning-rate policy applied over the progress of an on-policy training run.
@@ -33,157 +70,337 @@ pub enum LearningRateSchedule {
     Linear(f64),
 }
 
-struct BestActorEvaluator<A: Actor, E: Env> {
-    _p: PhantomData<(A, E)>,
-}
-
-impl<A: Actor, E: Env> BestActorEvaluator<A, E> {
-    pub fn eval<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
-        &mut self,
-        rt: &mut OnPolicyRuntime<AG, TS>,
-        rollout_idx: usize,
-    ) -> Result<(), Error> {
-        todo!()
+impl LearningRateSchedule {
+    fn value(self, progress_remaining: f64) -> f64 {
+        match self {
+            Self::Constant(learning_rate) => learning_rate,
+            Self::Linear(initial_learning_rate) => {
+                initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
+            }
+        }
     }
 }
 
-struct OnPolicyCommander();
+pub(crate) struct LearningRateScheduler {
+    schedule: Option<LearningRateSchedule>,
+}
 
-impl OnPolicyCommander {
-    fn process_pending_commands<A: Agent, S: Sampler>(
+impl LearningRateScheduler {
+    fn new(schedule: Option<LearningRateSchedule>) -> Self {
+        Self { schedule }
+    }
+
+    fn update<A: Agent, S: Sampler>(
+        &self,
+        progress_remaining: f64,
+        runtime: &mut OnPolicyRuntime<A, S>,
+    ) {
+        if let Some(schedule) = self.schedule {
+            runtime
+                .agent
+                .set_learning_rate(schedule.value(progress_remaining));
+        }
+    }
+}
+
+pub(crate) enum ScheduledEvaluator<A: Actor, E: Env> {
+    Disabled,
+    Enabled {
+        evaluator: BestActorEvaluator<A, E>,
+        rollouts_per_evaluation: usize,
+    },
+}
+
+impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: r2l_core::tensor::R2lTensor>>
+    ScheduledEvaluator<A, E>
+{
+    pub(crate) fn disabled() -> Self {
+        Self::Disabled
+    }
+
+    pub(crate) fn new(evaluator: BestActorEvaluator<A, E>, rollouts_per_evaluation: usize) -> Self {
+        assert!(
+            rollouts_per_evaluation > 0,
+            "rollouts per evaluation must be greater than zero"
+        );
+        Self::Enabled {
+            evaluator,
+            rollouts_per_evaluation,
+        }
+    }
+
+    fn evaluate<AG: Agent<Actor = A>, S: Sampler<Tensor = E::Tensor>>(
+        &mut self,
+        runtime: &mut OnPolicyRuntime<AG, S>,
+        completed_rollouts: usize,
+    ) -> Result<(), Error> {
+        let Self::Enabled {
+            evaluator,
+            rollouts_per_evaluation,
+        } = self
+        else {
+            return Ok(());
+        };
+        if (completed_rollouts + 1).is_multiple_of(*rollouts_per_evaluation) {
+            return evaluator.evaluate(runtime);
+        }
+        Ok(())
+    }
+
+    fn shutdown(&mut self) -> Result<(), Error> {
+        let Self::Enabled { evaluator, .. } = self else {
+            return Ok(());
+        };
+        let result = evaluator.try_write_artifacts();
+        evaluator.shutdown();
+        result
+    }
+}
+
+pub(crate) struct OnPolicyCommandHandler {
+    receiver: Option<OnPolicyCommandReceiver>,
+}
+
+impl OnPolicyCommandHandler {
+    pub(crate) fn new(receiver: Option<OnPolicyCommandReceiver>) -> Self {
+        Self { receiver }
+    }
+
+    fn process_pending<A: Agent<Actor: ToSafetensors>, S: Sampler>(
         &self,
         runtime: &mut OnPolicyRuntime<A, S>,
     ) -> HookResult {
-        todo!()
+        let Some(receiver) = &self.receiver else {
+            return HookResult::Continue;
+        };
+        while let Ok(command) = receiver.rx.try_recv() {
+            match command {
+                OnPolicyCommand::Shutdown => {
+                    let _ = receiver.tx.send(OnPolicyCommandResult::Stopping);
+                    return HookResult::Break;
+                }
+                OnPolicyCommand::SerializeCurrentPolicy(path) => {
+                    let result = runtime.actor().to_safetensors().and_then(|bytes| {
+                        std::fs::write(PathBuf::from(path), bytes).map_err(Error::wrap)
+                    });
+                    let _ = receiver
+                        .tx
+                        .send(OnPolicyCommandResult::CurrentPolicySerialized(result));
+                }
+            }
+        }
+        HookResult::Continue
+    }
+
+    fn notify_stopped(&self) {
+        if let Some(receiver) = &self.receiver {
+            let _ = receiver.tx.send(OnPolicyCommandResult::Stopped);
+        }
     }
 }
 
 #[derive(Default)]
 struct TrainingLoopTimings {
-    collect_time: Duration,
-    training_time: Duration,
-    evaluation_time: Duration,
-    total_time: Duration,
+    collection: Duration,
+    training: Duration,
+    evaluation: Duration,
+    total: Duration,
 }
 
-struct TrainingTimingsRecorder {
+pub(crate) enum TrainingTimingRecorder {
+    Disabled,
+    Enabled(EnabledTrainingTimingRecorder),
+}
+
+pub(crate) struct EnabledTrainingTimingRecorder {
     file: File,
-    training_start: Instant,
-    phase_start: Instant,
-    current_timings: TrainingLoopTimings,
+    training_started: Instant,
+    phase_started: Instant,
+    current: TrainingLoopTimings,
 }
 
-impl TrainingTimingsRecorder {
+impl TrainingTimingRecorder {
+    pub(crate) fn disabled() -> Self {
+        Self::Disabled
+    }
+
+    pub(crate) fn create(output_dir: &Path) -> Result<Self, Error> {
+        std::fs::create_dir_all(output_dir).map_err(Error::wrap)?;
+        let mut file = File::create(output_dir.join(TRAINING_TIMINGS_FILE)).map_err(Error::wrap)?;
+        writeln!(file, "rollout,collect_ms,learn_ms,evaluate_ms,total_ms").map_err(Error::wrap)?;
+        let now = Instant::now();
+        Ok(Self::Enabled(EnabledTrainingTimingRecorder {
+            file,
+            training_started: now,
+            phase_started: now,
+            current: TrainingLoopTimings::default(),
+        }))
+    }
+
     fn init(&mut self) {
-        self.phase_start = Instant::now();
-        self.training_start = Instant::now();
+        let Self::Enabled(recorder) = self else {
+            return;
+        };
+        let now = Instant::now();
+        recorder.training_started = now;
+        recorder.phase_started = now;
     }
 
-    fn record_phase_start(&mut self) {
-        self.phase_start = Instant::now();
+    fn start_phase(&mut self) {
+        let Self::Enabled(recorder) = self else {
+            return;
+        };
+        recorder.phase_started = Instant::now();
     }
 
-    fn record_phase_end(&mut self, phase: TrainingLoopPhase) {
-        let duration = Instant::now() - self.phase_start;
-        match phase {
-            TrainingLoopPhase::Collection => {
-                self.current_timings.collect_time = duration;
-            }
-            TrainingLoopPhase::Training => {
-                self.current_timings.training_time = duration;
-            }
-            TrainingLoopPhase::Evaluation => {
-                self.current_timings.evaluation_time = duration;
-                let timings = std::mem::take(&mut self.current_timings);
-                // TODO: write this to the file
-            }
-        }
+    fn finish_phase(&mut self, phase: TrainingPhase) -> Result<(), Error> {
+        let Self::Enabled(recorder) = self else {
+            return Ok(());
+        };
+        recorder.finish_phase(phase)
+    }
+
+    fn finish_evaluation(&mut self, completed_rollouts: usize) -> Result<(), Error> {
+        let Self::Enabled(recorder) = self else {
+            return Ok(());
+        };
+        recorder.finish_evaluation(completed_rollouts)
     }
 }
 
+impl EnabledTrainingTimingRecorder {
+    fn finish_phase(&mut self, phase: TrainingPhase) -> Result<(), Error> {
+        let now = Instant::now();
+        let duration = now - self.phase_started;
+        match phase {
+            TrainingPhase::Collection => self.current.collection = duration,
+            TrainingPhase::Training => self.current.training = duration,
+        }
+        Ok(())
+    }
+
+    fn finish_evaluation(&mut self, completed_rollouts: usize) -> Result<(), Error> {
+        let now = Instant::now();
+        self.current.evaluation = now - self.phase_started;
+        self.current.total = now - self.training_started;
+        let timings = std::mem::take(&mut self.current);
+        writeln!(
+            self.file,
+            "{},{:.3},{:.3},{:.3},{:.3}",
+            completed_rollouts,
+            timings.collection.as_secs_f64() * 1000.0,
+            timings.training.as_secs_f64() * 1000.0,
+            timings.evaluation.as_secs_f64() * 1000.0,
+            timings.total.as_secs_f64() * 1000.0,
+        )
+        .map_err(Error::wrap)
+    }
+}
+
+#[derive(Default)]
 struct TrainingLoopState {
-    rollout: usize,
+    completed_rollouts: usize,
     steps_taken: usize,
 }
 
-struct DefaultOnPolicyAlgorithmHooks2<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
-    pub(crate) training_loop_state: TrainingLoopState,
-    pub(crate) learning_schedule: LearningSchedule,
-    pub(crate) learning_rate_schedule: LearningRateSchedule,
-    pub(crate) best_actor_evaluator: BestActorEvaluator<A::Actor, E>,
-    pub(crate) on_policy_commander: OnPolicyCommander,
-    pub(crate) training_timings: TrainingTimingsRecorder,
-    pub(crate) _phantom: PhantomData<(A, S, E)>,
+/// Default lifecycle coordination for an on-policy training loop.
+pub struct DefaultOnPolicyAlgorithmHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
+    state: TrainingLoopState,
+    learning_schedule: LearningSchedule,
+    learning_rate_scheduler: LearningRateScheduler,
+    evaluator: ScheduledEvaluator<A::Actor, E>,
+    command_handler: OnPolicyCommandHandler,
+    timing_recorder: TrainingTimingRecorder,
+    error: Option<Error>,
+    _phantom: PhantomData<S>,
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
-    DefaultOnPolicyAlgorithmHooks2<A, S, E>
+    DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
+    pub(crate) fn new(
+        learning_schedule: LearningSchedule,
+        learning_rate_schedule: Option<LearningRateSchedule>,
+        evaluator: ScheduledEvaluator<A::Actor, E>,
+        command_handler: OnPolicyCommandHandler,
+        timing_recorder: TrainingTimingRecorder,
+    ) -> Self {
+        Self {
+            state: TrainingLoopState::default(),
+            learning_schedule,
+            learning_rate_scheduler: LearningRateScheduler::new(learning_rate_schedule),
+            evaluator,
+            command_handler,
+            timing_recorder,
+            error: None,
+            _phantom: PhantomData,
+        }
+    }
+
     fn progress_remaining(&self) -> f64 {
-        match self.learning_schedule {
+        match &self.learning_schedule {
             LearningSchedule::RolloutBound { total_rollouts } => {
-                1.0 - self.training_loop_state.rollout as f64 / total_rollouts as f64
+                1.0 - self.state.completed_rollouts as f64 / *total_rollouts as f64
             }
             LearningSchedule::TotalStepBound { total_steps } => {
-                1.0 - self.training_loop_state.steps_taken as f64 / total_steps as f64
+                1.0 - self.state.steps_taken as f64 / *total_steps as f64
             }
         }
     }
 
-    fn leraning_rate(&self) -> f64 {
-        match self.learning_rate_schedule {
-            LearningRateSchedule::Constant(learning_rate) => learning_rate,
-            LearningRateSchedule::Linear(initial_learning_rate) => {
-                let progress = self.progress_remaining();
-                initial_learning_rate * progress.clamp(0.0, 1.0)
-            }
-        }
+    fn finish_collection(&mut self, runtime: &mut OnPolicyRuntime<A, S>) -> Result<(), Error> {
+        self.timing_recorder
+            .finish_phase(TrainingPhase::Collection)?;
+        let rollouts = runtime.trajectory_containers();
+        self.state.steps_taken += rollouts
+            .as_ref()
+            .iter()
+            .map(|trajectory| trajectory.actions.len())
+            .sum::<usize>();
+        drop(rollouts);
+        self.learning_rate_scheduler
+            .update(self.progress_remaining(), runtime);
+        Ok(())
     }
 
-    fn advance_state(
+    fn finish_training_and_evaluate(
         &mut self,
         runtime: &mut OnPolicyRuntime<A, S>,
-        training_loop_phase: TrainingLoopPhase,
     ) -> Result<(), Error> {
-        self.training_timings.record_phase_end(training_loop_phase);
-        match training_loop_phase {
-            TrainingLoopPhase::Collection => {
-                let rollouts = runtime.trajectory_containers();
-                let rollout_steps: usize = rollouts.as_ref().iter().map(|e| e.actions.len()).sum();
-                self.training_loop_state.steps_taken += rollout_steps;
-                let learning_rate = self.leraning_rate();
-                drop(rollouts);
-                runtime.agent.set_learning_rate(learning_rate);
-            }
-            TrainingLoopPhase::Training => {
-                self.training_timings.record_phase_start();
-                self.best_actor_evaluator
-                    .eval(runtime, self.training_loop_state.rollout)?;
-                self.training_timings
-                    .record_phase_end(TrainingLoopPhase::Evaluation);
-                self.training_loop_state.rollout += 1
-            }
-            TrainingLoopPhase::Evaluation => unreachable!(),
-        }
-        Ok(())
+        self.timing_recorder.finish_phase(TrainingPhase::Training)?;
+        self.timing_recorder.start_phase();
+        let evaluation_result = self
+            .evaluator
+            .evaluate(runtime, self.state.completed_rollouts);
+        let completed_rollouts = self.state.completed_rollouts + 1;
+        let timing_result = self.timing_recorder.finish_evaluation(completed_rollouts);
+        self.state.completed_rollouts += 1;
+        evaluation_result.and(timing_result)
+    }
+
+    fn break_with_error(&mut self, error: Error) -> HookResult {
+        self.error.get_or_insert(error);
+        HookResult::Break
     }
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgorithmHooks
-    for DefaultOnPolicyAlgorithmHooks2<A, S, E>
+    for DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
     type A = A;
     type S = S;
 
-    fn init_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
-        self.training_timings.init();
+    fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
+        self.timing_recorder.init();
         HookResult::Continue
     }
 
     fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
-        self.advance_state(runtime, TrainingLoopPhase::Collection);
-        let command_result = self.on_policy_commander.process_pending_commands(runtime);
-        self.training_timings.record_phase_start();
+        if let Err(error) = self.finish_collection(runtime) {
+            return self.break_with_error(error);
+        }
+        let command_result = self.command_handler.process_pending(runtime);
+        self.timing_recorder.start_phase();
         command_result
     }
 
@@ -191,14 +408,16 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> HookResult {
-        self.advance_state(runtime, TrainingLoopPhase::Training);
-        let command_result = self.on_policy_commander.process_pending_commands(runtime);
-        let hook_result = if self.progress_remaining() <= 0. {
+        if let Err(error) = self.finish_training_and_evaluate(runtime) {
+            return self.break_with_error(error);
+        }
+        let command_result = self.command_handler.process_pending(runtime);
+        let hook_result = if self.progress_remaining() <= 0.0 {
             HookResult::Break
         } else {
             command_result
         };
-        self.training_timings.record_phase_start();
+        self.timing_recorder.start_phase();
         hook_result
     }
 
@@ -206,6 +425,12 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> Result<(), Error> {
-        todo!()
+        let evaluator_result = self.evaluator.shutdown();
+        runtime.shutdown();
+        self.command_handler.notify_stopped();
+        match self.error.take() {
+            Some(error) => Err(error),
+            None => evaluator_result,
+        }
     }
 }
