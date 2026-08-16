@@ -53,9 +53,9 @@ mod utils;
 pub type BurnBackend = Autodiff<NdArray>;
 
 pub use builders::{
-    A2CAlgorithmBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceArtifacts, InferenceRunner,
-    OnPolicyAlgoBuilder, OnPolicyOptimizerLayout, PPOAlgorithmBuilder, PPOBurn, PPOCandle,
-    PolicyBuilder, TrainingArtifactsConfig,
+    A2CAlgorithmBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceRunner, OnPolicyAlgoBuilder,
+    OnPolicyOptimizerLayout, PPOAlgorithmBuilder, PPOBurn, PPOCandle, PolicyBuilder,
+    TrainingArtifactsConfig,
 };
 pub use evaluators::best_actor_evaluator::EvaluationSettings;
 pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};

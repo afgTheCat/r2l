@@ -84,13 +84,12 @@ Using the inference artifacts and a new environment, you can create an
 ```rust,no_run
 # extern crate r2l;
 # extern crate r2l_gym;
-use r2l::InferenceArtifacts;
+use r2l::InferenceRunner;
 use r2l_gym::GymEnv;
 
 fn main() {
-    let inference_artifacts = InferenceArtifacts::load("runs/pendulum").unwrap();
     let env = GymEnv::new("Pendulum-v1", Some("human".to_owned())).unwrap();
-    let mut inference = inference_artifacts.build(env).unwrap();
+    let mut inference = InferenceRunner::load("runs/pendulum", env).unwrap();
     for _ in 0..4 {
         inference.run_episode();
     }

@@ -126,80 +126,6 @@ impl InferenceConfig {
     }
 }
 
-/// An inference configuration bound to its learned artifact directory.
-#[derive(Debug, Clone)]
-pub struct InferenceArtifacts {
-    config: InferenceConfig,
-    directory: PathBuf,
-}
-
-impl InferenceArtifacts {
-    /// Loads an inference configuration and binds it to `directory`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the configuration cannot be read or deserialized.
-    pub fn load(directory: impl Into<PathBuf>) -> Result<Self, Error> {
-        let directory = directory.into();
-        let config = InferenceConfig::load_from_dir(&directory)?;
-        Ok(Self { config, directory })
-    }
-
-    /// Builds an inference runtime using the configured backend and learned artifacts.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if an artifact cannot be read or the configured model cannot be built.
-    pub fn build<E: Env>(self, env: E) -> Result<InferenceRunner<E>, Error> {
-        let obs_normalizer = match self.config.observation_mode {
-            InferenceObservationMode::Raw => None,
-            InferenceObservationMode::Normalized => {
-                let artifact = ArtifactFile::new(
-                    self.directory.join(NORMALIZER_FILE),
-                    "observation normalizer",
-                );
-                let serialized = artifact.read_to_string()?;
-                let normalizer_builder: NormalizerBuilder = yaml_serde::from_str(&serialized)
-                    .map_err(|error| artifact.decode_error(Box::new(error)))?;
-                Some(normalizer_builder.into_normalizer()?)
-            }
-        };
-        let env_description = env.env_description();
-        let actor_artifact = ArtifactFile::new(self.directory.join(ACTOR_FILE), "actor");
-        let actor_bytes = actor_artifact.read()?;
-        let actor = match self.config.backend {
-            InferenceBackend::Candle(backend) => {
-                let var_builder =
-                    VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &backend.device)
-                        .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
-                let actor = CandlePolicyKind::build(
-                    env_description.action_space.clone(),
-                    &var_builder,
-                    &self.config.policy_builder.hidden_layers,
-                    env_description.observation_space.size(),
-                    self.config.policy_builder.activation_function,
-                    self.config.policy_builder.log_std_init,
-                )
-                .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
-                InferenceActor::Candle(ActorWrapper::new(actor))
-            }
-            InferenceBackend::Burn(_) => {
-                let actor = self
-                    .config
-                    .policy_builder
-                    .build_burn::<NdArray, _>(
-                        env_description.observation_space.size(),
-                        env_description.action_space,
-                    )?
-                    .load_from_bytes(actor_bytes)
-                    .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
-                InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))
-            }
-        };
-        InferenceRunner::new(env, obs_normalizer, actor)
-    }
-}
-
 /// Backend-independent actor adapted to an environment tensor type.
 #[derive(Debug, Clone)]
 enum InferenceActor<T: R2lTensor> {
@@ -236,6 +162,60 @@ pub struct InferenceRunner<E: Env> {
 }
 
 impl<E: Env> InferenceRunner<E> {
+    /// Loads an inference runtime from learned artifacts for `env`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an artifact cannot be read or decoded, the configured
+    /// model cannot be built, or the environment cannot be reset.
+    pub fn load(directory: impl AsRef<Path>, env: E) -> Result<Self, Error> {
+        let directory = directory.as_ref();
+        let config = InferenceConfig::load_from_dir(directory)?;
+        let obs_normalizer = match config.observation_mode {
+            InferenceObservationMode::Raw => None,
+            InferenceObservationMode::Normalized => {
+                let artifact =
+                    ArtifactFile::new(directory.join(NORMALIZER_FILE), "observation normalizer");
+                let serialized = artifact.read_to_string()?;
+                let normalizer_builder: NormalizerBuilder = yaml_serde::from_str(&serialized)
+                    .map_err(|error| artifact.decode_error(Box::new(error)))?;
+                Some(normalizer_builder.into_normalizer()?)
+            }
+        };
+        let env_description = env.env_description();
+        let actor_artifact = ArtifactFile::new(directory.join(ACTOR_FILE), "actor");
+        let actor_bytes = actor_artifact.read()?;
+        let actor = match config.backend {
+            InferenceBackend::Candle(backend) => {
+                let var_builder =
+                    VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &backend.device)
+                        .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
+                let actor = CandlePolicyKind::build(
+                    env_description.action_space.clone(),
+                    &var_builder,
+                    &config.policy_builder.hidden_layers,
+                    env_description.observation_space.size(),
+                    config.policy_builder.activation_function,
+                    config.policy_builder.log_std_init,
+                )
+                .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
+                InferenceActor::Candle(ActorWrapper::new(actor))
+            }
+            InferenceBackend::Burn(_) => {
+                let actor = config
+                    .policy_builder
+                    .build_burn::<NdArray, _>(
+                        env_description.observation_space.size(),
+                        env_description.action_space,
+                    )?
+                    .load_from_bytes(actor_bytes)
+                    .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
+                InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))
+            }
+        };
+        Self::new(env, obs_normalizer, actor)
+    }
+
     fn new(
         mut env: E,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,

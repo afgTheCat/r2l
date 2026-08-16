@@ -10,7 +10,7 @@ use burn::{
 };
 use candle_core::{Device, DeviceLocation};
 use candle_nn::ParamsAdamW;
-pub use inference::{InferenceArtifacts, InferenceRunner};
+pub use inference::InferenceRunner;
 use inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
 pub use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{

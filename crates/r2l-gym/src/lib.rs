@@ -54,8 +54,8 @@ fn map_py_error_to_r2l(py: Python<'_>, operation: &str, error: PyErr) -> Error {
 struct GymEnvPyhon(PyObject);
 
 impl GymEnvPyhon {
-    fn new<'a>(
-        py: Python<'a>,
+    fn new(
+        py: Python<'_>,
         name: &str,
         render_mode: Option<String>,
     ) -> Result<Self, r2l_core::error::Error> {
@@ -72,9 +72,9 @@ impl GymEnvPyhon {
         new().map_err(|error| map_py_error_to_r2l(py, "build", error))
     }
 
-    fn observation_space<'a>(
+    fn observation_space(
         &self,
-        py: Python<'a>,
+        py: Python<'_>,
     ) -> Result<Space<TensorData>, r2l_core::error::Error> {
         let observation_space = || {
             let gym_spaces = py.import("gymnasium.spaces")?;
@@ -86,9 +86,9 @@ impl GymEnvPyhon {
             .map_err(|error| map_py_error_to_r2l(py, "inspect observation space", error))
     }
 
-    fn action_space<'a>(
+    fn action_space(
         &self,
-        py: Python<'a>,
+        py: Python<'_>,
     ) -> Result<Space<TensorData>, r2l_core::error::Error> {
         let action_space = || {
             let gym_spaces = py.import("gymnasium.spaces")?;
@@ -99,9 +99,9 @@ impl GymEnvPyhon {
         action_space().map_err(|error| map_py_error_to_r2l(py, "inspect action space", error))
     }
 
-    fn reset<'a>(
+    fn reset(
         &self,
-        py: Python<'a>,
+        py: Python<'_>,
         seed: u64,
         observation_space: &Space<TensorData>,
     ) -> Result<TensorData, r2l_core::error::Error> {
@@ -110,23 +110,23 @@ impl GymEnvPyhon {
             kwargs.set_item("seed", seed)?;
             let state = self.0.call_method(py, "reset", (), Some(&kwargs))?;
             let step = state.bind(py);
-            parse_obs(&step.get_item(0)?, &observation_space)
+            parse_obs(&step.get_item(0)?, observation_space)
         };
         reset().map_err(|error| map_py_error_to_r2l(py, "reset", error))
     }
 
-    fn step<'a>(
+    fn step(
         &self,
-        py: Python<'a>,
+        py: Python<'_>,
         action: TensorData,
         action_space: &Space<TensorData>,
         observation_space: &Space<TensorData>,
     ) -> Result<Snapshot<TensorData>, r2l_core::error::Error> {
         let step = || {
-            let action = parse_action(py, &action.into_vec(), &action_space)?;
+            let action = parse_action(py, &action.into_vec(), action_space)?;
             let step = self.0.call_method(py, "step", (action,), None)?;
             let step = step.bind(py);
-            let next_state = parse_obs(&step.get_item(0)?, &observation_space)?;
+            let next_state = parse_obs(&step.get_item(0)?, observation_space)?;
             let reward: f32 = step.get_item(1)?.extract()?;
             let terminated: bool = step.get_item(2)?.extract()?;
             let truncated: bool = step.get_item(3)?.extract()?;

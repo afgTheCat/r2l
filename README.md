@@ -11,7 +11,7 @@ like this:
 
 ```rust,no_run
 use r2l::{
-    InferenceArtifacts, LearningSchedule, TrainingArtifactsConfig,
+    InferenceRunner, LearningSchedule, TrainingArtifactsConfig,
     PPOAlgorithmBuilder,
 };
 use r2l_gym::GymEnv;
@@ -34,9 +34,8 @@ fn main() {
     ppo.train().unwrap();
 
     // Reload the artifacts later without rebuilding the policy by hand.
-    let inference_artifacts = InferenceArtifacts::load(ARTIFACT_DIR).unwrap();
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
-    let mut inference = inference_artifacts.build(env).unwrap();
+    let mut inference = InferenceRunner::load(ARTIFACT_DIR, env).unwrap();
     for _ in 0..10 {
         inference.run_episode();
     }

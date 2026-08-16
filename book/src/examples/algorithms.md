@@ -7,7 +7,7 @@ customizing lower-level hooks or samplers.
 ## PPO
 
 The PPO example trains on `Pendulum-v1`, writes training artifacts, reloads the
-best actor through `InferenceArtifacts`, and runs rendered inference episodes.
+best actor through `InferenceRunner`, and runs rendered inference episodes.
 
 Run it from the workspace root:
 
@@ -21,7 +21,7 @@ cargo run -p r2l-examples --example ppo
 
 The important pieces are `with_training_artifacts`, which writes
 `actor.safetensors`, `inference.yaml`, and metrics files, and
-`InferenceArtifacts::load`, which rebuilds the inference runner from those
+`InferenceRunner::load`, which rebuilds the inference runner from those
 saved files.
 
 ## A2C

@@ -1,5 +1,5 @@
 // ANCHOR: ppo
-use r2l::{InferenceArtifacts, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
+use r2l::{InferenceRunner, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
 use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";
@@ -21,9 +21,8 @@ fn main() {
     ppo.train().unwrap();
 
     // Reload the artifacts later without rebuilding the policy by hand.
-    let inference_artifacts = InferenceArtifacts::load(ARTIFACT_DIR).unwrap();
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
-    let mut inference = inference_artifacts.build(env).unwrap();
+    let mut inference = InferenceRunner::load(ARTIFACT_DIR, env).unwrap();
     for _ in 0..4 {
         inference.run_episode();
     }

@@ -174,7 +174,7 @@ impl RlZooEnvironmentConfig {
         match backend {
             Backend::Burn => builder.with_burn().build()?.train()?,
             Backend::Candle => builder.build()?.train()?,
-        };
+        }
         Ok(())
     }
 }
