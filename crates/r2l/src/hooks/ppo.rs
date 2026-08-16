@@ -20,10 +20,10 @@ use r2l_core::{
 
 use crate::utils::{fmt_stat, mean};
 
-/// Per-batch training statistics emitted by the default PPO hook.
+/// Training statistics for a single PPO optimization minibatch.
 ///
-/// Each value corresponds to a single optimization batch processed within one
-/// PPO epoch.
+/// These statistics are collected during one PPO epoch and reported by the
+/// default PPO hook.
 #[derive(Debug, Clone)]
 pub struct PPOMinibatchStats {
     /// Fraction of samples whose probability ratio exceeded the clip range.
@@ -38,11 +38,11 @@ pub struct PPOMinibatchStats {
     pub value_loss: f32,
 }
 
-/// Aggregated statistics emitted by the default PPO hook after a learning
-/// pass.
+/// Training statistics for a single PPO rollout and its learning pass.
 ///
-/// A report contains all collected [`PPOMinibatchStats`] for the rollout together
-/// with rollout-level summaries such as average reward and learning rate.
+/// These statistics include the [`PPOMinibatchStats`] collected across PPO
+/// epochs together with rollout-level summaries such as average reward and
+/// learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct PPORolloutStats {
     /// Rollout index to which the stats belong.

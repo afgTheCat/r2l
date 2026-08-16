@@ -64,7 +64,7 @@ pub type A2CCandle = A2C<CandlePolicyValueLearner, DefaultA2CHook<CandlePolicyVa
 /// A2C agent produced by a Burn-backed algorithm builder.
 pub type A2CBurn<B> = A2C<BurnPolicyValueLearner<B>, DefaultA2CHook<BurnPolicyValueLearner<B>>>;
 
-/// `AdamW` hyperparameters used by an on-policy learner.
+/// Hyperparameters for the AdamW optimizer.
 #[derive(Clone, Debug)]
 pub struct AdamWParams {
     /// Learning rate.

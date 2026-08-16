@@ -29,13 +29,15 @@
 //!
 //! - on-policy training with PPO and A2C,
 //! - Candle and Burn policy/value backends,
-//! - native environment abstractions and a Gymnasium adapter,
+//! - a Gymnasium adapter,
 //! - categorical, diagonal-Gaussian, multi-categorical, multi-Bernoulli, and
-//!   composite policies for common Gymnasium action spaces,
-//! - observation and reward normalization, evaluation, and learning-rate scheduling
-//!   utilities, and
-//! - persistence of trained policies using [`TrainingArtifactsConfig`] and
-//!   [`InferenceArtifacts`] for later inference.
+//!   composite policies,
+//! - observation and reward normalization, evaluation and
+//! - persistence of trained policies and inference
+//!
+//! ## Other crates
+//!
+//! r2l is the built on top of other crates.
 
 #![warn(missing_docs)]
 

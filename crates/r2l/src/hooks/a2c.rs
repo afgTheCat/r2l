@@ -20,10 +20,10 @@ use r2l_core::{
 
 use crate::utils::{fmt_stat, mean};
 
-/// Per-batch training statistics emitted by the default A2C hook.
+/// Training statistics for a single A2C optimization minibatch.
 ///
-/// Each value corresponds to a single optimization batch processed during one
-/// A2C learning pass.
+/// These statistics are collected during one A2C learning pass and reported by
+/// the default A2C hook.
 #[derive(Debug, Clone)]
 pub struct A2CMinibatchStats {
     /// Entropy regularization term computed for the batch.
@@ -34,10 +34,10 @@ pub struct A2CMinibatchStats {
     pub value_loss: f32,
 }
 
-/// Aggregated statistics emitted by the default A2C hook after a learning pass.
+/// Training statistics for a single A2C rollout and its learning pass.
 ///
-/// A report contains all collected [`A2CMinibatchStats`] for the rollout together
-/// with rollout-level summaries such as average reward and learning rate.
+/// These statistics include the collected [`A2CMinibatchStats`] together with
+/// rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct A2CRolloutStats {
     /// Rollout index to which the stats belong to

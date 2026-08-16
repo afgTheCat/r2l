@@ -243,6 +243,18 @@ impl OnPolicyCommandHandler {
         Self { receiver }
     }
 
+    fn send_result(
+        receiver: &OnPolicyCommandReceiver,
+        result: OnPolicyCommandResult,
+    ) -> Result<(), Error> {
+        receiver.tx.send(result).map_err(|error| {
+            Error::ResourceInterrupted(ResourceInterrupted {
+                resource: "on-policy command result channel".into(),
+                details: error.to_string(),
+            })
+        })
+    }
+
     fn process_pending<A: Agent<Actor: ToSafetensors>, S: Sampler>(
         &self,
         runtime: &mut OnPolicyRuntime<A, S>,
@@ -270,21 +282,11 @@ impl OnPolicyCommandHandler {
         Ok(HookResult::Continue)
     }
 
-    fn send_result(
-        receiver: &OnPolicyCommandReceiver,
-        result: OnPolicyCommandResult,
-    ) -> Result<(), Error> {
-        receiver.tx.send(result).map_err(|error| {
-            Error::ResourceInterrupted(ResourceInterrupted {
-                resource: "on-policy command result channel".into(),
-                details: error.to_string(),
-            })
-        })
-    }
-
-    fn notify_stopped(&self) {
+    fn notify_stopped(&self) -> Result<(), Error> {
         if let Some(receiver) = &self.receiver {
-            let _ = receiver.tx.send(OnPolicyCommandResult::Stopped);
+            Self::send_result(receiver, OnPolicyCommandResult::Stopped)
+        } else {
+            Ok(())
         }
     }
 }
@@ -517,10 +519,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
     ) -> Result<(), Error> {
         let evaluator_result = self.evaluator.shutdown();
         runtime.shutdown();
-        self.command_handler.notify_stopped();
+        let notification_result = self.command_handler.notify_stopped();
         match self.error.take() {
             Some(error) => Err(error),
-            None => evaluator_result,
+            None => evaluator_result.and(notification_result),
         }
     }
 }
