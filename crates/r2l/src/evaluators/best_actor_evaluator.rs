@@ -209,17 +209,32 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         }
     }
 
+    /// Returns whether the next call to [`Self::eval`] will perform an evaluation.
+    #[must_use]
+    pub fn evaluation_due(&self) -> bool {
+        (self.current_evaluator_step + 1).is_multiple_of(self.rollouts_per_evaluation)
+    }
+
+    pub fn eval_always<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
+        &mut self,
+        rt: &mut OnPolicyRuntime<AG, TS>,
+    ) -> Result<(), Error> {
+        self.current_evaluator_step += 1;
+        let actor = rt.actor();
+        let adapted_actor = ActorWrapper::new(rt.actor());
+        self.eval_adapted(adapted_actor, actor)?;
+        Ok(())
+    }
+
     /// Evaluates the runtime actor when the configured interval elapses.
     /// Returns whether an evaluation was performed.
     pub fn eval<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
         &mut self,
         rt: &mut OnPolicyRuntime<AG, TS>,
     ) -> Result<bool, Error> {
+        let evaluation_due = self.evaluation_due();
         self.current_evaluator_step += 1;
-        if self
-            .current_evaluator_step
-            .is_multiple_of(self.rollouts_per_evaluation)
-        {
+        if evaluation_due {
             let actor = rt.actor();
             let adapted_actor = ActorWrapper::new(rt.actor());
             self.eval_adapted(adapted_actor, actor)?;

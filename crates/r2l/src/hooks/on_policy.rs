@@ -29,25 +29,10 @@ struct TrainingLoopTimings {
     total_time: Duration,
 }
 
-enum CurrentTrainingPhase {
-    CollectionStarted(Instant),
-    CollectionEnded(Instant),
-    TrainingStarted(Instant),
-    TrainingEnded(Instant),
-    EvaluationStarted(Instant),
-    EvaluationEnded(Instant),
-}
-
-enum CurrentTrainingPhase2 {
-    Collection((Instant, Instant)),
-    Training((Instant, Instant)),
-    Evaluation((Instant, Instant)),
-}
-
-enum TrainingLoopPhaseEnd {
-    Collection(Instant),
-    Training(Instant),
-    Evaluation(Instant),
+enum TrainingLoopPhase {
+    Collection,
+    Training,
+    Evaluation,
 }
 
 pub struct TrainingTimingRecorder2 {
@@ -77,13 +62,19 @@ impl TrainingTimingRecorder2 {
         self.current_phase_started = phase_started;
     }
 
-    fn handle_phase_transition(&mut self, phase_end: TrainingLoopPhaseEnd) {
+    fn start_training(&mut self, started: Instant) {
+        self.training_started = started;
+        self.set_phase_started(started);
+    }
+
+    fn handle_phase_transition(&mut self, phase_end: TrainingLoopPhase) {
+        let end = Instant::now();
         let timings = &mut self.current_training_loop_timings;
         let phase_start = self.current_phase_started;
         match phase_end {
-            TrainingLoopPhaseEnd::Collection(end) => timings.collect_time = end - phase_start,
-            TrainingLoopPhaseEnd::Training(end) => timings.training_time = end - phase_start,
-            TrainingLoopPhaseEnd::Evaluation(end) => timings.evaluation_time = end - phase_start,
+            TrainingLoopPhase::Collection => timings.collect_time = end - phase_start,
+            TrainingLoopPhase::Training => timings.training_time = end - phase_start,
+            TrainingLoopPhase::Evaluation => timings.evaluation_time = end - phase_start,
         }
     }
 
@@ -91,7 +82,6 @@ impl TrainingTimingRecorder2 {
         self.current_training_loop_timings.total_time = end_time - self.training_started;
         let timing = std::mem::take(&mut self.current_training_loop_timings);
         self.training_loop_timings.push(timing);
-        self.set_phase_started(end_time);
     }
 
     fn write(&mut self) -> std::io::Result<()> {
@@ -248,6 +238,20 @@ impl LearningRateSchedule {
                 initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
             }
         }
+    }
+
+    fn set_schedule<A: Agent, S: Sampler>(
+        &self,
+        progress_remaining: f64,
+        rt: &mut OnPolicyRuntime<A, S>,
+    ) {
+        let learning_rate = match self {
+            LearningRateSchedule::Constant(learning_rate) => *learning_rate,
+            LearningRateSchedule::Linear(initial_learning_rate) => {
+                initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
+            }
+        };
+        rt.agent.set_learning_rate(learning_rate);
     }
 }
 
@@ -407,8 +411,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
     }
 }
 
-impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
-    OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks<A, S, E>
+impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgorithmHooks
+    for DefaultOnPolicyAlgorithmHooks<A, S, E>
 {
     type A = A;
     type S = S;
@@ -497,11 +501,52 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
     }
 }
 
+pub struct TrainingTimingRecorder2Wrapper {
+    innner: Option<TrainingTimingRecorder2>,
+}
+
+impl TrainingTimingRecorder2Wrapper {
+    fn set_phase_started(&mut self) {
+        let Some(inner) = &mut self.innner else {
+            return;
+        };
+        inner.set_phase_started(Instant::now());
+    }
+
+    fn start_training(&mut self) {
+        let Some(inner) = &mut self.innner else {
+            return;
+        };
+        inner.start_training(Instant::now());
+    }
+
+    fn handle_phase_transition(&mut self, phase_end: TrainingLoopPhase) {
+        let Some(inner) = &mut self.innner else {
+            return;
+        };
+        inner.handle_phase_transition(phase_end);
+    }
+
+    fn finish_training_loop(&mut self, end_time: Instant) {
+        let Some(inner) = &mut self.innner else {
+            return;
+        };
+        inner.finish_training_loop(end_time);
+    }
+
+    fn write(&mut self) -> std::io::Result<()> {
+        let Some(inner) = &mut self.innner else {
+            return Ok(());
+        };
+        inner.write()
+    }
+}
+
 pub struct DefaultOnPolicyAlgorithmHooks2<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     pub(crate) learning_schedule: LearningSchedule,
-    pub(crate) learning_rate_schedule: Option<LearningRateSchedule>,
+    pub(crate) learning_rate_schedule: LearningRateSchedule,
     pub(crate) evaluator: Option<BestActorEvaluator<A::Actor, E>>,
-    pub(crate) timing_recorder: Option<TrainingTimingRecorder2>,
+    pub(crate) timing_recorder: TrainingTimingRecorder2Wrapper,
     pub(crate) command_rx: Option<OnPolicyCommandReceiver>,
     pub(crate) error: Option<Error>,
     pub(crate) _phantom: PhantomData<(A, S, E)>,
@@ -567,40 +612,26 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 }
 
-impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tensor = S::Tensor>>
-    OnPolicyAlgorithmHooks for DefaultOnPolicyAlgorithmHooks2<A, S, E>
+impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgorithmHooks
+    for DefaultOnPolicyAlgorithmHooks2<A, S, E>
 {
     type A = A;
     type S = S;
 
     fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
-        if let Some(timing_recorder) = &mut self.timing_recorder {
-            // TODO: just to note that the next phase transition started
-            timing_recorder.set_phase_started(Instant::now());
-        }
+        self.timing_recorder.start_training();
         HookResult::Continue
     }
 
     fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
-        if let Some(timing_recorder) = &mut self.timing_recorder {
-            timing_recorder
-                .handle_phase_transition(TrainingLoopPhaseEnd::Collection(Instant::now()));
-        }
+        self.timing_recorder
+            .handle_phase_transition(TrainingLoopPhase::Collection);
         self.mark_progress(runtime);
-        if let Some(learning_rate_schedule) = self.learning_rate_schedule {
-            let learning_rate = match learning_rate_schedule {
-                LearningRateSchedule::Constant(learning_rate) => learning_rate,
-                LearningRateSchedule::Linear(initial_learning_rate) => {
-                    let progress_remaining = self.progress_remaining();
-                    initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
-                }
-            };
-            runtime.agent.set_learning_rate(learning_rate);
-        }
+        let progress_remaining = self.progress_remaining();
+        self.learning_rate_schedule
+            .set_schedule(progress_remaining, runtime);
         let command_result = self.process_pending_commands(runtime);
-        if let Some(timing_recorder) = &mut self.timing_recorder {
-            timing_recorder.set_phase_started(Instant::now());
-        }
+        self.timing_recorder.set_phase_started();
         command_result
     }
 
@@ -608,34 +639,27 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> HookResult {
-        if let Some(timing_recorder) = &mut self.timing_recorder {
-            timing_recorder.handle_phase_transition(TrainingLoopPhaseEnd::Training(Instant::now()));
-        }
+        self.timing_recorder
+            .handle_phase_transition(TrainingLoopPhase::Training);
         if let Some(evaluator) = &mut self.evaluator {
-            if let Some(timing_recorder) = &mut self.timing_recorder {
-                timing_recorder.set_phase_started(Instant::now());
-            }
-            let evaluation_started = Instant::now();
-            match evaluator.eval(runtime) {
-                Ok(evaluated) => {
-                    evaluated.then(|| TrainingTimingRecorder::elapsed_since(evaluation_started))
+            let evaluation_due = evaluator.evaluation_due();
+            if evaluation_due {
+                self.timing_recorder.set_phase_started();
+                if let Err(err) = evaluator.eval_always(runtime) {
+                    return self.break_with_error(err);
                 }
-                Err(error) => return self.break_with_error(error),
-            };
-            if let Some(timing_recorder) = &mut self.timing_recorder {
-                timing_recorder
-                    .handle_phase_transition(TrainingLoopPhaseEnd::Evaluation(Instant::now()));
+                self.timing_recorder
+                    .handle_phase_transition(TrainingLoopPhase::Evaluation);
             }
         }
-        if let Some(timing_recorder) = &mut self.timing_recorder {
-            timing_recorder.finish_training_loop(Instant::now());
-        }
+        self.timing_recorder.finish_training_loop(Instant::now());
         let command_res = self.process_pending_commands(runtime);
         let hook_result = if self.progress_remaining() <= 0. {
             HookResult::Break
         } else {
             command_res
         };
+        self.timing_recorder.set_phase_started();
         hook_result
     }
 
@@ -643,8 +667,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor: R2lTensor>, E: Env<Tenso
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> Result<(), Error> {
-        if let Some(timing_recorder) = &mut self.timing_recorder {
-            timing_recorder.write().unwrap();
+        if let Err(error) = self.timing_recorder.write() {
+            self.error.get_or_insert_with(|| Error::wrap(error));
         }
         let artifact_result = if let Some(evaluator) = &mut self.evaluator {
             let result = evaluator.try_write_artifacts();
