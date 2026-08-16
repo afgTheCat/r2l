@@ -45,7 +45,7 @@ use burn::backend::{Autodiff, NdArray};
 
 // builders + hooks + higher level helpers
 mod builders;
-mod evaluators;
+mod evaluator;
 mod hooks;
 mod utils;
 
@@ -57,7 +57,7 @@ pub use builders::{
     OnPolicyOptimizerLayout, PPOAlgorithmBuilder, PPOBurn, PPOCandle, PolicyBuilder,
     TrainingArtifactsConfig,
 };
-pub use evaluators::best_actor_evaluator::EvaluationSettings;
+pub use evaluator::EvaluationSettings;
 pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
 pub use hooks::on_policy::{
     LearningRateSchedule, LearningSchedule, OnPolicyCommand, OnPolicyCommandReceiver,

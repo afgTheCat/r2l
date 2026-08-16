@@ -40,7 +40,7 @@ use serde::{Deserialize, Serialize, de::Error as _};
 use crate::hooks::on_policy::OnPolicyTrainingHooks;
 use crate::{
     A2CRolloutStats, PPORolloutStats,
-    evaluators::best_actor_evaluator::{EvaluationSampler, EvaluationSettings},
+    evaluator::{EvaluationSampler, EvaluationSettings},
     hooks::{
         a2c::DefaultA2CHookReporter,
         on_policy::{OnPolicyCommandHandler, ScheduledEvaluator, TrainingTimingRecorder},
@@ -50,7 +50,7 @@ use crate::{
 use crate::{BurnBackend, LearningRateSchedule, LearningSchedule, OnPolicyCommandReceiver};
 use crate::{EpisodeBoundHook, StepBoundHook};
 use crate::{
-    evaluators::best_actor_evaluator::BestActorEvaluator,
+    evaluator::BestActorEvaluator,
     hooks::{a2c::DefaultA2CHook, ppo::DefaultPPOHook},
 };
 use crate::{hooks::ppo::DefaultPPOHookReporter, utils::RewardNormalizer};

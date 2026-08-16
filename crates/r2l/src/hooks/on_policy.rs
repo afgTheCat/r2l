@@ -16,7 +16,7 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-use crate::evaluators::best_actor_evaluator::BestActorEvaluator;
+use crate::evaluator::BestActorEvaluator;
 
 /// Commands processed by the default on-policy hooks at training boundaries.
 pub enum OnPolicyCommand {

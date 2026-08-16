@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write as _, path::PathBuf};
+use std::{fs::File, io::Write as _, marker::PhantomData, path::PathBuf};
 
 use r2l_core::{
     ActorWrapper,
@@ -174,7 +174,7 @@ pub(crate) struct BestActorEvaluator<A: Actor, E: Env> {
     evaluation_results: Option<File>,
     inference_artifacts: Option<PathBuf>,
     best_reward: Option<f32>,
-    _actor: std::marker::PhantomData<A>,
+    _actor: PhantomData<A>,
 }
 
 impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
@@ -197,7 +197,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
             evaluation_results,
             inference_artifacts: write_inference_artifacts.then_some(output_dir),
             best_reward: None,
-            _actor: std::marker::PhantomData,
+            _actor: PhantomData,
         })
     }
 
