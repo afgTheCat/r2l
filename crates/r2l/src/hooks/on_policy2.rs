@@ -9,9 +9,10 @@ use std::{
 use r2l_core::{
     HookResult,
     env::Env,
-    error::Error,
+    error::{Error, ResourceInterrupted},
     models::{Actor, ToSafetensors},
     on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
+    tensor::R2lTensor,
 };
 
 use crate::{
@@ -20,6 +21,15 @@ use crate::{
 };
 
 const TRAINING_TIMINGS_FILE: &str = "training_timings.csv";
+
+macro_rules! break_on_error {
+    ($hooks:expr, $body:block) => {{
+        match (|| -> Result<HookResult, Error> { $body })() {
+            Ok(value) => value,
+            Err(error) => return ($hooks).break_with_error(error),
+        }
+    }};
+}
 
 #[derive(Clone, Copy)]
 enum TrainingPhase {
@@ -70,17 +80,6 @@ pub enum LearningRateSchedule {
     Linear(f64),
 }
 
-impl LearningRateSchedule {
-    fn value(self, progress_remaining: f64) -> f64 {
-        match self {
-            Self::Constant(learning_rate) => learning_rate,
-            Self::Linear(initial_learning_rate) => {
-                initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
-            }
-        }
-    }
-}
-
 pub(crate) struct LearningRateScheduler {
     schedule: Option<LearningRateSchedule>,
 }
@@ -96,9 +95,13 @@ impl LearningRateScheduler {
         runtime: &mut OnPolicyRuntime<A, S>,
     ) {
         if let Some(schedule) = self.schedule {
-            runtime
-                .agent
-                .set_learning_rate(schedule.value(progress_remaining));
+            let learning_rate = match schedule {
+                LearningRateSchedule::Constant(learning_rate) => learning_rate,
+                LearningRateSchedule::Linear(initial_learning_rate) => {
+                    initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
+                }
+            };
+            runtime.agent.set_learning_rate(learning_rate);
         }
     }
 }
@@ -111,9 +114,7 @@ pub(crate) enum ScheduledEvaluator<A: Actor, E: Env> {
     },
 }
 
-impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: r2l_core::tensor::R2lTensor>>
-    ScheduledEvaluator<A, E>
-{
+impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvaluator<A, E> {
     pub(crate) fn disabled() -> Self {
         Self::Disabled
     }
@@ -169,27 +170,40 @@ impl OnPolicyCommandHandler {
     fn process_pending<A: Agent<Actor: ToSafetensors>, S: Sampler>(
         &self,
         runtime: &mut OnPolicyRuntime<A, S>,
-    ) -> HookResult {
+    ) -> Result<HookResult, Error> {
         let Some(receiver) = &self.receiver else {
-            return HookResult::Continue;
+            return Ok(HookResult::Continue);
         };
         while let Ok(command) = receiver.rx.try_recv() {
             match command {
                 OnPolicyCommand::Shutdown => {
-                    let _ = receiver.tx.send(OnPolicyCommandResult::Stopping);
-                    return HookResult::Break;
+                    Self::send_result(receiver, OnPolicyCommandResult::Stopping)?;
+                    return Ok(HookResult::Break);
                 }
                 OnPolicyCommand::SerializeCurrentPolicy(path) => {
                     let result = runtime.actor().to_safetensors().and_then(|bytes| {
                         std::fs::write(PathBuf::from(path), bytes).map_err(Error::wrap)
                     });
-                    let _ = receiver
-                        .tx
-                        .send(OnPolicyCommandResult::CurrentPolicySerialized(result));
+                    Self::send_result(
+                        receiver,
+                        OnPolicyCommandResult::CurrentPolicySerialized(result),
+                    )?;
                 }
             }
         }
-        HookResult::Continue
+        Ok(HookResult::Continue)
+    }
+
+    fn send_result(
+        receiver: &OnPolicyCommandReceiver,
+        result: OnPolicyCommandResult,
+    ) -> Result<(), Error> {
+        receiver.tx.send(result).map_err(|error| {
+            Error::ResourceInterrupted(ResourceInterrupted {
+                resource: "on-policy command result channel".into(),
+                details: error.to_string(),
+            })
+        })
     }
 
     fn notify_stopped(&self) {
@@ -396,10 +410,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
     }
 
     fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
-        if let Err(error) = self.finish_collection(runtime) {
-            return self.break_with_error(error);
-        }
-        let command_result = self.command_handler.process_pending(runtime);
+        let command_result = break_on_error!(self, {
+            self.finish_collection(runtime)?;
+            self.command_handler.process_pending(runtime)
+        });
         self.timing_recorder.start_phase();
         command_result
     }
@@ -408,10 +422,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> HookResult {
-        if let Err(error) = self.finish_training_and_evaluate(runtime) {
-            return self.break_with_error(error);
-        }
-        let command_result = self.command_handler.process_pending(runtime);
+        let command_result = break_on_error!(self, {
+            self.finish_training_and_evaluate(runtime)?;
+            self.command_handler.process_pending(runtime)
+        });
         let hook_result = if self.progress_remaining() <= 0.0 {
             HookResult::Break
         } else {
