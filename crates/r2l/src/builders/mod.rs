@@ -581,7 +581,7 @@ impl<E: Env> Builder<E> {
                         config.output_dir.clone(),
                         config.evaluation_results,
                         config.inference_artifacts,
-                    ),
+                    )?,
                     config.evaluation_settings.rollouts_per_evaluation,
                 )
             } else {

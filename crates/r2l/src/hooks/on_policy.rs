@@ -228,9 +228,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
         let Self::Enabled { evaluator, .. } = self else {
             return Ok(());
         };
-        let result = evaluator.try_write_artifacts();
-        evaluator.shutdown();
-        result
+        evaluator.shutdown()
     }
 }
 

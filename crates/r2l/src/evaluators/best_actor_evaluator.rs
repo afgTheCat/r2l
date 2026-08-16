@@ -1,4 +1,4 @@
-use std::{fmt::Write as _, path::PathBuf};
+use std::{fs::File, io::Write as _, path::PathBuf};
 
 use r2l_core::{
     ActorWrapper,
@@ -164,11 +164,6 @@ impl EvaluationSettings {
     }
 }
 
-struct EvalState {
-    avg_reward: f32,
-    total_episodes: f32,
-}
-
 /// Evaluates an actor through the sampler path and keeps the best one seen.
 ///
 /// This evaluator collects episode-bounded rollouts,
@@ -176,13 +171,10 @@ struct EvalState {
 /// observed so far.
 pub(crate) struct BestActorEvaluator<A: Actor, E: Env> {
     sampler: EvaluationSampler<E>,
-    output_dir: PathBuf,
-    write_evaluation_results: bool,
-    write_inference_artifacts: bool,
-    best_actor: Option<A>,
-    best_obs_normalizer: Option<NormalizerBuilder>,
-    best_rewards: f32,
-    eval_states: Vec<EvalState>,
+    evaluation_results: Option<File>,
+    inference_artifacts: Option<PathBuf>,
+    best_reward: Option<f32>,
+    _actor: std::marker::PhantomData<A>,
 }
 
 impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
@@ -191,17 +183,22 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         output_dir: PathBuf,
         write_evaluation_results: bool,
         write_inference_artifacts: bool,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        std::fs::create_dir_all(&output_dir).map_err(Error::wrap)?;
+        let evaluation_results = if write_evaluation_results {
+            let mut file = File::create(output_dir.join(EVALUATIONS_FILE)).map_err(Error::wrap)?;
+            writeln!(file, "average_reward,total_episodes").map_err(Error::wrap)?;
+            Some(file)
+        } else {
+            None
+        };
+        Ok(Self {
             sampler,
-            output_dir,
-            write_evaluation_results,
-            write_inference_artifacts,
-            best_actor: None,
-            best_obs_normalizer: None,
-            best_rewards: f32::MIN,
-            eval_states: vec![],
-        }
+            evaluation_results,
+            inference_artifacts: write_inference_artifacts.then_some(output_dir),
+            best_reward: None,
+            _actor: std::marker::PhantomData,
+        })
     }
 
     pub fn evaluate<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
@@ -222,58 +219,37 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
     ) -> Result<(), Error> {
         let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor)?;
         let avg_reward = total_reward / total_episodes;
-        if self.write_evaluation_results {
-            self.eval_states.push(EvalState {
-                avg_reward,
-                total_episodes,
-            });
+        if let Some(evaluation_results) = &mut self.evaluation_results {
+            writeln!(evaluation_results, "{avg_reward},{total_episodes}").map_err(Error::wrap)?;
         }
-        if avg_reward > self.best_rewards {
-            self.best_rewards = avg_reward;
-            if self.write_inference_artifacts {
-                self.best_actor = Some(actor);
-                self.best_obs_normalizer = self.sampler.normalizer_snapshot()?;
+        if self
+            .best_reward
+            .is_none_or(|best_reward| avg_reward > best_reward)
+        {
+            if let Some(output_dir) = &self.inference_artifacts {
+                let actor_bytes = actor.to_safetensors()?;
+                let normalizer = self.sampler.normalizer_snapshot()?;
+                std::fs::write(output_dir.join(ACTOR_FILE), actor_bytes).map_err(Error::wrap)?;
+                if let Some(normalizer) = normalizer {
+                    let serialized = yaml_serde::to_string(&normalizer).map_err(Error::wrap)?;
+                    std::fs::write(output_dir.join(NORMALIZER_FILE), serialized)
+                        .map_err(Error::wrap)?;
+                }
             }
-            self.try_write_artifacts()?;
-        }
-        Ok(())
-    }
-
-    /// Writes the enabled inference artifacts and evaluation results.
-    pub fn try_write_artifacts(&self) -> Result<(), Error> {
-        std::fs::create_dir_all(&self.output_dir).map_err(Error::wrap)?;
-        if self.write_inference_artifacts {
-            let Some(actor) = &self.best_actor else {
-                return Err(Error::InvalidState {
-                    operation: "Serializing actor".into(),
-                    details: "No actor was cached, serialization is not possible".into(),
-                });
-            };
-            let bytes = actor.to_safetensors()?;
-            std::fs::write(self.output_dir.join(ACTOR_FILE), bytes).map_err(Error::wrap)?;
-            if let Some(normalizer) = &self.best_obs_normalizer {
-                let normalizer_path = self.output_dir.join(NORMALIZER_FILE);
-                let serialized = yaml_serde::to_string(normalizer).map_err(Error::wrap)?;
-                std::fs::write(normalizer_path, serialized).map_err(Error::wrap)?;
-            }
-        }
-        if self.write_evaluation_results {
-            let mut csv = String::from("average_reward,total_episodes\n");
-            for eval_state in &self.eval_states {
-                writeln!(
-                    csv,
-                    "{},{}",
-                    eval_state.avg_reward, eval_state.total_episodes
-                )
-                .map_err(Error::wrap)?;
-            }
-            std::fs::write(self.output_dir.join(EVALUATIONS_FILE), csv).map_err(Error::wrap)?;
+            self.best_reward = Some(avg_reward);
         }
         Ok(())
     }
 
     /// Releases evaluator resources.
-    pub fn shutdown(&mut self) {
+    pub fn shutdown(&mut self) -> Result<(), Error> {
         self.sampler.shutdown();
+        if self.inference_artifacts.is_some() && self.best_reward.is_none() {
+            return Err(Error::InvalidState {
+                operation: "serializing actor".into(),
+                details: "no actor was evaluated, serialization is not possible".into(),
+            });
+        }
+        Ok(())
     }
 }
