@@ -37,13 +37,13 @@ use r2l_sampler::{
 };
 use serde::{Deserialize, Serialize, de::Error as _};
 
-use crate::hooks::on_policy2::DefaultOnPolicyAlgorithmHooks;
+use crate::hooks::on_policy::DefaultOnPolicyAlgorithmHooks;
 use crate::{
     A2CRolloutStats, PPORolloutStats,
     evaluators::best_actor_evaluator::{EvaluationSampler, EvaluationSettings},
     hooks::{
         a2c::DefaultA2CHookReporter,
-        on_policy2::{OnPolicyCommandHandler, ScheduledEvaluator, TrainingTimingRecorder},
+        on_policy::{OnPolicyCommandHandler, ScheduledEvaluator, TrainingTimingRecorder},
         ppo::TargetKl,
     },
 };
