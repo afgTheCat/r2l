@@ -26,10 +26,10 @@ pub struct DiagGaussianDistribution<B: Backend> {
 impl<B: Backend> DiagGaussianDistribution<B> {
     /// Builds a diagonal-Gaussian policy network.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `mu_layers` is empty.
-    #[must_use]
+    /// Returns an error if `mu_layers` is empty or the log-standard-deviation tensor cannot be
+    /// created.
     pub fn build(
         mu_layers: &[usize],
         activation: ActivationFunction,

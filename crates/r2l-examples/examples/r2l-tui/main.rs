@@ -128,7 +128,7 @@ impl App {
     // maybe something more eventually
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if let KeyCode::Char('q') = key_event.code {
-            self.ppo_command.shutdown();
+            let _ = self.ppo_command.shutdown();
             self.exit();
         }
     }

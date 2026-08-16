@@ -91,6 +91,10 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     }
 
     /// Creates a normalizer for observations of `shape`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot create statistics for `shape`.
     pub fn build(normalizer_mode: NormalizerMode, clip: f32, shape: Vec<usize>) -> Result<Self> {
         let rm = RunningMeanStd::new(shape)?;
         let inner = ClippedRunningMean { rm, clip };
@@ -105,6 +109,10 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     /// # Panics
     ///
     /// Panics if the shared statistics lock is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the statistics cannot be updated or applied to `obs`.
     pub fn apply_slice_in_place(&self, obs: &mut [T]) -> Result<()> {
         let mut inner = self.inner.0.lock().unwrap();
         match self.normalizer_mode {
@@ -116,6 +124,11 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
         }
     }
 
+    /// Optionally updates statistics, then normalizes and clips `obs` in place.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the statistics cannot be updated or applied to `obs`.
     pub fn apply_tensor_in_place(&self, obs: &mut T) -> Result<()> {
         self.apply_slice_in_place(std::slice::from_mut(obs))
     }
@@ -125,6 +138,10 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     /// # Panics
     ///
     /// Panics if the shared statistics lock is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend tensor statistics cannot be extracted.
     pub fn snapshot(&self) -> Result<ClippedNormalizerSnapshot> {
         let inner = self.inner.0.lock().unwrap();
         let (mean, obs_shape) = inner.rm.mean.to_vec_and_shape()?;
@@ -141,6 +158,10 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
 
 impl ClippedNormalizerSnapshot {
     /// Reconstructs a normalizer from this snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot values cannot be converted into backend tensors.
     pub fn into_normalizer<T: R2lTensor>(self) -> Result<ClippedNormalizer<T>> {
         let mean = T::from_vec_and_shape(self.mean, self.obs_shape.clone())?;
         let var = T::from_vec_and_shape(self.var, self.obs_shape)?;

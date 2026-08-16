@@ -53,6 +53,10 @@ impl<E: Env> StagedSamplerCore<E> {
     /// # Panics
     ///
     /// Panics if an environment cannot be built or reset.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the initial observations cannot be normalized.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: &EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
@@ -116,6 +120,10 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     /// Collects a bounded rollout from the worker pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an environment step, normalization, or worker operation fails.
     pub fn collect(&mut self, bound: RolloutMode) -> Result<(), Error> {
         match bound {
             RolloutMode::StepBound { n_steps } => {
@@ -232,6 +240,10 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     }
 
     /// Builds a sampler with an existing shared observation normalizer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the staged sampler core cannot be initialized.
     pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
         env_builder: &EnvBuilderType<EB>,
         hook: H,

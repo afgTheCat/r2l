@@ -71,6 +71,10 @@ pub struct CompositeDistribution<B: Backend> {
 
 impl<B: Backend> CompositeDistribution<B> {
     /// Builds one child policy per nested action space.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an action space is unsupported or a child policy cannot be built.
     pub fn build<T: R2lTensor>(
         action_spaces: Vec<Space<T>>,
         policy_layers: &[usize],

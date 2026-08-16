@@ -22,12 +22,20 @@ type Result<T> = std::result::Result<T, TensorError>;
 /// tensor operations when available.
 pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns the tensor values as a flat vector.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend values cannot be extracted.
     fn to_vec(&self) -> Result<Vec<f32>>;
 
     /// Returns the tensor shape.
     fn to_shape(&self) -> Vec<usize>;
 
-    /// Returns the tensors vec and shape
+    /// Returns the tensor values and shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend values cannot be extracted.
     fn to_vec_and_shape(&self) -> Result<(Vec<f32>, Vec<usize>)> {
         let vec = self.to_vec()?;
         let shape = self.to_shape();
@@ -35,15 +43,27 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     }
 
     /// Creates a tensor by copying flat values into `shape`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the values and shape cannot form a backend tensor.
     fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Result<Self>;
 
-    /// Constructs a new tensor based on the a vector and shape
-    #[must_use]
+    /// Creates a tensor from owned flat values and a shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the values and shape cannot form a backend tensor.
     fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Result<Self> {
         Self::from_slice_and_shape(&data, shape)
     }
 
-    /// Convert between tensors of different types
+    /// Converts a tensor from another backend.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the source values cannot be extracted or the destination tensor
+    /// cannot be constructed.
     fn convert<S: R2lTensor>(s: &S) -> Result<Self> {
         let (data, shape) = s.to_vec_and_shape()?;
         Self::from_vec_and_shape(data, shape)
@@ -123,7 +143,10 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn sqr(&self) -> Result<Self>;
 
     /// Creates a zero-filled tensor with `shape`.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot create a tensor with `shape`.
     fn zeros(shape: Vec<usize>) -> Result<Self> {
         let data = vec![0f32; shape.iter().product()];
         Self::from_vec_and_shape(data, shape)
@@ -137,6 +160,10 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn mul_scalar(&self, scalar: f32) -> Result<Self>;
 
     /// Adds a non-empty slice of equally shaped tensors.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `tensors` is empty or a backend operation fails.
     fn add_multiple(tensors: &[Self]) -> Result<Self> {
         if tensors.is_empty() {
             return Err(TensorError::EmptyInput {
@@ -149,6 +176,10 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     }
 
     /// Calculates the mean of the tensors.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `tensors` is empty or a backend operation fails.
     fn mean_tensors(tensors: &[Self]) -> Result<Self> {
         if tensors.is_empty() {
             return Err(TensorError::EmptyInput {
@@ -160,6 +191,10 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     }
 
     /// Calculates the elementwise population variance of a non-empty tensor slice.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `tensors` is empty or a backend operation fails.
     fn var_tensors(tensors: &[Self]) -> Result<Self> {
         if tensors.is_empty() {
             return Err(TensorError::EmptyInput {
@@ -207,8 +242,9 @@ impl TensorData {
 
     /// Creates tensor data with an explicit shape.
     ///
+    /// # Errors
+    ///
     /// Returns an error if `shape` does not describe exactly `data.len()` values.
-    #[must_use]
     pub fn new(data: Vec<f32>, shape: Vec<usize>) -> Result<Self> {
         let expected = shape.iter().product();
         if expected != data.len() {

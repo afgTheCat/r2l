@@ -90,6 +90,10 @@ impl PolicyBuilder {
     }
 
     /// Builds a Burn policy for backend `B`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy configuration is invalid or unsupported.
     pub fn build_burn<B: Backend, T: R2lTensor>(
         &self,
         observation_size: usize,

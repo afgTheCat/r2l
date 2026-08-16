@@ -130,7 +130,10 @@ fn ensure_same_shape(left: &Tensor, right: &Tensor, operation: &str) -> Result<(
 
 impl TensorData {
     /// Clamps each element between the corresponding values in `min` and `max`.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor shapes differ or the result cannot be constructed.
     pub fn clamp(&self, min: &Self, max: &Self) -> Result<Self> {
         self.ensure_same_shape(min, "clamp minimum")?;
         self.ensure_same_shape(max, "clamp maximum")?;

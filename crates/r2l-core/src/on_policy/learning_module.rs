@@ -28,6 +28,10 @@ pub trait OnPolicyLearner:
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;
 
     /// Creates a learning tensor from flat scalar data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the learning backend cannot create the tensor.
     fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor>;
 
     /// Returns a policy suitable for rollout/inference.

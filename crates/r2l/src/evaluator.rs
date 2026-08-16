@@ -206,8 +206,8 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         rt: &mut OnPolicyRuntime<AG, TS>,
     ) -> Result<(), Error> {
         let actor = rt.actor();
-        let adapted_actor = ActorWrapper::new(rt.actor());
-        self.eval_adapted(adapted_actor, actor)?;
+        let adapted_actor = ActorWrapper::new(actor.clone());
+        self.eval_adapted(adapted_actor, &actor)?;
         Ok(())
     }
 
@@ -215,7 +215,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
     pub fn eval_adapted(
         &mut self,
         adapted_actor: impl Actor<Tensor = E::Tensor> + Clone,
-        actor: A,
+        actor: &A,
     ) -> Result<(), Error> {
         let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor)?;
         let avg_reward = total_reward / total_episodes;

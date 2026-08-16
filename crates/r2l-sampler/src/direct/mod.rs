@@ -58,6 +58,10 @@ impl<E: Env> DirectSamplerCore<E> {
     }
 
     /// Resets every worker environment and clears its active episode state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an environment cannot be reset or a worker is interrupted.
     pub fn reset_all_envs(&mut self) -> Result<(), Error> {
         self.worker_pool.reset_all_envs()
     }

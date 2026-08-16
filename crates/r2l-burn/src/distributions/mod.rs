@@ -122,6 +122,10 @@ impl<B: Backend> BurnPolicyKind<B> {
     }
 
     /// Builds the appropriate Burn policy for the given action space.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the layer configuration or action space is unsupported.
     pub fn build<T: R2lTensor>(
         action_space: Space<T>,
         policy_layers: &[usize],

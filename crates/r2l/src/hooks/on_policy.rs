@@ -100,6 +100,7 @@ const TRAINING_TIMINGS_FILE: &str = "training_timings.csv";
 
 macro_rules! break_on_error {
     ($hooks:expr, $body:block) => {{
+        #[allow(clippy::redundant_closure_call)]
         match (|| -> Result<HookResult, Error> { $body })() {
             Ok(value) => value,
             Err(error) => return ($hooks).break_with_error(error),
@@ -130,6 +131,10 @@ pub enum LearningSchedule {
 
 impl LearningSchedule {
     /// Creates a schedule bounded by total sampled environment steps.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `total_steps` is zero.
     #[must_use]
     pub fn total_step_bound(total_steps: usize) -> Self {
         assert!(total_steps > 0, "total steps must be greater than zero");
@@ -137,6 +142,10 @@ impl LearningSchedule {
     }
 
     /// Creates a schedule bounded by completed rollouts.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `total_rollouts` is zero.
     #[must_use]
     pub fn rollout_bound(total_rollouts: usize) -> Self {
         assert!(
@@ -343,11 +352,11 @@ impl TrainingTimingRecorder {
         recorder.phase_started = Instant::now();
     }
 
-    fn finish_phase(&mut self, phase: TrainingPhase) -> Result<(), Error> {
+    fn finish_phase(&mut self, phase: TrainingPhase) {
         let Self::Enabled(recorder) = self else {
-            return Ok(());
+            return;
         };
-        recorder.finish_phase(phase)
+        recorder.finish_phase(phase);
     }
 
     fn finish_evaluation(&mut self, completed_rollouts: usize) -> Result<(), Error> {
@@ -359,14 +368,13 @@ impl TrainingTimingRecorder {
 }
 
 impl EnabledTrainingTimingRecorder {
-    fn finish_phase(&mut self, phase: TrainingPhase) -> Result<(), Error> {
+    fn finish_phase(&mut self, phase: TrainingPhase) {
         let now = Instant::now();
         let duration = now - self.phase_started;
         match phase {
             TrainingPhase::Collection => self.current.collection = duration,
             TrainingPhase::Training => self.current.training = duration,
         }
-        Ok(())
     }
 
     fn finish_evaluation(&mut self, completed_rollouts: usize) -> Result<(), Error> {
@@ -438,9 +446,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         }
     }
 
-    fn finish_collection(&mut self, runtime: &mut OnPolicyRuntime<A, S>) -> Result<(), Error> {
-        self.timing_recorder
-            .finish_phase(TrainingPhase::Collection)?;
+    fn finish_collection(&mut self, runtime: &mut OnPolicyRuntime<A, S>) {
+        self.timing_recorder.finish_phase(TrainingPhase::Collection);
         let rollouts = runtime.trajectory_containers();
         self.state.steps_taken += rollouts
             .as_ref()
@@ -450,14 +457,13 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         drop(rollouts);
         self.learning_rate_scheduler
             .update(self.progress_remaining(), runtime);
-        Ok(())
     }
 
     fn finish_training_and_evaluate(
         &mut self,
         runtime: &mut OnPolicyRuntime<A, S>,
     ) -> Result<(), Error> {
-        self.timing_recorder.finish_phase(TrainingPhase::Training)?;
+        self.timing_recorder.finish_phase(TrainingPhase::Training);
         self.timing_recorder.start_phase();
         let evaluation_result = self
             .evaluator
@@ -487,7 +493,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
 
     fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
         let command_result = break_on_error!(self, {
-            self.finish_collection(runtime)?;
+            self.finish_collection(runtime);
             self.command_handler.process_pending(runtime)
         });
         self.timing_recorder.start_phase();

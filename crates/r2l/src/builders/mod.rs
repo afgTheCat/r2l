@@ -64,7 +64,7 @@ pub type A2CCandle = A2C<CandlePolicyValueLearner, DefaultA2CHook<CandlePolicyVa
 /// A2C agent produced by a Burn-backed algorithm builder.
 pub type A2CBurn<B> = A2C<BurnPolicyValueLearner<B>, DefaultA2CHook<BurnPolicyValueLearner<B>>>;
 
-/// Hyperparameters for the AdamW optimizer.
+/// Hyperparameters for Adam optimization with decoupled weight decay.
 #[derive(Clone, Debug)]
 pub struct AdamWParams {
     /// Learning rate.
@@ -608,6 +608,7 @@ impl<E: Env> Builder<E> {
         ))
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn direct_sampler_step_bound(&self) -> Result<DirectSampler<E, StepBoundHook<E>>, Error> {
         let SamplerConfiguration::DirectStep {
             rollout_steps,
@@ -623,6 +624,7 @@ impl<E: Env> Builder<E> {
         Ok(DirectSampler::new(sampler_core, step_bound_hook))
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn direct_sampler_episode_bound(&self) -> Result<DirectSampler<E, EpisodeBoundHook<E>>, Error> {
         let SamplerConfiguration::DirectEpisode { rollout_episodes } = &self.sampler_configuration
         else {
@@ -1088,6 +1090,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Errors
     ///
     /// Returns an error if the configured training algorithm cannot be constructed.
+    #[allow(clippy::type_complexity)]
     pub fn build(
         mut self,
     ) -> Result<OnPolicyAlgorithm<A, S, OnPolicyTrainingHooks<A, S, E>>, Error> {
@@ -1275,6 +1278,11 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     ///
     /// `Some(clip)` enables normalization with that clipping limit. `None`
     /// retains staged sampling without applying an observation normalizer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an observation normalizer cannot be constructed.
+    #[allow(clippy::type_complexity)]
     pub fn with_observation_normalizer(
         mut self,
         obs_clip: Option<f32>,

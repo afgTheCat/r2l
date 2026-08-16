@@ -8,13 +8,13 @@ pub struct MyEnv;
 impl Env for MyEnv {
     type Tensor = TensorData;
 
-    fn reset(&mut self, seed: u64) -> Result<Self::Tensor, r2l_core::error::Error> {
+    fn reset(&mut self, _seed: u64) -> Result<Self::Tensor, r2l_core::error::Error> {
         Ok(TensorData::new(vec![0., 0.], vec![2])?)
     }
 
     fn step(
         &mut self,
-        action: Self::Tensor,
+        _action: Self::Tensor,
     ) -> Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
         let state = TensorData::new(vec![0., 0.], vec![2])?;
         let reward = 0.;
@@ -45,6 +45,7 @@ impl EnvBuilder for MyEnvBuilder {
     }
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn build_env() -> Result<MyEnv, r2l_core::error::Error> {
     Ok(MyEnv)
 }

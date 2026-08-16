@@ -15,6 +15,10 @@ pub struct RunningMeanStd<T: R2lTensor> {
 // mega simplified view
 impl<T: R2lTensor> RunningMeanStd<T> {
     /// Creates zero-count statistics for tensors with `shape`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot create tensors with `shape`.
     pub fn new(shape: Vec<usize>) -> Result<Self> {
         let mean = T::zeros(shape.clone())?;
         let var = T::zeros(shape)?;
