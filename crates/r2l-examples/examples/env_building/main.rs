@@ -1,22 +1,22 @@
 // ANCHOR: env_builders
-use r2l::{Env, EnvBuilder, EnvDescription, PPOAlgorithmBuilder, Snapshot, Space, TensorData};
+use r2l::{Env, EnvBuilder, EnvDescription, PPOAlgorithmBuilder, Snapshot, Space, VecTensor};
 use r2l_gym::GymEnvBuilder;
 
 // Not a working implementation an actual env
 pub struct MyEnv;
 
 impl Env for MyEnv {
-    type Tensor = TensorData;
+    type Tensor = VecTensor;
 
     fn reset(&mut self, _seed: u64) -> Result<Self::Tensor, r2l_core::error::Error> {
-        Ok(TensorData::new(vec![0., 0.], vec![2])?)
+        Ok(VecTensor::new(vec![0., 0.], vec![2])?)
     }
 
     fn step(
         &mut self,
         _action: Self::Tensor,
     ) -> Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
-        let state = TensorData::new(vec![0., 0.], vec![2])?;
+        let state = VecTensor::new(vec![0., 0.], vec![2])?;
         let reward = 0.;
         let terminated = false;
         let truncated = false;

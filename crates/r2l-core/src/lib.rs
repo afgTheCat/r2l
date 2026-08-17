@@ -101,5 +101,5 @@ pub mod prelude {
     };
     pub use crate::on_policy::learning_module::OnPolicyLearner;
     pub use crate::on_policy::losses::FromPolicyValueLosses;
-    pub use crate::tensor::{R2lTensor, TensorData};
+    pub use crate::tensor::{R2lTensor, VecTensor};
 }

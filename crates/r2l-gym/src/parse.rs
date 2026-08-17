@@ -3,12 +3,12 @@ use pyo3::{
     exceptions::PyValueError,
     types::{PyAny, PyAnyMethods, PyDict, PyDictMethods, PyModule, PyTuple},
 };
-use r2l_core::{env::Space, tensor::TensorData};
+use r2l_core::{env::Space, tensor::VecTensor};
 
 pub(crate) fn parse_gym_space(
     space: &Bound<'_, PyAny>,
     gym_spaces: &Bound<'_, PyModule>,
-) -> PyResult<Space<TensorData>> {
+) -> PyResult<Space<VecTensor>> {
     let is_space = |name| space.is_instance(&gym_spaces.getattr(name)?);
     if is_space("Discrete")? {
         let size = space.getattr("n")?.extract()?;
@@ -19,11 +19,11 @@ pub(crate) fn parse_gym_space(
         let high = flatten_extract(&space.getattr("high")?)?;
         Ok(Space::Box {
             min: Some(
-                TensorData::new(low, shape.clone())
+                VecTensor::new(low, shape.clone())
                     .map_err(|error| PyValueError::new_err(error.to_string()))?,
             ),
             max: Some(
-                TensorData::new(high, shape.clone())
+                VecTensor::new(high, shape.clone())
                     .map_err(|error| PyValueError::new_err(error.to_string()))?,
             ),
             shape,
@@ -34,7 +34,7 @@ pub(crate) fn parse_gym_space(
         let nvec: Vec<usize> = flatten_extract(&nvec)?;
         let nvec = nvec.into_iter().map(|n| n as f32).collect();
         Ok(Space::MultiDiscrete {
-            nvec: TensorData::new(nvec, shape.clone())
+            nvec: VecTensor::new(nvec, shape.clone())
                 .map_err(|error| PyValueError::new_err(error.to_string()))?,
             shape,
         })
@@ -66,7 +66,7 @@ pub(crate) fn parse_gym_space(
 pub(crate) fn parse_action<'py>(
     py: Python<'py>,
     action: &[f32],
-    space: &Space<TensorData>,
+    space: &Space<VecTensor>,
 ) -> PyResult<Bound<'py, PyAny>> {
     match space {
         Space::Box {
@@ -76,7 +76,7 @@ pub(crate) fn parse_action<'py>(
             ..
         } => action_array(
             py,
-            TensorData::new(action.to_vec(), shape.clone())
+            VecTensor::new(action.to_vec(), shape.clone())
                 .map_err(|error| PyValueError::new_err(error.to_string()))?
                 .clamp(min, max)
                 .map_err(|error| PyValueError::new_err(error.to_string()))?
@@ -126,7 +126,7 @@ fn action_array<'py>(
 fn parse_child_actions<'py, 'space>(
     py: Python<'py>,
     action: &[f32],
-    spaces: impl IntoIterator<Item = &'space Space<TensorData>>,
+    spaces: impl IntoIterator<Item = &'space Space<VecTensor>>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut offset = 0;
     let mut actions = Vec::new();
@@ -147,21 +147,21 @@ fn flatten_extract<'py, T: FromPyObject<'py>>(value: &Bound<'py, PyAny>) -> PyRe
 
 pub(crate) fn parse_obs(
     observation: &Bound<'_, PyAny>,
-    space: &Space<TensorData>,
-) -> PyResult<TensorData> {
+    space: &Space<VecTensor>,
+) -> PyResult<VecTensor> {
     match space {
         Space::Discrete(size) => {
             let idx: usize = observation.extract()?;
             let mut values = vec![0.; *size];
             values[idx] = 1.;
-            TensorData::new(values, vec![*size])
+            VecTensor::new(values, vec![*size])
                 .map_err(|error| PyValueError::new_err(error.to_string()))
         }
         Space::Box { shape, .. }
         | Space::MultiDiscrete { shape, .. }
         | Space::MultiBinary { shape } => {
             let values = flatten_extract(observation)?;
-            TensorData::new(values, shape.clone())
+            VecTensor::new(values, shape.clone())
                 .map_err(|error| PyValueError::new_err(error.to_string()))
         }
         Space::Tuple(spaces) => parse_obs_fields(
@@ -179,14 +179,14 @@ pub(crate) fn parse_obs(
 }
 
 fn parse_obs_fields<'py>(
-    fields: impl IntoIterator<Item = PyResult<(Bound<'py, PyAny>, &'py Space<TensorData>)>>,
-) -> PyResult<TensorData> {
+    fields: impl IntoIterator<Item = PyResult<(Bound<'py, PyAny>, &'py Space<VecTensor>)>>,
+) -> PyResult<VecTensor> {
     let mut data = Vec::new();
     for field in fields {
         let (value, space) = field?;
         data.extend(parse_obs(&value, space)?.into_vec());
     }
-    Ok(TensorData::from_vec(data))
+    Ok(VecTensor::from_vec(data))
 }
 
 #[cfg(test)]

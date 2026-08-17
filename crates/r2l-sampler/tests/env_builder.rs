@@ -5,7 +5,7 @@ use std::sync::{
 
 use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
-    tensor::TensorData,
+    tensor::VecTensor,
 };
 use r2l_sampler::{
     DirectSampler, DirectSamplerCore, DirectSamplerHook, SamplerExecutionMode, SamplerHookResult,
@@ -15,10 +15,10 @@ use r2l_sampler::{
 struct TestEnv;
 
 impl Env for TestEnv {
-    type Tensor = TensorData;
+    type Tensor = VecTensor;
 
     fn reset(&mut self, _seed: u64) -> Result<Self::Tensor, r2l_core::error::Error> {
-        Ok(TensorData::new(vec![0.0], vec![1])?)
+        Ok(VecTensor::new(vec![0.0], vec![1])?)
     }
 
     fn step(
@@ -26,7 +26,7 @@ impl Env for TestEnv {
         _action: Self::Tensor,
     ) -> Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
         Ok(Snapshot::new(
-            TensorData::new(vec![0.0], vec![1])?,
+            VecTensor::new(vec![0.0], vec![1])?,
             0.0,
             false,
             false,

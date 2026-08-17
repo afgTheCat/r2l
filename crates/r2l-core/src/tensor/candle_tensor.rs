@@ -3,7 +3,7 @@ use itertools::izip;
 
 use crate::{
     error::{Error, TensorError},
-    tensor::{R2lTensor, TensorData},
+    tensor::{R2lTensor, VecTensor},
 };
 
 type Result<T> = std::result::Result<T, TensorError>;
@@ -128,7 +128,7 @@ fn ensure_same_shape(left: &Tensor, right: &Tensor, operation: &str) -> Result<(
     Ok(())
 }
 
-impl TensorData {
+impl VecTensor {
     /// Clamps each element between the corresponding values in `min` and `max`.
     ///
     /// # Errors

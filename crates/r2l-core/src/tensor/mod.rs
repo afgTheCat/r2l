@@ -211,17 +211,17 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     }
 }
 
-/// Backend-neutral owned tensor payload.
+/// Built-in tensor backed by a flat vector and an explicit shape.
 ///
-/// `TensorData` stores flat `f32` data with an explicit shape. It is useful for
-/// simple environments and for converting between backend tensor types
+/// `VecTensor` is useful for environments and for converting between backend
+/// tensor types.
 #[derive(Debug, Clone)]
-pub struct TensorData {
+pub struct VecTensor {
     data: Vec<f32>,
     shape: Vec<usize>,
 }
 
-impl TensorData {
+impl VecTensor {
     fn ensure_same_shape(&self, other: &Self, operation: &str) -> Result<()> {
         if self.shape != other.shape {
             return Err(TensorError::ShapeMismatch {
@@ -264,7 +264,7 @@ impl TensorData {
     }
 }
 
-impl R2lTensor for TensorData {
+impl R2lTensor for VecTensor {
     fn to_vec(&self) -> Result<Vec<f32>> {
         Ok(self.data.clone())
     }

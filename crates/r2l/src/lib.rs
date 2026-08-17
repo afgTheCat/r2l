@@ -68,6 +68,6 @@ pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     models::ActivationFunction,
     on_policy::algorithm::OnPolicyAlgorithm,
-    tensor::TensorData,
+    tensor::VecTensor,
 };
 pub use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};

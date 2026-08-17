@@ -13,7 +13,7 @@
 //!
 //! The adapter maps Gymnasium `Discrete`, `Box`, `MultiDiscrete`,
 //! `MultiBinary`, `Tuple`, and `Dict` spaces into `r2l-core` space metadata.
-//! Observations are converted into flat [`TensorData`] values. Discrete
+//! Observations are converted into flat [`VecTensor`] values. Discrete
 //! observations are one-hot encoded, while structured `Tuple` and `Dict`
 //! observations are flattened recursively.
 
@@ -28,7 +28,7 @@ use pyo3::{
 use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     error::{EnvironmentError, Error, MissingDependency},
-    tensor::TensorData,
+    tensor::VecTensor,
 };
 
 fn map_py_error_to_r2l(py: Python<'_>, operation: &str, error: PyErr) -> Error {
@@ -75,7 +75,7 @@ impl GymEnvPyhon {
     fn observation_space(
         &self,
         py: Python<'_>,
-    ) -> Result<Space<TensorData>, r2l_core::error::Error> {
+    ) -> Result<Space<VecTensor>, r2l_core::error::Error> {
         let observation_space = || {
             let gym_spaces = py.import("gymnasium.spaces")?;
             let observation_space = self.0.getattr(py, "observation_space")?.into_bound(py);
@@ -86,10 +86,7 @@ impl GymEnvPyhon {
             .map_err(|error| map_py_error_to_r2l(py, "inspect observation space", error))
     }
 
-    fn action_space(
-        &self,
-        py: Python<'_>,
-    ) -> Result<Space<TensorData>, r2l_core::error::Error> {
+    fn action_space(&self, py: Python<'_>) -> Result<Space<VecTensor>, r2l_core::error::Error> {
         let action_space = || {
             let gym_spaces = py.import("gymnasium.spaces")?;
             let action_space = self.0.getattr(py, "action_space")?.into_bound(py);
@@ -103,8 +100,8 @@ impl GymEnvPyhon {
         &self,
         py: Python<'_>,
         seed: u64,
-        observation_space: &Space<TensorData>,
-    ) -> Result<TensorData, r2l_core::error::Error> {
+        observation_space: &Space<VecTensor>,
+    ) -> Result<VecTensor, r2l_core::error::Error> {
         let reset = || {
             let kwargs = PyDict::new(py);
             kwargs.set_item("seed", seed)?;
@@ -118,10 +115,10 @@ impl GymEnvPyhon {
     fn step(
         &self,
         py: Python<'_>,
-        action: TensorData,
-        action_space: &Space<TensorData>,
-        observation_space: &Space<TensorData>,
-    ) -> Result<Snapshot<TensorData>, r2l_core::error::Error> {
+        action: VecTensor,
+        action_space: &Space<VecTensor>,
+        observation_space: &Space<VecTensor>,
+    ) -> Result<Snapshot<VecTensor>, r2l_core::error::Error> {
         let step = || {
             let action = parse_action(py, &action.into_vec(), action_space)?;
             let step = self.0.call_method(py, "step", (action,), None)?;
@@ -150,8 +147,8 @@ impl GymEnvPyhon {
 /// rebuilt into the Python values expected by Gymnasium.
 pub struct GymEnv {
     env: GymEnvPyhon,
-    action_space: Space<TensorData>,
-    observation_space: Space<TensorData>,
+    action_space: Space<VecTensor>,
+    observation_space: Space<VecTensor>,
 }
 
 impl GymEnv {
@@ -177,7 +174,7 @@ impl GymEnv {
 }
 
 impl Env for GymEnv {
-    type Tensor = TensorData;
+    type Tensor = VecTensor;
 
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor, r2l_core::error::Error> {
         Python::with_gil(|py| self.env.reset(py, seed, &self.observation_space))
@@ -193,7 +190,7 @@ impl Env for GymEnv {
         })
     }
 
-    fn env_description(&self) -> EnvDescription<TensorData> {
+    fn env_description(&self) -> EnvDescription<VecTensor> {
         EnvDescription {
             observation_space: self.observation_space.clone(),
             action_space: self.action_space.clone(),
