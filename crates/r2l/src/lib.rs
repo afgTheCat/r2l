@@ -8,10 +8,7 @@
 //! ```no_run
 //! use r2l::PPOBuilder;
 //!
-//! let mut algorithm = PPOBuilder::gym("Pendulum-v1", 4)
-//!     .unwrap()
-//!     .build()
-//!     .unwrap();
+//! let mut algorithm = PPOBuilder::gym("Pendulum-v1", 4)?.build()?;
 //! algorithm.train().unwrap();
 //! ```
 //!

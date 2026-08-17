@@ -168,7 +168,7 @@ impl<E: Env> InferenceRunner<E> {
     ///
     /// Returns an error if an artifact cannot be read or decoded, the configured
     /// model cannot be built, or the environment cannot be reset.
-    pub fn load(directory: impl AsRef<Path>, env: E) -> Result<Self, Error> {
+    pub fn load(directory: impl AsRef<Path>, mut env: E) -> Result<Self, Error> {
         let directory = directory.as_ref();
         let config = InferenceConfig::load_from_dir(directory)?;
         let obs_normalizer = match config.observation_mode {
@@ -213,14 +213,6 @@ impl<E: Env> InferenceRunner<E> {
                 InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))
             }
         };
-        Self::new(env, obs_normalizer, actor)
-    }
-
-    fn new(
-        mut env: E,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-        actor: InferenceActor<E::Tensor>,
-    ) -> Result<Self, Error> {
         let mut last_state = env.reset(sample_u64())?;
         if let Some(obs_normalizer) = &obs_normalizer {
             obs_normalizer.apply_tensor_in_place(&mut last_state)?;
