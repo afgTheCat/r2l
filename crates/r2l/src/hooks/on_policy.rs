@@ -37,17 +37,17 @@ pub enum OnPolicyCommandResult {
 }
 
 /// Algorithm-side endpoint of an on-policy control channel.
-pub struct OnPolicyControlEndpoint {
+pub(crate) struct OnPolicyControlEndpoint {
     /// Receives commands from the control handle.
-    pub rx: Receiver<OnPolicyCommand>,
+    rx: Receiver<OnPolicyCommand>,
     /// Sends command results to the control handle.
-    pub tx: Sender<OnPolicyCommandResult>,
+    tx: Sender<OnPolicyCommandResult>,
 }
 
 impl OnPolicyControlEndpoint {
     /// Creates an algorithm-side control endpoint from its command and result channels.
     #[must_use]
-    pub fn new(rx: Receiver<OnPolicyCommand>, tx: Sender<OnPolicyCommandResult>) -> Self {
+    fn new(rx: Receiver<OnPolicyCommand>, tx: Sender<OnPolicyCommandResult>) -> Self {
         Self { rx, tx }
     }
 }
@@ -64,7 +64,7 @@ pub struct OnPolicyControlHandle {
 impl OnPolicyControlHandle {
     /// Creates a control handle from its result and command channels.
     #[must_use]
-    pub fn new(rx: Receiver<OnPolicyCommandResult>, tx: Sender<OnPolicyCommand>) -> Self {
+    fn new(rx: Receiver<OnPolicyCommandResult>, tx: Sender<OnPolicyCommand>) -> Self {
         Self { rx, tx }
     }
 
@@ -86,11 +86,8 @@ impl OnPolicyControlHandle {
 }
 
 /// Creates paired algorithm and caller endpoints for controlling on-policy training.
-///
-/// Pass the [`OnPolicyControlEndpoint`] to an on-policy algorithm builder and retain the
-/// [`OnPolicyControlHandle`] to control the running algorithm.
 #[must_use]
-pub fn on_policy_control_channel() -> (OnPolicyControlEndpoint, OnPolicyControlHandle) {
+pub(crate) fn on_policy_control_channel() -> (OnPolicyControlEndpoint, OnPolicyControlHandle) {
     let (command_tx, command_rx) = channel();
     let (result_tx, result_rx) = channel();
     (

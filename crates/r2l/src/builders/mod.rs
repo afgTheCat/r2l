@@ -12,7 +12,7 @@ use candle_core::{Device, DeviceLocation};
 use candle_nn::ParamsAdamW;
 pub use inference::InferenceRunner;
 use inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
-pub use policy::PolicyBuilder;
+use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
     ppo::{PPO, PPOHook, PPOParams},
@@ -43,11 +43,14 @@ use crate::{
     evaluator::{EvaluationSampler, EvaluationSettings},
     hooks::{
         a2c::A2CRolloutReporter,
-        on_policy::{OnPolicyCommandHandler, ScheduledEvaluator, TrainingTimingRecorder},
+        on_policy::{
+            OnPolicyCommandHandler, OnPolicyControlEndpoint, ScheduledEvaluator,
+            TrainingTimingRecorder, on_policy_control_channel,
+        },
         ppo::TargetKl,
     },
 };
-use crate::{BurnBackend, LearningRateSchedule, LearningSchedule, OnPolicyControlEndpoint};
+use crate::{BurnBackend, LearningRateSchedule, LearningSchedule, OnPolicyControlHandle};
 use crate::{EpisodeBoundHook, StepBoundHook};
 use crate::{
     evaluator::BestActorEvaluator,
@@ -318,7 +321,7 @@ enum AlgorithmConfiguration {
     },
 }
 
-trait EnvBuildPlan<E: Env> {
+trait EnvBuildPlan<E: Env>: Send {
     fn build_evaluator_sampler(
         &self,
         episodes_per_evaluation: usize,
@@ -899,10 +902,11 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
-    /// Installs the algorithm-side endpoint for controlling a running algorithm.
-    pub fn with_control_endpoint(mut self, control_endpoint: OnPolicyControlEndpoint) -> Self {
+    /// Enables external control of the configured training algorithm.
+    pub fn with_control(mut self) -> (Self, OnPolicyControlHandle) {
+        let (control_endpoint, control_handle) = on_policy_control_channel();
         self.builder.control_endpoint = Some(control_endpoint);
-        self
+        (self, control_handle)
     }
 
     /// Sets the learning-rate schedule applied as training progresses.
@@ -925,12 +929,6 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// Selects single-threaded or multi-threaded environment execution.
     pub fn with_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
         self.builder.sampler_execution_mode = execution_mode;
-        self
-    }
-
-    /// Replaces the policy-network configuration.
-    pub fn with_policy_builder(mut self, policy_builder: PolicyBuilder) -> Self {
-        self.builder.policy_config = policy_builder;
         self
     }
 

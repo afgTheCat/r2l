@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// Training learner builders and inference runners both use this
 /// configuration to construct the same policy architecture.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PolicyBuilder {
+pub(crate) struct PolicyBuilder {
     pub(crate) hidden_layers: Vec<usize>,
     pub(crate) activation_function: ActivationFunction,
     pub(crate) log_std_init: f32,
@@ -28,48 +28,6 @@ impl Default for PolicyBuilder {
 }
 
 impl PolicyBuilder {
-    /// Creates a policy builder with the default two-layer architecture.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Sets the hidden layer sizes.
-    #[must_use]
-    pub fn with_hidden_layers(mut self, hidden_layers: Vec<usize>) -> Self {
-        self.hidden_layers = hidden_layers;
-        self
-    }
-
-    /// Sets the activation function used between hidden layers.
-    #[must_use]
-    pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
-        self.activation_function = activation_function;
-        self
-    }
-
-    /// Sets the initial log standard deviation for Gaussian policies.
-    #[must_use]
-    pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
-        self.log_std_init = log_std_init;
-        self
-    }
-
-    /// Builds a Candle policy on `device`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the configured policy network cannot be built.
-    pub fn build_candle<T: R2lTensor>(
-        &self,
-        observation_size: usize,
-        action_space: Space<T>,
-        device: &Device,
-    ) -> r2l_core::error::Result<CandlePolicyKind> {
-        let (policy, _) = self.build_candle_with_varmap(observation_size, action_space, device)?;
-        Ok(policy)
-    }
-
     pub(crate) fn build_candle_with_varmap<T: R2lTensor>(
         &self,
         observation_size: usize,
@@ -94,7 +52,7 @@ impl PolicyBuilder {
     /// # Errors
     ///
     /// Returns an error if the policy configuration is invalid or unsupported.
-    pub fn build_burn<B: Backend, T: R2lTensor>(
+    pub(crate) fn build_burn<B: Backend, T: R2lTensor>(
         &self,
         observation_size: usize,
         action_space: Space<T>,

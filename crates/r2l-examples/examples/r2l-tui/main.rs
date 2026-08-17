@@ -2,11 +2,9 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::{io, sync::mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l::{
-    LearningSchedule, OnPolicyControlEndpoint, OnPolicyControlHandle, PPOAlgorithmBuilder,
-    PPORolloutStats, on_policy_control_channel,
-};
+use r2l::{LearningSchedule, OnPolicyControlHandle, PPOAlgorithmBuilder, PPORolloutStats};
 use r2l_examples::EventBox;
+use r2l_gym::GymEnv;
 use ratatui::layout::Alignment;
 use ratatui::widgets::Paragraph;
 use ratatui::{
@@ -263,17 +261,22 @@ fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     });
 }
 
-/// Trains the PPO example and reports progress through `tx`.
+/// Builds and trains a configured PPO algorithm.
 ///
 /// # Errors
 ///
 /// Returns an error if the algorithm cannot be built or training fails.
-pub fn train_ppo(
+pub fn train_ppo(ppo_builder: PPOAlgorithmBuilder<GymEnv>) -> anyhow::Result<()> {
+    let mut ppo = ppo_builder.build()?;
+    ppo.train()?;
+    Ok(())
+}
+
+fn ppo_builder(
     tx: Sender<PPORolloutStats>,
     total_rollouts: usize,
-    control_endpoint: OnPolicyControlEndpoint,
-) -> anyhow::Result<()> {
-    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 4)?
+) -> r2l_core::error::Result<PPOAlgorithmBuilder<GymEnv>> {
+    Ok(PPOAlgorithmBuilder::gym(ENV_NAME, 4)?
         .with_candle(candle_core::Device::Cpu)
         .with_execution_mode(r2l::SamplerExecutionMode::MultiThreaded)
         .with_clip_range(0.2)
@@ -285,11 +288,7 @@ pub fn train_ppo(
         .with_total_epochs(10)
         .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
         .with_log_progress(false)
-        .with_reporter(Some(tx))
-        .with_control_endpoint(control_endpoint);
-    let mut ppo = ppo_builder.build()?;
-    ppo.train()?;
-    Ok(())
+        .with_reporter(Some(tx)))
 }
 
 /// Forwards PPO updates into the UI event channel.
@@ -311,15 +310,15 @@ fn main() -> io::Result<()> {
     handle_input_events(event_tx.clone());
     adapt_ppo_events(update_rx, event_tx.clone());
     let total_rollouts = 30;
-    let (control_endpoint, control_handle) = on_policy_control_channel();
-    std::thread::spawn(
-        move || match train_ppo(update_tx, total_rollouts, control_endpoint) {
-            Ok(()) => {}
-            Err(err) => {
-                eprintln!("ppo was not trained normally, err: {err}");
-            }
-        },
-    );
+    let (ppo_builder, control_handle) = ppo_builder(update_tx, total_rollouts)
+        .map_err(io::Error::other)?
+        .with_control();
+    std::thread::spawn(move || match train_ppo(ppo_builder) {
+        Ok(()) => {}
+        Err(err) => {
+            eprintln!("ppo was not trained normally, err: {err}");
+        }
+    });
     let mut terminal = ratatui::init();
     let app_result = App::new(total_rollouts, event_rx, control_handle).run(&mut terminal);
     ratatui::restore();

@@ -54,15 +54,13 @@ pub type BurnBackend = Autodiff<NdArray>;
 
 pub use builders::{
     A2CAlgorithmBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceRunner, OnPolicyAlgoBuilder,
-    OnPolicyOptimizerLayout, PPOAlgorithmBuilder, PPOBurn, PPOCandle, PolicyBuilder,
-    TrainingArtifactsConfig,
+    OnPolicyOptimizerLayout, PPOAlgorithmBuilder, PPOBurn, PPOCandle, TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
 pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
 pub use hooks::on_policy::{
     LearningRateSchedule, LearningSchedule, OnPolicyCommand, OnPolicyCommandResult,
-    OnPolicyControlEndpoint, OnPolicyControlHandle, OnPolicyTrainingHooks,
-    on_policy_control_channel,
+    OnPolicyControlHandle, OnPolicyTrainingHooks,
 };
 pub use hooks::ppo::{PPOMinibatchStats, PPORolloutStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
