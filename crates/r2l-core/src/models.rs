@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, str::FromStr};
+use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -61,21 +61,6 @@ impl FromStr for ActivationFunction {
             "tanh" => Ok(Self::Tanh),
             _ => Err(format!("unknown activation function: {name}")),
         }
-    }
-}
-
-/// Metadata stored next to policy tensors in a safetensors archive.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PolicyMetadata {
-    /// Hidden-layer activation function.
-    pub activation: ActivationFunction,
-}
-
-impl PolicyMetadata {
-    /// Converts the metadata into the string map accepted by safetensors.
-    #[must_use]
-    pub fn to_safetensors_metadata(&self) -> HashMap<String, String> {
-        HashMap::from([("activation".to_string(), self.activation.to_string())])
     }
 }
 

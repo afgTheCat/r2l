@@ -143,27 +143,3 @@ impl VecTensor {
         Self::new(data, self.shape.clone())
     }
 }
-
-#[cfg(test)]
-mod test {
-    use candle_core::Tensor;
-
-    #[test]
-    fn mean_things() {
-        // what we have here is the following:
-        let bm = Tensor::from_vec(
-            // [0][0], [0][1], [1][0], [1][1]
-            vec![1f32, 2., 3., 4.],
-            vec![2, 2],
-            &candle_core::Device::Cpu,
-        )
-        .unwrap();
-        dbg!(&bm);
-        let m = bm.mean(0).unwrap();
-        // result is 2, [0][0], [1][0]
-        // result is 3, [0][1], [1][1]
-        dbg!(&m);
-        let m = bm.mean(1).unwrap();
-        dbg!(&m);
-    }
-}

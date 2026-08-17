@@ -6,7 +6,7 @@ use candle_nn::{
 use r2l_core::{
     env::action_ranges,
     error::{Error, Result, TensorError},
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistribution;
@@ -104,11 +104,7 @@ impl Actor for MultiCategoricalDistribution {
 
 impl ToSafetensors for MultiCategoricalDistribution {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
-        let metadata = PolicyMetadata {
-            activation: self.logits.activation(),
-        }
-        .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata)).map_err(Error::wrap)
+        st_serialize(self.named_tensors("policy"), None).map_err(Error::wrap)
     }
 }
 

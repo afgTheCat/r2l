@@ -5,7 +5,7 @@ use candle_nn::{Module, ops::softmax};
 use itertools::Itertools;
 use r2l_core::{
     error::{Error, InvalidParameterError, Result, TensorError},
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistributiion;
@@ -97,11 +97,7 @@ impl Actor for CategoricalDistribution {
 
 impl ToSafetensors for CategoricalDistribution {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
-        let metadata = PolicyMetadata {
-            activation: self.logits.activation(),
-        }
-        .to_safetensors_metadata();
-        st_serialize(self.logits.named_tensors("policy"), Some(metadata)).map_err(Error::wrap)
+        st_serialize(self.logits.named_tensors("policy"), None).map_err(Error::wrap)
     }
 }
 

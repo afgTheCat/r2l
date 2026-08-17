@@ -268,10 +268,11 @@ impl<'de> Deserialize<'de> for CandleBackend {
 }
 
 impl CandleBackend {
-    fn seed(&self, seed: u64) {
+    fn seed(&self, seed: u64) -> Result<(), Error> {
         if !matches!(&self.device, Device::Cpu) {
-            self.device.set_seed(seed).unwrap();
+            self.device.set_seed(seed).map_err(Error::wrap)?;
         }
+        Ok(())
     }
 }
 
@@ -750,7 +751,7 @@ impl<E: Env> Builder<E> {
         let backend = backend.clone();
         self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
         if let Some(seed) = self.seed {
-            backend.seed(seed);
+            backend.seed(seed)?;
         }
         let learner = self.build_candle_learner(&backend.device)?;
         let hooks = self.ppo_hook();
@@ -785,7 +786,7 @@ impl<E: Env> Builder<E> {
         let backend = backend.clone();
         self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
         if let Some(seed) = self.seed {
-            backend.seed(seed);
+            backend.seed(seed)?;
         }
         let learner = self.build_candle_learner(&backend.device)?;
         let hooks = self.a2c_hook();

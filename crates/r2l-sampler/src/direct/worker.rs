@@ -29,7 +29,7 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     } else {
         env.reset(sample_u64())?
     };
-    let action = actor.action(state.clone()).unwrap();
+    let action = actor.action(state.clone())?;
     let Snapshot {
         state: mut next_state,
         reward,
@@ -175,7 +175,7 @@ impl<E: Env> ThreadWorker<E> {
         Self { worker, rx, tx }
     }
 
-    pub fn work(&mut self) -> Result<()> {
+    pub fn work(&mut self) {
         loop {
             let command = self.rx.recv().unwrap();
             match command {
@@ -201,7 +201,6 @@ impl<E: Env> ThreadWorker<E> {
                 }
             }
         }
-        Ok(())
     }
 }
 

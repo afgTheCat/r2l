@@ -79,7 +79,7 @@ impl UpdateTable {
                 "learning_rate".to_owned(),
                 format!("{:?}", self.progress.learning_rate)
             ),
-            _ => todo!(),
+            _ => unreachable!("table requested an unknown cell"),
         }
     }
 }

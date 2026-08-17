@@ -14,8 +14,12 @@ use r2l_candle::learning_module::{
     PolicyValueLearner as CandlePolicyValueLearner, PolicyValueLosses as CandlePolicyValueLosses,
 };
 use r2l_core::{
-    HookResult, buffers::TrajectoryBatch, error::Result, models::Policy,
+    HookResult,
+    buffers::TrajectoryBatch,
+    error::{Error, ResourceInterrupted, Result},
+    models::Policy,
     on_policy::learning_module::OnPolicyLearner,
+    tensor::R2lTensor,
 };
 
 use crate::utils::{fmt_stat, mean};
@@ -150,7 +154,7 @@ impl A2CRolloutReporter {
         }
     }
 
-    pub(crate) fn send_report(&mut self) {
+    pub(crate) fn send_report(&mut self) -> Result<()> {
         self.rollout_idx += 1;
         let progress = std::mem::replace(
             &mut self.report,
@@ -163,9 +167,15 @@ impl A2CRolloutReporter {
             println!("{progress}");
         }
         if let Some(tx) = &self.tx {
-            tx.send(progress).unwrap();
+            tx.send(progress).map_err(|error| {
+                Error::ResourceInterrupted(ResourceInterrupted {
+                    resource: "A2C rollout reporter".into(),
+                    details: error.to_string(),
+                })
+            })?;
         }
         self.report.average_reward = self.latest_average_reward;
+        Ok(())
     }
 }
 
@@ -255,9 +265,9 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         if let Some(A2CRolloutReporter { report, .. }) = &mut self.reporter {
             report.collect_minibatch(A2CMinibatchStats {
-                policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
-                entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
-                value_loss: losses.value_loss.to_data().to_vec::<f32>().unwrap()[0],
+                policy_loss: losses.policy_loss.to_vec()?[0],
+                entropy_loss: entropy_loss.to_vec()?[0],
+                value_loss: losses.value_loss.to_vec()?[0],
             });
         }
         if self.entropy_coeff != 0. {
@@ -278,7 +288,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
             reporter.update_average_reward(buffers);
             reporter.report.std = module.policy().std()?;
             reporter.report.learning_rate = module.policy_learning_rate();
-            reporter.send_report();
+            reporter.send_report()?;
         }
         Ok(HookResult::Continue)
     }
@@ -336,7 +346,7 @@ impl A2CHook<CandlePolicyValueLearner> for A2CLearningHook<CandlePolicyValueLear
             reporter.update_average_reward(buffers);
             reporter.report.std = module.policy().std()?;
             reporter.report.learning_rate = module.policy_learning_rate();
-            reporter.send_report();
+            reporter.send_report()?;
         }
         Ok(HookResult::Continue)
     }

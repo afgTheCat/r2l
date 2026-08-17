@@ -14,8 +14,12 @@ use r2l_candle::learning_module::{
     PolicyValueLearner as CandlePolicyValueLearner, PolicyValueLosses as CandlePolicyValueLosses,
 };
 use r2l_core::{
-    HookResult, buffers::TrajectoryBatch, error::Result, models::Policy,
+    HookResult,
+    buffers::TrajectoryBatch,
+    error::{Error, ResourceInterrupted, Result},
+    models::Policy,
     on_policy::learning_module::OnPolicyLearner,
+    tensor::R2lTensor,
 };
 
 use crate::utils::{fmt_stat, mean};
@@ -211,7 +215,7 @@ impl PPORolloutReporter {
         self.report.average_reward = self.latest_average_reward;
     }
 
-    fn send_report(&mut self, rollout_idx: usize) {
+    fn send_report(&mut self, rollout_idx: usize) -> Result<()> {
         let progress = std::mem::replace(
             &mut self.report,
             PPORolloutStats {
@@ -223,9 +227,15 @@ impl PPORolloutReporter {
             println!("{progress}");
         }
         if let Some(tx) = &self.tx {
-            tx.send(progress).unwrap();
+            tx.send(progress).map_err(|error| {
+                Error::ResourceInterrupted(ResourceInterrupted {
+                    resource: "PPO rollout reporter".into(),
+                    details: error.to_string(),
+                })
+            })?;
         }
         self.report.average_reward = self.latest_average_reward;
+        Ok(())
     }
 }
 
@@ -295,7 +305,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
                 reporter.report.std = module.policy().std()?;
                 reporter.report.learning_rate = module.policy_learning_rate();
                 reporter.report.clip_range = params.clip_range;
-                reporter.send_report(self.rollout_idx);
+                reporter.send_report(self.rollout_idx)?;
             }
             Ok(HookResult::Break)
         } else {
@@ -314,8 +324,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
         let entropy = module.policy().entropy(&data.observations)?;
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         let approx_kl = {
-            let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
-            let log_ratio: Vec<f32> = data.logp_diff.to_data().to_vec().unwrap();
+            let ratio = data.ratio.to_vec()?;
+            let log_ratio = data.logp_diff.to_vec()?;
             ratio
                 .iter()
                 .zip(log_ratio.iter())
@@ -325,7 +335,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
         };
 
         if let Some(PPORolloutReporter { report, .. }) = &mut self.reporter {
-            let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
+            let ratio = data.ratio.to_vec()?;
             let clip_fraction = ratio
                 .iter()
                 .filter(|value| (**value - 1.).abs() > params.clip_range)
@@ -333,9 +343,9 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
                 / ratio.len() as f32;
             report.collect_minibatch(PPOMinibatchStats {
                 clip_fraction,
-                policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
-                entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
-                value_loss: losses.value_loss.to_data().to_vec::<f32>().unwrap()[0],
+                policy_loss: losses.policy_loss.to_vec()?[0],
+                entropy_loss: entropy_loss.to_vec()?[0],
+                value_loss: losses.value_loss.to_vec()?[0],
                 approx_kl,
             });
         }
@@ -392,7 +402,7 @@ impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLear
                 reporter.report.std = module.policy().std()?;
                 reporter.report.learning_rate = module.policy_learning_rate();
                 reporter.report.clip_range = params.clip_range;
-                reporter.send_report(self.rollout_idx);
+                reporter.send_report(self.rollout_idx)?;
             }
             Ok(HookResult::Break)
         } else {

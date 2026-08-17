@@ -15,10 +15,11 @@ The shortest Gymnasium-based PPO setup is:
 # extern crate r2l;
 use r2l::PPOBuilder;
 
-fn main() {
-    let builder = PPOBuilder::gym("Pendulum-v1", 4);
-    let mut algorithm = builder.build().unwrap();
-    algorithm.train().unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let builder = PPOBuilder::gym("Pendulum-v1", 4)?;
+    let mut algorithm = builder.build()?;
+    algorithm.train()?;
+    Ok(())
 }
 ```
 
@@ -45,17 +46,17 @@ method.
 # extern crate r2l;
 use r2l::{PPOBuilder, TrainingArtifactsConfig};
 
-fn main() {
-    let builder = PPOBuilder::gym("Pendulum-v1", 4);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let builder = PPOBuilder::gym("Pendulum-v1", 4)?;
     let artifacts_config = TrainingArtifactsConfig::new("runs/pendulum")
         .with_evaluation_results(true)
         .with_training_timings(true)
         .with_inference_artifacts(true);
     let mut algorithm = builder
         .with_training_artifacts(artifacts_config)
-        .build()
-        .unwrap();
-    algorithm.train().unwrap();
+        .build()?;
+    algorithm.train()?;
+    Ok(())
 }
 ```
 
@@ -87,12 +88,13 @@ Using the inference artifacts and a new environment, you can create an
 use r2l::InferenceRunner;
 use r2l_gym::GymEnv;
 
-fn main() {
-    let env = GymEnv::new("Pendulum-v1", Some("human".to_owned())).unwrap();
-    let mut inference = InferenceRunner::load("runs/pendulum", env).unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let env = GymEnv::new("Pendulum-v1", Some("human".to_owned()))?;
+    let mut inference = InferenceRunner::load("runs/pendulum", env)?;
     for _ in 0..4 {
-        inference.run_episode().unwrap();
+        inference.run_episode()?;
     }
+    Ok(())
 }
 ```
 
@@ -121,8 +123,8 @@ A closure or function returning `anyhow::Result<E>` automatically implements
 
 ```rust,ignore
 let env_builder = || Ok(MyEnv);
-let ppo_builder = PPOBuilder::new(env_builder, 10);
-let ppo = ppo_builder.build().unwrap();
+let ppo_builder = PPOBuilder::new(env_builder, 10)?;
+let ppo = ppo_builder.build()?;
 ```
 
 For a more detailed example of how to implement the `Env` and `EnvBuilder`
@@ -156,8 +158,11 @@ workers sequentially on the calling thread:
 # extern crate r2l;
 use r2l::{PPOBuilder, SamplerExecutionMode};
 
-let builder = PPOBuilder::gym("Pendulum-v1", 4)
-    .with_execution_mode(SamplerExecutionMode::SingleThreaded);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let builder = PPOBuilder::gym("Pendulum-v1", 4)?
+        .with_execution_mode(SamplerExecutionMode::SingleThreaded);
+    Ok(())
+}
 ```
 
 Gymnasium calls still execute under Python's interpreter lock, so threaded

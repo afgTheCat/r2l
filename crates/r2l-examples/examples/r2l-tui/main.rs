@@ -80,10 +80,10 @@ impl App {
         }
     }
 
-    pub fn run(mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+    fn run(mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
-            let event = self.rx.recv().unwrap();
+            let event = self.rx.recv().map_err(io::Error::other)?;
             event
                 .downcast::<PPORolloutStats>()
                 .map(|progress| {
@@ -255,19 +255,23 @@ impl App {
 fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     std::thread::spawn(move || {
         loop {
-            if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
-                tx.send(Box::new(key_event)).unwrap();
+            match crossterm::event::read() {
+                Ok(crossterm::event::Event::Key(key_event)) => {
+                    if tx.send(Box::new(key_event)).is_err() {
+                        break;
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    eprintln!("failed to read terminal event: {error}");
+                    break;
+                }
             }
         }
     });
 }
 
-/// Builds and trains a configured PPO algorithm.
-///
-/// # Errors
-///
-/// Returns an error if the algorithm cannot be built or training fails.
-pub fn train_ppo(ppo_builder: PPOBuilder<GymEnv>) -> anyhow::Result<()> {
+fn train_ppo(ppo_builder: PPOBuilder<GymEnv>) -> anyhow::Result<()> {
     let mut ppo = ppo_builder.build()?;
     ppo.train()?;
     Ok(())
@@ -289,15 +293,12 @@ fn ppo_builder(tx: Sender<PPORolloutStats>, total_rollouts: usize) -> Result<PPO
         .with_rollout_reporter(Some(tx)))
 }
 
-/// Forwards PPO updates into the UI event channel.
-///
-/// # Panics
-///
-/// Panics if the UI event receiver disconnects while updates are still arriving.
-pub fn adapt_ppo_events(update_rx: Receiver<PPORolloutStats>, tx_to_updates: Sender<EventBox>) {
+fn adapt_ppo_events(update_rx: Receiver<PPORolloutStats>, tx_to_updates: Sender<EventBox>) {
     std::thread::spawn(move || {
         while let Ok(update) = update_rx.recv() {
-            tx_to_updates.send(Box::new(update)).unwrap();
+            if tx_to_updates.send(Box::new(update)).is_err() {
+                break;
+            }
         }
     });
 }

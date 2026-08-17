@@ -58,12 +58,16 @@ fn initialized_var(shape: &Shape, init: Init, dtype: DType, device: &Device) -> 
     let count = shape.elem_count();
     let values = match init {
         Init::Const(_) => return init.var(shape.clone(), dtype, device),
-        Init::Uniform { lo, up } => {
-            random_values(count, Uniform::new(lo as f32, up as f32).unwrap())
-        }
-        Init::Randn { mean, stdev } => {
-            random_values(count, Normal::new(mean as f32, stdev as f32).unwrap())
-        }
+        Init::Uniform { lo, up } => random_values(
+            count,
+            Uniform::new(lo as f32, up as f32)
+                .map_err(|error| candle_core::Error::Msg(error.to_string()))?,
+        ),
+        Init::Randn { mean, stdev } => random_values(
+            count,
+            Normal::new(mean as f32, stdev as f32)
+                .map_err(|error| candle_core::Error::Msg(error.to_string()))?,
+        ),
         Init::Kaiming {
             dist,
             fan,
@@ -71,12 +75,18 @@ fn initialized_var(shape: &Shape, init: Init, dtype: DType, device: &Device) -> 
         } => {
             let std = non_linearity.gain() / (fan.for_shape(shape) as f64).sqrt();
             match dist {
-                NormalOrUniform::Normal => {
-                    random_values(count, Normal::new(0.0, std as f32).unwrap())
-                }
+                NormalOrUniform::Normal => random_values(
+                    count,
+                    Normal::new(0.0, std as f32)
+                        .map_err(|error| candle_core::Error::Msg(error.to_string()))?,
+                ),
                 NormalOrUniform::Uniform => {
                     let bound = (3f64.sqrt() * std) as f32;
-                    random_values(count, Uniform::new(-bound, bound).unwrap())
+                    random_values(
+                        count,
+                        Uniform::new(-bound, bound)
+                            .map_err(|error| candle_core::Error::Msg(error.to_string()))?,
+                    )
                 }
             }
         }

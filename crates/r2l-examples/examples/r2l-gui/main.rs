@@ -108,12 +108,7 @@ const MAX_GRAD_NORM: f32 = 0.5;
 const TARGET_KL: f32 = 0.01;
 const ENV_NAME: &str = "Pendulum-v1";
 
-/// Trains the PPO GUI example and reports progress through `tx`.
-///
-/// # Errors
-///
-/// Returns an error if the algorithm cannot be built or training fails.
-pub fn train_ppo(
+fn train_ppo(
     tx: Sender<PPORolloutStats>,
     total_rollouts: usize,
     clip_range: f32,
@@ -147,7 +142,9 @@ fn main() -> eframe::Result {
     let tx_to_events = event_tx.clone();
     std::thread::spawn(move || {
         while let Ok(update) = update_rx.recv() {
-            tx_to_events.send(Box::new(update)).unwrap();
+            if tx_to_events.send(Box::new(update)).is_err() {
+                break;
+            }
         }
     });
     let total_rollouts = 300;

@@ -3,7 +3,7 @@ use candle_nn::VarBuilder;
 use r2l_core::{
     env::Space,
     error::{Error, Result, TensorError},
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     tensor::R2lTensor,
 };
 use safetensors::serialize as st_serialize;
@@ -17,7 +17,6 @@ pub struct CompositeDistribution {
     action_sizes: Vec<usize>,
     observation_size: usize,
     device: Device,
-    activation: ActivationFunction,
 }
 
 impl CompositeDistribution {
@@ -62,7 +61,6 @@ impl CompositeDistribution {
             action_sizes,
             observation_size,
             device: policy_varbuilder.device().clone(),
-            activation,
         })
     }
 
@@ -108,11 +106,7 @@ impl Actor for CompositeDistribution {
 
 impl ToSafetensors for CompositeDistribution {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
-        let metadata = PolicyMetadata {
-            activation: self.activation,
-        }
-        .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata)).map_err(Error::wrap)
+        st_serialize(self.named_tensors("policy"), None).map_err(Error::wrap)
     }
 }
 

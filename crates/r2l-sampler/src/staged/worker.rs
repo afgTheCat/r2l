@@ -3,8 +3,7 @@ use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{Memory, MultiMemory},
     env::{Env, EnvBuilder, Snapshot},
-    error::Result,
-    // error::Error,
+    error::{Error, Result},
     models::Actor,
     rng::{sample_u64, set_seed},
     tensor::R2lTensor,
@@ -36,10 +35,13 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
 
     fn step(&mut self, handle: &mut ElementHandle<T>) -> Result<Memory<T>> {
         let Some(policy) = &mut self.actor else {
-            todo!()
+            return Err(Error::InvalidState {
+                operation: "step staged sampler worker".into(),
+                details: "no policy has been installed".into(),
+            });
         };
         let state = handle.lock().unwrap().clone();
-        let action = policy.action(state.clone()).unwrap();
+        let action = policy.action(state.clone())?;
         let Snapshot {
             state: mut next_state,
             reward,

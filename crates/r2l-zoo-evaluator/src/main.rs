@@ -99,7 +99,7 @@ fn evaluate_all() -> anyhow::Result<()> {
 fn evaluate(envs: Vec<String>, backend: Backend) -> anyhow::Result<()> {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let config_path = crate_dir.join(CONFIG_PATH);
-    let zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
+    let zoo_config = ZooConfig::parse_rl_zoo_config(&config_path)?;
     for env in envs {
         let registration_module = match env.as_str() {
             "VizdoomBasic-MultiBinary-v1" => Some("vizdoom.gymnasium_wrapper"),
@@ -128,7 +128,7 @@ fn main() -> anyhow::Result<()> {
             let backend_index = args
                 .iter()
                 .position(|arg| arg == "burn" || arg == "candle")
-                .unwrap();
+                .context("expected a backend argument (`burn` or `candle`)")?;
             let backend = match args.remove(backend_index).as_str() {
                 "burn" => Backend::Burn,
                 "candle" => Backend::Candle,
