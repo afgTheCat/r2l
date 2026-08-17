@@ -47,8 +47,8 @@ pub struct PPOMinibatchStats {
 pub struct PPORolloutStats {
     /// Rollout index to which the stats belong.
     pub rollout_idx: usize,
-    /// Batch-level statistics collected across PPO epochs for the rollout.
-    pub batch_stats: Vec<PPOMinibatchStats>,
+    /// Minibatch statistics collected across PPO epochs for the rollout.
+    pub minibatch_stats: Vec<PPOMinibatchStats>,
     /// Current action-distribution standard deviation when available.
     pub std: Option<f32>,
     /// Average completed-episode reward observed across the active env set.
@@ -65,7 +65,7 @@ impl PPORolloutStats {
     pub fn entropy_loss(&self) -> f32 {
         mean(
             &self
-                .batch_stats
+                .minibatch_stats
                 .iter()
                 .map(|s| s.entropy_loss)
                 .collect::<Vec<_>>(),
@@ -77,7 +77,7 @@ impl PPORolloutStats {
     pub fn value_loss(&self) -> f32 {
         mean(
             &self
-                .batch_stats
+                .minibatch_stats
                 .iter()
                 .map(|s| s.value_loss)
                 .collect::<Vec<_>>(),
@@ -89,7 +89,7 @@ impl PPORolloutStats {
     pub fn policy_loss(&self) -> f32 {
         mean(
             &self
-                .batch_stats
+                .minibatch_stats
                 .iter()
                 .map(|s| s.policy_loss)
                 .collect::<Vec<_>>(),
@@ -101,16 +101,15 @@ impl PPORolloutStats {
     pub fn clip_fraction(&self) -> f32 {
         mean(
             &self
-                .batch_stats
+                .minibatch_stats
                 .iter()
                 .map(|s| s.clip_fraction)
                 .collect::<Vec<_>>(),
         )
     }
 
-    /// Appends one batch report to this rollout report.
-    pub fn collect_batch_data(&mut self, batch_stats: PPOMinibatchStats) {
-        self.batch_stats.push(batch_stats);
+    fn collect_minibatch(&mut self, minibatch_stats: PPOMinibatchStats) {
+        self.minibatch_stats.push(minibatch_stats);
     }
 }
 
@@ -148,7 +147,7 @@ pub(crate) struct TargetKl {
 }
 
 impl TargetKl {
-    pub fn target_kl_exceeded(&mut self) -> bool {
+    pub(crate) fn target_kl_exceeded(&mut self) -> bool {
         std::mem::take(&mut self.target_exceeded)
     }
 }
@@ -162,7 +161,7 @@ pub(crate) struct PPORolloutReporter {
 }
 
 impl PPORolloutReporter {
-    pub fn new(
+    pub(crate) fn new(
         tx: Option<Sender<PPORolloutStats>>,
         log_progress: bool,
         n_envs: usize,
@@ -332,7 +331,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
                 .filter(|value| (**value - 1.).abs() > params.clip_range)
                 .count() as f32
                 / ratio.len() as f32;
-            report.collect_batch_data(PPOMinibatchStats {
+            report.collect_minibatch(PPOMinibatchStats {
                 clip_fraction,
                 policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
                 entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
@@ -426,7 +425,7 @@ impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLear
                 .to_dtype(candle_core::DType::F32)?
                 .mean_all()?
                 .to_scalar::<f32>()?;
-            report.collect_batch_data(PPOMinibatchStats {
+            report.collect_minibatch(PPOMinibatchStats {
                 clip_fraction,
                 policy_loss: losses.policy_loss.to_scalar()?,
                 entropy_loss: entropy_loss.to_scalar()?,

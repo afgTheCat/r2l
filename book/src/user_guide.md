@@ -13,10 +13,10 @@ The shortest Gymnasium-based PPO setup is:
 
 ```rust,no_run
 # extern crate r2l;
-use r2l::PPOAlgorithmBuilder;
+use r2l::PPOBuilder;
 
 fn main() {
-    let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4);
+    let builder = PPOBuilder::gym("Pendulum-v1", 4);
     let mut algorithm = builder.build().unwrap();
     algorithm.train().unwrap();
 }
@@ -43,10 +43,10 @@ method.
 
 ```rust,no_run
 # extern crate r2l;
-use r2l::{PPOAlgorithmBuilder, TrainingArtifactsConfig};
+use r2l::{PPOBuilder, TrainingArtifactsConfig};
 
 fn main() {
-    let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4);
+    let builder = PPOBuilder::gym("Pendulum-v1", 4);
     let artifacts_config = TrainingArtifactsConfig::new("runs/pendulum")
         .with_evaluation_results(true)
         .with_training_timings(true)
@@ -91,7 +91,7 @@ fn main() {
     let env = GymEnv::new("Pendulum-v1", Some("human".to_owned())).unwrap();
     let mut inference = InferenceRunner::load("runs/pendulum", env).unwrap();
     for _ in 0..4 {
-        inference.run_episode();
+        inference.run_episode().unwrap();
     }
 }
 ```
@@ -121,7 +121,7 @@ A closure or function returning `anyhow::Result<E>` automatically implements
 
 ```rust,ignore
 let env_builder = || Ok(MyEnv);
-let ppo_builder = PPOAlgorithmBuilder::new(env_builder, 10);
+let ppo_builder = PPOBuilder::new(env_builder, 10);
 let ppo = ppo_builder.build().unwrap();
 ```
 
@@ -154,9 +154,9 @@ workers sequentially on the calling thread:
 
 ```rust,no_run
 # extern crate r2l;
-use r2l::{PPOAlgorithmBuilder, SamplerExecutionMode};
+use r2l::{PPOBuilder, SamplerExecutionMode};
 
-let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
+let builder = PPOBuilder::gym("Pendulum-v1", 4)
     .with_execution_mode(SamplerExecutionMode::SingleThreaded);
 ```
 
@@ -170,8 +170,8 @@ rollouts can also normalize discounted rewards with
 
 ## Training schedules
 
-`LearningSchedule::rollout_bound(n)` stops after `n` rollout collections.
-`LearningSchedule::total_step_bound(n)` stops after at least `n` sampled
+`TrainingLimit::rollouts(n)` stops after `n` rollout collections.
+`TrainingLimit::steps(n)` stops after at least `n` sampled
 environment steps across all workers.
 
 `LearningRateSchedule::Constant(rate)` keeps the configured rate fixed.

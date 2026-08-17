@@ -201,8 +201,7 @@ impl Env for GymEnv {
 /// Builder for named Gymnasium environments.
 ///
 /// This is the standard way to plug Gymnasium environments into higher-level
-/// high-level builders such as `r2l::PPOAlgorithmBuilder` and
-/// `r2l::A2CAlgorithmBuilder`.
+/// high-level builders such as `r2l::PPOBuilder` and `r2l::A2CBuilder`.
 pub struct GymEnvBuilder(String);
 
 impl GymEnvBuilder {

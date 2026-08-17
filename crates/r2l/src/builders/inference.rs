@@ -279,31 +279,31 @@ impl<E: Env> InferenceRunner<E> {
 
     /// Runs the environment to completion and then resets it.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if action inference, an environment step, or the final reset fails.
-    pub fn run_episode(&mut self) {
+    /// Returns an error if action inference, an environment step, or the final reset fails.
+    pub fn run_episode(&mut self) -> Result<(), Error> {
         loop {
-            let snapshot = self.step().unwrap();
+            let snapshot = self.step()?;
             if snapshot.terminated || snapshot.truncated {
                 break;
             }
         }
-        self.reset().unwrap();
+        self.reset()
     }
 
     /// Runs the environment to completion using modal actions only and then resets it.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if action inference, an environment step, or the final reset fails.
-    pub fn mode_run_episode(&mut self) {
+    /// Returns an error if action inference, an environment step, or the final reset fails.
+    pub fn mode_run_episode(&mut self) -> Result<(), Error> {
         loop {
-            let snapshot = self.mode_step().unwrap();
+            let snapshot = self.mode_step()?;
             if snapshot.terminated || snapshot.truncated {
                 break;
             }
         }
-        self.reset().unwrap();
+        self.reset()
     }
 }

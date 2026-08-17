@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
-use r2l::{LearningRateSchedule, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
+use r2l::{LearningRateSchedule, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
 use serde::{Deserialize, Deserializer, de};
 use yaml_serde::Value;
 
@@ -152,20 +152,20 @@ impl RlZooEnvironmentConfig {
     ) -> anyhow::Result<()> {
         let obs_clip = self.normalize.norm_obs().then_some(10.0);
         let artifacts_config = TrainingArtifactsConfig::new(output_dir);
-        let mut builder = PPOAlgorithmBuilder::gym(env_name, self.n_envs)?
+        let mut builder = PPOBuilder::gym(env_name, self.n_envs)?
             .with_rollout_steps(self.n_steps)
-            .with_learning_schedule(LearningSchedule::total_step_bound(self.n_timesteps))
+            .with_training_limit(TrainingLimit::steps(self.n_timesteps))
             .with_training_artifacts(artifacts_config)
             .with_observation_normalizer(obs_clip)?
             .with_lambda(self.gae_lambda)
             .with_gamma(self.gamma)
             .with_total_epochs(self.n_epochs)
-            .with_entropy_coeff(self.ent_coef)
+            .with_entropy_coefficient(self.ent_coef)
             .with_sample_size(self.batch_size)
             .with_learning_rate_schedule(Some(self.learning_rate.into()))
             .with_clip_range(self.clip_range.initial_value() as f32)
             .with_log_std_init(self.log_std_init)
-            .with_vf_coeff(Some(self.vf_coef))
+            .with_value_loss_coefficient(Some(self.vf_coef))
             .with_seed(seed)
             .with_gradient_clipping(Some(self.max_grad_norm));
         if self.normalize.norm_reward() {

@@ -2,17 +2,17 @@
 
 High-level training builders and default hooks for `r2l`.
 
-The main entry points are `PPOAlgorithmBuilder` and `A2CAlgorithmBuilder`.
+The main entry points are `PPOBuilder` and `A2CBuilder`.
 They combine environment construction, rollout collection, a Candle or Burn
 learning module, scheduling, reporting, and optional best-actor evaluation.
 
 ```rust,no_run
-use r2l::{LearningSchedule, PPOAlgorithmBuilder};
+use r2l::{PPOBuilder, TrainingLimit};
 
-let builder = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
+let builder = PPOBuilder::gym("Pendulum-v1", 4)
     .with_burn()
     .with_rollout_steps(1024)
-    .with_learning_schedule(LearningSchedule::total_step_bound(100_000));
+    .with_training_limit(TrainingLimit::steps(100_000));
 let mut algorithm = builder.build().unwrap();
 algorithm.train().unwrap();
 ```

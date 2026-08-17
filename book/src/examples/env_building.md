@@ -10,7 +10,7 @@ The `env_building` example shows the supported construction styles:
 - implementing `EnvBuilder` for a custom builder type;
 - passing a closure or function that returns an environment;
 - using `GymEnvBuilder` directly;
-- using `PPOAlgorithmBuilder::gym` for Gymnasium environment ids.
+- using `PPOBuilder::gym` for Gymnasium environment ids.
 
 Run it from the workspace root:
 

@@ -4,7 +4,7 @@ use std::{
 };
 
 use candle_core::Device;
-use r2l::{A2CAlgorithmBuilder, LearningSchedule};
+use r2l::{A2CBuilder, TrainingLimit};
 
 #[allow(dead_code)]
 struct A2CTestConfig {
@@ -28,15 +28,15 @@ struct A2CTestConfig {
 fn configure_candle_a2c_test(config: &A2CTestConfig) {
     let (update_tx, update_rx) = mpsc::channel();
 
-    let mut a2c_builder = A2CAlgorithmBuilder::gym(config.env_name, config.n_envs)
+    let mut a2c_builder = A2CBuilder::gym(config.env_name, config.n_envs)
         .unwrap()
         .with_candle(Device::Cpu)
-        .with_entropy_coeff(config.entropy_coeff)
+        .with_entropy_coefficient(config.entropy_coeff)
         .with_lambda(config.gae_lambda)
         .with_gamma(config.gamma)
         .with_rollout_steps(config.n_steps)
-        .with_learning_schedule(LearningSchedule::total_step_bound(config.n_timesteps))
-        .with_reporter(Some(update_tx));
+        .with_training_limit(TrainingLimit::steps(config.n_timesteps))
+        .with_rollout_reporter(Some(update_tx));
 
     if let Some(learning_rate) = config.learning_rate {
         a2c_builder = a2c_builder.with_learning_rate(learning_rate);
@@ -47,7 +47,7 @@ fn configure_candle_a2c_test(config: &A2CTestConfig) {
     }
 
     if let Some(vf_coeff) = config.vf_coeff {
-        a2c_builder = a2c_builder.with_vf_coeff(Some(vf_coeff));
+        a2c_builder = a2c_builder.with_value_loss_coefficient(Some(vf_coeff));
     }
 
     let mut a2c = a2c_builder.build().unwrap();

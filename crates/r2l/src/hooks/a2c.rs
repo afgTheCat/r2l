@@ -42,8 +42,8 @@ pub struct A2CMinibatchStats {
 pub struct A2CRolloutStats {
     /// Rollout index to which the stats belong to
     pub rollout_idx: usize,
-    /// Batch-level statistics collected during the most recent learning pass.
-    pub batch_stats: Vec<A2CMinibatchStats>,
+    /// Minibatch statistics collected during the most recent learning pass.
+    pub minibatch_stats: Vec<A2CMinibatchStats>,
     /// Current action-distribution standard deviation when available.
     pub std: Option<f32>,
     /// Average completed-episode reward observed across the active env set.
@@ -58,7 +58,7 @@ impl A2CRolloutStats {
     pub fn entropy_loss(&self) -> f32 {
         mean(
             &self
-                .batch_stats
+                .minibatch_stats
                 .iter()
                 .map(|s| s.entropy_loss)
                 .collect::<Vec<_>>(),
@@ -70,7 +70,7 @@ impl A2CRolloutStats {
     pub fn value_loss(&self) -> f32 {
         mean(
             &self
-                .batch_stats
+                .minibatch_stats
                 .iter()
                 .map(|s| s.value_loss)
                 .collect::<Vec<_>>(),
@@ -82,16 +82,15 @@ impl A2CRolloutStats {
     pub fn policy_loss(&self) -> f32 {
         mean(
             &self
-                .batch_stats
+                .minibatch_stats
                 .iter()
                 .map(|s| s.policy_loss)
                 .collect::<Vec<_>>(),
         )
     }
 
-    /// Appends one batch report to this rollout report.
-    pub fn collect_batch_data(&mut self, batch_stats: A2CMinibatchStats) {
-        self.batch_stats.push(batch_stats);
+    fn collect_minibatch(&mut self, minibatch_stats: A2CMinibatchStats) {
+        self.minibatch_stats.push(minibatch_stats);
     }
 }
 
@@ -132,7 +131,7 @@ pub(crate) struct A2CRolloutReporter {
 }
 
 impl A2CRolloutReporter {
-    pub fn new(
+    pub(crate) fn new(
         tx: Option<Sender<A2CRolloutStats>>,
         log_progress: bool,
         n_envs: usize,
@@ -255,7 +254,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
         let entropy = module.policy().entropy(&data.observations)?;
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         if let Some(A2CRolloutReporter { report, .. }) = &mut self.reporter {
-            report.collect_batch_data(A2CMinibatchStats {
+            report.collect_minibatch(A2CMinibatchStats {
                 policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
                 entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
                 value_loss: losses.value_loss.to_data().to_vec::<f32>().unwrap()[0],
@@ -315,7 +314,7 @@ impl A2CHook<CandlePolicyValueLearner> for A2CLearningHook<CandlePolicyValueLear
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
         if let Some(A2CRolloutReporter { report, .. }) = &mut self.reporter {
-            report.collect_batch_data(A2CMinibatchStats {
+            report.collect_minibatch(A2CMinibatchStats {
                 policy_loss: losses.policy_loss.to_scalar()?,
                 entropy_loss: entropy_loss.to_scalar()?,
                 value_loss: losses.value_loss.to_scalar()?,

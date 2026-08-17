@@ -2,12 +2,12 @@ use r2l_core::{
     buffers::buffer::TrajectoryBuffer, running_mean::RunningMeanStdF32, tensor::R2lTensor,
 };
 
-pub fn mean(numbers: &[f32]) -> f32 {
+pub(crate) fn mean(numbers: &[f32]) -> f32 {
     let sum: f32 = numbers.iter().sum();
     sum / numbers.len() as f32
 }
 
-pub fn fmt_stat(x: f32) -> String {
+pub(crate) fn fmt_stat(x: f32) -> String {
     if x == 0.0 {
         "0".to_string()
     } else if x.abs() < 0.001 {

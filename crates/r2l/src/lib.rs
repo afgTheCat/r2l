@@ -6,16 +6,16 @@
 //! The Gymnasium integration requires Python with Gymnasium installed.
 //!
 //! ```no_run
-//! use r2l::PPOAlgorithmBuilder;
+//! use r2l::PPOBuilder;
 //!
-//! let mut algorithm = PPOAlgorithmBuilder::gym("Pendulum-v1", 4)
+//! let mut algorithm = PPOBuilder::gym("Pendulum-v1", 4)
 //!     .unwrap()
 //!     .build()
 //!     .unwrap();
 //! algorithm.train().unwrap();
 //! ```
 //!
-//! [`PPOAlgorithmBuilder`] and [`A2CAlgorithmBuilder`] are the main entry points for
+//! [`PPOBuilder`] and [`A2CBuilder`] are the main entry points for
 //! configuring and training agents.
 //!
 //! For a more in-depth tutorial, see
@@ -40,6 +40,7 @@
 //! r2l is the built on top of other crates.
 
 #![warn(missing_docs)]
+#![warn(unreachable_pub)]
 
 use burn::backend::{Autodiff, NdArray};
 
@@ -53,14 +54,13 @@ mod utils;
 pub type BurnBackend = Autodiff<NdArray>;
 
 pub use builders::{
-    A2CAlgorithmBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceRunner, OnPolicyAlgoBuilder,
-    OnPolicyOptimizerLayout, PPOAlgorithmBuilder, PPOBurn, PPOCandle, TrainingArtifactsConfig,
+    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceRunner, OnPolicyBuilder, PPOBuilder,
+    PPOBurn, PPOCandle, TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
 pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
 pub use hooks::on_policy::{
-    LearningRateSchedule, LearningSchedule, OnPolicyCommand, OnPolicyCommandResult,
-    OnPolicyControlHandle, OnPolicyTrainingHooks,
+    LearningRateSchedule, OnPolicyControlHandle, OnPolicyTrainingHooks, TrainingLimit,
 };
 pub use hooks::ppo::{PPOMinibatchStats, PPORolloutStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};

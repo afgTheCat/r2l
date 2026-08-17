@@ -18,21 +18,14 @@ use r2l_core::{
 
 use crate::evaluator::BestActorEvaluator;
 
-/// Commands processed by on-policy training hooks at training boundaries.
-pub enum OnPolicyCommand {
-    /// Stops training before the next learning phase or after the current one.
+enum OnPolicyCommand {
     Shutdown,
-    /// Serializes the current runtime actor to the given path.
-    SerializeCurrentPolicy(String),
+    SerializeCurrentPolicy(PathBuf),
 }
 
-/// Acknowledgements sent after an on-policy command has been processed.
-pub enum OnPolicyCommandResult {
-    /// Training is stopping and runtime cleanup will follow.
+enum OnPolicyCommandResult {
     Stopping,
-    /// Training stopped completely and runtime cleanup has happened.
     Stopped,
-    /// Result of attempting to serialize the current runtime actor.
     CurrentPolicySerialized(Result<(), Error>),
 }
 
@@ -55,10 +48,8 @@ impl OnPolicyControlEndpoint {
 /// Handle for controlling a running on-policy training loop.
 #[derive(Debug)]
 pub struct OnPolicyControlHandle {
-    /// Receives command results from the training loop.
-    pub rx: Receiver<OnPolicyCommandResult>,
-    /// Sends commands to the training loop.
-    pub tx: Sender<OnPolicyCommand>,
+    rx: Receiver<OnPolicyCommandResult>,
+    tx: Sender<OnPolicyCommand>,
 }
 
 impl OnPolicyControlHandle {
@@ -68,20 +59,55 @@ impl OnPolicyControlHandle {
         Self { rx, tx }
     }
 
+    fn send(&self, command: OnPolicyCommand) -> Result<(), Error> {
+        self.tx.send(command).map_err(|error| {
+            Error::ResourceInterrupted(ResourceInterrupted {
+                resource: "on-policy control channel".into(),
+                details: error.to_string(),
+            })
+        })
+    }
+
+    fn receive(&self) -> Result<OnPolicyCommandResult, Error> {
+        self.rx.recv().map_err(|error| {
+            Error::ResourceInterrupted(ResourceInterrupted {
+                resource: "on-policy control channel".into(),
+                details: error.to_string(),
+            })
+        })
+    }
+
+    /// Requests serialization of the current policy and waits for the result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails, the training loop is stopping,
+    /// or the training-side control endpoint disconnects.
+    pub fn serialize_current_policy(&self, path: impl Into<PathBuf>) -> Result<(), Error> {
+        self.send(OnPolicyCommand::SerializeCurrentPolicy(path.into()))?;
+        match self.receive()? {
+            OnPolicyCommandResult::CurrentPolicySerialized(result) => result,
+            OnPolicyCommandResult::Stopping | OnPolicyCommandResult::Stopped => {
+                Err(Error::InvalidState {
+                    operation: "serialize current policy".into(),
+                    details: "the training loop is stopping".into(),
+                })
+            }
+        }
+    }
+
     /// Requests graceful shutdown and waits for the training loop to stop.
     ///
     /// # Errors
     ///
     /// Returns an error if the training-side control endpoint has disconnected.
     pub fn shutdown(&self) -> Result<(), Error> {
-        self.tx.send(OnPolicyCommand::Shutdown).map_err(|error| {
-            Error::ResourceInterrupted(ResourceInterrupted {
-                resource: "on-policy control channel".into(),
-                details: error.to_string(),
-            })
-        })?;
-        while self.rx.recv().is_ok() {}
-        Ok(())
+        self.send(OnPolicyCommand::Shutdown)?;
+        loop {
+            if matches!(self.receive()?, OnPolicyCommandResult::Stopped) {
+                return Ok(());
+            }
+        }
     }
 }
 
@@ -116,7 +142,7 @@ enum TrainingPhase {
 
 /// Training-stop policy for the on-policy training loop.
 #[derive(Debug, Clone, Copy)]
-pub enum LearningSchedule {
+pub enum TrainingLimit {
     /// Stop after `total_rollouts` completed rollouts.
     RolloutBound {
         /// Number of rollouts after which training stops.
@@ -129,14 +155,14 @@ pub enum LearningSchedule {
     },
 }
 
-impl LearningSchedule {
+impl TrainingLimit {
     /// Creates a schedule bounded by total sampled environment steps.
     ///
     /// # Panics
     ///
     /// Panics if `total_steps` is zero.
     #[must_use]
-    pub fn total_step_bound(total_steps: usize) -> Self {
+    pub fn steps(total_steps: usize) -> Self {
         assert!(total_steps > 0, "total steps must be greater than zero");
         Self::TotalStepBound { total_steps }
     }
@@ -147,7 +173,7 @@ impl LearningSchedule {
     ///
     /// Panics if `total_rollouts` is zero.
     #[must_use]
-    pub fn rollout_bound(total_rollouts: usize) -> Self {
+    pub fn rollouts(total_rollouts: usize) -> Self {
         assert!(
             total_rollouts > 0,
             "total rollouts must be greater than zero"
@@ -276,9 +302,10 @@ impl OnPolicyCommandHandler {
                     return Ok(HookResult::Break);
                 }
                 OnPolicyCommand::SerializeCurrentPolicy(path) => {
-                    let result = runtime.actor().to_safetensors().and_then(|bytes| {
-                        std::fs::write(PathBuf::from(path), bytes).map_err(Error::wrap)
-                    });
+                    let result = runtime
+                        .actor()
+                        .to_safetensors()
+                        .and_then(|bytes| std::fs::write(path, bytes).map_err(Error::wrap));
                     Self::send_result(
                         endpoint,
                         OnPolicyCommandResult::CurrentPolicySerialized(result),
@@ -404,7 +431,7 @@ struct TrainingLoopState {
 /// Lifecycle hooks for an on-policy training loop.
 pub struct OnPolicyTrainingHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     state: TrainingLoopState,
-    learning_schedule: LearningSchedule,
+    training_limit: TrainingLimit,
     learning_rate_scheduler: LearningRateScheduler,
     evaluator: ScheduledEvaluator<A::Actor, E>,
     command_handler: OnPolicyCommandHandler,
@@ -417,7 +444,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     OnPolicyTrainingHooks<A, S, E>
 {
     pub(crate) fn new(
-        learning_schedule: LearningSchedule,
+        training_limit: TrainingLimit,
         learning_rate_schedule: Option<LearningRateSchedule>,
         evaluator: ScheduledEvaluator<A::Actor, E>,
         command_handler: OnPolicyCommandHandler,
@@ -425,7 +452,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ) -> Self {
         Self {
             state: TrainingLoopState::default(),
-            learning_schedule,
+            training_limit,
             learning_rate_scheduler: LearningRateScheduler::new(learning_rate_schedule),
             evaluator,
             command_handler,
@@ -436,11 +463,11 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     fn progress_remaining(&self) -> f64 {
-        match &self.learning_schedule {
-            LearningSchedule::RolloutBound { total_rollouts } => {
+        match &self.training_limit {
+            TrainingLimit::RolloutBound { total_rollouts } => {
                 1.0 - self.state.completed_rollouts as f64 / *total_rollouts as f64
             }
-            LearningSchedule::TotalStepBound { total_steps } => {
+            TrainingLimit::TotalStepBound { total_steps } => {
                 1.0 - self.state.steps_taken as f64 / *total_steps as f64
             }
         }

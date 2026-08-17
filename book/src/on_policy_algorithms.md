@@ -47,8 +47,8 @@ the standard policies through `with_rollout_steps` and
 provides defaults for loss configuration, reporting, evaluation, and learning
 schedules.
 
-Applications construct complete runs with `PPOAlgorithmBuilder` or
-`A2CAlgorithmBuilder`. Backend and sampler choices change the concrete builder
+Applications construct complete runs with `PPOBuilder` or `A2CBuilder`.
+Backend and sampler choices change the concrete builder
 type while preserving the shared configuration. Applications that need custom
 agents, samplers, or hook compositions can use the lower-level traits from
 `r2l-core`, `r2l-agents`, and `r2l-sampler` directly.

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l::{LearningSchedule, PPOAlgorithmBuilder, PPORolloutStats};
+use r2l::{PPOBuilder, PPORolloutStats, TrainingLimit};
 use r2l_examples::EventBox;
 use r2l_sampler::SamplerExecutionMode;
 
@@ -118,17 +118,17 @@ pub fn train_ppo(
     total_rollouts: usize,
     clip_range: f32,
 ) -> anyhow::Result<()> {
-    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 10)?
+    let ppo_builder = PPOBuilder::gym(ENV_NAME, 10)?
         .with_burn()
         .with_seed(0)
-        .with_entropy_coeff(ENT_COEFF)
+        .with_entropy_coefficient(ENT_COEFF)
         .with_gradient_clipping(Some(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
         .with_rollout_steps(2048)
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_clip_range(clip_range)
-        .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
-        .with_reporter(Some(tx));
+        .with_training_limit(TrainingLimit::rollouts(total_rollouts))
+        .with_rollout_reporter(Some(tx));
     let mut ppo = ppo_builder.build()?;
     ppo.train()?;
     Ok(())

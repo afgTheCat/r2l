@@ -1,5 +1,5 @@
 // ANCHOR: ppo
-use r2l::{InferenceRunner, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
+use r2l::{InferenceRunner, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
 use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";
@@ -8,14 +8,14 @@ const ARTIFACT_DIR: &str = "runs/pendulum";
 fn main() {
     // Train the agent and persist the best policy for inference.
     let artifacts_config = TrainingArtifactsConfig::new(ARTIFACT_DIR);
-    let mut ppo = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
+    let mut ppo = PPOBuilder::gym(ENV_NAME, 10)
         .unwrap()
         .with_training_artifacts(artifacts_config)
         .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
-        .with_learning_schedule(LearningSchedule::rollout_bound(30))
+        .with_training_limit(TrainingLimit::rollouts(30))
         .build()
         .unwrap();
     ppo.train().unwrap();
@@ -24,7 +24,7 @@ fn main() {
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
     let mut inference = InferenceRunner::load(ARTIFACT_DIR, env).unwrap();
     for _ in 0..4 {
-        inference.run_episode();
+        inference.run_episode().unwrap();
     }
 }
 // ANCHOR_END: ppo

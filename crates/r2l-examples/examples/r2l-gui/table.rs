@@ -22,35 +22,35 @@ impl UpdateTable {
 
         let clip_fractions = self
             .progress
-            .batch_stats
+            .minibatch_stats
             .iter()
             .map(|s| s.clip_fraction)
             .collect::<Vec<_>>();
 
         let entropy_losses = self
             .progress
-            .batch_stats
+            .minibatch_stats
             .iter()
             .map(|s| s.entropy_loss)
             .collect::<Vec<_>>();
 
         let policy_losses = self
             .progress
-            .batch_stats
+            .minibatch_stats
             .iter()
             .map(|s| s.policy_loss)
             .collect::<Vec<_>>();
 
         let value_losses = self
             .progress
-            .batch_stats
+            .minibatch_stats
             .iter()
             .map(|s| s.value_loss)
             .collect::<Vec<_>>();
 
         let approx_kl = self
             .progress
-            .batch_stats
+            .minibatch_stats
             .iter()
             .map(|s| s.approx_kl)
             .collect::<Vec<_>>();

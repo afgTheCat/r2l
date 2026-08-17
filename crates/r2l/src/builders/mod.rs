@@ -50,7 +50,7 @@ use crate::{
         ppo::TargetKl,
     },
 };
-use crate::{BurnBackend, LearningRateSchedule, LearningSchedule, OnPolicyControlHandle};
+use crate::{BurnBackend, LearningRateSchedule, OnPolicyControlHandle, TrainingLimit};
 use crate::{EpisodeBoundHook, StepBoundHook};
 use crate::{
     evaluator::BestActorEvaluator,
@@ -152,7 +152,7 @@ fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
 
 /// Optimizer arrangement for the policy and value networks.
 #[derive(Clone, Debug)]
-pub enum OnPolicyOptimizerLayout {
+pub(crate) enum OnPolicyOptimizerLayout {
     /// One optimizer updates both networks.
     Joint {
         /// Optional maximum gradient norm.
@@ -191,31 +191,31 @@ impl OnPolicyOptimizerLayout {
 
     /// Sets the learning rate of every optimizer in the layout.
     #[must_use]
-    pub fn with_lr(self, lr: f64) -> Self {
+    fn with_lr(self, lr: f64) -> Self {
         self.map_params(|params| params.lr = lr)
     }
 
     /// Sets the first-moment decay of every optimizer in the layout.
     #[must_use]
-    pub fn with_beta1(self, beta1: f64) -> Self {
+    fn with_beta1(self, beta1: f64) -> Self {
         self.map_params(|params| params.beta1 = beta1)
     }
 
     /// Sets the second-moment decay of every optimizer in the layout.
     #[must_use]
-    pub fn with_beta2(self, beta2: f64) -> Self {
+    fn with_beta2(self, beta2: f64) -> Self {
         self.map_params(|params| params.beta2 = beta2)
     }
 
     /// Sets the numerical-stability term of every optimizer in the layout.
     #[must_use]
-    pub fn with_epsilon(self, epsilon: f64) -> Self {
+    fn with_epsilon(self, epsilon: f64) -> Self {
         self.map_params(|params| params.eps = epsilon)
     }
 
     /// Sets the weight decay of every optimizer in the layout.
     #[must_use]
-    pub fn with_weight_decay(self, weight_decay: f64) -> Self {
+    fn with_weight_decay(self, weight_decay: f64) -> Self {
         self.map_params(|params| params.weight_decay = weight_decay)
     }
 }
@@ -385,7 +385,7 @@ struct Builder<E: Env> {
     algorithm_configuration: AlgorithmConfiguration,
 
     // for the hooks
-    learning_schedule: LearningSchedule,
+    training_limit: TrainingLimit,
     learning_rate_schedule: Option<LearningRateSchedule>,
     training_artifacts: Option<TrainingArtifactsConfig>,
     control_endpoint: Option<OnPolicyControlEndpoint>,
@@ -424,7 +424,7 @@ impl<E: Env> Builder<E> {
             sampler_configuration,
             backend_configuration,
             algorithm_configuration,
-            learning_schedule: LearningSchedule::rollout_bound(300),
+            training_limit: TrainingLimit::rollouts(300),
             learning_rate_schedule: None,
             training_artifacts: None,
             control_endpoint: None,
@@ -603,7 +603,7 @@ impl<E: Env> Builder<E> {
             )
         };
         Ok(OnPolicyTrainingHooks::new(
-            self.learning_schedule,
+            self.training_limit,
             self.learning_rate_schedule,
             evaluator,
             OnPolicyCommandHandler::new(self.control_endpoint),
@@ -821,7 +821,7 @@ struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
 
 /// Configures and builds a complete PPO or A2C training algorithm.
 ///
-/// Start with [`PPOAlgorithmBuilder`] or [`A2CAlgorithmBuilder`]. Some methods,
+/// Start with [`PPOBuilder`] or [`A2CBuilder`]. Some methods,
 /// such as backend and sampler selection, return a builder with different
 /// generic arguments. The concrete state components are publicly named so such
 /// builders can be stored in and passed to user functions.
@@ -832,13 +832,13 @@ struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
 /// minibatches of 64 samples, and a joint `AdamW` optimizer with a learning rate
 /// of `3e-4`.
 #[must_use]
-pub struct OnPolicyAlgoBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
+pub struct OnPolicyBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     builder: Builder<E>,
     config: Config<A, S, E>,
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
-    OnPolicyAlgoBuilder<A, S, E>
+    OnPolicyBuilder<A, S, E>
 {
     fn configured<EB: EnvBuilder<Env = E>>(
         env_builder: EB,
@@ -867,8 +867,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     fn with_agent<A2: Agent>(
         self,
         build_agent: fn(&mut Builder<E>) -> Result<A2, Error>,
-    ) -> OnPolicyAlgoBuilder<A2, S, E> {
-        OnPolicyAlgoBuilder {
+    ) -> OnPolicyBuilder<A2, S, E> {
+        OnPolicyBuilder {
             builder: self.builder,
             config: Config {
                 build_agent,
@@ -880,8 +880,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     fn with_sampler<S2: Sampler<Tensor = E::Tensor>>(
         self,
         build_sampler: fn(&Builder<E>) -> Result<S2, Error>,
-    ) -> OnPolicyAlgoBuilder<A, S2, E> {
-        OnPolicyAlgoBuilder {
+    ) -> OnPolicyBuilder<A, S2, E> {
+        OnPolicyBuilder {
             builder: self.builder,
             config: Config {
                 build_agent: self.config.build_agent,
@@ -897,8 +897,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Sets the schedule that determines when training stops.
-    pub fn with_learning_schedule(mut self, learning_schedule: LearningSchedule) -> Self {
-        self.builder.learning_schedule = learning_schedule;
+    pub fn with_training_limit(mut self, training_limit: TrainingLimit) -> Self {
+        self.builder.training_limit = training_limit;
         self
     }
 
@@ -1020,12 +1020,6 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
-    /// Replaces the optimizer arrangement and its parameters.
-    pub fn with_optimizer_layout(mut self, optimizer_layout: OnPolicyOptimizerLayout) -> Self {
-        self.builder.update_optimizer_layout(|_| optimizer_layout);
-        self
-    }
-
     /// Enables or disables advantage normalization before learning.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         match &mut self.builder.algorithm_configuration {
@@ -1042,13 +1036,13 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Sets the entropy term coefficient in the training loss.
-    pub fn with_entropy_coeff(mut self, entropy_coeff: f32) -> Self {
+    pub fn with_entropy_coefficient(mut self, entropy_coeff: f32) -> Self {
         self.builder.entropy_coeff = entropy_coeff;
         self
     }
 
     /// Sets the optional value-function loss coefficient.
-    pub fn with_vf_coeff(mut self, vf_coeff: Option<f32>) -> Self {
+    pub fn with_value_loss_coefficient(mut self, vf_coeff: Option<f32>) -> Self {
         self.builder.vf_coeff = vf_coeff;
         self
     }
@@ -1105,7 +1099,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 }
 
-impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOCandle, S, E> {
+impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOCandle, S, E> {
     /// Uses Candle on `device` for PPO learning.
     pub fn with_candle(mut self, device: Device) -> Self {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
@@ -1113,15 +1107,15 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOCandle, S, E
     }
 
     /// Switches PPO learning to the default Burn backend.
-    pub fn with_burn(mut self) -> OnPolicyAlgoBuilder<PPOBurn<BurnBackend>, S, E> {
+    pub fn with_burn(mut self) -> OnPolicyBuilder<PPOBurn<BurnBackend>, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
         self.with_agent(Builder::ppo_burn_agent)
     }
 }
 
-impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOBurn<BurnBackend>, S, E> {
+impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOBurn<BurnBackend>, S, E> {
     /// Switches PPO learning to Candle on `device`.
-    pub fn with_candle(mut self, device: Device) -> OnPolicyAlgoBuilder<PPOCandle, S, E> {
+    pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<PPOCandle, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self.with_agent(Builder::ppo_candle_agent)
     }
@@ -1133,7 +1127,7 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOBurn<BurnBac
     }
 }
 
-impl<M, S, E> OnPolicyAlgoBuilder<PPO<M, PPOLearningHook<M>>, S, E>
+impl<M, S, E> OnPolicyBuilder<PPO<M, PPOLearningHook<M>>, S, E>
 where
     M: OnPolicyLearner,
     M::InferencePolicy: ToSafetensors,
@@ -1142,7 +1136,7 @@ where
     E: Env<Tensor = S::Tensor>,
 {
     /// Installs an optional channel for reporting PPO training statistics.
-    pub fn with_reporter(mut self, tx: Option<Sender<PPORolloutStats>>) -> Self {
+    pub fn with_rollout_reporter(mut self, tx: Option<Sender<PPORolloutStats>>) -> Self {
         let AlgorithmConfiguration::Ppo { reporter, .. } =
             &mut self.builder.algorithm_configuration
         else {
@@ -1192,7 +1186,7 @@ where
     }
 }
 
-impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CCandle, S, E> {
+impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CCandle, S, E> {
     /// Uses Candle on `device` for A2C learning.
     pub fn with_candle(mut self, device: Device) -> Self {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
@@ -1200,15 +1194,15 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CCandle, S, E
     }
 
     /// Switches A2C learning to the default Burn backend.
-    pub fn with_burn(mut self) -> OnPolicyAlgoBuilder<A2CBurn<BurnBackend>, S, E> {
+    pub fn with_burn(mut self) -> OnPolicyBuilder<A2CBurn<BurnBackend>, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
         self.with_agent(Builder::a2c_burn_agent)
     }
 }
 
-impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CBurn<BurnBackend>, S, E> {
+impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CBurn<BurnBackend>, S, E> {
     /// Switches A2C learning to Candle on `device`.
-    pub fn with_candle(mut self, device: Device) -> OnPolicyAlgoBuilder<A2CCandle, S, E> {
+    pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<A2CCandle, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self.with_agent(Builder::a2c_candle_agent)
     }
@@ -1220,7 +1214,7 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CBurn<BurnBac
     }
 }
 
-impl<M, S, E> OnPolicyAlgoBuilder<A2C<M, A2CLearningHook<M>>, S, E>
+impl<M, S, E> OnPolicyBuilder<A2C<M, A2CLearningHook<M>>, S, E>
 where
     M: OnPolicyLearner,
     M::InferencePolicy: ToSafetensors,
@@ -1229,7 +1223,7 @@ where
     E: Env<Tensor = S::Tensor>,
 {
     /// Installs an optional channel for reporting A2C training statistics.
-    pub fn with_reporter(mut self, tx: Option<Sender<A2CRolloutStats>>) -> Self {
+    pub fn with_rollout_reporter(mut self, tx: Option<Sender<A2CRolloutStats>>) -> Self {
         let AlgorithmConfiguration::A2C { reporter, .. } =
             &mut self.builder.algorithm_configuration
         else {
@@ -1241,7 +1235,7 @@ where
 }
 
 impl<A: Agent<Actor: ToSafetensors>, E: Env>
-    OnPolicyAlgoBuilder<A, DirectSampler<E, StepBoundHook<E>>, E>
+    OnPolicyBuilder<A, DirectSampler<E, StepBoundHook<E>>, E>
 {
     /// Sets the number of steps collected per environment and rollout.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
@@ -1284,7 +1278,7 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     pub fn with_observation_normalizer(
         mut self,
         obs_clip: Option<f32>,
-    ) -> Result<OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>, Error> {
+    ) -> Result<OnPolicyBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>, Error> {
         let obs_normalizer = obs_clip
             .map(|clip| {
                 ClippedNormalizer::build(
@@ -1313,7 +1307,7 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     pub fn with_rollout_episodes(
         mut self,
         rollout_episodes: usize,
-    ) -> OnPolicyAlgoBuilder<A, DirectSampler<E, EpisodeBoundHook<E>>, E> {
+    ) -> OnPolicyBuilder<A, DirectSampler<E, EpisodeBoundHook<E>>, E> {
         let SamplerConfiguration::DirectStep { .. } = self.builder.sampler_configuration else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
@@ -1324,7 +1318,7 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
 }
 
 impl<A: Agent<Actor: ToSafetensors>, E: Env>
-    OnPolicyAlgoBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>
+    OnPolicyBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>
 {
     /// Sets the number of steps collected per environment and rollout.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
@@ -1357,14 +1351,12 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
 }
 
 /// Default PPO builder using Candle and direct, step-bounded sampling.
-pub type PPOAlgorithmBuilder<E> =
-    OnPolicyAlgoBuilder<PPOCandle, DirectSampler<E, StepBoundHook<E>>, E>;
+pub type PPOBuilder<E> = OnPolicyBuilder<PPOCandle, DirectSampler<E, StepBoundHook<E>>, E>;
 
 /// Default A2C builder using Candle and direct, step-bounded sampling.
-pub type A2CAlgorithmBuilder<E> =
-    OnPolicyAlgoBuilder<A2CCandle, DirectSampler<E, StepBoundHook<E>>, E>;
+pub type A2CBuilder<E> = OnPolicyBuilder<A2CCandle, DirectSampler<E, StepBoundHook<E>>, E>;
 
-impl<E: Env> PPOAlgorithmBuilder<E> {
+impl<E: Env> PPOBuilder<E> {
     /// Creates a PPO builder using `n_envs` homogeneous environments.
     ///
     /// # Errors
@@ -1397,7 +1389,7 @@ impl<E: Env> PPOAlgorithmBuilder<E> {
     }
 }
 
-impl<E: Env> A2CAlgorithmBuilder<E> {
+impl<E: Env> A2CBuilder<E> {
     /// Creates an A2C builder using `n_envs` homogeneous environments.
     ///
     /// # Errors
@@ -1427,7 +1419,7 @@ impl<E: Env> A2CAlgorithmBuilder<E> {
     }
 }
 
-impl PPOAlgorithmBuilder<GymEnv> {
+impl PPOBuilder<GymEnv> {
     /// Creates a PPO builder for a Gymnasium environment.
     ///
     /// # Errors
@@ -1441,7 +1433,7 @@ impl PPOAlgorithmBuilder<GymEnv> {
     }
 }
 
-impl A2CAlgorithmBuilder<GymEnv> {
+impl A2CBuilder<GymEnv> {
     /// Creates an A2C builder for a Gymnasium environment.
     ///
     /// # Errors

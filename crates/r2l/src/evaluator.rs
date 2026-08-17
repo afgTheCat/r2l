@@ -140,10 +140,7 @@ impl EvaluationSettings {
 
     /// Sets how evaluation environments are executed.
     #[must_use]
-    pub fn with_evaluation_execution_mode(
-        mut self,
-        evaluation_execution_mode: SamplerExecutionMode,
-    ) -> Self {
+    pub fn with_execution_mode(mut self, evaluation_execution_mode: SamplerExecutionMode) -> Self {
         self.evaluation_execution_mode = evaluation_execution_mode;
         self
     }
@@ -201,7 +198,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         })
     }
 
-    pub fn evaluate<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
+    pub(crate) fn evaluate<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
         &mut self,
         rt: &mut OnPolicyRuntime<AG, TS>,
     ) -> Result<(), Error> {
@@ -212,7 +209,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
     }
 
     /// Evaluates the actor and persists it if it outperforms the current best actor.
-    pub fn eval_adapted(
+    pub(crate) fn eval_adapted(
         &mut self,
         adapted_actor: impl Actor<Tensor = E::Tensor> + Clone,
         actor: &A,
@@ -242,7 +239,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
     }
 
     /// Releases evaluator resources.
-    pub fn shutdown(&mut self) -> Result<(), Error> {
+    pub(crate) fn shutdown(&mut self) -> Result<(), Error> {
         self.sampler.shutdown();
         if self.inference_artifacts.is_some() && self.best_reward.is_none() {
             return Err(Error::InvalidState {

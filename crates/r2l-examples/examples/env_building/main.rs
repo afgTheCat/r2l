@@ -1,5 +1,5 @@
 // ANCHOR: env_builders
-use r2l::{Env, EnvBuilder, EnvDescription, PPOAlgorithmBuilder, Snapshot, Space, VecTensor};
+use r2l::{Env, EnvBuilder, EnvDescription, PPOBuilder, Snapshot, Space, VecTensor};
 use r2l_gym::GymEnvBuilder;
 
 // Not a working implementation an actual env
@@ -51,27 +51,27 @@ fn build_env() -> Result<MyEnv, r2l_core::error::Error> {
 }
 
 fn main() {
-    // Anything that implement Into<GymEnvBuilder> can be used with the PPOAlgorithmBuilder::gym
+    // Anything that implements Into<GymEnvBuilder> can be used with PPOBuilder::gym.
     // method. This includes &str, String and GymEnvBuilder itself (or your own implementation)
-    let ppo_builder0 = PPOAlgorithmBuilder::gym("Pendulum-v1", 10).unwrap();
+    let ppo_builder0 = PPOBuilder::gym("Pendulum-v1", 10).unwrap();
     let _ppo0 = ppo_builder0.build().unwrap();
 
-    // Since GymEnvBuilder is an EnvBuilder, it can be used with PPOAlgorithmBuilder::new
+    // Since GymEnvBuilder is an EnvBuilder, it can be used with PPOBuilder::new.
     let gym_env_builder = GymEnvBuilder::new("Pendulum-v1");
-    let ppo_builder1 = PPOAlgorithmBuilder::new(gym_env_builder, 10).unwrap();
+    let ppo_builder1 = PPOBuilder::new(gym_env_builder, 10).unwrap();
     let _ppo1 = ppo_builder1.build().unwrap();
 
     // This closure that returns an environment can be used as an environment builder
     let env_builder = || Ok(MyEnv);
-    let ppo_builder = PPOAlgorithmBuilder::new(env_builder, 10).unwrap();
+    let ppo_builder = PPOBuilder::new(env_builder, 10).unwrap();
     let _ppo = ppo_builder.build().unwrap();
 
     // This function that returns an environment can also be used as an environment builder
-    let ppo_builder3 = PPOAlgorithmBuilder::new(build_env, 10).unwrap();
+    let ppo_builder3 = PPOBuilder::new(build_env, 10).unwrap();
     let _ppo3 = ppo_builder3.build().unwrap();
 
-    // We can implement our own environment builder to be used with PPOAlgorithmBuilder::new.
-    let ppo_builder4 = PPOAlgorithmBuilder::new(MyEnvBuilder, 10).unwrap();
+    // We can implement our own environment builder to be used with PPOBuilder::new.
+    let ppo_builder4 = PPOBuilder::new(MyEnvBuilder, 10).unwrap();
     let _ppo4 = ppo_builder4.build().unwrap();
 }
 // ANCHOR_END: env_builders
