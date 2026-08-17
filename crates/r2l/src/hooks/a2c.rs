@@ -122,7 +122,7 @@ impl std::fmt::Display for A2CRolloutStats {
     }
 }
 
-pub(crate) struct DefaultA2CHookReporter {
+pub(crate) struct A2CRolloutReporter {
     pub(crate) rollout_idx: usize,
     pub(crate) report: A2CRolloutStats,
     pub(crate) tx: Option<Sender<A2CRolloutStats>>,
@@ -131,7 +131,7 @@ pub(crate) struct DefaultA2CHookReporter {
     pub(crate) latest_average_reward: f32,
 }
 
-impl DefaultA2CHookReporter {
+impl A2CRolloutReporter {
     pub fn new(
         tx: Option<Sender<A2CRolloutStats>>,
         log_progress: bool,
@@ -170,7 +170,7 @@ impl DefaultA2CHookReporter {
     }
 }
 
-impl DefaultA2CHookReporter {
+impl A2CRolloutReporter {
     fn update_average_reward<T: r2l_core::tensor::R2lTensor, B: TrajectoryBatch<T>>(
         &mut self,
         batches: &[B],
@@ -204,7 +204,7 @@ impl DefaultA2CHookReporter {
     }
 }
 
-/// Default training hook used by [`A2CAlgorithmBuilder`](crate::A2CAlgorithmBuilder).
+/// Learning behavior for A2C optimization.
 ///
 /// This hook applies the crate's standard A2C training behavior:
 /// advantage normalization when enabled, optional value-loss weighting,
@@ -213,17 +213,17 @@ impl DefaultA2CHookReporter {
 ///
 /// The generic parameter tracks the concrete learner backend and is not
 /// usually named directly by callers.
-pub struct DefaultA2CHook<T = ()> {
+pub struct A2CLearningHook<T = ()> {
     pub(crate) normalize_advantage: bool,
     pub(crate) entropy_coeff: f32,
     pub(crate) vf_coeff: Option<f32>,
     pub(crate) gradient_clipping: Option<f32>,
-    pub(crate) reporter: Option<DefaultA2CHookReporter>,
+    pub(crate) reporter: Option<A2CRolloutReporter>,
     pub(crate) _lm: PhantomData<T>,
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
-    for DefaultA2CHook<BurnPolicyValueLearner<B, D>>
+    for A2CLearningHook<BurnPolicyValueLearner<B, D>>
 {
     fn before_learning_hook<
         C: TrajectoryBatch<<BurnPolicyValueLearner<B, D> as OnPolicyLearner>::InferenceTensor>,
@@ -254,7 +254,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
         losses.set_vf_coeff(self.vf_coeff);
         let entropy = module.policy().entropy(&data.observations)?;
         let entropy_loss = entropy.neg() * self.entropy_coeff;
-        if let Some(DefaultA2CHookReporter { report, .. }) = &mut self.reporter {
+        if let Some(A2CRolloutReporter { report, .. }) = &mut self.reporter {
             report.collect_batch_data(A2CMinibatchStats {
                 policy_loss: losses.policy_loss.to_data().to_vec::<f32>().unwrap()[0],
                 entropy_loss: entropy_loss.to_data().to_vec::<f32>().unwrap()[0],
@@ -285,7 +285,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
     }
 }
 
-impl A2CHook<CandlePolicyValueLearner> for DefaultA2CHook<CandlePolicyValueLearner> {
+impl A2CHook<CandlePolicyValueLearner> for A2CLearningHook<CandlePolicyValueLearner> {
     fn before_learning_hook<
         B: TrajectoryBatch<<CandlePolicyValueLearner as OnPolicyLearner>::InferenceTensor>,
     >(
@@ -314,7 +314,7 @@ impl A2CHook<CandlePolicyValueLearner> for DefaultA2CHook<CandlePolicyValueLearn
         let entropy = module.policy().entropy(&data.observations)?;
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
-        if let Some(DefaultA2CHookReporter { report, .. }) = &mut self.reporter {
+        if let Some(A2CRolloutReporter { report, .. }) = &mut self.reporter {
             report.collect_batch_data(A2CMinibatchStats {
                 policy_loss: losses.policy_loss.to_scalar()?,
                 entropy_loss: entropy_loss.to_scalar()?,

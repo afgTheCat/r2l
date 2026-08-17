@@ -153,7 +153,7 @@ impl TargetKl {
     }
 }
 
-pub(crate) struct DefaultPPOHookReporter {
+pub(crate) struct PPORolloutReporter {
     report: PPORolloutStats,
     tx: Option<Sender<PPORolloutStats>>,
     log_progress: bool,
@@ -161,7 +161,7 @@ pub(crate) struct DefaultPPOHookReporter {
     latest_average_reward: f32,
 }
 
-impl DefaultPPOHookReporter {
+impl PPORolloutReporter {
     pub fn new(
         tx: Option<Sender<PPORolloutStats>>,
         log_progress: bool,
@@ -230,7 +230,7 @@ impl DefaultPPOHookReporter {
     }
 }
 
-/// Default training hook used by [`PPOAlgorithmBuilder`](crate::PPOAlgorithmBuilder).
+/// Learning behavior for PPO optimization.
 ///
 /// This hook applies the crate's standard PPO training behavior: advantage
 /// normalization when enabled, repeated PPO epochs, optional value-loss
@@ -240,7 +240,7 @@ impl DefaultPPOHookReporter {
 ///
 /// The generic parameter tracks the concrete learner backend and is not
 /// usually named directly by callers.
-pub struct DefaultPPOHook<T = ()> {
+pub struct PPOLearningHook<T = ()> {
     pub(crate) normalize_advantage: bool,
     pub(crate) total_epochs: usize,
     pub(crate) entropy_coeff: f32,
@@ -248,13 +248,13 @@ pub struct DefaultPPOHook<T = ()> {
     pub(crate) target_kl: Option<TargetKl>,
     pub(crate) gradient_clipping: Option<f32>,
     pub(crate) current_epoch: usize,
-    pub(crate) reporter: Option<DefaultPPOHookReporter>,
+    pub(crate) reporter: Option<PPORolloutReporter>,
     pub(crate) rollout_idx: usize,
     pub(crate) _lm: PhantomData<T>,
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
-    for DefaultPPOHook<BurnPolicyValueLearner<B, D>>
+    for PPOLearningHook<BurnPolicyValueLearner<B, D>>
 {
     fn before_learning_hook<
         BT: TrajectoryBatch<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
@@ -325,7 +325,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
                 / ratio.len() as f32
         };
 
-        if let Some(DefaultPPOHookReporter { report, .. }) = &mut self.reporter {
+        if let Some(PPORolloutReporter { report, .. }) = &mut self.reporter {
             let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
             let clip_fraction = ratio
                 .iter()
@@ -356,7 +356,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
     }
 }
 
-impl PPOHook<CandlePolicyValueLearner> for DefaultPPOHook<CandlePolicyValueLearner> {
+impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLearner> {
     fn before_learning_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
@@ -419,7 +419,7 @@ impl PPOHook<CandlePolicyValueLearner> for DefaultPPOHook<CandlePolicyValueLearn
             .sub(&log_ratio)?
             .mean_all()?
             .to_scalar::<f32>()?;
-        if let Some(DefaultPPOHookReporter { report, .. }) = &mut self.reporter {
+        if let Some(PPORolloutReporter { report, .. }) = &mut self.reporter {
             let clip_fraction = (&data.ratio - 1.)?
                 .abs()?
                 .gt(params.clip_range)?

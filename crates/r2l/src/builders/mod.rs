@@ -42,27 +42,27 @@ use crate::{
     A2CRolloutStats, PPORolloutStats,
     evaluator::{EvaluationSampler, EvaluationSettings},
     hooks::{
-        a2c::DefaultA2CHookReporter,
+        a2c::A2CRolloutReporter,
         on_policy::{OnPolicyCommandHandler, ScheduledEvaluator, TrainingTimingRecorder},
         ppo::TargetKl,
     },
 };
-use crate::{BurnBackend, LearningRateSchedule, LearningSchedule, OnPolicyCommandReceiver};
+use crate::{BurnBackend, LearningRateSchedule, LearningSchedule, OnPolicyControlEndpoint};
 use crate::{EpisodeBoundHook, StepBoundHook};
 use crate::{
     evaluator::BestActorEvaluator,
-    hooks::{a2c::DefaultA2CHook, ppo::DefaultPPOHook},
+    hooks::{a2c::A2CLearningHook, ppo::PPOLearningHook},
 };
-use crate::{hooks::ppo::DefaultPPOHookReporter, utils::RewardNormalizer};
+use crate::{hooks::ppo::PPORolloutReporter, utils::RewardNormalizer};
 
 /// PPO agent produced by a Candle-backed algorithm builder.
-pub type PPOCandle = PPO<CandlePolicyValueLearner, DefaultPPOHook<CandlePolicyValueLearner>>;
+pub type PPOCandle = PPO<CandlePolicyValueLearner, PPOLearningHook<CandlePolicyValueLearner>>;
 /// PPO agent produced by a Burn-backed algorithm builder.
-pub type PPOBurn<B> = PPO<BurnPolicyValueLearner<B>, DefaultPPOHook<BurnPolicyValueLearner<B>>>;
+pub type PPOBurn<B> = PPO<BurnPolicyValueLearner<B>, PPOLearningHook<BurnPolicyValueLearner<B>>>;
 /// A2C agent produced by a Candle-backed algorithm builder.
-pub type A2CCandle = A2C<CandlePolicyValueLearner, DefaultA2CHook<CandlePolicyValueLearner>>;
+pub type A2CCandle = A2C<CandlePolicyValueLearner, A2CLearningHook<CandlePolicyValueLearner>>;
 /// A2C agent produced by a Burn-backed algorithm builder.
-pub type A2CBurn<B> = A2C<BurnPolicyValueLearner<B>, DefaultA2CHook<BurnPolicyValueLearner<B>>>;
+pub type A2CBurn<B> = A2C<BurnPolicyValueLearner<B>, A2CLearningHook<BurnPolicyValueLearner<B>>>;
 
 /// Hyperparameters for Adam optimization with decoupled weight decay.
 #[derive(Clone, Debug)]
@@ -385,7 +385,7 @@ struct Builder<E: Env> {
     learning_schedule: LearningSchedule,
     learning_rate_schedule: Option<LearningRateSchedule>,
     training_artifacts: Option<TrainingArtifactsConfig>,
-    policy_command_rx: Option<OnPolicyCommandReceiver>,
+    control_endpoint: Option<OnPolicyControlEndpoint>,
 
     // for the agent
     policy_config: PolicyBuilder,
@@ -424,7 +424,7 @@ impl<E: Env> Builder<E> {
             learning_schedule: LearningSchedule::rollout_bound(300),
             learning_rate_schedule: None,
             training_artifacts: None,
-            policy_command_rx: None,
+            control_endpoint: None,
             policy_config: PolicyBuilder::default(),
             value_hidden_layers: vec![64, 64],
             optimizer_layout: OnPolicyOptimizerLayout::Joint {
@@ -603,7 +603,7 @@ impl<E: Env> Builder<E> {
             self.learning_schedule,
             self.learning_rate_schedule,
             evaluator,
-            OnPolicyCommandHandler::new(self.policy_command_rx),
+            OnPolicyCommandHandler::new(self.control_endpoint),
             timing_recorder,
         ))
     }
@@ -674,7 +674,7 @@ impl<E: Env> Builder<E> {
         Ok(())
     }
 
-    fn ppo_hook<M>(&mut self) -> DefaultPPOHook<M> {
+    fn ppo_hook<M>(&mut self) -> PPOLearningHook<M> {
         let AlgorithmConfiguration::Ppo {
             normalize_advantage,
             total_epochs,
@@ -685,7 +685,7 @@ impl<E: Env> Builder<E> {
         else {
             unreachable!("PPO agent type must use PPO configuration")
         };
-        DefaultPPOHook {
+        PPOLearningHook {
             normalize_advantage: normalize_advantage.unwrap_or(true),
             total_epochs: *total_epochs,
             entropy_coeff: self.entropy_coeff,
@@ -696,13 +696,13 @@ impl<E: Env> Builder<E> {
             }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
-            reporter: DefaultPPOHookReporter::new(reporter.take(), self.log_progress, self.n_envs),
+            reporter: PPORolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
             rollout_idx: 0,
             _lm: PhantomData,
         }
     }
 
-    fn a2c_hook<M>(&mut self) -> DefaultA2CHook<M> {
+    fn a2c_hook<M>(&mut self) -> A2CLearningHook<M> {
         let AlgorithmConfiguration::A2C {
             normalize_advantage,
             reporter,
@@ -710,12 +710,12 @@ impl<E: Env> Builder<E> {
         else {
             unreachable!("A2C agent type must use A2C configuration")
         };
-        DefaultA2CHook {
+        A2CLearningHook {
             normalize_advantage: normalize_advantage.unwrap_or(false),
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
             gradient_clipping: self.gradient_clipping,
-            reporter: DefaultA2CHookReporter::new(reporter.take(), self.log_progress, self.n_envs),
+            reporter: A2CRolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
             _lm: PhantomData,
         }
     }
@@ -899,9 +899,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
-    /// Installs a channel for controlling a running algorithm.
-    pub fn with_command_rx(mut self, command_rx: OnPolicyCommandReceiver) -> Self {
-        self.builder.policy_command_rx = Some(command_rx);
+    /// Installs the algorithm-side endpoint for controlling a running algorithm.
+    pub fn with_control_endpoint(mut self, control_endpoint: OnPolicyControlEndpoint) -> Self {
+        self.builder.control_endpoint = Some(control_endpoint);
         self
     }
 
@@ -1135,11 +1135,11 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<PPOBurn<BurnBac
     }
 }
 
-impl<M, S, E> OnPolicyAlgoBuilder<PPO<M, DefaultPPOHook<M>>, S, E>
+impl<M, S, E> OnPolicyAlgoBuilder<PPO<M, PPOLearningHook<M>>, S, E>
 where
     M: OnPolicyLearner,
     M::InferencePolicy: ToSafetensors,
-    DefaultPPOHook<M>: PPOHook<M>,
+    PPOLearningHook<M>: PPOHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
 {
@@ -1222,11 +1222,11 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgoBuilder<A2CBurn<BurnBac
     }
 }
 
-impl<M, S, E> OnPolicyAlgoBuilder<A2C<M, DefaultA2CHook<M>>, S, E>
+impl<M, S, E> OnPolicyAlgoBuilder<A2C<M, A2CLearningHook<M>>, S, E>
 where
     M: OnPolicyLearner,
     M::InferencePolicy: ToSafetensors,
-    DefaultA2CHook<M>: A2CHook<M>,
+    A2CLearningHook<M>: A2CHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
 {

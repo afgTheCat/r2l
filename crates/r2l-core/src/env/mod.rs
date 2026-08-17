@@ -140,9 +140,6 @@ impl<T: R2lTensor> Snapshot<T> {
     }
 }
 
-/// Tensor type used by an [`Env`] implementation.
-pub type EnvTensor<E> = <E as Env>::Tensor;
-
 // ANCHOR: env
 /// Environment interface used by samplers.
 pub trait Env {
@@ -195,9 +192,6 @@ pub trait EnvBuilder: Sync + Send + 'static {
     }
 }
 // ANCHOR_END: env_builder
-
-/// Tensor type produced by environments built by `EB`.
-pub type TensorOfEnvBuilder<EB> = <<EB as EnvBuilder>::Env as Env>::Tensor;
 
 impl<E: Env, F: Sync + Send + 'static> EnvBuilder for F
 where

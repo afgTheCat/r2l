@@ -18,7 +18,7 @@ use r2l_core::{
 
 use crate::evaluator::BestActorEvaluator;
 
-/// Commands processed by the default on-policy hooks at training boundaries.
+/// Commands processed by on-policy training hooks at training boundaries.
 pub enum OnPolicyCommand {
     /// Stops training before the next learning phase or after the current one.
     Shutdown,
@@ -36,47 +36,47 @@ pub enum OnPolicyCommandResult {
     CurrentPolicySerialized(Result<(), Error>),
 }
 
-/// Algorithm-side endpoint for receiving on-policy commands.
-pub struct OnPolicyCommandReceiver {
-    /// Receives commands from the user-side endpoint.
+/// Algorithm-side endpoint of an on-policy control channel.
+pub struct OnPolicyControlEndpoint {
+    /// Receives commands from the control handle.
     pub rx: Receiver<OnPolicyCommand>,
-    /// Sends command results to the user-side endpoint.
+    /// Sends command results to the control handle.
     pub tx: Sender<OnPolicyCommandResult>,
 }
 
-impl OnPolicyCommandReceiver {
-    /// Creates an algorithm-side endpoint from its command and result channels.
+impl OnPolicyControlEndpoint {
+    /// Creates an algorithm-side control endpoint from its command and result channels.
     #[must_use]
     pub fn new(rx: Receiver<OnPolicyCommand>, tx: Sender<OnPolicyCommandResult>) -> Self {
         Self { rx, tx }
     }
 }
 
-/// User-side endpoint for sending commands to an on-policy training loop.
+/// Handle for controlling a running on-policy training loop.
 #[derive(Debug)]
-pub struct OnPolicyCommandSender {
+pub struct OnPolicyControlHandle {
     /// Receives command results from the training loop.
     pub rx: Receiver<OnPolicyCommandResult>,
     /// Sends commands to the training loop.
     pub tx: Sender<OnPolicyCommand>,
 }
 
-impl OnPolicyCommandSender {
-    /// Creates a user-side endpoint from its result and command channels.
+impl OnPolicyControlHandle {
+    /// Creates a control handle from its result and command channels.
     #[must_use]
     pub fn new(rx: Receiver<OnPolicyCommandResult>, tx: Sender<OnPolicyCommand>) -> Self {
         Self { rx, tx }
     }
 
-    /// Shuts down the on-policy algorithm gracefully.
+    /// Requests graceful shutdown and waits for the training loop to stop.
     ///
     /// # Errors
     ///
-    /// Returns an error if the training-side command receiver has disconnected.
+    /// Returns an error if the training-side control endpoint has disconnected.
     pub fn shutdown(&self) -> Result<(), Error> {
         self.tx.send(OnPolicyCommand::Shutdown).map_err(|error| {
             Error::ResourceInterrupted(ResourceInterrupted {
-                resource: "on-policy command channel".into(),
+                resource: "on-policy control channel".into(),
                 details: error.to_string(),
             })
         })?;
@@ -85,14 +85,17 @@ impl OnPolicyCommandSender {
     }
 }
 
-/// Creates the algorithm-side receiver and user-side sender for on-policy commands.
+/// Creates paired algorithm and caller endpoints for controlling on-policy training.
+///
+/// Pass the [`OnPolicyControlEndpoint`] to an on-policy algorithm builder and retain the
+/// [`OnPolicyControlHandle`] to control the running algorithm.
 #[must_use]
-pub fn on_policy_command_channel() -> (OnPolicyCommandReceiver, OnPolicyCommandSender) {
+pub fn on_policy_control_channel() -> (OnPolicyControlEndpoint, OnPolicyControlHandle) {
     let (command_tx, command_rx) = channel();
     let (result_tx, result_rx) = channel();
     (
-        OnPolicyCommandReceiver::new(command_rx, result_tx),
-        OnPolicyCommandSender::new(result_rx, command_tx),
+        OnPolicyControlEndpoint::new(command_rx, result_tx),
+        OnPolicyControlHandle::new(result_rx, command_tx),
     )
 }
 
@@ -242,19 +245,19 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
 }
 
 pub(crate) struct OnPolicyCommandHandler {
-    receiver: Option<OnPolicyCommandReceiver>,
+    endpoint: Option<OnPolicyControlEndpoint>,
 }
 
 impl OnPolicyCommandHandler {
-    pub(crate) fn new(receiver: Option<OnPolicyCommandReceiver>) -> Self {
-        Self { receiver }
+    pub(crate) fn new(endpoint: Option<OnPolicyControlEndpoint>) -> Self {
+        Self { endpoint }
     }
 
     fn send_result(
-        receiver: &OnPolicyCommandReceiver,
+        endpoint: &OnPolicyControlEndpoint,
         result: OnPolicyCommandResult,
     ) -> Result<(), Error> {
-        receiver.tx.send(result).map_err(|error| {
+        endpoint.tx.send(result).map_err(|error| {
             Error::ResourceInterrupted(ResourceInterrupted {
                 resource: "on-policy command result channel".into(),
                 details: error.to_string(),
@@ -266,13 +269,13 @@ impl OnPolicyCommandHandler {
         &self,
         runtime: &mut OnPolicyRuntime<A, S>,
     ) -> Result<HookResult, Error> {
-        let Some(receiver) = &self.receiver else {
+        let Some(endpoint) = &self.endpoint else {
             return Ok(HookResult::Continue);
         };
-        while let Ok(command) = receiver.rx.try_recv() {
+        while let Ok(command) = endpoint.rx.try_recv() {
             match command {
                 OnPolicyCommand::Shutdown => {
-                    Self::send_result(receiver, OnPolicyCommandResult::Stopping)?;
+                    Self::send_result(endpoint, OnPolicyCommandResult::Stopping)?;
                     return Ok(HookResult::Break);
                 }
                 OnPolicyCommand::SerializeCurrentPolicy(path) => {
@@ -280,7 +283,7 @@ impl OnPolicyCommandHandler {
                         std::fs::write(PathBuf::from(path), bytes).map_err(Error::wrap)
                     });
                     Self::send_result(
-                        receiver,
+                        endpoint,
                         OnPolicyCommandResult::CurrentPolicySerialized(result),
                     )?;
                 }
@@ -290,8 +293,8 @@ impl OnPolicyCommandHandler {
     }
 
     fn notify_stopped(&self) -> Result<(), Error> {
-        if let Some(receiver) = &self.receiver {
-            Self::send_result(receiver, OnPolicyCommandResult::Stopped)
+        if let Some(endpoint) = &self.endpoint {
+            Self::send_result(endpoint, OnPolicyCommandResult::Stopped)
         } else {
             Ok(())
         }
