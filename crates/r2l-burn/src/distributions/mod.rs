@@ -58,21 +58,11 @@ impl<B: Backend> BurnPolicyKind<B> {
     pub fn load_from_bytes(mut self, bytes: Vec<u8>) -> Result<Self> {
         let mut store = SafetensorsStore::from_bytes(Some(bytes));
         match &mut self {
-            Self::Categorical(policy) => policy
-                .load_from(&mut store)
-                .map_err(r2l_core::error::Error::wrap)?,
-            Self::Diag(policy) => policy
-                .load_from(&mut store)
-                .map_err(r2l_core::error::Error::wrap)?,
-            Self::MultiCategorical(policy) => policy
-                .load_from(&mut store)
-                .map_err(r2l_core::error::Error::wrap)?,
-            Self::MultiBernoulli(policy) => policy
-                .load_from(&mut store)
-                .map_err(r2l_core::error::Error::wrap)?,
-            Self::Composite(policy) => policy
-                .load_from(&mut store)
-                .map_err(r2l_core::error::Error::wrap)?,
+            Self::Categorical(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
+            Self::Diag(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
+            Self::MultiCategorical(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
+            Self::MultiBernoulli(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
+            Self::Composite(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
         };
         Ok(self)
     }
@@ -171,7 +161,7 @@ impl<B: Backend> BurnPolicyKind<B> {
 impl<B: Backend> Actor for BurnPolicyKind<B> {
     type Tensor = Tensor<B, 1>;
 
-    fn action(&self, observation: Self::Tensor) -> r2l_core::error::Result<Self::Tensor> {
+    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.action(observation),
             Self::Diag(diag) => diag.action(observation),
@@ -181,7 +171,7 @@ impl<B: Backend> Actor for BurnPolicyKind<B> {
         }
     }
 
-    fn mode_action(&self, observation: Self::Tensor) -> r2l_core::error::Result<Self::Tensor> {
+    fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.mode_action(observation),
             Self::Diag(diag) => diag.mode_action(observation),
@@ -209,7 +199,7 @@ impl<B: Backend> Policy for BurnPolicyKind<B> {
         &self,
         observations: &[Self::Tensor],
         actions: &[Self::Tensor],
-    ) -> r2l_core::error::Result<Self::Tensor> {
+    ) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.log_probs(observations, actions),
             Self::Diag(diag) => diag.log_probs(observations, actions),
@@ -219,7 +209,7 @@ impl<B: Backend> Policy for BurnPolicyKind<B> {
         }
     }
 
-    fn std(&self) -> r2l_core::error::Result<Option<f32>> {
+    fn std(&self) -> Result<Option<f32>> {
         match self {
             Self::Categorical(cat) => cat.std(),
             Self::Diag(diag) => diag.std(),
@@ -229,7 +219,7 @@ impl<B: Backend> Policy for BurnPolicyKind<B> {
         }
     }
 
-    fn entropy(&self, states: &[Self::Tensor]) -> r2l_core::error::Result<Self::Tensor> {
+    fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.entropy(states),
             Self::Diag(diag) => diag.entropy(states),

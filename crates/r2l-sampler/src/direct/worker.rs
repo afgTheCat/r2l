@@ -5,7 +5,7 @@ use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{Memory, buffer::TrajectoryBuffer},
     env::{Env, Snapshot},
-    error::Error,
+    error::Result,
     models::Actor,
     rng::sample_u64,
     tensor::R2lTensor,
@@ -23,7 +23,7 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
     actor: &mut Box<dyn Actor<Tensor = T>>,
     last_state: Option<T>,
-) -> Result<Memory<T>, Error> {
+) -> Result<Memory<T>> {
     let state = if let Some(state) = last_state {
         state
     } else {
@@ -60,8 +60,8 @@ pub enum WorkerCommand<T: R2lTensor> {
 
 pub enum WorkerResult {
     PolicySet,
-    Collected(Result<(), Error>),
-    EnvReset(Result<(), Error>),
+    Collected(Result<()>),
+    EnvReset(Result<()>),
     BufferCleared,
     Shutdown,
 }
@@ -121,7 +121,7 @@ impl<E: Env> Worker<E> {
         self.buffer.lock().unwrap().clear();
     }
 
-    pub fn collect(&mut self, bound: RolloutMode) -> Result<(), Error> {
+    pub fn collect(&mut self, bound: RolloutMode) -> Result<()> {
         let Some(actor) = &mut self.actor else {
             unreachable!()
         };
@@ -156,7 +156,7 @@ impl<E: Env> Worker<E> {
     }
 
     // resets the initial state and clears the buffer. Used by the Evaluator hook
-    pub fn reset(&mut self, seed: u64) -> Result<(), Error> {
+    pub fn reset(&mut self, seed: u64) -> Result<()> {
         let state = self.env.reset(seed)?;
         self.last_state = Some(state);
         self.buffer.lock().unwrap().clear();
@@ -175,7 +175,7 @@ impl<E: Env> ThreadWorker<E> {
         Self { worker, rx, tx }
     }
 
-    pub fn work(&mut self) {
+    pub fn work(&mut self) -> Result<()> {
         loop {
             let command = self.rx.recv().unwrap();
             match command {
@@ -201,6 +201,7 @@ impl<E: Env> ThreadWorker<E> {
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -222,7 +223,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         }
     }
 
-    pub fn collect_rollout(&self, bound: RolloutMode) -> Result<(), Error> {
+    pub fn collect_rollout(&self, bound: RolloutMode) -> Result<()> {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::Collect(bound));
         }
@@ -238,7 +239,7 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         result
     }
 
-    pub fn reset_all(&self) -> Result<(), Error> {
+    pub fn reset_all(&self) -> Result<()> {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
         }
@@ -307,7 +308,7 @@ impl<E: Env> WorkerPool<E> {
     }
 
     /// Collects one bounded rollout on every worker.
-    pub fn collect(&mut self, bound: RolloutMode) -> Result<(), Error> {
+    pub fn collect(&mut self, bound: RolloutMode) -> Result<()> {
         match self {
             Self::Vec(workers) => {
                 for worker in workers {
@@ -332,7 +333,7 @@ impl<E: Env> WorkerPool<E> {
     }
 
     /// Resets all worker environments with fresh seeds.
-    pub fn reset_all_envs(&mut self) -> Result<(), Error> {
+    pub fn reset_all_envs(&mut self) -> Result<()> {
         match self {
             Self::Vec(workers) => {
                 for worker in workers {

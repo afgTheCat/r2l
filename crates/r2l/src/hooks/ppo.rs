@@ -311,7 +311,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
         data: &PPOBatchData<burn::Tensor<B, 1>>,
     ) -> Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy = module.policy().entropy(&data.observations).unwrap();
+        let entropy = module.policy().entropy(&data.observations)?;
         let entropy_loss = entropy.neg() * self.entropy_coeff;
         let approx_kl = {
             let ratio: Vec<f32> = data.ratio.to_data().to_vec().unwrap();
@@ -408,7 +408,7 @@ impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLear
         data: &PPOBatchData<candle_core::Tensor>,
     ) -> Result<HookResult> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy = module.policy().entropy(&data.observations).unwrap();
+        let entropy = module.policy().entropy(&data.observations)?;
         let device = entropy.device();
         let entropy_loss = (Tensor::full(self.entropy_coeff, (), device)? * entropy.neg()?)?;
         let ratio = data.ratio.detach();

@@ -7,7 +7,7 @@ use itertools::Itertools;
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
     env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
-    error::Error,
+    error::Result,
     models::Actor,
     on_policy::algorithm::Sampler,
     rng::sample_u64,
@@ -61,7 +61,7 @@ impl<E: Env> StagedSamplerCore<E> {
         env_builder: &EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
         let (mut last_states, pool) = match execution_mode {
@@ -124,7 +124,7 @@ impl<E: Env> StagedSamplerCore<E> {
     /// # Errors
     ///
     /// Returns an error if an environment step, normalization, or worker operation fails.
-    pub fn collect(&mut self, bound: RolloutMode) -> Result<(), Error> {
+    pub fn collect(&mut self, bound: RolloutMode) -> Result<()> {
         match bound {
             RolloutMode::StepBound { n_steps } => {
                 for _ in 0..n_steps {
@@ -153,7 +153,7 @@ impl<E: Env> StagedSamplerCore<E> {
         Ok(())
     }
 
-    fn step_indexed(&mut self, indices: &[usize]) -> Result<Vec<bool>, Error> {
+    fn step_indexed(&mut self, indices: &[usize]) -> Result<Vec<bool>> {
         let multi_memory = self.pool.step_indexed(indices)?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
@@ -182,7 +182,7 @@ impl<E: Env> StagedSamplerCore<E> {
         Ok(terminations)
     }
 
-    fn step(&mut self) -> Result<(), Error> {
+    fn step(&mut self) -> Result<()> {
         let multi_memory = self.pool.step()?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
@@ -249,7 +249,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         Ok(Self {
             core: StagedSamplerCore::build(env_builder, execution_mode, obs_normalizer)?,
             hook,
@@ -267,7 +267,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Result<Self, Error>
+    ) -> Result<Self>
     where
         E: 'static,
     {
@@ -284,7 +284,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
 impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedSampler<E, H> {
     type Tensor = E::Tensor;
 
-    fn reset_all_envs(&mut self) -> Result<(), Error> {
+    fn reset_all_envs(&mut self) -> Result<()> {
         self.core.pool.reset_all()?;
         if let Some(obs_normalizer) = &self.core.obs_normalizer {
             let mut last_states = self.core.last_states.lock().unwrap();
@@ -298,7 +298,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
         actor: A,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         self.core.clear_buffers();
         self.core.set_policy(&actor);
         loop {

@@ -1,5 +1,6 @@
 // ANCHOR: env_builders
 use r2l::{Env, EnvBuilder, EnvDescription, PPOBuilder, Snapshot, Space, VecTensor};
+use r2l_core::error::Error;
 use r2l_gym::GymEnvBuilder;
 
 // Not a working implementation an actual env
@@ -8,14 +9,11 @@ pub struct MyEnv;
 impl Env for MyEnv {
     type Tensor = VecTensor;
 
-    fn reset(&mut self, _seed: u64) -> Result<Self::Tensor, r2l_core::error::Error> {
+    fn reset(&mut self, _seed: u64) -> Result<Self::Tensor, Error> {
         Ok(VecTensor::new(vec![0., 0.], vec![2])?)
     }
 
-    fn step(
-        &mut self,
-        _action: Self::Tensor,
-    ) -> Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
+    fn step(&mut self, _action: Self::Tensor) -> Result<Snapshot<Self::Tensor>, Error> {
         let state = VecTensor::new(vec![0., 0.], vec![2])?;
         let reward = 0.;
         let terminated = false;
@@ -40,13 +38,13 @@ struct MyEnvBuilder;
 impl EnvBuilder for MyEnvBuilder {
     type Env = MyEnv;
 
-    fn build_env(&self) -> Result<Self::Env, r2l_core::error::Error> {
+    fn build_env(&self) -> Result<Self::Env, Error> {
         Ok(MyEnv)
     }
 }
 
 #[allow(clippy::unnecessary_wraps)]
-fn build_env() -> Result<MyEnv, r2l_core::error::Error> {
+fn build_env() -> Result<MyEnv, Error> {
     Ok(MyEnv)
 }
 

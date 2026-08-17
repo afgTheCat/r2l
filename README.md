@@ -50,6 +50,15 @@ cargo run -p r2l-examples --example ppo
 
 For more information, read the [book](https://afgthecat.github.io/r2l/).
 
+## Requirements
+
+r2l is developed and tested against the latest stable Rust release. No formal
+minimum supported Rust version is currently maintained.
+
+Python and Gymnasium are optional. Native and custom Rust environments do not
+require either dependency. The Gymnasium adapter requires Python 3.11 or newer
+and the `gymnasium` package installed in the Python environment used at runtime.
+
 ## v0.0.2 capabilities
 
 - On-policy PPO and A2C builders, plus lower-level PPO, A2C, and VPG

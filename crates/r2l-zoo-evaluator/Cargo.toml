@@ -5,6 +5,7 @@ edition.workspace = true
 description.workspace = true
 repository.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
 r2l = { workspace = true }

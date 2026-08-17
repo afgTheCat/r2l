@@ -12,7 +12,7 @@ use r2l_core::buffers::buffer::TrajectoryView;
 use r2l_core::env::Env;
 use r2l_core::env::EnvBuilder;
 use r2l_core::env::EnvBuilderType;
-use r2l_core::error::Error;
+use r2l_core::error::Result;
 use r2l_core::models::Actor;
 use r2l_core::on_policy::algorithm::Sampler;
 use r2l_core::rng::{sample_u64, set_seed};
@@ -62,7 +62,7 @@ impl<E: Env> DirectSamplerCore<E> {
     /// # Errors
     ///
     /// Returns an error if an environment cannot be reset or a worker is interrupted.
-    pub fn reset_all_envs(&mut self) -> Result<(), Error> {
+    pub fn reset_all_envs(&mut self) -> Result<()> {
         self.worker_pool.reset_all_envs()
     }
 
@@ -154,7 +154,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
-    ) -> Result<Self, Error>
+    ) -> Result<Self>
     where
         E: 'static,
     {
@@ -170,7 +170,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
 impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
     type Tensor = E::Tensor;
 
-    fn reset_all_envs(&mut self) -> Result<(), Error> {
+    fn reset_all_envs(&mut self) -> Result<()> {
         self.core.reset_all_envs()?;
         self.hook.reset();
         Ok(())
@@ -179,7 +179,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
         actor: A,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         self.core.worker_pool.clear_buffers();
         self.core.worker_pool.set_actor(&actor);
         loop {

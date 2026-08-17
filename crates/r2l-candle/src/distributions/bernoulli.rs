@@ -1,7 +1,7 @@
 use candle_core::{Device, Tensor};
 use candle_nn::{Module, VarBuilder, ops::sigmoid};
 use r2l_core::{
-    error::Result,
+    error::{Error, Result},
     models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     rng::with_rng,
 };
@@ -98,8 +98,7 @@ impl ToSafetensors for MultiBernoulliDistribution {
             activation: self.logits.activation(),
         }
         .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata))
-            .map_err(r2l_core::error::Error::wrap)
+        st_serialize(self.named_tensors("policy"), Some(metadata)).map_err(Error::wrap)
     }
 }
 

@@ -2,7 +2,7 @@ use burn::{Tensor, module::Module, prelude::Backend};
 use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
     env::Space,
-    error::{Result, TensorError},
+    error::{Error, Result, TensorError},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
     tensor::R2lTensor,
 };
@@ -21,7 +21,7 @@ enum CompositePolicyChildren<B: Backend> {
 }
 
 impl<B: Backend> CompositePolicyChildren<B> {
-    fn action(&self, observation: Tensor<B, 1>) -> r2l_core::error::Result<Tensor<B, 1>> {
+    fn action(&self, observation: Tensor<B, 1>) -> Result<Tensor<B, 1>> {
         match self {
             Self::Categorical(policy) => policy.action(observation),
             Self::Diag(policy) => policy.action(observation),
@@ -30,7 +30,7 @@ impl<B: Backend> CompositePolicyChildren<B> {
         }
     }
 
-    fn mode_action(&self, observation: Tensor<B, 1>) -> r2l_core::error::Result<Tensor<B, 1>> {
+    fn mode_action(&self, observation: Tensor<B, 1>) -> Result<Tensor<B, 1>> {
         match self {
             Self::Categorical(policy) => policy.mode_action(observation),
             Self::Diag(policy) => policy.mode_action(observation),
@@ -39,11 +39,7 @@ impl<B: Backend> CompositePolicyChildren<B> {
         }
     }
 
-    fn log_probs(
-        &self,
-        states: &[Tensor<B, 1>],
-        actions: &[Tensor<B, 1>],
-    ) -> r2l_core::error::Result<Tensor<B, 1>> {
+    fn log_probs(&self, states: &[Tensor<B, 1>], actions: &[Tensor<B, 1>]) -> Result<Tensor<B, 1>> {
         match self {
             Self::Categorical(policy) => policy.log_probs(states, actions),
             Self::Diag(policy) => policy.log_probs(states, actions),
@@ -52,7 +48,7 @@ impl<B: Backend> CompositePolicyChildren<B> {
         }
     }
 
-    fn entropy(&self, states: &[Tensor<B, 1>]) -> r2l_core::error::Result<Tensor<B, 1>> {
+    fn entropy(&self, states: &[Tensor<B, 1>]) -> Result<Tensor<B, 1>> {
         match self {
             Self::Categorical(policy) => policy.entropy(states),
             Self::Diag(policy) => policy.entropy(states),
@@ -80,7 +76,7 @@ impl<B: Backend> CompositeDistribution<B> {
         policy_layers: &[usize],
         activation: ActivationFunction,
         log_std_init: f32,
-    ) -> r2l_core::error::Result<Self> {
+    ) -> Result<Self> {
         let mut policies = Vec::new();
         let mut action_sizes = Vec::new();
         for action_space in action_spaces {
@@ -112,7 +108,7 @@ impl<B: Backend> CompositeDistribution<B> {
         log_std_init: f32,
         policies: &mut Vec<CompositePolicyChildren<B>>,
         action_sizes: &mut Vec<usize>,
-    ) -> r2l_core::error::Result<()> {
+    ) -> Result<()> {
         let action_size = action_space.action_size();
         match action_space {
             Space::Discrete(choices) => {
@@ -194,7 +190,7 @@ impl<B: Backend> CompositeDistribution<B> {
 impl<B: Backend> Actor for CompositeDistribution<B> {
     type Tensor = Tensor<B, 1>;
 
-    fn action(&self, observation: Self::Tensor) -> r2l_core::error::Result<Self::Tensor> {
+    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let mut actions = Vec::new();
         for policy in &self.policies {
             actions.push(policy.action(observation.clone())?);
@@ -202,7 +198,7 @@ impl<B: Backend> Actor for CompositeDistribution<B> {
         Ok(Tensor::cat(actions, 0))
     }
 
-    fn mode_action(&self, observation: Self::Tensor) -> r2l_core::error::Result<Self::Tensor> {
+    fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let mut actions = Vec::new();
         for policy in &self.policies {
             actions.push(policy.mode_action(observation.clone())?);
@@ -214,19 +210,13 @@ impl<B: Backend> Actor for CompositeDistribution<B> {
 impl<B: Backend> ToSafetensors for CompositeDistribution<B> {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store
-            .collect_from(self)
-            .map_err(r2l_core::error::Error::wrap)?;
-        store.get_bytes().map_err(r2l_core::error::Error::wrap)
+        store.collect_from(self).map_err(Error::wrap)?;
+        store.get_bytes().map_err(Error::wrap)
     }
 }
 
 impl<B: Backend> Policy for CompositeDistribution<B> {
-    fn log_probs(
-        &self,
-        states: &[Self::Tensor],
-        actions: &[Self::Tensor],
-    ) -> r2l_core::error::Result<Self::Tensor> {
+    fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
         debug_assert!(!states.is_empty());
         debug_assert_eq!(states.len(), actions.len());
         let mut offset = 0;
@@ -242,7 +232,7 @@ impl<B: Backend> Policy for CompositeDistribution<B> {
         Ok(Tensor::stack::<2>(log_probs, 0).sum_dim(0).squeeze())
     }
 
-    fn entropy(&self, states: &[Self::Tensor]) -> r2l_core::error::Result<Self::Tensor> {
+    fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor> {
         debug_assert!(!states.is_empty());
         let mut entropies = Vec::new();
         for policy in &self.policies {
@@ -251,7 +241,7 @@ impl<B: Backend> Policy for CompositeDistribution<B> {
         Ok(Tensor::stack::<2>(entropies, 0).sum_dim(0).squeeze())
     }
 
-    fn std(&self) -> r2l_core::error::Result<Option<f32>> {
+    fn std(&self) -> Result<Option<f32>> {
         Ok(None)
     }
 }

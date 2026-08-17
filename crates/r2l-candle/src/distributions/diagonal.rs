@@ -3,7 +3,7 @@ use std::f32;
 use candle_core::{Device, Tensor};
 use candle_nn::{Module, VarBuilder};
 use r2l_core::{
-    error::Result,
+    error::{Error, Result},
     models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
 };
 use safetensors::serialize as st_serialize;
@@ -96,7 +96,7 @@ impl ToSafetensors for DiagGaussianDistribution {
         .to_safetensors_metadata();
         let mut tensors = self.mu_net.named_tensors("policy");
         tensors.push(("policy.log_std".to_string(), self.log_std.clone()));
-        st_serialize(tensors, Some(metadata)).map_err(r2l_core::error::Error::wrap)
+        st_serialize(tensors, Some(metadata)).map_err(Error::wrap)
     }
 }
 

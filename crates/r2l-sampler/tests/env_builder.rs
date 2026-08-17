@@ -5,6 +5,7 @@ use std::sync::{
 
 use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
+    error::Error,
     tensor::VecTensor,
 };
 use r2l_sampler::{
@@ -17,14 +18,11 @@ struct TestEnv;
 impl Env for TestEnv {
     type Tensor = VecTensor;
 
-    fn reset(&mut self, _seed: u64) -> Result<Self::Tensor, r2l_core::error::Error> {
+    fn reset(&mut self, _seed: u64) -> Result<Self::Tensor, Error> {
         Ok(VecTensor::new(vec![0.0], vec![1])?)
     }
 
-    fn step(
-        &mut self,
-        _action: Self::Tensor,
-    ) -> Result<Snapshot<Self::Tensor>, r2l_core::error::Error> {
+    fn step(&mut self, _action: Self::Tensor) -> Result<Snapshot<Self::Tensor>, Error> {
         Ok(Snapshot::new(
             VecTensor::new(vec![0.0], vec![1])?,
             0.0,

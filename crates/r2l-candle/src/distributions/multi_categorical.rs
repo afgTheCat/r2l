@@ -108,8 +108,7 @@ impl ToSafetensors for MultiCategoricalDistribution {
             activation: self.logits.activation(),
         }
         .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata))
-            .map_err(r2l_core::error::Error::wrap)
+        st_serialize(self.named_tensors("policy"), Some(metadata)).map_err(Error::wrap)
     }
 }
 

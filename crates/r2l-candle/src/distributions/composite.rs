@@ -2,7 +2,7 @@ use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use r2l_core::{
     env::Space,
-    error::{Result, TensorError},
+    error::{Error, Result, TensorError},
     models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
     tensor::R2lTensor,
 };
@@ -112,8 +112,7 @@ impl ToSafetensors for CompositeDistribution {
             activation: self.activation,
         }
         .to_safetensors_metadata();
-        st_serialize(self.named_tensors("policy"), Some(metadata))
-            .map_err(r2l_core::error::Error::wrap)
+        st_serialize(self.named_tensors("policy"), Some(metadata)).map_err(Error::wrap)
     }
 }
 

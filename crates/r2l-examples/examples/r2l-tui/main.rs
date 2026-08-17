@@ -3,6 +3,7 @@ use std::{io, sync::mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use r2l::{OnPolicyControlHandle, PPOBuilder, PPORolloutStats, TrainingLimit};
+use r2l_core::error::Result;
 use r2l_examples::EventBox;
 use r2l_gym::GymEnv;
 use ratatui::layout::Alignment;
@@ -272,10 +273,7 @@ pub fn train_ppo(ppo_builder: PPOBuilder<GymEnv>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn ppo_builder(
-    tx: Sender<PPORolloutStats>,
-    total_rollouts: usize,
-) -> r2l_core::error::Result<PPOBuilder<GymEnv>> {
+fn ppo_builder(tx: Sender<PPORolloutStats>, total_rollouts: usize) -> Result<PPOBuilder<GymEnv>> {
     Ok(PPOBuilder::gym(ENV_NAME, 4)?
         .with_candle(candle_core::Device::Cpu)
         .with_execution_mode(r2l::SamplerExecutionMode::MultiThreaded)

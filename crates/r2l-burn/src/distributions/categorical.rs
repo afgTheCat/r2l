@@ -101,10 +101,8 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
 impl<B: Backend> ToSafetensors for CategoricalDistribution<B> {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store
-            .collect_from(self)
-            .map_err(r2l_core::error::Error::wrap)?;
-        store.get_bytes().map_err(r2l_core::error::Error::wrap)
+        store.collect_from(self).map_err(Error::wrap)?;
+        store.get_bytes().map_err(Error::wrap)
     }
 }
 

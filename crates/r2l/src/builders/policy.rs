@@ -3,7 +3,7 @@ use candle_core::{DType, Device};
 use candle_nn::VarMap;
 use r2l_burn::distributions::BurnPolicyKind;
 use r2l_candle::distributions::CandlePolicyKind;
-use r2l_core::{env::Space, models::ActivationFunction, tensor::R2lTensor};
+use r2l_core::{env::Space, error::Result, models::ActivationFunction, tensor::R2lTensor};
 use serde::{Deserialize, Serialize};
 
 /// Backend-independent configuration for an inference policy.
@@ -33,7 +33,7 @@ impl PolicyBuilder {
         observation_size: usize,
         action_space: Space<T>,
         device: &Device,
-    ) -> r2l_core::error::Result<(CandlePolicyKind, VarMap)> {
+    ) -> Result<(CandlePolicyKind, VarMap)> {
         let varmap = VarMap::new();
         let var_builder = r2l_candle::seeded_var_builder(&varmap, DType::F32, device);
         let policy = CandlePolicyKind::build(
@@ -56,7 +56,7 @@ impl PolicyBuilder {
         &self,
         observation_size: usize,
         action_space: Space<T>,
-    ) -> r2l_core::error::Result<BurnPolicyKind<B>> {
+    ) -> Result<BurnPolicyKind<B>> {
         let action_size = action_space.size();
         let policy_layers = [&[observation_size][..], &self.hidden_layers, &[action_size]].concat();
         BurnPolicyKind::build(

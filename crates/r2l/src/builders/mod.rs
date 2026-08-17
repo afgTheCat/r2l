@@ -414,7 +414,7 @@ impl<E: Env> Builder<E> {
         algorithm_configuration: AlgorithmConfiguration,
         backend_configuration: BackendConfiguration,
         sampler_configuration: SamplerConfiguration<E>,
-    ) -> Result<Self, r2l_core::error::Error> {
+    ) -> Result<Self, Error> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
         let env_desription = env_builder.env_description()?;
         Ok(Self {
@@ -848,7 +848,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         sampler_configuration: SamplerConfiguration<E>,
         build_agent: fn(&mut Builder<E>) -> Result<A, Error>,
         build_sampler: fn(&Builder<E>) -> Result<S, Error>,
-    ) -> Result<Self, r2l_core::error::Error> {
+    ) -> Result<Self, Error> {
         Ok(Self {
             builder: Builder::new(
                 env_builder,
@@ -1362,10 +1362,7 @@ impl<E: Env> PPOBuilder<E> {
     /// # Errors
     ///
     /// Returns an error if `n_envs` is zero.
-    pub fn new<EB: EnvBuilder<Env = E>>(
-        env_builder: EB,
-        n_envs: usize,
-    ) -> Result<Self, r2l_core::error::Error> {
+    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Result<Self, Error> {
         Self::configured(
             env_builder,
             n_envs,
@@ -1395,10 +1392,7 @@ impl<E: Env> A2CBuilder<E> {
     /// # Errors
     ///
     /// Returns an error if `n_envs` is zero.
-    pub fn new<EB: EnvBuilder<Env = E>>(
-        env_builder: EB,
-        n_envs: usize,
-    ) -> Result<Self, r2l_core::error::Error> {
+    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Result<Self, Error> {
         Self::configured(
             env_builder,
             n_envs,
@@ -1425,10 +1419,7 @@ impl PPOBuilder<GymEnv> {
     /// # Errors
     ///
     /// Returns an error if `n_envs` is zero.
-    pub fn gym<EB: Into<GymEnvBuilder>>(
-        env_builder: EB,
-        n_envs: usize,
-    ) -> Result<Self, r2l_core::error::Error> {
+    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Result<Self, Error> {
         Self::new(env_builder.into(), n_envs)
     }
 }
@@ -1439,10 +1430,7 @@ impl A2CBuilder<GymEnv> {
     /// # Errors
     ///
     /// Returns an error if `n_envs` is zero.
-    pub fn gym<EB: Into<GymEnvBuilder>>(
-        env_builder: EB,
-        n_envs: usize,
-    ) -> Result<Self, r2l_core::error::Error> {
+    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Result<Self, Error> {
         Self::new(env_builder.into(), n_envs)
     }
 }

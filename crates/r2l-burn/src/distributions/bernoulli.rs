@@ -6,7 +6,7 @@ use burn::{
 };
 use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
-    error::{Result, TensorError},
+    error::{Error, Result, TensorError},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
@@ -90,10 +90,8 @@ impl<B: Backend> Actor for MultiBernoulliDistribution<B> {
 impl<B: Backend> ToSafetensors for MultiBernoulliDistribution<B> {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store
-            .collect_from(self)
-            .map_err(r2l_core::error::Error::wrap)?;
-        store.get_bytes().map_err(r2l_core::error::Error::wrap)
+        store.collect_from(self).map_err(Error::wrap)?;
+        store.get_bytes().map_err(Error::wrap)
     }
 }
 
