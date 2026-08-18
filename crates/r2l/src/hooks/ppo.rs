@@ -49,6 +49,8 @@ pub struct PPOMinibatchStats {
 /// learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct PPORolloutStats {
+    /// Planned number of rollouts, when it can be determined before training.
+    pub total_rollouts: Option<usize>,
     /// Rollout index to which the stats belong.
     pub rollout_idx: usize,
     /// Minibatch statistics collected across PPO epochs for the rollout.
@@ -134,7 +136,16 @@ impl std::fmt::Display for PPORolloutStats {
 
         let key_width = rows.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
 
-        writeln!(f, "PPO stats (rollout {})", self.rollout_idx)?;
+        match self.total_rollouts {
+            Some(total_rollouts) => {
+                writeln!(
+                    f,
+                    "PPO stats (rollout {}/{total_rollouts})",
+                    self.rollout_idx
+                )?;
+            }
+            None => writeln!(f, "PPO stats (rollout {}/?)", self.rollout_idx)?,
+        }
         writeln!(f, "{:-<1$}", "", key_width + 15)?;
 
         for (key, value) in rows {
@@ -169,10 +180,14 @@ impl PPORolloutReporter {
         tx: Option<Sender<PPORolloutStats>>,
         log_progress: bool,
         n_envs: usize,
+        total_rollouts: Option<usize>,
     ) -> Option<Self> {
         if tx.is_some() || log_progress {
             Some(Self {
-                report: PPORolloutStats::default(),
+                report: PPORolloutStats {
+                    total_rollouts,
+                    ..Default::default()
+                },
                 tx,
                 log_progress,
                 unfinished_episode_rewards: vec![0.; n_envs],
@@ -215,14 +230,10 @@ impl PPORolloutReporter {
         self.report.average_reward = self.latest_average_reward;
     }
 
-    fn send_report(&mut self, rollout_idx: usize) -> Result<()> {
-        let progress = std::mem::replace(
-            &mut self.report,
-            PPORolloutStats {
-                rollout_idx,
-                ..Default::default()
-            },
-        );
+    fn send_report(&mut self, rollout_idx: usize, total_rollouts: Option<usize>) -> Result<()> {
+        self.report.rollout_idx = rollout_idx;
+        self.report.total_rollouts = total_rollouts;
+        let progress = std::mem::take(&mut self.report);
         if self.log_progress {
             println!("{progress}");
         }
@@ -259,6 +270,7 @@ pub struct PPOLearningHook<T = ()> {
     pub(crate) current_epoch: usize,
     pub(crate) reporter: Option<PPORolloutReporter>,
     pub(crate) rollout_idx: usize,
+    pub(crate) total_rollouts: Option<usize>,
     pub(crate) _lm: PhantomData<T>,
 }
 
@@ -305,7 +317,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
                 reporter.report.std = module.policy().std()?;
                 reporter.report.learning_rate = module.policy_learning_rate();
                 reporter.report.clip_range = params.clip_range;
-                reporter.send_report(self.rollout_idx)?;
+                reporter.send_report(self.rollout_idx, self.total_rollouts)?;
             }
             Ok(HookResult::Break)
         } else {
@@ -402,7 +414,7 @@ impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLear
                 reporter.report.std = module.policy().std()?;
                 reporter.report.learning_rate = module.policy_learning_rate();
                 reporter.report.clip_range = params.clip_range;
-                reporter.send_report(self.rollout_idx)?;
+                reporter.send_report(self.rollout_idx, self.total_rollouts)?;
             }
             Ok(HookResult::Break)
         } else {

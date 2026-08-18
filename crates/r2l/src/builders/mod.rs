@@ -401,7 +401,6 @@ struct Builder<E: Env> {
     env_build_plan: Box<dyn EnvBuildPlan<E>>,
     env_desription: EnvDescription<E::Tensor>,
     n_envs: usize,
-    sampler_configuration: SamplerConfiguration<E>,
     backend_configuration: BackendConfiguration,
     algorithm_configuration: AlgorithmConfiguration,
 
@@ -426,6 +425,7 @@ struct Builder<E: Env> {
 
     // for the sampler
     sampler_execution_mode: SamplerExecutionMode,
+    sampler_configuration: SamplerConfiguration<E>,
 }
 
 impl<E: Env> Builder<E> {
@@ -698,7 +698,22 @@ impl<E: Env> Builder<E> {
         Ok(())
     }
 
+    fn total_rollouts(&self) -> Option<usize> {
+        match self.training_limit {
+            TrainingLimit::RolloutBound { total_rollouts } => Some(total_rollouts),
+            TrainingLimit::TotalStepBound { total_steps } => match &self.sampler_configuration {
+                SamplerConfiguration::DirectStep { rollout_steps, .. }
+                | SamplerConfiguration::StagedStep { rollout_steps, .. } => rollout_steps
+                    .checked_mul(self.n_envs)
+                    .filter(|steps_per_rollout| *steps_per_rollout > 0)
+                    .map(|steps_per_rollout| total_steps.div_ceil(steps_per_rollout)),
+                SamplerConfiguration::DirectEpisode { .. } => None,
+            },
+        }
+    }
+
     fn ppo_hook<M>(&mut self) -> PPOLearningHook<M> {
+        let total_rollouts = self.total_rollouts();
         let AlgorithmConfiguration::Ppo {
             normalize_advantage,
             total_epochs,
@@ -720,13 +735,20 @@ impl<E: Env> Builder<E> {
             }),
             gradient_clipping: self.gradient_clipping,
             current_epoch: 0,
-            reporter: PPORolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
+            reporter: PPORolloutReporter::new(
+                reporter.take(),
+                self.log_progress,
+                self.n_envs,
+                total_rollouts,
+            ),
             rollout_idx: 0,
+            total_rollouts,
             _lm: PhantomData,
         }
     }
 
     fn a2c_hook<M>(&mut self) -> A2CLearningHook<M> {
+        let total_rollouts = self.total_rollouts();
         let AlgorithmConfiguration::A2C {
             normalize_advantage,
             reporter,
@@ -739,7 +761,13 @@ impl<E: Env> Builder<E> {
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
             gradient_clipping: self.gradient_clipping,
-            reporter: A2CRolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
+            reporter: A2CRolloutReporter::new(
+                reporter.take(),
+                self.log_progress,
+                self.n_envs,
+                total_rollouts,
+            ),
+            total_rollouts,
             _lm: PhantomData,
         }
     }

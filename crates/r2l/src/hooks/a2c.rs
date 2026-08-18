@@ -44,6 +44,8 @@ pub struct A2CMinibatchStats {
 /// rollout-level summaries such as average reward and learning rate.
 #[derive(Default, Debug, Clone)]
 pub struct A2CRolloutStats {
+    /// Planned number of rollouts, when it can be determined before training.
+    pub total_rollouts: Option<usize>,
     /// Rollout index to which the stats belong to
     pub rollout_idx: usize,
     /// Minibatch statistics collected during the most recent learning pass.
@@ -114,7 +116,16 @@ impl std::fmt::Display for A2CRolloutStats {
 
         let key_width = rows.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
 
-        writeln!(f, "A2C stats (rollout {})", self.rollout_idx)?;
+        match self.total_rollouts {
+            Some(total_rollouts) => {
+                writeln!(
+                    f,
+                    "A2C stats (rollout {}/{total_rollouts})",
+                    self.rollout_idx
+                )?;
+            }
+            None => writeln!(f, "A2C stats (rollout {}/?)", self.rollout_idx)?,
+        }
         writeln!(f, "{:-<1$}", "", key_width + 15)?;
 
         for (key, value) in rows {
@@ -139,11 +150,15 @@ impl A2CRolloutReporter {
         tx: Option<Sender<A2CRolloutStats>>,
         log_progress: bool,
         n_envs: usize,
+        total_rollouts: Option<usize>,
     ) -> Option<Self> {
         if tx.is_some() || log_progress {
             Some(Self {
                 rollout_idx: 0,
-                report: A2CRolloutStats::default(),
+                report: A2CRolloutStats {
+                    total_rollouts,
+                    ..Default::default()
+                },
                 tx,
                 log_progress,
                 unfinished_episode_rewards: vec![0.; n_envs],
@@ -154,15 +169,11 @@ impl A2CRolloutReporter {
         }
     }
 
-    pub(crate) fn send_report(&mut self) -> Result<()> {
+    pub(crate) fn send_report(&mut self, total_rollouts: Option<usize>) -> Result<()> {
         self.rollout_idx += 1;
-        let progress = std::mem::replace(
-            &mut self.report,
-            A2CRolloutStats {
-                rollout_idx: self.rollout_idx,
-                ..Default::default()
-            },
-        );
+        self.report.rollout_idx = self.rollout_idx;
+        self.report.total_rollouts = total_rollouts;
+        let progress = std::mem::take(&mut self.report);
         if self.log_progress {
             println!("{progress}");
         }
@@ -228,6 +239,7 @@ pub struct A2CLearningHook<T = ()> {
     pub(crate) vf_coeff: Option<f32>,
     pub(crate) gradient_clipping: Option<f32>,
     pub(crate) reporter: Option<A2CRolloutReporter>,
+    pub(crate) total_rollouts: Option<usize>,
     pub(crate) _lm: PhantomData<T>,
 }
 
@@ -288,7 +300,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
             reporter.update_average_reward(buffers);
             reporter.report.std = module.policy().std()?;
             reporter.report.learning_rate = module.policy_learning_rate();
-            reporter.send_report()?;
+            reporter.send_report(self.total_rollouts)?;
         }
         Ok(HookResult::Continue)
     }
@@ -346,7 +358,7 @@ impl A2CHook<CandlePolicyValueLearner> for A2CLearningHook<CandlePolicyValueLear
             reporter.update_average_reward(buffers);
             reporter.report.std = module.policy().std()?;
             reporter.report.learning_rate = module.policy_learning_rate();
-            reporter.send_report()?;
+            reporter.send_report(self.total_rollouts)?;
         }
         Ok(HookResult::Continue)
     }
