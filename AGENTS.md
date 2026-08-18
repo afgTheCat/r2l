@@ -41,6 +41,13 @@ For cross-cutting changes, use:
 - `cargo test --workspace`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 
+## Documentation
+
+- In the user-facing `crates/r2l` API, document every explicit parameter of a public function or
+  method under an `# Arguments` section.
+- Omit `# Arguments` for functions whose only parameter is `self`.
+- Describe the parameter's behavioral effect when its type and name are not sufficient.
+
 ## Notes
 
 - The project is pre-alpha. Favor clarity and maintainability over premature abstraction.

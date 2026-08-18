@@ -164,6 +164,11 @@ pub struct InferenceRunner<E: Env> {
 impl<E: Env> InferenceRunner<E> {
     /// Loads an inference runtime from learned artifacts for `env`.
     ///
+    /// # Arguments
+    ///
+    /// * `directory` - Directory containing the saved inference configuration and model artifacts.
+    /// * `env` - Environment in which the loaded policy will run.
+    ///
     /// # Errors
     ///
     /// Returns an error if an artifact cannot be read or decoded, the configured

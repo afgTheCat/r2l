@@ -93,6 +93,10 @@ pub struct TrainingArtifactsConfig {
 
 impl TrainingArtifactsConfig {
     /// Creates a configuration that writes all supported training artifacts.
+    ///
+    /// # Arguments
+    ///
+    /// * `output_dir` - Directory in which training artifacts will be written.
     pub fn new(output_dir: impl Into<PathBuf>) -> Self {
         Self {
             output_dir: resolve_and_validate_output_dir(output_dir.into()),
@@ -104,6 +108,10 @@ impl TrainingArtifactsConfig {
     }
 
     /// Sets whether evaluation results are written during training.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether to write evaluation results.
     #[must_use]
     pub fn with_evaluation_results(mut self, enabled: bool) -> Self {
         self.evaluation_results = enabled;
@@ -111,6 +119,10 @@ impl TrainingArtifactsConfig {
     }
 
     /// Sets whether training timing measurements are written.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether to write training timing measurements.
     #[must_use]
     pub fn with_training_timings(mut self, enabled: bool) -> Self {
         self.training_timings = enabled;
@@ -118,6 +130,10 @@ impl TrainingArtifactsConfig {
     }
 
     /// Sets whether the best policy is saved as inference-ready artifacts.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether to save inference-ready artifacts for the best policy.
     #[must_use]
     pub fn with_inference_artifacts(mut self, enabled: bool) -> Self {
         self.inference_artifacts = enabled;
@@ -125,6 +141,10 @@ impl TrainingArtifactsConfig {
     }
 
     /// Sets the evaluation behavior used by evaluation results and inference artifacts.
+    ///
+    /// # Arguments
+    ///
+    /// * `evaluation_settings` - Settings that control evaluation frequency and execution.
     #[must_use]
     pub fn with_evaluation_settings(mut self, evaluation_settings: EvaluationSettings) -> Self {
         self.evaluation_settings = evaluation_settings;
@@ -892,12 +912,20 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Enables the evaluation, training-timing, and inference artifacts selected by `config`.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The artifact output directory and the artifacts to produce.
     pub fn with_training_artifacts(mut self, config: TrainingArtifactsConfig) -> Self {
         self.builder.training_artifacts = Some(config);
         self
     }
 
     /// Sets the schedule that determines when training stops.
+    ///
+    /// # Arguments
+    ///
+    /// * `training_limit` - The rollout or sampled-step limit for the training run.
     pub fn with_training_limit(mut self, training_limit: TrainingLimit) -> Self {
         self.builder.training_limit = training_limit;
         self
@@ -913,6 +941,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// Sets the learning-rate schedule applied as training progresses.
     ///
     /// Passing `None` leaves the optimizer at its configured learning rate.
+    ///
+    /// # Arguments
+    ///
+    /// * `learning_rate_schedule` - The schedule to apply, or `None` to disable scheduling.
     pub fn with_learning_rate_schedule(
         mut self,
         learning_rate_schedule: Option<LearningRateSchedule>,
@@ -922,36 +954,60 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Sets the random seed used when the algorithm is built.
+    ///
+    /// # Arguments
+    ///
+    /// * `seed` - Seed used to initialize the random number generators.
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.builder.seed = Some(seed);
         self
     }
 
     /// Selects single-threaded or multi-threaded environment execution.
+    ///
+    /// # Arguments
+    ///
+    /// * `execution_mode` - How sampler environment workers should be executed.
     pub fn with_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
         self.builder.sampler_execution_mode = execution_mode;
         self
     }
 
     /// Sets the hidden-layer widths of the policy network.
+    ///
+    /// # Arguments
+    ///
+    /// * `policy_hidden_layers` - Hidden-layer widths in network order.
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
         self.builder.policy_config.hidden_layers = policy_hidden_layers;
         self
     }
 
     /// Sets the hidden-layer activation used by the policy and value networks.
+    ///
+    /// # Arguments
+    ///
+    /// * `activation_function` - Activation function applied by hidden layers.
     pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
         self.builder.policy_config.activation_function = activation_function;
         self
     }
 
     /// Sets the initial log standard deviation for continuous-action policies.
+    ///
+    /// # Arguments
+    ///
+    /// * `log_std_init` - Initial logarithm of the action distribution's standard deviation.
     pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
         self.builder.policy_config.log_std_init = log_std_init;
         self
     }
 
     /// Sets every optimizer's learning rate and selects a constant schedule.
+    ///
+    /// # Arguments
+    ///
+    /// * `learning_rate` - Constant learning rate applied to every optimizer.
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_lr(learning_rate));
@@ -960,6 +1016,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Sets the `AdamW` first-moment decay for every optimizer.
+    ///
+    /// # Arguments
+    ///
+    /// * `beta1` - First-moment exponential decay coefficient.
     pub fn with_beta1(mut self, beta1: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_beta1(beta1));
@@ -967,6 +1027,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Sets the `AdamW` second-moment decay for every optimizer.
+    ///
+    /// # Arguments
+    ///
+    /// * `beta2` - Second-moment exponential decay coefficient.
     pub fn with_beta2(mut self, beta2: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_beta2(beta2));
@@ -974,6 +1038,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Sets the `AdamW` numerical-stability term for every optimizer.
+    ///
+    /// # Arguments
+    ///
+    /// * `epsilon` - Small value added to the optimizer denominator for numerical stability.
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_epsilon(epsilon));
@@ -981,6 +1049,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Sets the `AdamW` weight decay for every optimizer.
+    ///
+    /// # Arguments
+    ///
+    /// * `weight_decay` - Decoupled weight-decay coefficient.
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_weight_decay(weight_decay));
@@ -988,6 +1060,11 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Uses one optimizer for the policy and value networks.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_grad_norm` - Optional maximum gradient norm applied before each update.
+    /// * `params` - AdamW parameters shared by the policy and value networks.
     pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: AdamWParams) -> Self {
         self.builder
             .update_optimizer_layout(|_| OnPolicyOptimizerLayout::Joint {
@@ -998,6 +1075,13 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Uses independent optimizers for the policy and value networks.
+    ///
+    /// # Arguments
+    ///
+    /// * `policy_max_grad_norm` - Optional maximum norm for policy gradients.
+    /// * `policy_params` - AdamW parameters for the policy network.
+    /// * `value_max_grad_norm` - Optional maximum norm for value-network gradients.
+    /// * `value_params` - AdamW parameters for the value network.
     pub fn with_split(
         mut self,
         policy_max_grad_norm: Option<f32>,
@@ -1016,12 +1100,20 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Sets the hidden-layer widths of the value network.
+    ///
+    /// # Arguments
+    ///
+    /// * `value_hidden_layers` - Hidden-layer widths in network order.
     pub fn with_value_hidden_layers(mut self, value_hidden_layers: Vec<usize>) -> Self {
         self.builder.value_hidden_layers = value_hidden_layers;
         self
     }
 
     /// Enables or disables advantage normalization before learning.
+    ///
+    /// # Arguments
+    ///
+    /// * `normalize_advantage` - Whether to normalize advantages before optimizer updates.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         match &mut self.builder.algorithm_configuration {
             AlgorithmConfiguration::Ppo {
@@ -1037,42 +1129,70 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Sets the entropy term coefficient in the training loss.
+    ///
+    /// # Arguments
+    ///
+    /// * `entropy_coeff` - Multiplier applied to the entropy term.
     pub fn with_entropy_coefficient(mut self, entropy_coeff: f32) -> Self {
         self.builder.entropy_coeff = entropy_coeff;
         self
     }
 
     /// Sets the optional value-function loss coefficient.
+    ///
+    /// # Arguments
+    ///
+    /// * `vf_coeff` - Value-loss multiplier, or `None` to use the unscaled loss.
     pub fn with_value_loss_coefficient(mut self, vf_coeff: Option<f32>) -> Self {
         self.builder.vf_coeff = vf_coeff;
         self
     }
 
     /// Sets optional gradient-norm clipping in the algorithm hook.
+    ///
+    /// # Arguments
+    ///
+    /// * `gradient_clipping` - Maximum gradient norm, or `None` to disable clipping.
     pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
         self.builder.gradient_clipping = gradient_clipping;
         self
     }
 
     /// Enables or disables progress output from the learning hook.
+    ///
+    /// # Arguments
+    ///
+    /// * `log_progress` - Whether to print training progress.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
         self.builder.log_progress = log_progress;
         self
     }
 
     /// Sets the reward discount factor.
+    ///
+    /// # Arguments
+    ///
+    /// * `gamma` - Discount factor used to compute returns.
     pub fn with_gamma(mut self, gamma: f32) -> Self {
         self.builder.gamma = gamma;
         self
     }
 
     /// Sets the generalized advantage-estimation lambda.
+    ///
+    /// # Arguments
+    ///
+    /// * `lambda` - Bias-variance tradeoff used by generalized advantage estimation.
     pub fn with_lambda(mut self, lambda: f32) -> Self {
         self.builder.lambda = lambda;
         self
     }
 
     /// Sets the minibatch size used by learning updates.
+    ///
+    /// # Arguments
+    ///
+    /// * `sample_size` - Maximum number of transitions in each learning minibatch.
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
         self.builder.sample_size = sample_size;
         self
@@ -1102,6 +1222,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOCandle, S, E> {
     /// Uses Candle on `device` for PPO learning.
+    ///
+    /// # Arguments
+    ///
+    /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> Self {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self
@@ -1116,6 +1240,10 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOCandle, S, E> {
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOBurn<BurnBackend>, S, E> {
     /// Switches PPO learning to Candle on `device`.
+    ///
+    /// # Arguments
+    ///
+    /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<PPOCandle, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self.with_agent(Builder::ppo_candle_agent)
@@ -1137,6 +1265,10 @@ where
     E: Env<Tensor = S::Tensor>,
 {
     /// Installs an optional channel for reporting PPO training statistics.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Channel sender that receives rollout statistics, or `None` to disable reporting.
     pub fn with_rollout_reporter(mut self, tx: Option<Sender<PPORolloutStats>>) -> Self {
         let AlgorithmConfiguration::Ppo { reporter, .. } =
             &mut self.builder.algorithm_configuration
@@ -1148,6 +1280,10 @@ where
     }
 
     /// Sets the maximum PPO epochs performed for each rollout.
+    ///
+    /// # Arguments
+    ///
+    /// * `total_epochs` - Maximum optimization epochs performed over each rollout.
     pub fn with_total_epochs(mut self, total_epochs: usize) -> Self {
         let AlgorithmConfiguration::Ppo {
             total_epochs: configured,
@@ -1161,6 +1297,10 @@ where
     }
 
     /// Sets the optional KL-divergence threshold for stopping PPO epochs early.
+    ///
+    /// # Arguments
+    ///
+    /// * `target_kl` - KL-divergence threshold, or `None` to disable early stopping.
     pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
         let AlgorithmConfiguration::Ppo {
             target_kl: configured,
@@ -1174,6 +1314,10 @@ where
     }
 
     /// Sets the PPO policy-ratio clipping range.
+    ///
+    /// # Arguments
+    ///
+    /// * `clip_range` - Maximum allowed deviation of the policy ratio from `1.0`.
     pub fn with_clip_range(mut self, clip_range: f32) -> Self {
         let AlgorithmConfiguration::Ppo {
             clip_range: configured,
@@ -1189,6 +1333,10 @@ where
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CCandle, S, E> {
     /// Uses Candle on `device` for A2C learning.
+    ///
+    /// # Arguments
+    ///
+    /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> Self {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self
@@ -1203,6 +1351,10 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CCandle, S, E> {
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CBurn<BurnBackend>, S, E> {
     /// Switches A2C learning to Candle on `device`.
+    ///
+    /// # Arguments
+    ///
+    /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<A2CCandle, S, E> {
         self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
         self.with_agent(Builder::a2c_candle_agent)
@@ -1224,6 +1376,10 @@ where
     E: Env<Tensor = S::Tensor>,
 {
     /// Installs an optional channel for reporting A2C training statistics.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Channel sender that receives rollout statistics, or `None` to disable reporting.
     pub fn with_rollout_reporter(mut self, tx: Option<Sender<A2CRolloutStats>>) -> Self {
         let AlgorithmConfiguration::A2C { reporter, .. } =
             &mut self.builder.algorithm_configuration
@@ -1239,6 +1395,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     OnPolicyBuilder<A, DirectSampler<E, StepBoundHook<E>>, E>
 {
     /// Sets the number of steps collected per environment and rollout.
+    ///
+    /// # Arguments
+    ///
+    /// * `rollout_steps` - Number of steps collected from each environment per rollout.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
         let SamplerConfiguration::DirectStep {
             rollout_steps: configured,
@@ -1252,6 +1412,11 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     }
 
     /// Normalizes discounted rewards and clips them to `clip_reward`.
+    ///
+    /// # Arguments
+    ///
+    /// * `gamma` - Discount factor used to track discounted returns.
+    /// * `clip_reward` - Absolute limit applied to normalized rewards.
     pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
         let SamplerConfiguration::DirectStep {
             reward_normalizer, ..
@@ -1271,6 +1436,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     ///
     /// `Some(clip)` enables normalization with that clipping limit. `None`
     /// retains staged sampling without applying an observation normalizer.
+    ///
+    /// # Arguments
+    ///
+    /// * `obs_clip` - Absolute clipping limit, or `None` to keep observations unnormalized.
     ///
     /// # Errors
     ///
@@ -1305,6 +1474,11 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     }
 
     /// Selects direct sampling bounded by completed episodes per environment.
+    ///
+    /// # Arguments
+    ///
+    /// * `rollout_episodes` - Number of completed episodes collected from each environment per
+    ///   rollout.
     pub fn with_rollout_episodes(
         mut self,
         rollout_episodes: usize,
@@ -1322,6 +1496,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     OnPolicyBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>
 {
     /// Sets the number of steps collected per environment and rollout.
+    ///
+    /// # Arguments
+    ///
+    /// * `rollout_steps` - Number of steps collected from each environment per rollout.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
         let SamplerConfiguration::StagedStep {
             rollout_steps: configured,
@@ -1335,6 +1513,11 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     }
 
     /// Normalizes discounted rewards and clips them to `clip_reward`.
+    ///
+    /// # Arguments
+    ///
+    /// * `gamma` - Discount factor used to track discounted returns.
+    /// * `clip_reward` - Absolute limit applied to normalized rewards.
     pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
         let SamplerConfiguration::StagedStep {
             reward_normalizer, ..

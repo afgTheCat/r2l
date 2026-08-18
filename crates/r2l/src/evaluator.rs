@@ -125,6 +125,10 @@ impl EvaluationSettings {
 
     /// Sets the number of episodes collected during each evaluation pass.
     ///
+    /// # Arguments
+    ///
+    /// * `episodes_per_evaluation` - Number of completed episodes collected per evaluation pass.
+    ///
     /// # Panics
     ///
     /// Panics if `episodes_per_evaluation` is zero.
@@ -139,6 +143,11 @@ impl EvaluationSettings {
     }
 
     /// Sets how evaluation environments are executed.
+    ///
+    /// # Arguments
+    ///
+    /// * `evaluation_execution_mode` - Whether evaluation workers run on the current thread or on
+    ///   dedicated threads.
     #[must_use]
     pub fn with_execution_mode(mut self, evaluation_execution_mode: SamplerExecutionMode) -> Self {
         self.evaluation_execution_mode = evaluation_execution_mode;
@@ -146,6 +155,10 @@ impl EvaluationSettings {
     }
 
     /// Sets the number of training rollouts between evaluation passes.
+    ///
+    /// # Arguments
+    ///
+    /// * `rollouts_per_evaluation` - Number of completed training rollouts between evaluations.
     ///
     /// # Panics
     ///

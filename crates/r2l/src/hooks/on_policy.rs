@@ -79,6 +79,10 @@ impl OnPolicyControlHandle {
 
     /// Requests serialization of the current policy and waits for the result.
     ///
+    /// # Arguments
+    ///
+    /// * `path` - Destination path for the serialized policy.
+    ///
     /// # Errors
     ///
     /// Returns an error if serialization fails, the training loop is stopping,
@@ -158,6 +162,10 @@ pub enum TrainingLimit {
 impl TrainingLimit {
     /// Creates a schedule bounded by total sampled environment steps.
     ///
+    /// # Arguments
+    ///
+    /// * `total_steps` - Minimum number of sampled steps after which training stops.
+    ///
     /// # Panics
     ///
     /// Panics if `total_steps` is zero.
@@ -168,6 +176,10 @@ impl TrainingLimit {
     }
 
     /// Creates a schedule bounded by completed rollouts.
+    ///
+    /// # Arguments
+    ///
+    /// * `total_rollouts` - Number of completed rollouts after which training stops.
     ///
     /// # Panics
     ///
