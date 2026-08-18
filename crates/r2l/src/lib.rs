@@ -1,5 +1,9 @@
-//! r2l is a reinforcement learning library for Rust. It provides high-level PPO and A2C
+//! r2l is a reinforcement learning library for Rust. It provides high-level
+//! [Proximal Policy Optimization (PPO)][ppo] and [Advantage Actor-Critic (A2C)][a2c]
 //! training builders while exposing lower-level components for customization.
+//!
+//! [ppo]: https://arxiv.org/abs/1707.06347
+//! [a2c]: https://openai.com/index/openai-baselines-acktr-a2c/
 //!
 //! ## Quick start
 //!
@@ -8,8 +12,11 @@
 //! ```no_run
 //! use r2l::PPOBuilder;
 //!
-//! let mut algorithm = PPOBuilder::gym("Pendulum-v1", 4)?.build()?;
-//! algorithm.train().unwrap();
+//! fn main() -> anyhow::Result<()> {
+//!     let mut algorithm = PPOBuilder::gym("Pendulum-v1", 4)?.build()?;
+//!     algorithm.train()?;
+//!     Ok(())
+//! }
 //! ```
 //!
 //! [`PPOBuilder`] and [`A2CBuilder`] are the main entry points for
