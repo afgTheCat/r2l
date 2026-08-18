@@ -147,7 +147,10 @@ pub struct GymEnv {
 impl GymEnv {
     /// Creates a Gymnasium environment by name.
     ///
-    /// `render_mode` is forwarded to `gymnasium.make` when provided.
+    /// # Arguments
+    ///
+    /// * `name` - Gymnasium environment id passed to `gymnasium.make`.
+    /// * `render_mode` - Optional rendering mode passed to `gymnasium.make`.
     ///
     /// # Errors
     ///
@@ -196,6 +199,10 @@ pub struct GymEnvBuilder(String);
 
 impl GymEnvBuilder {
     /// Creates a builder for the given Gymnasium environment id.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Gymnasium environment id used for each environment instance.
     #[must_use]
     pub fn new(name: &str) -> Self {
         Self(name.to_owned())

@@ -1,6 +1,5 @@
 // ANCHOR: ppo
-use r2l::{InferenceRunner, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
-use r2l_gym::GymEnv;
+use r2l::{GymEnv, InferenceRunner, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
 
 const ENV_NAME: &str = "Pendulum-v1";
 const ARTIFACT_DIR: &str = "runs/pendulum";
