@@ -445,7 +445,7 @@ impl<E: Env> Builder<E> {
             sampler_configuration,
             backend_configuration,
             algorithm_configuration,
-            training_limit: TrainingLimit::rollouts(300),
+            training_limit: TrainingLimit::rollouts(50),
             learning_rate_schedule: None,
             training_artifacts: None,
             control_endpoint: None,
