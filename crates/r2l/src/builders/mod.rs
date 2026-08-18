@@ -1358,15 +1358,22 @@ pub type PPOBuilder<E> = OnPolicyBuilder<PPOCandle, DirectSampler<E, StepBoundHo
 pub type A2CBuilder<E> = OnPolicyBuilder<A2CCandle, DirectSampler<E, StepBoundHook<E>>, E>;
 
 impl<E: Env> PPOBuilder<E> {
-    /// Creates a PPO builder using `n_envs` homogeneous environments.
+    /// Creates a PPO builder using homogeneous environments.
+    ///
+    /// # Arguments
+    ///
+    /// * `env_builder` - The environment builder used to create each environment instance.
+    /// * `num_envs` - The number of independent environment instances used to collect rollouts.
+    ///   Each environment collects the configured number of rollout steps, so the default 1,024
+    ///   steps with four environments produces 4,096 transitions per rollout.
     ///
     /// # Errors
     ///
-    /// Returns an error if `n_envs` is zero.
-    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Result<Self, Error> {
+    /// Returns an error if `num_envs` is zero.
+    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, num_envs: usize) -> Result<Self, Error> {
         Self::configured(
             env_builder,
-            n_envs,
+            num_envs,
             AlgorithmConfiguration::Ppo {
                 normalize_advantage: None,
                 total_epochs: 10,
@@ -1388,15 +1395,22 @@ impl<E: Env> PPOBuilder<E> {
 }
 
 impl<E: Env> A2CBuilder<E> {
-    /// Creates an A2C builder using `n_envs` homogeneous environments.
+    /// Creates an A2C builder using homogeneous environments.
+    ///
+    /// # Arguments
+    ///
+    /// * `env_builder` - The environment builder used to create each environment instance.
+    /// * `num_envs` - The number of independent environment instances used to collect rollouts.
+    ///   Each environment collects the configured number of rollout steps, so the default 1,024
+    ///   steps with four environments produces 4,096 transitions per rollout.
     ///
     /// # Errors
     ///
-    /// Returns an error if `n_envs` is zero.
-    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, n_envs: usize) -> Result<Self, Error> {
+    /// Returns an error if `num_envs` is zero.
+    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, num_envs: usize) -> Result<Self, Error> {
         Self::configured(
             env_builder,
-            n_envs,
+            num_envs,
             AlgorithmConfiguration::A2C {
                 normalize_advantage: None,
                 reporter: None,
@@ -1417,21 +1431,37 @@ impl<E: Env> A2CBuilder<E> {
 impl PPOBuilder<GymEnv> {
     /// Creates a PPO builder for a Gymnasium environment.
     ///
+    /// # Arguments
+    ///
+    /// * `env_builder` - The Gymnasium environment name or configured [`GymEnvBuilder`] used to
+    ///   create each environment instance.
+    /// * `num_envs` - The number of independent environment instances used to collect rollouts.
+    ///   Each environment collects the configured number of rollout steps, so the default 1,024
+    ///   steps with four environments produces 4,096 transitions per rollout.
+    ///
     /// # Errors
     ///
-    /// Returns an error if `n_envs` is zero.
-    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Result<Self, Error> {
-        Self::new(env_builder.into(), n_envs)
+    /// Returns an error if `num_envs` is zero.
+    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, num_envs: usize) -> Result<Self, Error> {
+        Self::new(env_builder.into(), num_envs)
     }
 }
 
 impl A2CBuilder<GymEnv> {
     /// Creates an A2C builder for a Gymnasium environment.
     ///
+    /// # Arguments
+    ///
+    /// * `env_builder` - The Gymnasium environment name or configured [`GymEnvBuilder`] used to
+    ///   create each environment instance.
+    /// * `num_envs` - The number of independent environment instances used to collect rollouts.
+    ///   Each environment collects the configured number of rollout steps, so the default 1,024
+    ///   steps with four environments produces 4,096 transitions per rollout.
+    ///
     /// # Errors
     ///
-    /// Returns an error if `n_envs` is zero.
-    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, n_envs: usize) -> Result<Self, Error> {
-        Self::new(env_builder.into(), n_envs)
+    /// Returns an error if `num_envs` is zero.
+    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, num_envs: usize) -> Result<Self, Error> {
+        Self::new(env_builder.into(), num_envs)
     }
 }
