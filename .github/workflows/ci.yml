@@ -31,6 +31,6 @@ jobs:
       - name: Install mdBook
         run: cargo install --locked --version ${MDBOOK_VERSION} mdbook
       - name: Build book dependencies
-        run: cargo build -p r2l
+        run: cargo build -p r2l --features gym
       - name: Test book examples
         run: mdbook test -L target/debug/deps book

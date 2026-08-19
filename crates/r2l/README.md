@@ -6,6 +6,13 @@ The main entry points are `PPOBuilder` and `A2CBuilder`.
 They combine environment construction, rollout collection, a Candle or Burn
 learning module, scheduling, reporting, and optional best-actor evaluation.
 
+Gymnasium support is opt-in and requires Python 3.11 or newer with the
+`gymnasium` package installed:
+
+```toml
+r2l = { version = "0.0.2", features = ["gym"] }
+```
+
 ```rust,no_run
 use r2l::{PPOBuilder, TrainingLimit};
 

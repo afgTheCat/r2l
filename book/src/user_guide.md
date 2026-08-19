@@ -11,6 +11,10 @@ hackability.
 
 The shortest Gymnasium-based PPO setup is:
 
+```toml
+r2l = { version = "0.0.2", features = ["gym"] }
+```
+
 ```rust,no_run
 # extern crate r2l;
 use r2l::PPOBuilder;
@@ -23,11 +27,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-This requires Python 3.11 or newer and the `gymnasium` Python package. A
-Gymnasium environment id is passed to `GymEnvBuilder`, which maps supported
-Gymnasium spaces to `r2l` space descriptions. The builders support other
-environment types through a different construction, which will be introduced
-later on.
+The `gym` feature requires Python 3.11 or newer and the `gymnasium` Python
+package. A Gymnasium environment id is passed to `GymEnvBuilder`, which maps
+supported Gymnasium spaces to `r2l` space descriptions. Discrete spaces
+currently require `start = 0`; non-zero `start` values are not supported. The
+builders support other environment types through a different construction,
+which will be introduced later on.
 
 ## Saving training artifacts
 

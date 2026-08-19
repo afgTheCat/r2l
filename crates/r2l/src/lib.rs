@@ -7,7 +7,8 @@
 //!
 //! ## Quick start
 //!
-//! The Gymnasium integration requires Python with Gymnasium installed.
+//! The Gymnasium integration is available through the opt-in `gym` feature. It
+//! requires Python 3.11 or newer with the `gymnasium` package installed.
 //!
 //! ```no_run
 //! use r2l::PPOBuilder;

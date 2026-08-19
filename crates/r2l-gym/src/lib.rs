@@ -10,8 +10,9 @@
 //! - [`GymEnvBuilder`], an [`EnvBuilder`]
 //!   implementation that constructs named Gymnasium environments
 //!
-//! The adapter maps Gymnasium `Discrete`, `Box`, `MultiDiscrete`,
-//! `MultiBinary`, `Tuple`, and `Dict` spaces to `r2l-core` spaces.
+//! The adapter maps Gymnasium `Discrete` spaces with `start = 0`, plus `Box`,
+//! `MultiDiscrete`, `MultiBinary`, `Tuple`, and `Dict` spaces to `r2l-core`
+//! spaces. Non-zero `Discrete` `start` values are not currently supported.
 //! Observations are converted into [`VecTensor`] values.
 mod parse;
 
@@ -128,8 +129,9 @@ impl GymEnvPyhon {
 /// `GymEnv` wraps a Gymnasium environment created through `gymnasium.make` and
 /// exposes its observation/action spaces through `r2l-core` space types.
 ///
-/// This wrapper currently supports Gymnasium `Discrete`, `Box`,
-/// `MultiDiscrete`, `MultiBinary`, `Tuple`, and `Dict` spaces.
+/// This wrapper currently supports Gymnasium `Discrete` spaces with `start = 0`,
+/// plus `Box`, `MultiDiscrete`, `MultiBinary`, `Tuple`, and `Dict` spaces.
+/// Non-zero `Discrete` `start` values are not currently supported.
 ///
 /// Box actions are clipped to the environment's declared bounds before
 /// stepping. Structured actions are read from flat tensors and recursively

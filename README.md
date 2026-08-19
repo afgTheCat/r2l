@@ -6,8 +6,14 @@
 
 ## Getting started
 
-With `gymnasium` installed, a complete training and inference workflow looks
-like this:
+Enable the optional Gymnasium integration in your `Cargo.toml`:
+
+```toml
+r2l = { version = "0.0.2", features = ["gym"] }
+```
+
+With the `gymnasium` Python package installed, a complete training and
+inference workflow looks like this:
 
 ```rust,no_run
 use r2l::{
@@ -56,9 +62,10 @@ For more information, read the [book](https://afgthecat.github.io/r2l/).
 r2l is developed and tested against the latest stable Rust release. No formal
 minimum supported Rust version is currently maintained.
 
-Python and Gymnasium are optional. Native and custom Rust environments do not
-require either dependency. The Gymnasium adapter requires Python 3.11 or newer
-and the `gymnasium` package installed in the Python environment used at runtime.
+The `gym` feature is disabled by default, so native and custom Rust environments
+do not require or link against Python. Enabling `gym` requires Python 3.11 or
+newer and the `gymnasium` package installed in the Python environment used at
+runtime.
 
 ## v0.0.2 capabilities
 
@@ -69,8 +76,8 @@ and the `gymnasium` package installed in the Python environment used at runtime.
 - Step- and episode-bounded rollout hooks
 - Observation normalization, discounted-reward normalization, and linear
   learning-rate schedules
-- Native `Env` implementations and a Gymnasium adapter for Discrete, Box,
-  MultiDiscrete, MultiBinary, Tuple, and Dict spaces
+- Native `Env` implementations and a Gymnasium adapter for Discrete spaces with
+  `start = 0`, plus Box, MultiDiscrete, MultiBinary, Tuple, and Dict spaces
 - Best-actor evaluation and SafeTensors persistence for backend-specific
   policies
 
