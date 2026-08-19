@@ -177,7 +177,7 @@ pub(crate) enum OnPolicyOptimizerLayout {
     Joint {
         /// Optional maximum gradient norm.
         max_grad_norm: Option<f32>,
-        /// Shared `AdamW` parameters.
+        /// Shared Adam optimizer parameters with decoupled weight decay.
         params: AdamWParams,
     },
     /// Policy and value networks use independent optimizers.
@@ -878,8 +878,8 @@ struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
 /// Both entry points default to Candle on the CPU, multi-threaded direct
 /// sampling with 1,024 steps per environment, and a training limit of 300
 /// rollouts. Shared learning defaults include `gamma = 0.98`, `lambda = 0.8`,
-/// minibatches of 64 samples, and a joint `AdamW` optimizer with a learning rate
-/// of `3e-4`.
+/// minibatches of 64 samples, and a joint Adam optimizer with decoupled weight
+/// decay and a learning rate of `3e-4`.
 #[must_use]
 pub struct OnPolicyBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     builder: Builder<E>,
@@ -1043,7 +1043,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
-    /// Sets the `AdamW` first-moment decay for every optimizer.
+    /// Sets the Adam first-moment decay for every optimizer.
     ///
     /// # Arguments
     ///
@@ -1054,7 +1054,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
-    /// Sets the `AdamW` second-moment decay for every optimizer.
+    /// Sets the Adam second-moment decay for every optimizer.
     ///
     /// # Arguments
     ///
@@ -1065,7 +1065,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
-    /// Sets the `AdamW` numerical-stability term for every optimizer.
+    /// Sets the Adam numerical-stability term for every optimizer.
     ///
     /// # Arguments
     ///
@@ -1076,7 +1076,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
-    /// Sets the `AdamW` weight decay for every optimizer.
+    /// Sets the decoupled weight decay for every Adam optimizer.
     ///
     /// # Arguments
     ///
@@ -1092,7 +1092,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Arguments
     ///
     /// * `max_grad_norm` - Optional maximum gradient norm applied before each update.
-    /// * `params` - AdamW parameters shared by the policy and value networks.
+    /// * `params` - Adam optimizer parameters with decoupled weight decay shared by the policy
+    ///   and value networks.
     pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: AdamWParams) -> Self {
         self.builder
             .update_optimizer_layout(|_| OnPolicyOptimizerLayout::Joint {
@@ -1107,9 +1108,11 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Arguments
     ///
     /// * `policy_max_grad_norm` - Optional maximum norm for policy gradients.
-    /// * `policy_params` - AdamW parameters for the policy network.
+    /// * `policy_params` - Adam optimizer parameters with decoupled weight decay for the policy
+    ///   network.
     /// * `value_max_grad_norm` - Optional maximum norm for value-network gradients.
-    /// * `value_params` - AdamW parameters for the value network.
+    /// * `value_params` - Adam optimizer parameters with decoupled weight decay for the value
+    ///   network.
     pub fn with_split(
         mut self,
         policy_max_grad_norm: Option<f32>,

@@ -20,7 +20,7 @@ use r2l_core::{
 
 use crate::{distributions::BurnPolicyKind, sequential::Sequential};
 
-// A series constraints that we need for the policy to work nicely with AdamW
+// Constraints needed for the policy to work with Adam optimization and decoupled weight decay.
 /// Trait alias-like bound for Burn policies used by on-policy learners.
 ///
 /// This captures the combination of Burn autodiff support and `r2l-core`
