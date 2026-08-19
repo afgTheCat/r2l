@@ -72,7 +72,7 @@ runs/pendulum
 ├── actor.safetensors
 ├── evaluations.csv
 ├── inference.yaml
-└── performance.csv
+└── training_timings.csv
 
 1 directory, 4 files
 ```
@@ -84,9 +84,7 @@ Using the inference artifacts and a new environment, you can create an
 
 ```rust,no_run
 # extern crate r2l;
-# extern crate r2l_gym;
-use r2l::InferenceRunner;
-use r2l_gym::GymEnv;
+use r2l::{GymEnv, InferenceRunner};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let env = GymEnv::new("Pendulum-v1", Some("human".to_owned()))?;

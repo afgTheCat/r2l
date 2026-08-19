@@ -31,6 +31,7 @@ use r2l_core::{
     },
     rng::set_seed,
 };
+#[cfg(feature = "gym")]
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{
     DirectSampler, DirectSamplerCore, SamplerExecutionMode, StagedSampler, StagedSamplerCore,
@@ -1642,6 +1643,7 @@ impl<E: Env> A2CBuilder<E> {
     }
 }
 
+#[cfg(feature = "gym")]
 impl PPOBuilder<GymEnv> {
     /// Creates a PPO builder for a Gymnasium environment.
     ///
@@ -1661,6 +1663,7 @@ impl PPOBuilder<GymEnv> {
     }
 }
 
+#[cfg(feature = "gym")]
 impl A2CBuilder<GymEnv> {
     /// Creates an A2C builder for a Gymnasium environment.
     ///

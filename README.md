@@ -10,8 +10,9 @@ With `gymnasium` installed, a complete training and inference workflow looks
 like this:
 
 ```rust,no_run
-use r2l::{InferenceRunner, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
-use r2l_gym::GymEnv;
+use r2l::{
+    GymEnv, InferenceRunner, PPOBuilder, TrainingArtifactsConfig, TrainingLimit,
+};
 
 const ENV_NAME: &str = "Pendulum-v1";
 const ARTIFACT_DIR: &str = "runs/pendulum";
@@ -83,6 +84,10 @@ training runs.
 **Current version: `v0.0.2`.** The project is in an early experimental phase.
 Expect missing features, frequent breaking changes, bugs, and everything in
 between.
+
+### `v0.0.3` – Gymnasium compatibility
+
+- Support non-zero `start` values in Gymnasium `Discrete` spaces.
 
 ### `v0.1.0` – Core Algorithm Coverage (SB3 parity)
 

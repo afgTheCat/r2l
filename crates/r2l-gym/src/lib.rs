@@ -1,10 +1,9 @@
-//! Gymnasium-backed environment adapters for `r2l`.
+//! Gymnasium-backed environment for `r2l`.
 //!
 //! This crate provides a small bridge between Python Gymnasium environments and
 //! the `r2l-core` [`Env`] / [`EnvBuilder`]
 //! traits. It is primarily intended for examples and high-level algorithm
-//! builders that want to train against standard Gym-style environments without
-//! implementing a native Rust environment wrapper first.
+//! builders that want to train against standard Gym environments.
 //!
 //! The main entry points are:
 //! - [`GymEnv`], a concrete environment wrapper around a Python Gymnasium env
@@ -12,11 +11,8 @@
 //!   implementation that constructs named Gymnasium environments
 //!
 //! The adapter maps Gymnasium `Discrete`, `Box`, `MultiDiscrete`,
-//! `MultiBinary`, `Tuple`, and `Dict` spaces into `r2l-core` space metadata.
-//! Observations are converted into flat [`VecTensor`] values. Discrete
-//! observations are one-hot encoded, while structured `Tuple` and `Dict`
-//! observations are flattened recursively.
-
+//! `MultiBinary`, `Tuple`, and `Dict` spaces to `r2l-core` spaces.
+//! Observations are converted into [`VecTensor`] values.
 mod parse;
 
 use parse::{parse_action, parse_gym_space, parse_obs};

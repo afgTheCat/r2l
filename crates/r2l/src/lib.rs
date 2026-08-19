@@ -12,11 +12,14 @@
 //! ```no_run
 //! use r2l::PPOBuilder;
 //!
-//! fn main() -> anyhow::Result<()> {
+//! # #[cfg(feature = "gym")]
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let mut algorithm = PPOBuilder::gym("Pendulum-v1", 4)?.build()?;
 //!     algorithm.train()?;
 //!     Ok(())
 //! }
+//! # #[cfg(not(feature = "gym"))]
+//! # fn main() {}
 //! ```
 //!
 //! [`PPOBuilder`] and [`A2CBuilder`] are the main entry points for
@@ -36,12 +39,20 @@
 //! - a Gymnasium adapter,
 //! - categorical, diagonal-Gaussian, multi-categorical, multi-Bernoulli, and
 //!   composite policies,
-//! - observation and reward normalization, evaluation and
-//! - persistence of trained policies and inference
+//! - observation and reward normalization,
+//! - evaluation and persistence of trained policies, and
+//! - inference from saved policies.
 //!
 //! ## Other crates
 //!
-//! r2l is the built on top of other crates.
+//! `r2l` is built on top of these lower-level crates:
+//!
+//! - [r2l-core](https://docs.rs/r2l-core) — core traits and data types.
+//! - [r2l-sampler](https://docs.rs/r2l-sampler) — rollout samplers.
+//! - [r2l-gym](https://docs.rs/r2l-gym) — Gymnasium-backed environments.
+//! - [r2l-burn](https://docs.rs/r2l-burn) — Burn-backed policy and learner implementations.
+//! - [r2l-candle](https://docs.rs/r2l-candle) — Candle-backed policy and learner implementations.
+//! - [r2l-agents](https://docs.rs/r2l-agents) — core RL algorithm implementations.
 
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
@@ -74,5 +85,6 @@ pub use r2l_core::{
     on_policy::algorithm::OnPolicyAlgorithm,
     tensor::VecTensor,
 };
+#[cfg(feature = "gym")]
 pub use r2l_gym::{GymEnv, GymEnvBuilder};
 pub use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
