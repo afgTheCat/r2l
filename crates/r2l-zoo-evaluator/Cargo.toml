@@ -8,7 +8,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-r2l = { workspace = true }
+r2l = { workspace = true, features = ["gym"] }
 r2l-core = { workspace = true }
 r2l-gym = { workspace = true }
 r2l-sampler = { workspace = true }
