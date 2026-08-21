@@ -1,0 +1,55 @@
+{
+  "taskGroups": [
+    {
+      "taskSpec": {
+        "runnables": [
+          {
+            "container": {
+              "imageUri": "",
+              "entrypoint": "/bin/sh",
+              "commands": [
+                "-c",
+                "printf '%s\\n' MountainCarContinuous-v0 CartPole-v1 Pendulum-v1 Acrobot-v1 MountainCar-v0 LunarLander-v3 LunarLanderContinuous-v3 popgym-BattleshipEasy-v0 | xargs -P 8 -n 1 r2l-zoo-evaluator evaluate burn"
+              ],
+              "volumes": [
+                "/mnt/disks/r2l-results:/opt/r2l/logs"
+              ]
+            }
+          }
+        ],
+        "computeResource": {
+          "cpuMilli": 8000,
+          "memoryMib": 14000
+        },
+        "environment": {
+          "variables": {
+            "OPENBLAS_NUM_THREADS": "1",
+            "RAYON_NUM_THREADS": "1"
+          }
+        },
+        "maxRetryCount": 2,
+        "volumes": [
+          {
+            "gcs": {
+              "remotePath": ""
+            },
+            "mountPath": "/mnt/disks/r2l-results"
+          }
+        ]
+      }
+    }
+  ],
+  "allocationPolicy": {
+    "instances": [
+      {
+        "policy": {
+          "machineType": "c4d-highcpu-8",
+          "provisioningModel": "SPOT"
+        }
+      }
+    ],
+    "serviceAccount": {
+      "email": ""
+    }
+  }
+}

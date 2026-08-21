@@ -19,7 +19,7 @@ use crate::zoo_parser::ZooConfig;
 const SEED: u64 = 0;
 const CONFIG_PATH: &str = "../../assets/ppo.yaml";
 const LOG_DIR: &str = "../../logs";
-const SMALL_ENVIRONMENTS: [&str; 10] = [
+const SMALL_ENVIRONMENTS: [&str; 9] = [
     "MountainCarContinuous-v0",
     "CartPole-v1",
     "Pendulum-v1",
@@ -28,7 +28,6 @@ const SMALL_ENVIRONMENTS: [&str; 10] = [
     "BipedalWalker-v3",
     "LunarLander-v3",
     "LunarLanderContinuous-v3",
-    "VizdoomBasic-MultiBinary-v1",
     "popgym-BattleshipEasy-v0",
 ];
 
@@ -102,7 +101,6 @@ fn evaluate(envs: Vec<String>, backend: Backend) -> anyhow::Result<()> {
     let zoo_config = ZooConfig::parse_rl_zoo_config(config_path);
     for env in envs {
         let registration_module = match env.as_str() {
-            "VizdoomBasic-MultiBinary-v1" => Some("vizdoom.gymnasium_wrapper"),
             "popgym-BattleshipEasy-v0" => Some("popgym"),
             _ => None,
         };

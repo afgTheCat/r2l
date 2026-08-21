@@ -1,0 +1,64 @@
+name: Zoo benchmark
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  AR_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+  RESULTS_BUCKET: ${{ vars.GCP_RESULTS_BUCKET }}
+  WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+  CI_SERVICE_ACCOUNT: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+  BATCH_SERVICE_ACCOUNT: ${{ vars.GCP_BATCH_SERVICE_ACCOUNT }}
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.CI_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/zoo/Dockerfile
+          push: true
+          tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/r2l-zoo:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - env:
+          IMAGE_URI: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/r2l-zoo:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          JOB_NAME="r2l-zoo-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          BUCKET_PATH="${RESULTS_BUCKET}/runs/${JOB_NAME}"
+
+          jq \
+            --arg image "$IMAGE_URI" \
+            --arg bucket "$BUCKET_PATH" \
+            --arg service_account "$BATCH_SERVICE_ACCOUNT" \
+            '.taskGroups[0].taskSpec.runnables[0].container.imageUri = $image
+             | .taskGroups[0].taskSpec.volumes[0].gcs.remotePath = $bucket
+             | .allocationPolicy.serviceAccount.email = $service_account' \
+            .github/batch/zoo-job.json > job.json
+
+          gcloud batch jobs submit "$JOB_NAME" \
+            --project "$PROJECT_ID" \
+            --location "$REGION" \
+            --config job.json
