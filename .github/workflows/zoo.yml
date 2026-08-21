@@ -2,6 +2,9 @@ name: Zoo benchmark
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - zoo-test-*
 
 permissions:
   contents: read
@@ -29,6 +32,23 @@ jobs:
           service_account: ${{ env.CI_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Prepare results bucket
+        run: |
+          if ! gcloud storage buckets describe "gs://${RESULTS_BUCKET}" --project "$PROJECT_ID" >/dev/null 2>&1; then
+            gcloud storage buckets create "gs://${RESULTS_BUCKET}" \
+              --project "$PROJECT_ID" \
+              --location "$REGION" \
+              --no-public-access-prevention \
+              --uniform-bucket-level-access
+          fi
+
+          gcloud storage buckets add-iam-policy-binding "gs://${RESULTS_BUCKET}" \
+            --member=allUsers \
+            --role=roles/storage.objectViewer
+          gcloud storage buckets add-iam-policy-binding "gs://${RESULTS_BUCKET}" \
+            --member="serviceAccount:${BATCH_SERVICE_ACCOUNT}" \
+            --role=roles/storage.objectUser
 
       - run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
