@@ -44,7 +44,10 @@
       {
         "policy": {
           "machineType": "c4d-highcpu-8",
-          "provisioningModel": "SPOT"
+          "provisioningModel": "SPOT",
+          "bootDisk": {
+            "type": "hyperdisk-balanced"
+          }
         }
       }
     ],
