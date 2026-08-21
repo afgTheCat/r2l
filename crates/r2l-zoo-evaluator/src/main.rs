@@ -19,7 +19,7 @@ use crate::zoo_parser::ZooConfig;
 const SEED: u64 = 0;
 const CONFIG_PATH: &str = "../../assets/ppo.yaml";
 const LOG_DIR: &str = "../../logs";
-const SMALL_ENVIRONMENTS: [&str; 10] = [
+const SMALL_ENVIRONMENTS: [&str; 9] = [
     "MountainCarContinuous-v0",
     "CartPole-v1",
     "Pendulum-v1",
@@ -28,7 +28,6 @@ const SMALL_ENVIRONMENTS: [&str; 10] = [
     "BipedalWalker-v3",
     "LunarLander-v3",
     "LunarLanderContinuous-v3",
-    "VizdoomBasic-MultiBinary-v1",
     "popgym-BattleshipEasy-v0",
 ];
 
@@ -103,6 +102,7 @@ fn evaluate(envs: Vec<String>, backend: Backend) -> anyhow::Result<()> {
     for env in envs {
         let import_module = |m| Python::with_gil(|py| py.import(m).map(|_| ()));
         match env.as_str() {
+            // we may expand this
             "VizdoomBasic-MultiBinary-v1" => import_module("vizdoom.gymnasium_wrapper")?,
             "popgym-BattleshipEasy-v0" => import_module("ppogym")?,
             _ => {}
