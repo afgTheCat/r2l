@@ -2,10 +2,10 @@
 
 For most applications, `r2l` is the main dependency. It provides complete PPO
 and A2C builders while the lower-level workspace crates define environments,
-samplers, agents, and backend integrations. This getting started guide will be
-solely using the `r2l` crate, which itself builds on lower-level crates. If the
-current setup does not satisfy you, the lower level hooks allow for a lot of
-hackability.
+samplers, agents, and backend integrations. This getting started guide primarily
+uses the `r2l` crate, which itself builds on lower-level crates. Implementing a
+custom environment also requires the error type from `r2l-core`. If the current
+setup does not satisfy you, the lower level hooks allow for a lot of hackability.
 
 ## Shortest setup
 
@@ -31,8 +31,8 @@ The `gym` feature requires Python 3.11 or newer and the `gymnasium` Python
 package. A Gymnasium environment id is passed to `GymEnvBuilder`, which maps
 supported Gymnasium spaces to `r2l` space descriptions. Discrete spaces
 currently require `start = 0`; non-zero `start` values are not supported. The
-builders support other environment types through a different construction,
-which will be introduced later on.
+builders support other environment types through a different construction, which
+will be introduced later on.
 
 ## Saving training artifacts
 
@@ -65,11 +65,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Under the hood, `r2l` will evaluate the performance of the policy by launching a
-clean environment after each training round, and remember the best performing
-policy. These evaluation settings can be customized as well, by setting
-`EvaluationSettings`. Once training is done the following new files are created
-in the artifacts folder:
+Under the hood, `r2l` evaluates the policy with dedicated environments that are
+reset and reused between evaluation passes, and remembers the best-performing
+policy. Evaluation runs after every rollout by default. Its frequency and other
+settings can be customized with `EvaluationSettings`. Once training is done, the
+following new files are created in the artifacts folder:
 
 ```sh
 $ tree runs/pendulum
@@ -101,9 +101,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-The inference configuration describes only the policy shape and observation
-normalization settings. It does not contain information about how the policy was
-trained.
+The inference configuration records the backend, policy architecture settings,
+and observation normalization mode needed to rebuild the policy. It does not
+contain training hyperparameters such as the learning rate or discount factor.
 
 # Environments
 
@@ -121,11 +121,11 @@ runs.
 {{#include ../../crates/r2l-core/src/env/mod.rs:env_builder}}
 ```
 
-A closure or function returning `anyhow::Result<E>` automatically implements
-`EnvBuilder`.
+A closure or function returning `r2l_core::error::Result<E>` automatically
+implements `EnvBuilder`.
 
 ```rust,ignore
-let env_builder = || Ok(MyEnv);
+let env_builder = || -> r2l_core::error::Result<MyEnv> { Ok(MyEnv) };
 let ppo_builder = PPOBuilder::new(env_builder, 10)?;
 let ppo = ppo_builder.build()?;
 ```
@@ -171,16 +171,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Gymnasium calls still execute under Python's interpreter lock, so threaded
 execution should not be assumed to improve Python-environment throughput.
 
-Observation normalization is enabled with
-`with_observation_normalizer(Some(clip))`; `None` disables it. Step-bounded
-rollouts can also normalize discounted rewards with
+`with_observation_normalizer(Some(clip))` switches to staged sampling and enables
+observation normalization. Passing `None` switches to staged sampling without a
+normalizer. Step-bounded rollouts can also normalize discounted rewards with
 `with_reward_normalizer(gamma, clip_reward)`.
 
 ## Training schedules
 
 `TrainingLimit::rollouts(n)` stops after `n` rollout collections.
-`TrainingLimit::steps(n)` stops after at least `n` sampled
-environment steps across all workers.
+`TrainingLimit::steps(n)` stops after at least `n` sampled environment steps
+across all workers.
 
 `LearningRateSchedule::Constant(rate)` keeps the configured rate fixed.
 `LearningRateSchedule::Linear(rate)` decays it from `rate` to zero over the

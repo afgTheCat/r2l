@@ -877,7 +877,7 @@ struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
 /// builders can be stored in and passed to user functions.
 ///
 /// Both entry points default to Candle on the CPU, multi-threaded direct
-/// sampling with 1,024 steps per environment, and a training limit of 300
+/// sampling with 1,024 steps per environment, and a training limit of 50
 /// rollouts. Shared learning defaults include `gamma = 0.98`, `lambda = 0.8`,
 /// minibatches of 64 samples, and a joint Adam optimizer with decoupled weight
 /// decay and a learning rate of `3e-4`.
