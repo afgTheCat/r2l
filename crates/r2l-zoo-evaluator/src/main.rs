@@ -101,13 +101,11 @@ fn evaluate(envs: Vec<String>, backend: Backend) -> anyhow::Result<()> {
     let config_path = crate_dir.join(CONFIG_PATH);
     let zoo_config = ZooConfig::parse_rl_zoo_config(&config_path)?;
     for env in envs {
-        let registration_module = match env.as_str() {
-            "VizdoomBasic-MultiBinary-v1" => Some("vizdoom.gymnasium_wrapper"),
-            "popgym-BattleshipEasy-v0" => Some("popgym"),
-            _ => None,
-        };
-        if let Some(module) = registration_module {
-            Python::with_gil(|py| py.import(module).map(|_| ()))?;
+        let import_module = |m| Python::with_gil(|py| py.import(m).map(|_| ()));
+        match env.as_str() {
+            "VizdoomBasic-MultiBinary-v1" => import_module("vizdoom.gymnasium_wrapper")?,
+            "popgym-BattleshipEasy-v0" => import_module("ppogym")?,
+            _ => {}
         }
         let Some(env_config) = zoo_config.supported_envs.get(&env) else {
             if zoo_config.unsupported_envs.contains_key(&env) {

@@ -481,6 +481,36 @@ impl<E: Env> Builder<E> {
         self.optimizer_layout = update(self.optimizer_layout.clone());
     }
 
+    fn validate_evaluation_schedule(&self) -> Result<(), Error> {
+        let Some(config) = &self.training_artifacts else {
+            return Ok(());
+        };
+        if !config.needs_evaluator() {
+            return Ok(());
+        }
+        let rollouts_per_evaluation = config.evaluation_settings.rollouts_per_evaluation;
+        match self.total_rollouts() {
+            Some(total_rollouts) if rollouts_per_evaluation > total_rollouts => {
+                Err(Error::InvalidState {
+                    operation: "configuring evaluation".into(),
+                    details: format!(
+                        "evaluation frequency ({rollouts_per_evaluation} rollouts) exceeds the \
+                     configured training length ({total_rollouts} rollouts)"
+                    ),
+                })
+            }
+            Some(_) => Ok(()),
+            None if rollouts_per_evaluation == 1 => Ok(()),
+            None => Err(Error::InvalidState {
+                operation: "configuring evaluation".into(),
+                details: format!(
+                    "evaluation every {rollouts_per_evaluation} rollouts cannot be guaranteed because \
+                 the configured training schedule has no statically known rollout count"
+                ),
+            }),
+        }
+    }
+
     fn build_candle_learner(&self, device: &Device) -> Result<CandlePolicyValueLearner, Error> {
         let observation_size = self.env_desription.observation_size();
         let (policy, policy_varmap) = self.policy_config.build_candle_with_varmap(
@@ -1234,11 +1264,13 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// # Errors
     ///
-    /// Returns an error if the configured training algorithm cannot be constructed.
+    /// Returns an error if the evaluation schedule cannot run before training ends or the
+    /// configured training algorithm cannot be constructed.
     #[allow(clippy::type_complexity)]
     pub fn build(
         mut self,
     ) -> Result<OnPolicyAlgorithm<A, S, OnPolicyTrainingHooks<A, S, E>>, Error> {
+        self.builder.validate_evaluation_schedule()?;
         if let Some(seed) = self.builder.seed {
             set_seed(seed);
         }
