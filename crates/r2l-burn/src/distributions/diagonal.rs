@@ -1,12 +1,14 @@
 use std::f32;
 
-use anyhow::Result;
 use burn::module::{Module, Param};
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor};
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
-use r2l_core::models::{ActivationFunction, Actor, Policy, ToSafetensors};
+use r2l_core::{
+    error::{Error, InvalidParameterError, Result},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
+};
 
 use crate::sequential::Sequential;
 
@@ -24,13 +26,23 @@ pub struct DiagGaussianDistribution<B: Backend> {
 impl<B: Backend> DiagGaussianDistribution<B> {
     /// Builds a diagonal-Gaussian policy network.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `mu_layers` is empty.
-    #[must_use]
-    pub fn build(mu_layers: &[usize], activation: ActivationFunction, log_std_init: f32) -> Self {
+    /// Returns an error if `mu_layers` is empty or the log-standard-deviation tensor cannot be
+    /// created.
+    pub fn build(
+        mu_layers: &[usize],
+        activation: ActivationFunction,
+        log_std_init: f32,
+    ) -> Result<Self> {
         let device = Default::default();
-        let action_size = *mu_layers.last().unwrap();
+        let action_size = mu_layers.last().copied().ok_or_else(|| {
+            Error::InvalidParameter(Box::new(InvalidParameterError::InvalidValue {
+                name: "mu_layers".into(),
+                expected: "at least one layer".into(),
+                value: "[]".into(),
+            }))
+        })?;
         let mu_net: Sequential<B> = Sequential::build(mu_layers, activation);
         let log_std = Param::from_data(
             TensorData::new(
@@ -39,21 +51,19 @@ impl<B: Backend> DiagGaussianDistribution<B> {
             ),
             &device,
         );
-        Self { mu_net, log_std }
+        Ok(Self { mu_net, log_std })
     }
 
     /// Builds a diagonal-Guassian policy using a safetensor store
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the stored network dimensions or parameters are invalid.
-    pub fn from_store(store: &mut SafetensorsStore) -> Self {
+    /// Returns an error if the stored network dimensions or parameters are invalid.
+    pub fn from_store(store: &mut SafetensorsStore) -> Result<Self> {
         let mu_layers = Sequential::<B>::dims_from_store("mu_net", store);
-        let mut distribution = Self::build(&mu_layers, ActivationFunction::default(), 0.0);
-        distribution
-            .load_from(store)
-            .expect("failed to load DiagGaussianDistribution from store");
-        distribution
+        let mut distribution = Self::build(&mu_layers, ActivationFunction::default(), 0.0)?;
+        distribution.load_from(store).map_err(Error::wrap)?;
+        Ok(distribution)
     }
 }
 
@@ -77,10 +87,10 @@ impl<B: Backend> Actor for DiagGaussianDistribution<B> {
 }
 
 impl<B: Backend> ToSafetensors for DiagGaussianDistribution<B> {
-    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self)?;
-        Ok(store.get_bytes()?)
+        store.collect_from(self).map_err(Error::wrap)?;
+        store.get_bytes().map_err(Error::wrap)
     }
 }
 
@@ -88,6 +98,8 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
     // FIXME: we probably want a differnt type states, actions etc. Alternatively we should have a
     // different trait, as log_probs are not really used during inference.
     fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
+        debug_assert!(!states.is_empty());
+        debug_assert_eq!(states.len(), actions.len());
         let device = Default::default();
         let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
@@ -123,8 +135,8 @@ impl<B: Backend> Policy for DiagGaussianDistribution<B> {
         Ok(entropy_per_dim.sum_dim(1).squeeze_dims(&[1]))
     }
 
-    fn std(&self) -> Result<f32> {
+    fn std(&self) -> Result<Option<f32>> {
         let std = self.log_std.val().exp().mean().into_scalar().to_f32();
-        Ok(std)
+        Ok(Some(std))
     }
 }

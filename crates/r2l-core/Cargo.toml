@@ -12,11 +12,11 @@ rand = { workspace = true }
 rayon = "1.10.0"
 derive_more = { version = "2.0.1", features = ["full"] }
 either = {workspace = true}
-anyhow = { workspace = true }
 candle-core = { workspace = true, optional = true }
 burn = { workspace = true, optional = true }
 itertools = { workspace = true }
 serde = { workspace = true }
+thiserror = { workspace = true }
 
 [features]
 candle = ["dep:candle-core"]

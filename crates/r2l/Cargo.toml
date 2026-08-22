@@ -8,7 +8,7 @@ license.workspace = true
 readme = "README.md"
 
 [dependencies]
-r2l-gym = { workspace = true }
+r2l-gym = { workspace = true, optional = true }
 r2l-core = { workspace = true }
 r2l-agents = { workspace = true }
 r2l-sampler = { workspace = true }
@@ -18,13 +18,14 @@ burn = { workspace = true }
 r2l-candle = { workspace = true }
 r2l-burn = { workspace = true }
 rand = "0.10.0"
-anyhow = { workspace = true }
 derive_more = "2.0.1"
 bimodal-array = { workspace = true }
 serde = { workspace = true }
 yaml_serde = { workspace = true } 
 
 [features]
+default = []
+gym = ["dep:r2l-gym"]
 test-utils = []
 cuda = [
   "r2l-core/cuda",
@@ -32,6 +33,9 @@ cuda = [
   "candle-core/cuda",
   "candle-nn/cuda",
 ]
+
+[package.metadata.docs.rs]
+features = ["gym"]
 
 [dev-dependencies]
 r2l = { path = ".", features = ["test-utils"] }

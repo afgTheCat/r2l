@@ -12,6 +12,7 @@ use r2l_core::buffers::buffer::TrajectoryView;
 use r2l_core::env::Env;
 use r2l_core::env::EnvBuilder;
 use r2l_core::env::EnvBuilderType;
+use r2l_core::error::Result;
 use r2l_core::models::Actor;
 use r2l_core::on_policy::algorithm::Sampler;
 use r2l_core::rng::{sample_u64, set_seed};
@@ -57,8 +58,12 @@ impl<E: Env> DirectSamplerCore<E> {
     }
 
     /// Resets every worker environment and clears its active episode state.
-    pub fn reset_all_envs(&mut self) {
-        self.worker_pool.reset_all_envs();
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an environment cannot be reset or a worker is interrupted.
+    pub fn reset_all_envs(&mut self) -> Result<()> {
+        self.worker_pool.reset_all_envs()
     }
 
     /// Builds sampler state from an environment collection and execution mode.
@@ -140,42 +145,51 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
     }
 
     /// Builds a homogeneous sampler from a shared environment builder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `num_envs` is zero.
     pub fn build_from_env_builder(
         env_builder: Arc<dyn EnvBuilder<Env = E>>,
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
-    ) -> Self
+    ) -> Result<Self>
     where
         E: 'static,
     {
         let env_builder = move || env_builder.build_env();
-        Self::build(
-            EnvBuilderType::homogeneous(env_builder, num_envs),
+        Ok(Self::build(
+            EnvBuilderType::homogeneous(env_builder, num_envs)?,
             hook,
             execution_mode,
-        )
+        ))
     }
 }
 
 impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
     type Tensor = E::Tensor;
 
-    fn reset_all_envs(&mut self) {
-        self.core.reset_all_envs();
+    fn reset_all_envs(&mut self) -> Result<()> {
+        self.core.reset_all_envs()?;
         self.hook.reset();
+        Ok(())
     }
 
-    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        actor: A,
+    ) -> Result<()> {
         self.core.worker_pool.clear_buffers();
         self.core.worker_pool.set_actor(&actor);
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {
-                SamplerHookResult::Bound(bound) => self.core.worker_pool.collect(bound),
+                SamplerHookResult::Bound(bound) => self.core.worker_pool.collect(bound)?,
                 SamplerHookResult::Stop => break,
             }
         }
+        Ok(())
     }
 
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {

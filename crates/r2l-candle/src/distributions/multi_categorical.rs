@@ -1,12 +1,12 @@
-use anyhow::{Result, bail};
-use candle_core::{DType, Device, Error, Tensor};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::{
     Module, VarBuilder,
     ops::{log_softmax, softmax},
 };
 use r2l_core::{
     env::action_ranges,
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
+    error::{Error, Result, TensorError},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistribution;
@@ -69,10 +69,6 @@ impl Actor for MultiCategoricalDistribution {
     type Tensor = Tensor;
 
     fn action(&self, observation: Tensor) -> Result<Tensor> {
-        assert!(
-            observation.rank() == 1,
-            "Observation should be a flattened tensor"
-        );
         let observation = observation.unsqueeze(0)?;
         let logits = self.logits.forward(&observation)?;
         let logits = logits.squeeze(0)?;
@@ -97,7 +93,9 @@ impl Actor for MultiCategoricalDistribution {
                 .enumerate()
                 .max_by(|(_, left), (_, right)| left.total_cmp(right))
                 .map(|(index, _)| index)
-                .unwrap();
+                .ok_or_else(|| TensorError::EmptyInput {
+                    operation: "select multi-categorical modal action".into(),
+                })?;
             actions.push(action as f32);
         }
         Ok(Tensor::from_vec(actions, self.nvec.len(), &self.device)?.detach())
@@ -106,16 +104,14 @@ impl Actor for MultiCategoricalDistribution {
 
 impl ToSafetensors for MultiCategoricalDistribution {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
-        let metadata = PolicyMetadata {
-            activation: self.logits.activation(),
-        }
-        .to_safetensors_metadata();
-        Ok(st_serialize(self.named_tensors("policy"), Some(metadata))?)
+        st_serialize(self.named_tensors("policy"), None).map_err(Error::wrap)
     }
 }
 
 impl Policy for MultiCategoricalDistribution {
     fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!states.is_empty());
+        debug_assert_eq!(states.len(), actions.len());
         let states = Tensor::stack(states, 0)?;
         let actions = Tensor::stack(actions, 0)?;
         let logits = self.logits.forward(&states)?;
@@ -130,6 +126,7 @@ impl Policy for MultiCategoricalDistribution {
     }
 
     fn entropy(&self, states: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!states.is_empty());
         let states = Tensor::stack(states, 0)?;
         let logits = self.logits.forward(&states)?;
         let mut entropies = Vec::new();
@@ -143,7 +140,7 @@ impl Policy for MultiCategoricalDistribution {
         Ok(entropy_per_state.mean_all()?)
     }
 
-    fn std(&self) -> Result<f32> {
-        bail!("standard deviation is not defined for multi-categorical distributions")
+    fn std(&self) -> Result<Option<f32>> {
+        Ok(None)
     }
 }

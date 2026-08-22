@@ -3,7 +3,6 @@ members = [
   "crates/r2l",
   "crates/r2l-core",
   "crates/r2l-gym",
-  # "crates/r2l-macros",
   "crates/r2l-examples",
   "crates/r2l-agents",
   "crates/r2l-candle",
@@ -36,13 +35,14 @@ safetensors = { version = "0.8.0" }
 serde = { version = "1.0.229", features = ["derive"] }
 yaml_serde = "0.10.4"
 itertools = "0.15.0"
+thiserror = { version = "2.0.20" } 
 
 [workspace.package]
 version = "0.0.2"
 edition = "2024"
 description = "A rust reinforcement learning library"
 repository = "https://github.com/afgTheCat/r2l"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

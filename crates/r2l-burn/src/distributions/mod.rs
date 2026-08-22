@@ -9,6 +9,7 @@ use burn::{Tensor, module::Module, prelude::Backend};
 use burn_store::{ModuleSnapshot, SafetensorsStore};
 use r2l_core::{
     env::Space,
+    error::{Error, InvalidParameterError, Result},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
     tensor::R2lTensor,
 };
@@ -28,8 +29,6 @@ pub mod composite;
 pub mod diagonal;
 /// Multi-categorical policy distribution for multi-discrete action spaces.
 pub mod multi_categorical;
-/// Recurrent categorical policy distribution for discrete action spaces.
-pub mod recurrent_categorical;
 
 /// Erased Burn policy type covering the supported action-space variants.
 ///
@@ -56,22 +55,21 @@ impl<B: Backend> BurnPolicyKind<B> {
     /// # Errors
     ///
     /// Returns an error if the stored policy parameters cannot be loaded.
-    pub fn load_from_bytes(mut self, bytes: Vec<u8>) -> anyhow::Result<Self> {
+    pub fn load_from_bytes(mut self, bytes: Vec<u8>) -> Result<Self> {
         let mut store = SafetensorsStore::from_bytes(Some(bytes));
         match &mut self {
-            Self::Categorical(policy) => policy.load_from(&mut store)?,
-            Self::Diag(policy) => policy.load_from(&mut store)?,
-            Self::MultiCategorical(policy) => policy.load_from(&mut store)?,
-            Self::MultiBernoulli(policy) => policy.load_from(&mut store)?,
-            Self::Composite(policy) => policy.load_from(&mut store)?,
+            Self::Categorical(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
+            Self::Diag(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
+            Self::MultiCategorical(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
+            Self::MultiBernoulli(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
+            Self::Composite(policy) => policy.load_from(&mut store).map_err(Error::wrap)?,
         };
         Ok(self)
     }
 
-    fn categorical(policy_layers: &[usize], activation: ActivationFunction) -> Self {
-        BurnPolicyKind::Categorical(CategoricalDistribution::<B>::build(
-            policy_layers,
-            activation,
+    fn categorical(policy_layers: &[usize], activation: ActivationFunction) -> Result<Self> {
+        Ok(BurnPolicyKind::Categorical(
+            CategoricalDistribution::<B>::build(policy_layers, activation)?,
         ))
     }
 
@@ -79,12 +77,12 @@ impl<B: Backend> BurnPolicyKind<B> {
         policy_layers: &[usize],
         activation: ActivationFunction,
         log_std_init: f32,
-    ) -> Self {
-        BurnPolicyKind::Diag(DiagGaussianDistribution::build(
+    ) -> Result<Self> {
+        Ok(BurnPolicyKind::Diag(DiagGaussianDistribution::build(
             policy_layers,
             activation,
             log_std_init,
-        ))
+        )?))
     }
 
     fn multi_categorical(
@@ -114,17 +112,30 @@ impl<B: Backend> BurnPolicyKind<B> {
     }
 
     /// Builds the appropriate Burn policy for the given action space.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the layer configuration or action space is unsupported.
     pub fn build<T: R2lTensor>(
         action_space: Space<T>,
         policy_layers: &[usize],
         activation: ActivationFunction,
         log_std_init: f32,
-    ) -> Self {
-        match action_space {
-            Space::Discrete(_) => Self::categorical(policy_layers, activation),
-            Space::Box { .. } => Self::box_policy(policy_layers, activation, log_std_init),
+    ) -> Result<Self> {
+        if policy_layers.len() < 2 {
+            return Err(Error::InvalidParameter(Box::new(
+                InvalidParameterError::InvalidValue {
+                    name: "policy_layers".into(),
+                    expected: "at least an input and output layer".into(),
+                    value: format!("{policy_layers:?}"),
+                },
+            )));
+        }
+        Ok(match action_space {
+            Space::Discrete(_) => Self::categorical(policy_layers, activation)?,
+            Space::Box { .. } => Self::box_policy(policy_layers, activation, log_std_init)?,
             Space::MultiDiscrete { nvec, .. } => {
-                let nvec = nvec.to_vec().into_iter().map(|n| n as usize).collect();
+                let nvec = nvec.to_vec()?.into_iter().map(|n| n as usize).collect();
                 Self::multi_categorical(policy_layers, nvec, activation)
             }
             Space::MultiBinary { shape } => {
@@ -136,21 +147,21 @@ impl<B: Backend> BurnPolicyKind<B> {
                 policy_layers,
                 activation,
                 log_std_init,
-            )),
+            )?),
             Space::Dict(spaces) => BurnPolicyKind::Composite(CompositeDistribution::build(
                 spaces.into_values().collect(),
                 policy_layers,
                 activation,
                 log_std_init,
-            )),
-        }
+            )?),
+        })
     }
 }
 
 impl<B: Backend> Actor for BurnPolicyKind<B> {
     type Tensor = Tensor<B, 1>;
 
-    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.action(observation),
             Self::Diag(diag) => diag.action(observation),
@@ -160,7 +171,7 @@ impl<B: Backend> Actor for BurnPolicyKind<B> {
         }
     }
 
-    fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.mode_action(observation),
             Self::Diag(diag) => diag.mode_action(observation),
@@ -172,7 +183,7 @@ impl<B: Backend> Actor for BurnPolicyKind<B> {
 }
 
 impl<B: Backend> ToSafetensors for BurnPolicyKind<B> {
-    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         match self {
             Self::Categorical(cat) => cat.to_safetensors(),
             Self::Diag(diag) => diag.to_safetensors(),
@@ -188,7 +199,7 @@ impl<B: Backend> Policy for BurnPolicyKind<B> {
         &self,
         observations: &[Self::Tensor],
         actions: &[Self::Tensor],
-    ) -> anyhow::Result<Self::Tensor> {
+    ) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.log_probs(observations, actions),
             Self::Diag(diag) => diag.log_probs(observations, actions),
@@ -198,7 +209,7 @@ impl<B: Backend> Policy for BurnPolicyKind<B> {
         }
     }
 
-    fn std(&self) -> anyhow::Result<f32> {
+    fn std(&self) -> Result<Option<f32>> {
         match self {
             Self::Categorical(cat) => cat.std(),
             Self::Diag(diag) => diag.std(),
@@ -208,7 +219,7 @@ impl<B: Backend> Policy for BurnPolicyKind<B> {
         }
     }
 
-    fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+    fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor> {
         match self {
             Self::Categorical(cat) => cat.entropy(states),
             Self::Diag(diag) => diag.entropy(states),

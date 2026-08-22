@@ -3,6 +3,7 @@ use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{Memory, MultiMemory},
     env::{Env, EnvBuilder, Snapshot},
+    error::{Error, Result},
     models::Actor,
     rng::{sample_u64, set_seed},
     tensor::R2lTensor,
@@ -16,9 +17,9 @@ pub enum WorkerCommand<T: R2lTensor> {
 }
 
 pub enum WorkerResult<T: R2lTensor> {
-    Stepped(Memory<T>),
+    Stepped(Result<Memory<T>>),
     PolicySet,
-    EnvReset,
+    EnvReset(Result<()>),
     Stopped,
 }
 
@@ -32,31 +33,34 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
         Self { actor: None, env }
     }
 
-    fn step(&mut self, handle: &mut ElementHandle<T>) -> Memory<T> {
+    fn step(&mut self, handle: &mut ElementHandle<T>) -> Result<Memory<T>> {
         let Some(policy) = &mut self.actor else {
-            todo!()
+            return Err(Error::InvalidState {
+                operation: "step staged sampler worker".into(),
+                details: "no policy has been installed".into(),
+            });
         };
         let state = handle.lock().unwrap().clone();
-        let action = policy.action(state.clone()).unwrap();
+        let action = policy.action(state.clone())?;
         let Snapshot {
             state: mut next_state,
             reward,
             terminated,
             truncated,
-        } = self.env.step(action.clone()).unwrap();
+        } = self.env.step(action.clone())?;
         let done = terminated || truncated;
         if done {
-            next_state = self.env.reset(sample_u64()).unwrap();
+            next_state = self.env.reset(sample_u64())?;
         }
         *handle.lock().unwrap() = next_state.clone();
-        Memory {
+        Ok(Memory {
             state,
             next_state,
             action,
             reward,
             terminated,
             truncated,
-        }
+        })
     }
 }
 
@@ -73,7 +77,7 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
         }
     }
 
-    fn step(&mut self) -> Memory<T> {
+    fn step(&mut self) -> Result<Memory<T>> {
         self.worker.step(&mut self.handle)
     }
 
@@ -81,9 +85,10 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorker<T, E> {
         self.worker.actor = Some(policy);
     }
 
-    fn reset(&mut self) {
-        let state = self.worker.env.reset(sample_u64()).unwrap();
+    fn reset(&mut self) -> Result<()> {
+        let state = self.worker.env.reset(sample_u64())?;
         *self.handle.lock().unwrap() = state;
+        Ok(())
     }
 }
 
@@ -100,20 +105,20 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
         Self { workers }
     }
 
-    fn step(&mut self) -> MultiMemory<T> {
+    fn step(&mut self) -> Result<MultiMemory<T>> {
         let mut multi_memory = MultiMemory::with_capacity(self.workers.len());
         for worker in &mut self.workers {
-            multi_memory.push_memory(worker.step());
+            multi_memory.push_memory(worker.step()?);
         }
-        multi_memory
+        Ok(multi_memory)
     }
 
-    fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<T> {
+    fn step_indexed(&mut self, indices: &[usize]) -> Result<MultiMemory<T>> {
         let mut multi_memory = MultiMemory::with_capacity(indices.len());
         for idx in indices {
-            multi_memory.push_memory(self.workers[*idx].step());
+            multi_memory.push_memory(self.workers[*idx].step()?);
         }
-        multi_memory
+        Ok(multi_memory)
     }
 
     fn set_policy<A: Actor<Tensor = T> + Clone>(&mut self, policy: &A) {
@@ -122,10 +127,11 @@ impl<T: R2lTensor, E: Env<Tensor = T>> VecWorkers<T, E> {
         }
     }
 
-    fn reset_all(&mut self) {
+    fn reset_all(&mut self) -> Result<()> {
         for worker in &mut self.workers {
-            worker.reset();
+            worker.reset()?;
         }
+        Ok(())
     }
 }
 
@@ -156,17 +162,18 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
         while let Ok(command) = self.rx.recv() {
             match command {
                 WorkerCommand::Step => {
-                    let memory = self.worker.step(&mut handle);
-                    self.tx.send(WorkerResult::Stepped(memory)).unwrap();
+                    let result = self.worker.step(&mut handle);
+                    self.tx.send(WorkerResult::Stepped(result)).unwrap();
                 }
                 WorkerCommand::SetPolicy(policy) => {
                     self.worker.actor = Some(policy);
                     self.tx.send(WorkerResult::PolicySet).unwrap();
                 }
                 WorkerCommand::ResetEnv(seed) => {
-                    let state = self.worker.env.reset(seed).unwrap();
-                    *handle.lock().unwrap() = state;
-                    self.tx.send(WorkerResult::EnvReset).unwrap();
+                    let result = self.worker.env.reset(seed).map(|state| {
+                        *handle.lock().unwrap() = state;
+                    });
+                    self.tx.send(WorkerResult::EnvReset(result)).unwrap();
                 }
                 WorkerCommand::Stop => {
                     self.tx.send(WorkerResult::Stopped).unwrap();
@@ -243,32 +250,50 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         Self { worker_handles }
     }
 
-    fn step(&self) -> MultiMemory<T> {
+    fn step(&self) -> Result<MultiMemory<T>> {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::Step);
         }
         let mut multi_memory = MultiMemory::with_capacity(self.worker_handles.len());
+        let mut error = None;
         for worker_handle in &self.worker_handles {
-            let WorkerResult::Stepped(memory) = worker_handle.recv() else {
+            let WorkerResult::Stepped(result) = worker_handle.recv() else {
                 unreachable!()
             };
-            multi_memory.push_memory(memory);
+            match result {
+                Ok(memory) => multi_memory.push_memory(memory),
+                Err(worker_error) => {
+                    error.get_or_insert(worker_error);
+                }
+            }
         }
-        multi_memory
+        match error {
+            Some(error) => Err(error),
+            None => Ok(multi_memory),
+        }
     }
 
-    fn step_indexed(&self, indices: &[usize]) -> MultiMemory<T> {
+    fn step_indexed(&self, indices: &[usize]) -> Result<MultiMemory<T>> {
         for idx in indices {
             self.worker_handles[*idx].send(WorkerCommand::Step);
         }
         let mut multi_memory = MultiMemory::with_capacity(indices.len());
+        let mut error = None;
         for idx in indices {
-            let WorkerResult::Stepped(memory) = self.worker_handles[*idx].recv() else {
+            let WorkerResult::Stepped(result) = self.worker_handles[*idx].recv() else {
                 unreachable!()
             };
-            multi_memory.push_memory(memory);
+            match result {
+                Ok(memory) => multi_memory.push_memory(memory),
+                Err(worker_error) => {
+                    error.get_or_insert(worker_error);
+                }
+            }
         }
-        multi_memory
+        match error {
+            Some(error) => Err(error),
+            None => Ok(multi_memory),
+        }
     }
 
     fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: &A) {
@@ -282,15 +307,20 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         }
     }
 
-    fn reset_all(&self) {
+    fn reset_all(&self) -> Result<()> {
         for worker_handle in &self.worker_handles {
             worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
         }
+        let mut result = Ok(());
         for worker_handle in &self.worker_handles {
-            let WorkerResult::EnvReset = worker_handle.recv() else {
+            let WorkerResult::EnvReset(worker_result) = worker_handle.recv() else {
                 unreachable!()
             };
+            if result.is_ok() {
+                result = worker_result;
+            }
         }
+        result
     }
 
     fn shutdown(&self) {
@@ -311,14 +341,14 @@ pub enum WorkerPool<E: Env<Tensor: R2lTensor>> {
 }
 
 impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
-    pub fn step_indexed(&mut self, indices: &[usize]) -> MultiMemory<E::Tensor> {
+    pub fn step_indexed(&mut self, indices: &[usize]) -> Result<MultiMemory<E::Tensor>> {
         match self {
             Self::Vec(workers) => workers.step_indexed(indices),
             Self::Thread(workers) => workers.step_indexed(indices),
         }
     }
 
-    pub fn step(&mut self) -> MultiMemory<E::Tensor> {
+    pub fn step(&mut self) -> Result<MultiMemory<E::Tensor>> {
         match self {
             Self::Vec(workers) => workers.step(),
             Self::Thread(workers) => workers.step(),
@@ -332,7 +362,7 @@ impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
         }
     }
 
-    pub fn reset_all(&mut self) {
+    pub fn reset_all(&mut self) -> Result<()> {
         match self {
             Self::Vec(workers) => workers.reset_all(),
             Self::Thread(workers) => workers.reset_all(),

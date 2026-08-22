@@ -6,6 +6,7 @@ description.workspace = true
 repository.workspace = true
 license.workspace = true
 readme = "README.md"
+publish = false
 
 [dependencies]
 
@@ -19,7 +20,7 @@ egui_plot = "0.33.0"
 r2l-core = { workspace = true }
 r2l-gym = { workspace = true }
 r2l-agents = { workspace = true }
-r2l = { workspace = true }
+r2l = { workspace = true, features = ["gym"] }
 r2l-candle = { workspace = true }
 r2l-burn = { workspace = true }
 candle-core = { workspace = true }

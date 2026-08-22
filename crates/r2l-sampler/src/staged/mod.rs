@@ -7,6 +7,7 @@ use itertools::Itertools;
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
     env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
+    error::Result,
     models::Actor,
     on_policy::algorithm::Sampler,
     rng::sample_u64,
@@ -52,12 +53,15 @@ impl<E: Env> StagedSamplerCore<E> {
     /// # Panics
     ///
     /// Panics if an environment cannot be built or reset.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the initial observations cannot be normalized.
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: &EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Self {
+    ) -> Result<Self> {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
         let (mut last_states, pool) = match execution_mode {
@@ -68,14 +72,14 @@ impl<E: Env> StagedSamplerCore<E> {
         };
         if let Some(obs_normalizer) = &obs_normalizer {
             let mut last_states = last_states.lock().unwrap();
-            obs_normalizer.apply_slice_in_place(&mut last_states);
+            obs_normalizer.apply_slice_in_place(&mut last_states)?;
         }
-        Self {
+        Ok(Self {
             pool,
             obs_normalizer,
             last_states,
             buffers,
-        }
+        })
     }
 
     fn build_vec_workers<EB: EnvBuilder<Env = E>>(
@@ -116,11 +120,15 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     /// Collects a bounded rollout from the worker pool.
-    pub fn collect(&mut self, bound: RolloutMode) {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an environment step, normalization, or worker operation fails.
+    pub fn collect(&mut self, bound: RolloutMode) -> Result<()> {
         match bound {
             RolloutMode::StepBound { n_steps } => {
                 for _ in 0..n_steps {
-                    self.step();
+                    self.step()?;
                 }
             }
             RolloutMode::EpisodeBound { n_episodes } => {
@@ -133,7 +141,7 @@ impl<E: Env> StagedSamplerCore<E> {
                     if worker_idxs.is_empty() {
                         break;
                     }
-                    let terminations = self.step_indexed(&worker_idxs);
+                    let terminations = self.step_indexed(&worker_idxs)?;
                     for (idx, terminated) in worker_idxs.into_iter().zip(terminations) {
                         if terminated {
                             episode_counts[idx] += 1;
@@ -142,17 +150,18 @@ impl<E: Env> StagedSamplerCore<E> {
                 }
             }
         }
+        Ok(())
     }
 
-    fn step_indexed(&mut self, indices: &[usize]) -> Vec<bool> {
-        let multi_memory = self.pool.step_indexed(indices);
+    fn step_indexed(&mut self, indices: &[usize]) -> Result<Vec<bool>> {
+        let multi_memory = self.pool.step_indexed(indices)?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
             let mut next_states = indices
                 .iter()
                 .map(|idx| last_states[*idx].clone())
                 .collect::<Vec<_>>();
-            obs_normalizer.apply_slice_in_place(&mut next_states);
+            obs_normalizer.apply_slice_in_place(&mut next_states)?;
             for (idx, next_state) in indices.iter().zip(next_states) {
                 last_states[*idx] = next_state;
             }
@@ -170,20 +179,21 @@ impl<E: Env> StagedSamplerCore<E> {
         for (idx, memory) in indices.iter().zip(memories) {
             self.buffers[*idx].push(memory);
         }
-        terminations
+        Ok(terminations)
     }
 
-    fn step(&mut self) {
-        let multi_memory = self.pool.step();
+    fn step(&mut self) -> Result<()> {
+        let multi_memory = self.pool.step()?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
-            obs_normalizer.apply_slice_in_place(&mut last_states);
+            obs_normalizer.apply_slice_in_place(&mut last_states)?;
         }
         let last_states = self.last_states.lock().unwrap();
         let memories = multi_memory.into_memories(&last_states);
         for (idx, memory) in memories.into_iter().enumerate() {
             self.buffers[idx].push(memory);
         }
+        Ok(())
     }
 
     /// Clears all output trajectory buffers.
@@ -230,32 +240,40 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     }
 
     /// Builds a sampler with an existing shared observation normalizer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the staged sampler core cannot be initialized.
     pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
         env_builder: &EnvBuilderType<EB>,
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Self {
-        Self {
-            core: StagedSamplerCore::build(env_builder, execution_mode, obs_normalizer),
+    ) -> Result<Self> {
+        Ok(Self {
+            core: StagedSamplerCore::build(env_builder, execution_mode, obs_normalizer)?,
             hook,
-        }
+        })
     }
 
     /// Builds a homogeneous sampler from a shared environment builder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `num_envs` is zero.
     pub fn build_from_env_builder(
         env_builder: Arc<dyn EnvBuilder<Env = E>>,
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Self
+    ) -> Result<Self>
     where
         E: 'static,
     {
         let env_builder = move || env_builder.build_env();
         Self::build_with_obs_normalizer(
-            &EnvBuilderType::homogeneous(env_builder, num_envs),
+            &EnvBuilderType::homogeneous(env_builder, num_envs)?,
             hook,
             execution_mode,
             obs_normalizer,
@@ -266,26 +284,31 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
 impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedSampler<E, H> {
     type Tensor = E::Tensor;
 
-    fn reset_all_envs(&mut self) {
-        self.core.pool.reset_all();
+    fn reset_all_envs(&mut self) -> Result<()> {
+        self.core.pool.reset_all()?;
         if let Some(obs_normalizer) = &self.core.obs_normalizer {
             let mut last_states = self.core.last_states.lock().unwrap();
-            obs_normalizer.apply_slice_in_place(&mut last_states);
+            obs_normalizer.apply_slice_in_place(&mut last_states)?;
         }
         self.core.clear_buffers();
         self.hook.reset();
+        Ok(())
     }
 
-    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(&mut self, actor: A) {
+    fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
+        &mut self,
+        actor: A,
+    ) -> Result<()> {
         self.core.clear_buffers();
         self.core.set_policy(&actor);
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {
-                SamplerHookResult::Bound(bound) => self.core.collect(bound),
+                SamplerHookResult::Bound(bound) => self.core.collect(bound)?,
                 SamplerHookResult::Stop => break,
             }
         }
+        Ok(())
     }
 
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {

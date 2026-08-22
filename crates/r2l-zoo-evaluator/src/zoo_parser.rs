@@ -1,12 +1,17 @@
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
-use r2l::{LearningRateSchedule, LearningSchedule, PPOAlgorithmBuilder, TrainingArtifactsConfig};
-use serde::{Deserialize, Deserializer, Serialize, de};
+use anyhow::Context as _;
+use r2l::{LearningRateSchedule, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
+use serde::{Deserialize, Deserializer, de};
 use yaml_serde::Value;
 
 use crate::Backend;
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum RlZooSchedule {
     Constant(f64),
     Linear(f64),
@@ -52,7 +57,7 @@ impl<'de> Deserialize<'de> for RlZooSchedule {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub enum RlZooNormalize {
     Enabled(bool),
     Options { norm_obs: bool, norm_reward: bool },
@@ -116,7 +121,8 @@ fn parse_python_bool_option(value: &str, key: &str) -> Option<bool> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
 pub struct RlZooEnvironmentConfig {
     n_envs: usize,
     n_timesteps: usize,
@@ -151,29 +157,30 @@ impl RlZooEnvironmentConfig {
     ) -> anyhow::Result<()> {
         let obs_clip = self.normalize.norm_obs().then_some(10.0);
         let artifacts_config = TrainingArtifactsConfig::new(output_dir);
-        let mut builder = PPOAlgorithmBuilder::gym(env_name, self.n_envs)
+        let mut builder = PPOBuilder::gym(env_name, self.n_envs)?
             .with_rollout_steps(self.n_steps)
-            .with_learning_schedule(LearningSchedule::total_step_bound(self.n_timesteps))
+            .with_training_limit(TrainingLimit::steps(self.n_timesteps))
             .with_training_artifacts(artifacts_config)
-            .with_observation_normalizer(obs_clip)
+            .with_observation_normalizer(obs_clip)?
             .with_lambda(self.gae_lambda)
             .with_gamma(self.gamma)
             .with_total_epochs(self.n_epochs)
-            .with_entropy_coeff(self.ent_coef)
+            .with_entropy_coefficient(self.ent_coef)
             .with_sample_size(self.batch_size)
             .with_learning_rate_schedule(Some(self.learning_rate.into()))
             .with_clip_range(self.clip_range.initial_value() as f32)
             .with_log_std_init(self.log_std_init)
-            .with_vf_coeff(Some(self.vf_coef))
+            .with_value_loss_coefficient(Some(self.vf_coef))
             .with_seed(seed)
             .with_gradient_clipping(Some(self.max_grad_norm));
         if self.normalize.norm_reward() {
             builder = builder.with_reward_normalizer(self.gamma, 10.0);
         }
         match backend {
-            Backend::Burn => builder.with_burn().build()?.train(),
-            Backend::Candle => builder.build()?.train(),
+            Backend::Burn => builder.with_burn().build()?.train()?,
+            Backend::Candle => builder.build()?.train()?,
         }
+        Ok(())
     }
 }
 
@@ -184,23 +191,29 @@ pub struct ZooConfig {
 }
 
 impl ZooConfig {
-    pub fn parse_rl_zoo_config(path: PathBuf) -> Self {
-        let content = fs::read_to_string(path).unwrap();
-        let mut parsed_content: BTreeMap<String, Value> = yaml_serde::from_str(&content).unwrap();
+    pub fn parse_rl_zoo_config(path: &Path) -> anyhow::Result<Self> {
+        let content = fs::read_to_string(path).with_context(|| {
+            format!("failed to read RL Zoo configuration at {}", path.display())
+        })?;
+        let mut parsed_content: BTreeMap<String, Value> = yaml_serde::from_str(&content)
+            .with_context(|| {
+                format!("failed to parse RL Zoo configuration at {}", path.display())
+            })?;
         parsed_content.remove("atari");
         let mut supported_envs = BTreeMap::new();
         let mut unsupported_envs = BTreeMap::new();
         for (env_name, val) in parsed_content {
-            let rl_zoo_config = yaml_serde::from_value::<RlZooEnvironmentConfig>(val).unwrap();
+            let rl_zoo_config = yaml_serde::from_value::<RlZooEnvironmentConfig>(val)
+                .with_context(|| format!("failed to parse RL Zoo configuration for {env_name}"))?;
             if rl_zoo_config.supported() {
                 supported_envs.insert(env_name, rl_zoo_config);
             } else {
                 unsupported_envs.insert(env_name, rl_zoo_config);
             }
         }
-        Self {
+        Ok(Self {
             supported_envs,
             unsupported_envs,
-        }
+        })
     }
 }

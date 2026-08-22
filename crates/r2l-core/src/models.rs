@@ -1,9 +1,8 @@
-use std::{collections::HashMap, fmt, str::FromStr};
+use std::{fmt, str::FromStr};
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::tensor::R2lTensor;
+use crate::{error::Result, tensor::R2lTensor};
 
 /// Activation function used between hidden layers in feed-forward networks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -65,33 +64,6 @@ impl FromStr for ActivationFunction {
     }
 }
 
-/// Metadata stored next to policy tensors in a safetensors archive.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PolicyMetadata {
-    /// Hidden-layer activation function.
-    pub activation: ActivationFunction,
-}
-
-impl PolicyMetadata {
-    /// Converts the metadata into the string map accepted by safetensors.
-    #[must_use]
-    pub fn to_safetensors_metadata(&self) -> HashMap<String, String> {
-        HashMap::from([("activation".to_string(), self.activation.to_string())])
-    }
-
-    /// Builds policy metadata from the string map stored by safetensors.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the activation entry is missing or invalid.
-    #[must_use]
-    pub fn from_safetensors_metadata(metadata: &HashMap<String, String>) -> Self {
-        Self {
-            activation: metadata.get("activation").unwrap().parse().unwrap(),
-        }
-    }
-}
-
 /// A policy-like object that can choose an action for one observation.
 ///
 /// Actors are the inference-time surface used by samplers. They must be
@@ -146,7 +118,8 @@ pub trait Policy: Actor {
     /// # Errors
     ///
     /// Returns an error if the standard deviation cannot be computed.
-    fn std(&self) -> Result<f32>;
+    /// Returns `Ok(None)` when the policy has no meaningful scalar standard deviation.
+    fn std(&self) -> Result<Option<f32>>;
 
     /// Computes the policy entropy for a batch of states.
     ///

@@ -1,20 +1,18 @@
-use std::collections::HashMap;
-
-use anyhow::{Result, bail};
-use candle_core::{DType, Device, Error, Tensor};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
 use itertools::Itertools;
 use r2l_core::{
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
+    error::{Error, InvalidParameterError, Result, TensorError},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
 use rand::distr::Distribution as RandDistributiion;
 use rand::distr::weighted::WeightedIndex;
 use safetensors::serialize as st_serialize;
 
-use crate::sequential::{Sequential, build_sequential, network_shape};
+use crate::sequential::{Sequential, build_sequential};
 
 /// Categorical Candle policy for discrete action spaces.
 ///
@@ -23,7 +21,6 @@ use crate::sequential::{Sequential, build_sequential, network_shape};
 /// traits.
 #[derive(Clone, Debug)]
 pub struct CategoricalDistribution {
-    action_size: usize,
     logits: Sequential,
     device: Device,
 }
@@ -43,33 +40,17 @@ impl CategoricalDistribution {
         prefix: &str,
         activation: ActivationFunction,
     ) -> Result<Self> {
+        if layers.last().copied() != Some(action_size) {
+            return Err(Error::InvalidParameter(Box::new(
+                InvalidParameterError::InvalidValue {
+                    name: "layers".into(),
+                    expected: format!("a final layer of size {action_size}"),
+                    value: format!("{layers:?}"),
+                },
+            )));
+        }
         let logits = build_sequential(observation_size, layers, vb, prefix, activation)?;
-        Ok(Self {
-            action_size,
-            logits,
-            device,
-        })
-    }
-
-    pub(crate) fn from_parts(
-        tensors: HashMap<String, Tensor>,
-        device: Device,
-        metadata: &PolicyMetadata,
-    ) -> Self {
-        let activation = metadata.activation;
-        let (observation_size, layers) = network_shape(&tensors, "policy");
-        let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
-        let action_size = *layers.last().unwrap();
-        Self::build(
-            observation_size,
-            action_size,
-            &layers,
-            &vb,
-            device,
-            "policy",
-            activation,
-        )
-        .unwrap()
+        Ok(Self { logits, device })
     }
 
     /// Returns the Candle device used by this policy.
@@ -93,16 +74,11 @@ impl Actor for CategoricalDistribution {
     type Tensor = Tensor;
 
     fn action(&self, observation: Tensor) -> Result<Tensor> {
-        assert!(
-            observation.rank() == 1,
-            "Observation should be a flattened tensor"
-        );
         let observation = observation.unsqueeze(0)?;
         let logits = self.logits.forward(&observation)?;
         let action_probs: Vec<f32> = softmax(&logits, 1)?.squeeze(0)?.to_vec1()?;
         let distribution = WeightedIndex::new(&action_probs).map_err(Error::wrap)?;
         let action = with_rng(|rng| distribution.sample(rng));
-        debug_assert!(action < self.action_size);
         Ok(Tensor::from_vec(vec![action as f32], 1, &self.device)?.detach())
     }
 
@@ -112,27 +88,23 @@ impl Actor for CategoricalDistribution {
         let action = logits
             .iter()
             .position_max_by(|a, b| a.total_cmp(b))
-            .unwrap();
-        debug_assert!(action < self.action_size);
+            .ok_or_else(|| TensorError::EmptyInput {
+                operation: "select categorical modal action".into(),
+            })?;
         Ok(Tensor::from_vec(vec![action as f32], 1, &self.device)?.detach())
     }
 }
 
 impl ToSafetensors for CategoricalDistribution {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
-        let metadata = PolicyMetadata {
-            activation: self.logits.activation(),
-        }
-        .to_safetensors_metadata();
-        Ok(st_serialize(
-            self.logits.named_tensors("policy"),
-            Some(metadata),
-        )?)
+        st_serialize(self.logits.named_tensors("policy"), None).map_err(Error::wrap)
     }
 }
 
 impl Policy for CategoricalDistribution {
     fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!states.is_empty());
+        debug_assert_eq!(states.len(), actions.len());
         let states = Tensor::stack(states, 0)?;
         let actions = Tensor::stack(actions, 0)?;
         let logits = self.logits.forward(&states)?;
@@ -143,6 +115,7 @@ impl Policy for CategoricalDistribution {
     }
 
     fn entropy(&self, states: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!states.is_empty());
         let states = Tensor::stack(states, 0)?;
         let logits = self.logits.forward(&states)?;
         let probs = softmax(&logits, 1)?;
@@ -152,7 +125,7 @@ impl Policy for CategoricalDistribution {
         Ok(entropy)
     }
 
-    fn std(&self) -> Result<f32> {
-        bail!("standard deviation is not defined for categorical distributions")
+    fn std(&self) -> Result<Option<f32>> {
+        Ok(None)
     }
 }

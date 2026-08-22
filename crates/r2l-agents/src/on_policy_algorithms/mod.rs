@@ -16,6 +16,7 @@ pub mod vpg;
 use derive_more::Deref;
 use r2l_core::{
     buffers::TrajectoryBatch,
+    error::{Result, TensorError},
     models::{Policy, ValueFunction},
     rng::with_rng,
     tensor::R2lTensor,
@@ -99,11 +100,17 @@ fn batch_advantages_and_returns<
     gamma: f32,
     lambda: f32,
     lifter: L,
-) -> anyhow::Result<(Vec<f32>, Vec<f32>)> {
+) -> Result<(Vec<f32>, Vec<f32>)> {
     let mut states = batch.states().iter().map(&lifter).collect::<Vec<_>>();
-    states.push(lifter(batch.next_states().last().unwrap()));
+    let next_state = batch
+        .next_states()
+        .last()
+        .ok_or_else(|| TensorError::EmptyInput {
+            operation: "compute advantages and returns".into(),
+        })?;
+    states.push(lifter(next_state));
     let values_stacked = value_func.values(&states)?;
-    let values: Vec<f32> = values_stacked.to_vec();
+    let values: Vec<f32> = values_stacked.to_vec()?;
     let total_steps = batch.rewards().len();
     let mut advantages: Vec<f32> = vec![0.; total_steps];
     let mut returns: Vec<f32> = vec![0.; total_steps];
@@ -141,7 +148,7 @@ pub fn batches_advantages_and_returns<
     gamma: f32,
     lambda: f32,
     lifter: L,
-) -> anyhow::Result<(Advantages, Returns)> {
+) -> Result<(Advantages, Returns)> {
     let mut advantage_vec = vec![];
     let mut returns_vec = vec![];
     for batch in batches {
@@ -176,12 +183,12 @@ pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -
 pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
     batches: &[B],
     policy: &impl Policy<Tensor = T>,
-) -> anyhow::Result<Logps> {
+) -> Result<Logps> {
     let mut logps = vec![];
     for batch in batches {
         let logp = policy
-            .log_probs(batch.states(), batch.actions())
-            .map(|t| t.to_vec())?;
+            .log_probs(batch.states(), batch.actions())?
+            .to_vec()?;
         logps.push(logp);
     }
     Ok(Logps(logps))

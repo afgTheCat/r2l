@@ -1,4 +1,3 @@
-use anyhow::bail;
 use burn::{
     Tensor,
     module::Module,
@@ -7,6 +6,7 @@ use burn::{
 };
 use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
+    error::{Error, Result, TensorError},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
@@ -44,11 +44,14 @@ impl<B: Backend> MultiBernoulliDistribution<B> {
 impl<B: Backend> Actor for MultiBernoulliDistribution<B> {
     type Tensor = Tensor<B, 1>;
 
-    fn action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device = Default::default();
         let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation).squeeze::<1>();
-        let probs: Vec<f32> = sigmoid(logits).to_data().to_vec().unwrap();
+        let probs: Vec<f32> = sigmoid(logits)
+            .to_data()
+            .to_vec()
+            .map_err(|error| TensorError::operation("read multi-Bernoulli probabilities", error))?;
         let actions = probs
             .into_iter()
             .map(|prob| {
@@ -65,11 +68,14 @@ impl<B: Backend> Actor for MultiBernoulliDistribution<B> {
         ))
     }
 
-    fn mode_action(&self, observation: Self::Tensor) -> anyhow::Result<Self::Tensor> {
+    fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device = Default::default();
         let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation).squeeze::<1>();
-        let probs: Vec<f32> = sigmoid(logits).to_data().to_vec().unwrap();
+        let probs: Vec<f32> = sigmoid(logits)
+            .to_data()
+            .to_vec()
+            .map_err(|error| TensorError::operation("read multi-Bernoulli probabilities", error))?;
         let actions = probs
             .into_iter()
             .map(|probability| if probability >= 0.5 { 1.0 } else { 0.0 })
@@ -82,19 +88,17 @@ impl<B: Backend> Actor for MultiBernoulliDistribution<B> {
 }
 
 impl<B: Backend> ToSafetensors for MultiBernoulliDistribution<B> {
-    fn to_safetensors(&self) -> anyhow::Result<Vec<u8>> {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
-        store.collect_from(self)?;
-        Ok(store.get_bytes()?)
+        store.collect_from(self).map_err(Error::wrap)?;
+        store.get_bytes().map_err(Error::wrap)
     }
 }
 
 impl<B: Backend> Policy for MultiBernoulliDistribution<B> {
-    fn log_probs(
-        &self,
-        states: &[Self::Tensor],
-        actions: &[Self::Tensor],
-    ) -> anyhow::Result<Self::Tensor> {
+    fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
+        debug_assert!(!states.is_empty());
+        debug_assert_eq!(states.len(), actions.len());
         let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
         let probs = sigmoid(self.logits.forward(states)).clamp(1e-6, 1. - 1e-6);
@@ -104,7 +108,8 @@ impl<B: Backend> Policy for MultiBernoulliDistribution<B> {
         Ok(log_probs.sum_dim(1).squeeze())
     }
 
-    fn entropy(&self, states: &[Self::Tensor]) -> anyhow::Result<Self::Tensor> {
+    fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor> {
+        debug_assert!(!states.is_empty());
         let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
         let probs = sigmoid(self.logits.forward(states)).clamp(1e-6, 1. - 1e-6);
         let ones = probs.ones_like();
@@ -113,7 +118,7 @@ impl<B: Backend> Policy for MultiBernoulliDistribution<B> {
         Ok(entropy_per_bit.neg().sum_dim(1).mean())
     }
 
-    fn std(&self) -> anyhow::Result<f32> {
-        bail!("standard deviation is not defined for multi-Bernoulli distributions")
+    fn std(&self) -> Result<Option<f32>> {
+        Ok(None)
     }
 }

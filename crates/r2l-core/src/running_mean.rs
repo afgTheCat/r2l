@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
+use crate::{error::TensorError, tensor::R2lTensor};
 
-use crate::tensor::R2lTensor;
+type Result<T> = std::result::Result<T, TensorError>;
 
 /// Online per-element mean and variance for tensor samples.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct RunningMeanStd<T: R2lTensor> {
     /// Current per-element mean.
     pub mean: T,
@@ -15,72 +15,70 @@ pub struct RunningMeanStd<T: R2lTensor> {
 // mega simplified view
 impl<T: R2lTensor> RunningMeanStd<T> {
     /// Creates zero-count statistics for tensors with `shape`.
-    #[must_use]
-    pub fn new(shape: Vec<usize>) -> Self {
-        let mean = T::zeros(shape.clone());
-        let var = T::zeros(shape);
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot create tensors with `shape`.
+    pub fn new(shape: Vec<usize>) -> Result<Self> {
+        let mean = T::zeros(shape.clone())?;
+        let var = T::zeros(shape)?;
+        Ok(Self {
             mean,
             var,
             count: 0.,
-        }
+        })
     }
 
     pub fn build(mean: T, var: T, count: f32) -> Self {
         Self { mean, var, count }
     }
 
-    fn update_from_moments(&mut self, batch_mean: &T, batch_var: &T, batch_count: f32) {
+    fn update_from_moments(
+        &mut self,
+        batch_mean: &T,
+        batch_var: &T,
+        batch_count: f32,
+    ) -> Result<()> {
         if batch_count == 0.0 {
-            return;
+            return Ok(());
         }
         let tot_count = self.count + batch_count;
-        let delta = batch_mean.sub(&self.mean).unwrap();
-        self.mean = self
-            .mean
-            .add(&delta.mul_scalar(batch_count / tot_count).unwrap())
-            .unwrap();
-        let m_a = self.var.mul_scalar(self.count).unwrap();
-        let m_b = batch_var.mul_scalar(batch_count).unwrap();
-        let m_2 = m_a
-            .add(&m_b)
-            .unwrap()
-            .add(
-                &delta
-                    .sqr()
-                    .unwrap()
-                    .mul_scalar(self.count * batch_count / tot_count)
-                    .unwrap(),
-            )
-            .unwrap();
-        self.var = m_2.mul_scalar(1.0 / tot_count).unwrap();
+        let delta = batch_mean.sub(&self.mean)?;
+        self.mean = self.mean.add(&delta.mul_scalar(batch_count / tot_count)?)?;
+        let m_a = self.var.mul_scalar(self.count)?;
+        let m_b = batch_var.mul_scalar(batch_count)?;
+        let m_2 = m_a.add(&m_b)?.add(
+            &delta
+                .sqr()?
+                .mul_scalar(self.count * batch_count / tot_count)?,
+        )?;
+        self.var = m_2.mul_scalar(1.0 / tot_count)?;
         self.count = tot_count;
+        Ok(())
     }
 
     /// Updates the statistics from a batch of tensors.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the tensor operations fail.
-    pub fn update(&mut self, t: &[T]) {
-        let mean = T::mean_tensors(t);
-        let var = T::var_tensors(t);
-        self.update_from_moments(&mean, &var, t.len() as f32);
+    /// Returns an error if the batch is empty or a tensor operation fails.
+    pub fn update(&mut self, t: &[T]) -> Result<()> {
+        let mean = T::mean_tensors(t)?;
+        let var = T::var_tensors(t)?;
+        self.update_from_moments(&mean, &var, t.len() as f32)
     }
 
     /// Converts flat samples to tensors and updates the statistics.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if any sample length differs from the configured tensor size.
-    pub fn update_from_vec(&mut self, t: &[Vec<f32>]) {
-        let mean_size = self.mean.size();
-        assert!(t.iter().all(|t| t.len() == mean_size));
+    /// Returns an error if a sample has an incompatible shape or the update fails.
+    pub fn update_from_vec(&mut self, t: &[Vec<f32>]) -> Result<()> {
         let t = t
             .iter()
             .map(|t| T::from_slice_and_shape(t, self.mean.to_shape()))
-            .collect::<Vec<_>>();
-        self.update(&t);
+            .collect::<Result<Vec<_>>>()?;
+        self.update(&t)
     }
 }
 
@@ -154,11 +152,11 @@ impl RunningMeanStdF32 {
 
 #[cfg(test)]
 mod test {
-    use anyhow::Result;
     use candle_core::{Device, Tensor};
     use rand::{RngExt, rng};
 
     use crate::{
+        error::Result,
         running_mean::{RunningMeanStd, RunningMeanStdF32},
         tensor::R2lTensor,
     };
@@ -186,7 +184,7 @@ mod test {
             .iter()
             .map(|chunk| Tensor::from_slice(chunk, 3, &device))
             .collect::<candle_core::Result<Vec<_>>>()?;
-        let var = Tensor::var_tensors(&tensors);
+        let var = Tensor::var_tensors(&tensors)?;
         let reference_var =
             Tensor::from_slice(&[0.022_170_02_f32, 0.033_425_38, 0.016_224_09], 3, &device)?;
         let var_diff = (&var - &reference_var)?.abs()?.max(0)?;
@@ -199,7 +197,7 @@ mod test {
         let device = Device::Cpu;
         let mut rng = rng();
         let shape = (10, 3);
-        let mut rms = RunningMeanStd::<Tensor>::new(vec![shape.1]);
+        let mut rms = RunningMeanStd::<Tensor>::new(vec![shape.1])?;
         let mut all_data = vec![];
 
         for _ in 0..100 {
@@ -208,7 +206,7 @@ mod test {
                 .chunks_exact(shape.1)
                 .map(|chunk| Tensor::from_slice(chunk, shape.1, &device))
                 .collect::<candle_core::Result<Vec<_>>>()?;
-            rms.update(&tensors);
+            rms.update(&tensors)?;
             all_data.extend(data);
         }
 

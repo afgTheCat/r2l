@@ -18,7 +18,6 @@ pub mod multi_categorical;
 
 use std::{f32, fmt::Debug};
 
-use anyhow::Result;
 use bernoulli::MultiBernoulliDistribution;
 use candle_core::{Device, Tensor};
 use candle_nn::{Init, VarBuilder};
@@ -28,10 +27,10 @@ use diagonal::DiagGaussianDistribution;
 use multi_categorical::MultiCategoricalDistribution;
 use r2l_core::{
     env::Space,
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
+    error::Result,
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     tensor::R2lTensor,
 };
-use safetensors::SafeTensors;
 
 /// Erased Candle policy type covering the supported action-space variants.
 ///
@@ -74,30 +73,6 @@ impl CandlePolicyKind {
             Self::MultiCategorical(m) => m.observation_size(),
             Self::MultiBernoulli(b) => b.observation_size(),
             Self::Composite(c) => c.observation_size(),
-        }
-    }
-
-    /// Builds a Candle policy from serialized safetensors bytes.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the bytes, metadata, or stored tensors are invalid.
-    #[must_use]
-    pub fn from_bytes(bytes: &[u8], device: Device) -> Self {
-        let (_, safe_tensors_metadata) = SafeTensors::read_metadata(bytes).unwrap();
-        let metadata = PolicyMetadata::from_safetensors_metadata(
-            safe_tensors_metadata.metadata().as_ref().unwrap(),
-        );
-        let tensors = candle_core::safetensors::load_buffer(bytes, &device).unwrap();
-
-        if tensors.contains_key("policy.log_std") {
-            Self::DiagGaussian(DiagGaussianDistribution::from_parts(
-                tensors, &device, &metadata,
-            ))
-        } else {
-            Self::Categorical(CategoricalDistribution::from_parts(
-                tensors, device, &metadata,
-            ))
         }
     }
 
@@ -165,9 +140,12 @@ impl CandlePolicyKind {
                 )?))
             }
             Space::MultiDiscrete { nvec, .. } => {
+                let nvec = nvec
+                    .to_vec()
+                    .map_err(|error| candle_core::Error::Msg(error.to_string()))?;
                 Ok(Self::MultiCategorical(MultiCategoricalDistribution::build(
                     observation_size,
-                    nvec.to_vec().into_iter().map(|n| n as usize).collect(),
+                    nvec.into_iter().map(|n| n as usize).collect(),
                     hidden_layers,
                     policy_varbuilder,
                     policy_varbuilder.device().clone(),
@@ -276,7 +254,7 @@ impl Policy for CandlePolicyKind {
         }
     }
 
-    fn std(&self) -> Result<f32> {
+    fn std(&self) -> Result<Option<f32>> {
         match self {
             Self::Categorical(cat) => cat.std(),
             Self::DiagGaussian(diag) => diag.std(),

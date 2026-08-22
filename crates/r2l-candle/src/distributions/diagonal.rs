@@ -1,15 +1,16 @@
-use std::collections::HashMap;
 use std::f32;
 
-use anyhow::Result;
-use candle_core::{DType, Device, Tensor};
+use candle_core::{Device, Tensor};
 use candle_nn::{Module, VarBuilder};
-use r2l_core::models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors};
+use r2l_core::{
+    error::{Error, Result},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
+};
 use safetensors::serialize as st_serialize;
 
 use crate::{
     random::standard_normal,
-    sequential::{Sequential, build_sequential, network_shape},
+    sequential::{Sequential, build_sequential},
 };
 
 /// Diagonal-Gaussian Candle policy for Box action spaces.
@@ -47,27 +48,6 @@ impl DiagGaussianDistribution {
         })
     }
 
-    pub(crate) fn from_parts(
-        tensors: HashMap<String, Tensor>,
-        device: &Device,
-        metadata: &PolicyMetadata,
-    ) -> Self {
-        let activation = metadata.activation;
-        let (observation_size, layers) = network_shape(&tensors, "policy");
-        let vb = VarBuilder::from_tensors(tensors, DType::F32, device);
-        let action_size = *layers.last().unwrap();
-        let log_std = vb.get(action_size, "policy.log_std").unwrap();
-        Self::build(
-            observation_size,
-            &layers,
-            &vb,
-            log_std,
-            "policy",
-            activation,
-        )
-        .unwrap()
-    }
-
     /// Returns the Candle device used by this policy.
     #[must_use]
     pub fn device(&self) -> Device {
@@ -91,10 +71,6 @@ impl Actor for DiagGaussianDistribution {
     type Tensor = Tensor;
 
     fn action(&self, observation: Tensor) -> Result<Tensor> {
-        assert!(
-            observation.rank() == 1,
-            "Observation should be a flattened tensor"
-        );
         let observation = observation.unsqueeze(0)?;
         let mu = self
             .mu_net
@@ -114,18 +90,16 @@ impl Actor for DiagGaussianDistribution {
 
 impl ToSafetensors for DiagGaussianDistribution {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
-        let metadata = PolicyMetadata {
-            activation: self.mu_net.activation(),
-        }
-        .to_safetensors_metadata();
         let mut tensors = self.mu_net.named_tensors("policy");
         tensors.push(("policy.log_std".to_string(), self.log_std.clone()));
-        Ok(st_serialize(tensors, Some(metadata))?)
+        st_serialize(tensors, None).map_err(Error::wrap)
     }
 }
 
 impl Policy for DiagGaussianDistribution {
     fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!states.is_empty());
+        debug_assert_eq!(states.len(), actions.len());
         let states = Tensor::stack(states, 0)?;
         let actions = Tensor::stack(actions, 0)?;
         let mu = self.mu_net.forward(&states)?;
@@ -150,8 +124,8 @@ impl Policy for DiagGaussianDistribution {
         Ok(entropy)
     }
 
-    fn std(&self) -> Result<f32> {
+    fn std(&self) -> Result<Option<f32>> {
         let std = self.log_std.exp()?.mean_all()?.to_scalar::<f32>()?;
-        Ok(std)
+        Ok(Some(std))
     }
 }

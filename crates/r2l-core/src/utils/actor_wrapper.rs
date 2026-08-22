@@ -1,8 +1,6 @@
 use std::marker::PhantomData;
 
-use anyhow::Result;
-
-use crate::{models::Actor, tensor::R2lTensor};
+use crate::{error::Result, models::Actor, tensor::R2lTensor};
 
 #[derive(Debug, Clone)]
 pub struct ActorWrapper<A: Actor + Clone, T: R2lTensor> {
@@ -23,12 +21,12 @@ impl<D: Actor + Clone, T: R2lTensor> Actor for ActorWrapper<D, T> {
     type Tensor = T;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let action = self.actor.action(D::Tensor::convert(&observation))?;
-        Ok(T::convert(&action))
+        let action = self.actor.action(D::Tensor::convert(&observation)?)?;
+        Ok(T::convert(&action)?)
     }
 
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let action = self.actor.mode_action(D::Tensor::convert(&observation))?;
-        Ok(T::convert(&action))
+        let action = self.actor.mode_action(D::Tensor::convert(&observation)?)?;
+        Ok(T::convert(&action)?)
     }
 }

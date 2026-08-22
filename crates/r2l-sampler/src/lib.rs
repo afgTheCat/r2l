@@ -10,14 +10,13 @@ mod staged;
 // pub mod staged2;
 
 pub use direct::{DirectSampler, DirectSamplerCore, DirectSamplerHook, SamplerHookResult};
-use serde::{Deserialize, Serialize};
 pub use staged::{StagedSampler, StagedSamplerCore, StagedSamplerHook};
 
 /// Execution strategy used by the sampler.
 ///
 /// This controls whether environment workers run inline in the current thread
 /// or in dedicated background threads.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum SamplerExecutionMode {
     /// Run sampler workers inline in a local vector on the current thread.
     SingleThreaded,
@@ -26,7 +25,7 @@ pub enum SamplerExecutionMode {
 }
 
 /// Bound used for one rollout collection request per environment.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum RolloutMode {
     /// Collect until each selected environment completes `n_episodes`.
     EpisodeBound {

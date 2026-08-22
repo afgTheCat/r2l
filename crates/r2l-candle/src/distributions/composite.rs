@@ -1,9 +1,9 @@
-use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use r2l_core::{
     env::Space,
-    models::{ActivationFunction, Actor, Policy, PolicyMetadata, ToSafetensors},
+    error::{Error, Result, TensorError},
+    models::{ActivationFunction, Actor, Policy, ToSafetensors},
     tensor::R2lTensor,
 };
 use safetensors::serialize as st_serialize;
@@ -17,7 +17,6 @@ pub struct CompositeDistribution {
     action_sizes: Vec<usize>,
     observation_size: usize,
     device: Device,
-    activation: ActivationFunction,
 }
 
 impl CompositeDistribution {
@@ -51,12 +50,17 @@ impl CompositeDistribution {
             )?);
             action_sizes.push(action_size);
         }
+        if policies.is_empty() {
+            return Err(TensorError::EmptyInput {
+                operation: "build composite policy".into(),
+            }
+            .into());
+        }
         Ok(Self {
             policies,
             action_sizes,
             observation_size,
             device: policy_varbuilder.device().clone(),
-            activation,
         })
     }
 
@@ -102,16 +106,14 @@ impl Actor for CompositeDistribution {
 
 impl ToSafetensors for CompositeDistribution {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
-        let metadata = PolicyMetadata {
-            activation: self.activation,
-        }
-        .to_safetensors_metadata();
-        Ok(st_serialize(self.named_tensors("policy"), Some(metadata))?)
+        st_serialize(self.named_tensors("policy"), None).map_err(Error::wrap)
     }
 }
 
 impl Policy for CompositeDistribution {
     fn log_probs(&self, states: &[Tensor], actions: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!states.is_empty());
+        debug_assert_eq!(states.len(), actions.len());
         let mut offset = 0;
         let mut log_probs = Vec::new();
         for (policy, action_size) in self.policies.iter().zip(&self.action_sizes) {
@@ -126,6 +128,7 @@ impl Policy for CompositeDistribution {
     }
 
     fn entropy(&self, states: &[Tensor]) -> Result<Tensor> {
+        debug_assert!(!states.is_empty());
         let mut entropies = Vec::new();
         for policy in &self.policies {
             entropies.push(policy.entropy(states)?);
@@ -133,7 +136,7 @@ impl Policy for CompositeDistribution {
         Ok(Tensor::stack(&entropies, 0)?.sum_all()?)
     }
 
-    fn std(&self) -> Result<f32> {
-        bail!("standard deviation is not defined for composite distributions")
+    fn std(&self) -> Result<Option<f32>> {
+        Ok(None)
     }
 }

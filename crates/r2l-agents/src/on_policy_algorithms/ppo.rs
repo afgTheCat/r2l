@@ -1,15 +1,14 @@
 //! Prototype PPO training path that consumes trajectory batches directly.
 
-use anyhow::Result;
 use r2l_core::{
     buffers::TrajectoryBatch,
+    error::Result,
     models::{Learner, Policy},
     on_policy::{
         algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
     },
     tensor::R2lTensor,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     HookResult,
@@ -20,7 +19,7 @@ use crate::{
 };
 
 /// Hyperparameters controlling PPO training behavior.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct PPOParams {
     /// Clipping range applied to the PPO policy ratio.
     pub clip_range: f32,
@@ -73,7 +72,7 @@ pub trait PPOHook<M: OnPolicyLearner> {
         _batches: &[B],
         _advantages: &mut Advantages,
         _returns: &mut Returns,
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         Ok(HookResult::Continue)
     }
 
@@ -87,7 +86,7 @@ pub trait PPOHook<M: OnPolicyLearner> {
         _params: &mut PPOParams,
         _module: &mut M,
         _batches: &[B],
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         Ok(HookResult::Break)
     }
 
@@ -102,7 +101,7 @@ pub trait PPOHook<M: OnPolicyLearner> {
         _module: &mut M,
         _losses: &mut <M as Learner>::Losses,
         _data: &PPOBatchData<M::LearningTensor>,
-    ) -> anyhow::Result<HookResult> {
+    ) -> Result<HookResult> {
         Ok(HookResult::Continue)
     }
 }
@@ -124,7 +123,7 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
         advantages: &Advantages,
         logps: &Logps,
         returns: &Returns,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let mut batch_indices = ShuffledBatchIndices::new(batches, self.params.sample_size);
         let lm = &mut self.lm;
         loop {
@@ -132,9 +131,9 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
                 return Ok(());
             };
             let (observations, actions) = sample(batches, &indices, Module::lifter);
-            let advantages = lm.tensor_from_slice(&advantages.sample(&indices));
-            let logp_old = lm.tensor_from_slice(&logps.sample(&indices));
-            let returns = lm.tensor_from_slice(&returns.sample(&indices));
+            let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
+            let logp_old = lm.tensor_from_slice(&logps.sample(&indices))?;
+            let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
             let logp = lm.policy().log_probs(&observations, &actions)?;
             let values_pred = lm.values(&observations)?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
@@ -170,7 +169,7 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
         advantages: &Advantages,
         returns: &Returns,
         logps: &Logps,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         loop {
             self.batch_loop(batches, advantages, logps, returns)?;
             let rollout_hook_res = self

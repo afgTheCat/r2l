@@ -6892,7 +6892,6 @@ dependencies = [
 name = "r2l"
 version = "0.0.2"
 dependencies = [
- "anyhow",
  "bimodal-array",
  "burn",
  "candle-core 0.11.0",
@@ -6914,18 +6913,15 @@ dependencies = [
 name = "r2l-agents"
 version = "0.0.2"
 dependencies = [
- "anyhow",
  "derive_more",
  "r2l-core",
  "rand 0.10.2",
- "serde",
 ]
 
 [[package]]
 name = "r2l-burn"
 version = "0.0.2"
 dependencies = [
- "anyhow",
  "burn",
  "burn-store",
  "derive_more",
@@ -6938,7 +6934,6 @@ dependencies = [
 name = "r2l-candle"
 version = "0.0.2"
 dependencies = [
- "anyhow",
  "candle-core 0.11.0",
  "candle-nn",
  "derive_more",
@@ -6954,7 +6949,6 @@ dependencies = [
 name = "r2l-core"
 version = "0.0.2"
 dependencies = [
- "anyhow",
  "burn",
  "candle-core 0.11.0",
  "derive_more",
@@ -6963,6 +6957,7 @@ dependencies = [
  "rand 0.10.2",
  "rayon",
  "serde",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -6994,24 +6989,20 @@ dependencies = [
 name = "r2l-gym"
 version = "0.0.2"
 dependencies = [
- "anyhow",
  "once_cell",
  "pyo3",
  "r2l-core",
- "serde",
 ]
 
 [[package]]
 name = "r2l-sampler"
 version = "0.0.2"
 dependencies = [
- "anyhow",
  "bimodal-array",
  "crossbeam",
  "itertools 0.15.0",
  "r2l-core",
  "rand 0.10.2",
- "serde",
 ]
 
 [[package]]

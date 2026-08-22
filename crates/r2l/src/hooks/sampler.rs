@@ -22,6 +22,10 @@ pub struct EpisodeBoundHook<E: Env> {
 
 impl<E: Env> EpisodeBoundHook<E> {
     /// Creates an episode-bound sampler hook.
+    ///
+    /// # Arguments
+    ///
+    /// * `num_episodes` - Number of completed episodes requested from each environment.
     #[must_use]
     pub fn new(num_episodes: usize) -> Self {
         Self {
@@ -74,6 +78,11 @@ pub struct StepBoundHook<E: Env<Tensor: R2lTensor>> {
 
 impl<E: Env<Tensor: R2lTensor>> StepBoundHook<E> {
     /// Creates a step-bound sampler hook.
+    ///
+    /// # Arguments
+    ///
+    /// * `num_steps` - Number of steps requested from each environment.
+    /// * `reward_normalizer` - Optional normalizer applied after rollout collection.
     #[must_use]
     pub fn new(num_steps: usize, reward_normalizer: Option<RewardNormalizer>) -> Self {
         Self {

@@ -6,40 +6,43 @@
 
 ## Getting started
 
-With `gymnasium` installed, a complete training and inference workflow looks
-like this:
+Enable the optional Gymnasium integration in your `Cargo.toml`:
+
+```toml
+r2l = { version = "0.0.2", features = ["gym"] }
+```
+
+With the `gymnasium` Python package installed, a complete training and
+inference workflow looks like this:
 
 ```rust,no_run
 use r2l::{
-    InferenceArtifacts, LearningSchedule, TrainingArtifactsConfig,
-    PPOAlgorithmBuilder,
+    GymEnv, InferenceRunner, PPOBuilder, TrainingArtifactsConfig, TrainingLimit,
 };
-use r2l_gym::GymEnv;
 
 const ENV_NAME: &str = "Pendulum-v1";
 const ARTIFACT_DIR: &str = "runs/pendulum";
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Train the agent and persist the best policy for inference.
     let artifacts_config = TrainingArtifactsConfig::new(ARTIFACT_DIR);
-    let mut ppo = PPOAlgorithmBuilder::gym(ENV_NAME, 10)
+    let mut ppo = PPOBuilder::gym(ENV_NAME, 10)?
         .with_training_artifacts(artifacts_config)
         .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
-        .with_learning_schedule(LearningSchedule::rollout_bound(30))
-        .build()
-        .unwrap();
-    ppo.train().unwrap();
+        .with_training_limit(TrainingLimit::rollouts(30))
+        .build()?;
+    ppo.train()?;
 
     // Reload the artifacts later without rebuilding the policy by hand.
-    let inference_artifacts = InferenceArtifacts::load(ARTIFACT_DIR).unwrap();
-    let env = GymEnv::new(ENV_NAME, Some("human".to_owned())).unwrap();
-    let mut inference = inference_artifacts.build(env).unwrap();
+    let env = GymEnv::new(ENV_NAME, Some("human".to_owned()))?;
+    let mut inference = InferenceRunner::load(ARTIFACT_DIR, env)?;
     for _ in 0..10 {
-        inference.run_episode();
+        inference.run_episode()?;
     }
+    Ok(())
 }
 ```
 
@@ -54,6 +57,16 @@ cargo run -p r2l-examples --example ppo
 
 For more information, read the [book](https://afgthecat.github.io/r2l/).
 
+## Requirements
+
+r2l is developed and tested against the latest stable Rust release. No formal
+minimum supported Rust version is currently maintained.
+
+The `gym` feature is disabled by default, so native and custom Rust environments
+do not require or link against Python. Enabling `gym` requires Python 3.11 or
+newer and the `gymnasium` package installed in the Python environment used at
+runtime.
+
 ## v0.0.2 capabilities
 
 - On-policy PPO and A2C builders, plus lower-level PPO, A2C, and VPG
@@ -63,8 +76,8 @@ For more information, read the [book](https://afgthecat.github.io/r2l/).
 - Step- and episode-bounded rollout hooks
 - Observation normalization, discounted-reward normalization, and linear
   learning-rate schedules
-- Native `Env` implementations and a Gymnasium adapter for Discrete, Box,
-  MultiDiscrete, MultiBinary, Tuple, and Dict spaces
+- Native `Env` implementations and a Gymnasium adapter for Discrete spaces with
+  `start = 0`, plus Box, MultiDiscrete, MultiBinary, Tuple, and Dict spaces
 - Best-actor evaluation and SafeTensors persistence for backend-specific
   policies
 
@@ -78,6 +91,10 @@ training runs.
 **Current version: `v0.0.2`.** The project is in an early experimental phase.
 Expect missing features, frequent breaking changes, bugs, and everything in
 between.
+
+### `v0.0.3` – Gymnasium compatibility
+
+- Support non-zero `start` values in Gymnasium `Discrete` spaces.
 
 ### `v0.1.0` – Core Algorithm Coverage (SB3 parity)
 

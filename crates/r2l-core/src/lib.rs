@@ -40,6 +40,8 @@
 pub mod buffers;
 /// Environment traits and space descriptions.
 pub mod env;
+/// Error types
+pub mod error;
 /// Actor, policy, value-function, and learner traits.
 pub mod models;
 /// Shared interfaces for on-policy training loops.
@@ -99,5 +101,5 @@ pub mod prelude {
     };
     pub use crate::on_policy::learning_module::OnPolicyLearner;
     pub use crate::on_policy::losses::FromPolicyValueLosses;
-    pub use crate::tensor::{R2lTensor, TensorData};
+    pub use crate::tensor::{R2lTensor, VecTensor};
 }

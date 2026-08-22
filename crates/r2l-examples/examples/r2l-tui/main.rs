@@ -2,11 +2,10 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::{io, sync::mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l::{
-    LearningSchedule, OnPolicyCommandReceiver, OnPolicyCommandSender, PPOAlgorithmBuilder,
-    PPORolloutStats, on_policy_command_channel,
-};
+use r2l::{OnPolicyControlHandle, PPOBuilder, PPORolloutStats, TrainingLimit};
+use r2l_core::error::Result;
 use r2l_examples::EventBox;
+use r2l_gym::GymEnv;
 use ratatui::layout::Alignment;
 use ratatui::widgets::Paragraph;
 use ratatui::{
@@ -26,7 +25,7 @@ struct App {
     exit: bool,
     latest_update: Option<PPORolloutStats>,
     rx: Receiver<EventBox>,
-    ppo_command: OnPolicyCommandSender,
+    ppo_control: OnPolicyControlHandle,
     best_update: Option<PPORolloutStats>,
     average_rollout_rewards: Vec<f32>,
     total_rollouts: usize,
@@ -67,7 +66,7 @@ impl App {
     fn new(
         total_rollouts: usize,
         rx: Receiver<EventBox>,
-        ppo_command: OnPolicyCommandSender,
+        ppo_control: OnPolicyControlHandle,
     ) -> Self {
         Self {
             total_rollouts,
@@ -77,14 +76,14 @@ impl App {
             average_rollout_rewards: vec![],
             current_rollout: 0,
             exit: false,
-            ppo_command,
+            ppo_control,
         }
     }
 
-    pub fn run(mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+    fn run(mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
-            let event = self.rx.recv().unwrap();
+            let event = self.rx.recv().map_err(io::Error::other)?;
             event
                 .downcast::<PPORolloutStats>()
                 .map(|progress| {
@@ -128,7 +127,7 @@ impl App {
     // maybe something more eventually
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if let KeyCode::Char('q') = key_event.code {
-            self.ppo_command.shutdown();
+            let _ = self.ppo_control.shutdown();
             self.exit();
         }
     }
@@ -256,50 +255,50 @@ impl App {
 fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     std::thread::spawn(move || {
         loop {
-            if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
-                tx.send(Box::new(key_event)).unwrap();
+            match crossterm::event::read() {
+                Ok(crossterm::event::Event::Key(key_event)) => {
+                    if tx.send(Box::new(key_event)).is_err() {
+                        break;
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    eprintln!("failed to read terminal event: {error}");
+                    break;
+                }
             }
         }
     });
 }
 
-/// Trains the PPO example and reports progress through `tx`.
-///
-/// # Errors
-///
-/// Returns an error if the algorithm cannot be built or training fails.
-pub fn train_ppo(
-    tx: Sender<PPORolloutStats>,
-    total_rollouts: usize,
-    command_rx: OnPolicyCommandReceiver,
-) -> anyhow::Result<()> {
-    let ppo_builder = PPOAlgorithmBuilder::gym(ENV_NAME, 4)
+fn train_ppo(ppo_builder: PPOBuilder<GymEnv>) -> anyhow::Result<()> {
+    let mut ppo = ppo_builder.build()?;
+    ppo.train()?;
+    Ok(())
+}
+
+fn ppo_builder(tx: Sender<PPORolloutStats>, total_rollouts: usize) -> Result<PPOBuilder<GymEnv>> {
+    Ok(PPOBuilder::gym(ENV_NAME, 4)?
         .with_candle(candle_core::Device::Cpu)
         .with_execution_mode(r2l::SamplerExecutionMode::MultiThreaded)
         .with_clip_range(0.2)
-        .with_entropy_coeff(0.)
+        .with_entropy_coefficient(0.)
         .with_lambda(0.95)
         .with_gamma(0.9)
         .with_learning_rate(0.001)
         .with_rollout_steps(1024)
         .with_total_epochs(10)
-        .with_learning_schedule(LearningSchedule::rollout_bound(total_rollouts))
+        .with_training_limit(TrainingLimit::rollouts(total_rollouts))
         .with_log_progress(false)
-        .with_reporter(Some(tx))
-        .with_command_rx(command_rx);
-    let mut ppo = ppo_builder.build()?;
-    ppo.train()
+        .with_rollout_reporter(Some(tx)))
 }
 
-/// Forwards PPO updates into the UI event channel.
-///
-/// # Panics
-///
-/// Panics if the UI event receiver disconnects while updates are still arriving.
-pub fn adapt_ppo_events(update_rx: Receiver<PPORolloutStats>, tx_to_updates: Sender<EventBox>) {
+fn adapt_ppo_events(update_rx: Receiver<PPORolloutStats>, tx_to_updates: Sender<EventBox>) {
     std::thread::spawn(move || {
         while let Ok(update) = update_rx.recv() {
-            tx_to_updates.send(Box::new(update)).unwrap();
+            if tx_to_updates.send(Box::new(update)).is_err() {
+                break;
+            }
         }
     });
 }
@@ -310,17 +309,17 @@ fn main() -> io::Result<()> {
     handle_input_events(event_tx.clone());
     adapt_ppo_events(update_rx, event_tx.clone());
     let total_rollouts = 30;
-    let (command_rx, command_tx) = on_policy_command_channel();
-    std::thread::spawn(
-        move || match train_ppo(update_tx, total_rollouts, command_rx) {
-            Ok(()) => {}
-            Err(err) => {
-                eprintln!("ppo was not trained normally, err: {err}");
-            }
-        },
-    );
+    let (ppo_builder, control_handle) = ppo_builder(update_tx, total_rollouts)
+        .map_err(io::Error::other)?
+        .with_control();
+    std::thread::spawn(move || match train_ppo(ppo_builder) {
+        Ok(()) => {}
+        Err(err) => {
+            eprintln!("ppo was not trained normally, err: {err}");
+        }
+    });
     let mut terminal = ratatui::init();
-    let app_result = App::new(total_rollouts, event_rx, command_tx).run(&mut terminal);
+    let app_result = App::new(total_rollouts, event_rx, control_handle).run(&mut terminal);
     ratatui::restore();
     app_result
 }

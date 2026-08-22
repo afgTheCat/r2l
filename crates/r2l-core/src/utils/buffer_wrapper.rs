@@ -2,6 +2,7 @@ use std::any::TypeId;
 
 use crate::{
     buffers::{TrajectoryBatch, buffer::TrajectoryView},
+    error::TensorError,
     tensor::R2lTensor,
 };
 
@@ -42,35 +43,47 @@ pub enum TrajectoryViewsWrapper<'a, T: R2lTensor> {
 impl<T: R2lTensor> TrajectoryViewsWrapper<'_, T> {
     pub fn from_view<'b, S: R2lTensor>(
         view: &'b TrajectoryView<'b, S>,
-    ) -> TrajectoryViewsWrapper<'b, T> {
+    ) -> Result<TrajectoryViewsWrapper<'b, T>, TensorError> {
         if TypeId::of::<S>() == TypeId::of::<T>() {
             let states = unsafe { &*(std::ptr::from_ref::<[S]>(view.states()) as *const [T]) };
             let next_states =
                 unsafe { &*(std::ptr::from_ref::<[S]>(view.next_states()) as *const [T]) };
             let actions = unsafe { &*(std::ptr::from_ref::<[S]>(view.actions()) as *const [T]) };
-            return TrajectoryViewsWrapper::Borrowed(TrajectoryView {
+            return Ok(TrajectoryViewsWrapper::Borrowed(TrajectoryView {
                 states,
                 next_states,
                 actions,
                 rewards: view.rewards(),
                 terminated: view.terminated(),
                 truncated: view.truncated(),
-            });
+            }));
         }
-        let states = view.states().iter().map(|v| T::convert(v)).collect();
-        let next_states = view.next_states().iter().map(|v| T::convert(v)).collect();
-        let actions = view.actions().iter().map(|v| T::convert(v)).collect();
+        let states = view
+            .states()
+            .iter()
+            .map(T::convert)
+            .collect::<Result<Vec<_>, _>>()?;
+        let next_states = view
+            .next_states()
+            .iter()
+            .map(T::convert)
+            .collect::<Result<Vec<_>, _>>()?;
+        let actions = view
+            .actions()
+            .iter()
+            .map(T::convert)
+            .collect::<Result<Vec<_>, _>>()?;
         let rewards = view.rewards().to_vec();
         let terminated = view.terminated().to_vec();
         let truncated = view.truncated().to_vec();
-        TrajectoryViewsWrapper::Owned(OwnedView::new(
+        Ok(TrajectoryViewsWrapper::Owned(OwnedView::new(
             states,
             next_states,
             actions,
             rewards,
             terminated,
             truncated,
-        ))
+        )))
     }
 }
 

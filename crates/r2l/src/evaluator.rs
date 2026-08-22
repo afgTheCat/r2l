@@ -1,16 +1,15 @@
-use std::{fmt::Write as _, path::PathBuf};
+use std::{fs::File, io::Write as _, marker::PhantomData, path::PathBuf};
 
-use anyhow::Result;
 use r2l_core::{
     ActorWrapper,
     buffers::TrajectoryBatch,
     env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
+    error::Error,
     models::{Actor, ToSafetensors},
     on_policy::algorithm::{Agent, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
 use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
-use serde::{Deserialize, Serialize};
 
 use crate::{
     builders::{
@@ -33,21 +32,28 @@ impl<E: Env> EvaluationSampler<E> {
         n_episodes: usize,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Self {
+    ) -> Result<Self, Error> {
         let hook = EpisodeBoundHook::new(n_episodes);
         if let Some(obs_normalizer) = obs_normalizer {
-            Self::Staged(StagedSampler::build_with_obs_normalizer(
+            Ok(Self::Staged(StagedSampler::build_with_obs_normalizer(
                 &env_builder,
                 hook,
                 execution_mode,
                 Some(obs_normalizer),
-            ))
+            )?))
         } else {
-            Self::Direct(DirectSampler::build(env_builder, hook, execution_mode))
+            Ok(Self::Direct(DirectSampler::build(
+                env_builder,
+                hook,
+                execution_mode,
+            )))
         }
     }
 
-    fn evaluate<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: A) -> (f32, f32) {
+    fn evaluate<A: Actor<Tensor = E::Tensor> + Clone>(
+        &mut self,
+        actor: A,
+    ) -> Result<(f32, f32), Error> {
         match self {
             Self::Direct(sampler) => Self::evaluate_with_sampler(sampler, actor),
             Self::Staged(sampler) => Self::evaluate_with_sampler(sampler, actor),
@@ -57,9 +63,9 @@ impl<E: Env> EvaluationSampler<E> {
     fn evaluate_with_sampler<S: Sampler<Tensor = E::Tensor>>(
         sampler: &mut S,
         actor: impl Actor<Tensor = E::Tensor> + Clone,
-    ) -> (f32, f32) {
-        sampler.reset_all_envs();
-        sampler.collect_rollouts(actor);
+    ) -> Result<(f32, f32), Error> {
+        sampler.reset_all_envs()?;
+        sampler.collect_rollouts(actor)?;
         let trajectories = sampler.trajectory_views();
         let total_reward = trajectories
             .as_ref()
@@ -71,15 +77,17 @@ impl<E: Env> EvaluationSampler<E> {
             .iter()
             .map(|trajectory| trajectory.episode_terminations() as f32)
             .sum();
-        (total_reward, total_episodes)
+        Ok((total_reward, total_episodes))
     }
 
-    fn normalizer_snapshot(&self) -> Option<NormalizerBuilder> {
+    fn normalizer_snapshot(&self) -> Result<Option<NormalizerBuilder>, Error> {
         match self {
-            Self::Direct(_) => None,
+            Self::Direct(_) => Ok(None),
             Self::Staged(sampler) => sampler
                 .obs_normalizer()
-                .map(NormalizerBuilder::from_normalizer),
+                .map(NormalizerBuilder::from_normalizer)
+                .transpose()
+                .map_err(Into::into),
         }
     }
 
@@ -92,7 +100,6 @@ impl<E: Env> EvaluationSampler<E> {
 }
 
 /// Configures how policies are evaluated during training.
-#[derive(Serialize, Deserialize)]
 pub struct EvaluationSettings {
     pub(crate) episodes_per_evaluation: usize,
     pub(crate) evaluation_execution_mode: SamplerExecutionMode,
@@ -118,6 +125,10 @@ impl EvaluationSettings {
 
     /// Sets the number of episodes collected during each evaluation pass.
     ///
+    /// # Arguments
+    ///
+    /// * `episodes_per_evaluation` - Number of completed episodes collected per evaluation pass.
+    ///
     /// # Panics
     ///
     /// Panics if `episodes_per_evaluation` is zero.
@@ -132,16 +143,22 @@ impl EvaluationSettings {
     }
 
     /// Sets how evaluation environments are executed.
+    ///
+    /// # Arguments
+    ///
+    /// * `evaluation_execution_mode` - Whether evaluation workers run on the current thread or on
+    ///   dedicated threads.
     #[must_use]
-    pub fn with_evaluation_execution_mode(
-        mut self,
-        evaluation_execution_mode: SamplerExecutionMode,
-    ) -> Self {
+    pub fn with_execution_mode(mut self, evaluation_execution_mode: SamplerExecutionMode) -> Self {
         self.evaluation_execution_mode = evaluation_execution_mode;
         self
     }
 
     /// Sets the number of training rollouts between evaluation passes.
+    ///
+    /// # Arguments
+    ///
+    /// * `rollouts_per_evaluation` - Number of completed training rollouts between evaluations.
     ///
     /// # Panics
     ///
@@ -157,12 +174,6 @@ impl EvaluationSettings {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct EvalState {
-    avg_reward: f32,
-    total_episodes: f32,
-}
-
 /// Evaluates an actor through the sampler path and keeps the best one seen.
 ///
 /// This evaluator collects episode-bounded rollouts,
@@ -170,15 +181,10 @@ struct EvalState {
 /// observed so far.
 pub(crate) struct BestActorEvaluator<A: Actor, E: Env> {
     sampler: EvaluationSampler<E>,
-    output_dir: PathBuf,
-    write_evaluation_results: bool,
-    write_inference_artifacts: bool,
-    best_actor: Option<A>,
-    best_obs_normalizer: Option<NormalizerBuilder>,
-    best_rewards: f32,
-    current_evaluator_step: usize,
-    rollouts_per_evaluation: usize,
-    eval_states: Vec<EvalState>,
+    evaluation_results: Option<File>,
+    inference_artifacts: Option<PathBuf>,
+    best_reward: Option<f32>,
+    _actor: PhantomData<A>,
 }
 
 impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
@@ -187,96 +193,73 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         output_dir: PathBuf,
         write_evaluation_results: bool,
         write_inference_artifacts: bool,
-        rollouts_per_evaluation: usize,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        std::fs::create_dir_all(&output_dir).map_err(Error::wrap)?;
+        let evaluation_results = if write_evaluation_results {
+            let mut file = File::create(output_dir.join(EVALUATIONS_FILE)).map_err(Error::wrap)?;
+            writeln!(file, "average_reward,total_episodes").map_err(Error::wrap)?;
+            Some(file)
+        } else {
+            None
+        };
+        Ok(Self {
             sampler,
-            output_dir,
-            write_evaluation_results,
-            write_inference_artifacts,
-            best_actor: None,
-            best_obs_normalizer: None,
-            best_rewards: f32::MIN,
-            current_evaluator_step: 0,
-            rollouts_per_evaluation,
-            eval_states: vec![],
-        }
+            evaluation_results,
+            inference_artifacts: write_inference_artifacts.then_some(output_dir),
+            best_reward: None,
+            _actor: PhantomData,
+        })
     }
 
-    /// Evaluates the runtime actor when the configured interval elapses.
-    /// Returns whether an evaluation was performed.
-    pub fn eval<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
+    pub(crate) fn evaluate<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
         &mut self,
         rt: &mut OnPolicyRuntime<AG, TS>,
-    ) -> bool {
-        self.current_evaluator_step += 1;
-        if self
-            .current_evaluator_step
-            .is_multiple_of(self.rollouts_per_evaluation)
-        {
-            let actor = rt.actor();
-            let adapted_actor = ActorWrapper::new(rt.actor());
-            self.eval_adapted(adapted_actor, actor);
-            true
-        } else {
-            false
-        }
+    ) -> Result<(), Error> {
+        let actor = rt.actor();
+        let adapted_actor = ActorWrapper::new(actor.clone());
+        self.eval_adapted(adapted_actor, &actor)?;
+        Ok(())
     }
 
     /// Evaluates the actor and persists it if it outperforms the current best actor.
-    pub fn eval_adapted(
+    pub(crate) fn eval_adapted(
         &mut self,
         adapted_actor: impl Actor<Tensor = E::Tensor> + Clone,
-        actor: A,
-    ) {
-        let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor);
+        actor: &A,
+    ) -> Result<(), Error> {
+        let (total_reward, total_episodes) = self.sampler.evaluate(adapted_actor)?;
         let avg_reward = total_reward / total_episodes;
-        if self.write_evaluation_results {
-            self.eval_states.push(EvalState {
-                avg_reward,
-                total_episodes,
-            });
+        if let Some(evaluation_results) = &mut self.evaluation_results {
+            writeln!(evaluation_results, "{avg_reward},{total_episodes}").map_err(Error::wrap)?;
         }
-        if avg_reward > self.best_rewards {
-            self.best_rewards = avg_reward;
-            if self.write_inference_artifacts {
-                self.best_actor = Some(actor);
-                self.best_obs_normalizer = self.sampler.normalizer_snapshot();
-            }
-            self.try_write_artifacts()
-                .expect("failed to write training artifacts");
-        }
-    }
-
-    /// Writes the enabled inference artifacts and evaluation results.
-    pub fn try_write_artifacts(&self) -> Result<()> {
-        std::fs::create_dir_all(&self.output_dir)?;
-        if self.write_inference_artifacts
-            && let Some(actor) = &self.best_actor
+        if self
+            .best_reward
+            .is_none_or(|best_reward| avg_reward > best_reward)
         {
-            let bytes = actor.to_safetensors()?;
-            std::fs::write(self.output_dir.join(ACTOR_FILE), bytes)?;
-            if let Some(normalizer) = &self.best_obs_normalizer {
-                let normalizer_path = self.output_dir.join(NORMALIZER_FILE);
-                std::fs::write(normalizer_path, yaml_serde::to_string(normalizer)?)?;
+            if let Some(output_dir) = &self.inference_artifacts {
+                let actor_bytes = actor.to_safetensors()?;
+                let normalizer = self.sampler.normalizer_snapshot()?;
+                std::fs::write(output_dir.join(ACTOR_FILE), actor_bytes).map_err(Error::wrap)?;
+                if let Some(normalizer) = normalizer {
+                    let serialized = yaml_serde::to_string(&normalizer).map_err(Error::wrap)?;
+                    std::fs::write(output_dir.join(NORMALIZER_FILE), serialized)
+                        .map_err(Error::wrap)?;
+                }
             }
-        }
-        if self.write_evaluation_results {
-            let mut csv = String::from("average_reward,total_episodes\n");
-            for eval_state in &self.eval_states {
-                writeln!(
-                    csv,
-                    "{},{}",
-                    eval_state.avg_reward, eval_state.total_episodes
-                )?;
-            }
-            std::fs::write(self.output_dir.join(EVALUATIONS_FILE), csv)?;
+            self.best_reward = Some(avg_reward);
         }
         Ok(())
     }
 
     /// Releases evaluator resources.
-    pub fn shutdown(&mut self) {
+    pub(crate) fn shutdown(&mut self) -> Result<(), Error> {
         self.sampler.shutdown();
+        if self.inference_artifacts.is_some() && self.best_reward.is_none() {
+            return Err(Error::InvalidState {
+                operation: "serializing actor".into(),
+                details: "no actor was evaluated, serialization is not possible".into(),
+            });
+        }
+        Ok(())
     }
 }

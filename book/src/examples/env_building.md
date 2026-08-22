@@ -8,9 +8,9 @@ The `env_building` example shows the supported construction styles:
 
 - implementing `Env` for a custom environment;
 - implementing `EnvBuilder` for a custom builder type;
-- passing a closure or function that returns an environment;
+- passing a closure or function that returns `r2l_core::error::Result<E>`;
 - using `GymEnvBuilder` directly;
-- using `PPOAlgorithmBuilder::gym` for Gymnasium environment ids.
+- using `PPOBuilder::gym` for Gymnasium environment ids.
 
 Run it from the workspace root:
 
