@@ -9,7 +9,7 @@
               "entrypoint": "/bin/sh",
               "commands": [
                 "-c",
-                "printf '%s\\n' MountainCarContinuous-v0 CartPole-v1 Pendulum-v1 Acrobot-v1 MountainCar-v0 LunarLander-v3 LunarLanderContinuous-v3 popgym-BattleshipEasy-v0 | xargs -P 8 -n 1 r2l-zoo-evaluator evaluate \"$R2L_BACKEND\""
+                "if [ \"$R2L_BACKEND\" = sb3 ]; then printf '%s\\n' MountainCarContinuous-v0 CartPole-v1 Pendulum-v1 Acrobot-v1 MountainCar-v0 LunarLander-v3 LunarLanderContinuous-v3 popgym-BattleshipEasy-v0 | xargs -P 8 -n 1 python /opt/r2l/sb3/ppo.py; else printf '%s\\n' MountainCarContinuous-v0 CartPole-v1 Pendulum-v1 Acrobot-v1 MountainCar-v0 LunarLander-v3 LunarLanderContinuous-v3 popgym-BattleshipEasy-v0 | xargs -P 8 -n 1 r2l-zoo-evaluator evaluate \"$R2L_BACKEND\"; fi"
               ],
               "volumes": [
                 "/mnt/disks/r2l-results:/opt/r2l/logs"

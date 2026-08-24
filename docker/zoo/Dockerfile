@@ -17,9 +17,14 @@ RUN apt-get update \
 
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu \
+        "torch==2.13.0" \
+    && /opt/venv/bin/pip install --no-cache-dir \
         "gymnasium[classic-control]==1.2.2" \
         "box2d-py==2.3.5" \
-        "popgym==1.0.7"
+        "popgym==1.0.7" \
+        "PyYAML==6.0.2" \
+        "stable-baselines3==2.9.0"
 
 
 FROM python:3.11-slim-bookworm
@@ -27,6 +32,7 @@ FROM python:3.11-slim-bookworm
 COPY --from=python-deps /opt/venv /opt/venv
 COPY --from=rust-build /opt/r2l/target/release/r2l-zoo-evaluator /usr/local/bin/
 COPY --from=rust-build /opt/r2l/assets/ppo.yaml /opt/r2l/assets/ppo.yaml
+COPY --from=rust-build /opt/r2l/sb3/ppo.py /opt/r2l/sb3/ppo.py
 
 ENV PATH=/opt/venv/bin:$PATH
 
