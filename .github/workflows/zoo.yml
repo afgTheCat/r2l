@@ -18,6 +18,7 @@ env:
   WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
   CI_SERVICE_ACCOUNT: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
   BATCH_SERVICE_ACCOUNT: ${{ vars.GCP_BATCH_SERVICE_ACCOUNT }}
+  R2L_BACKENDS: ${{ vars.R2L_BACKENDS }}
 
 jobs:
   benchmark:
@@ -49,19 +50,26 @@ jobs:
       - env:
           IMAGE_URI: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/r2l-zoo:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
-          JOB_NAME="r2l-zoo-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          BUCKET_PATH="${RESULTS_BUCKET}/runs/${JOB_NAME}"
+          JOB_PREFIX="r2l-zoo-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          BUCKET_PATH="${RESULTS_BUCKET}/runs/${JOB_PREFIX}"
+          IFS=, read -ra BACKENDS <<< "${R2L_BACKENDS:-burn}"
 
-          jq \
-            --arg image "$IMAGE_URI" \
-            --arg bucket "$BUCKET_PATH" \
-            --arg service_account "$BATCH_SERVICE_ACCOUNT" \
-            '.taskGroups[0].taskSpec.runnables[0].container.imageUri = $image
-             | .taskGroups[0].taskSpec.volumes[0].gcs.remotePath = $bucket
-             | .allocationPolicy.serviceAccount.email = $service_account' \
-            .github/batch/zoo-job.json > job.json
+          for BACKEND in "${BACKENDS[@]}"; do
+            JOB_NAME="${JOB_PREFIX}-${BACKEND}"
 
-          gcloud batch jobs submit "$JOB_NAME" \
-            --project "$PROJECT_ID" \
-            --location "$REGION" \
-            --config job.json
+            jq \
+              --arg image "$IMAGE_URI" \
+              --arg bucket "$BUCKET_PATH" \
+              --arg service_account "$BATCH_SERVICE_ACCOUNT" \
+              --arg backend "$BACKEND" \
+              '.taskGroups[0].taskSpec.runnables[0].container.imageUri = $image
+               | .taskGroups[0].taskSpec.environment.variables.R2L_BACKEND = $backend
+               | .taskGroups[0].taskSpec.volumes[0].gcs.remotePath = $bucket
+               | .allocationPolicy.serviceAccount.email = $service_account' \
+              .github/batch/zoo-job.json > "job-${BACKEND}.json"
+
+            gcloud batch jobs submit "$JOB_NAME" \
+              --project "$PROJECT_ID" \
+              --location "$REGION" \
+              --config "job-${BACKEND}.json"
+          done
