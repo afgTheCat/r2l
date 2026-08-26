@@ -104,7 +104,7 @@ fn evaluate(envs: Vec<String>, backend: Backend) -> anyhow::Result<()> {
         match env.as_str() {
             // we may expand this
             "VizdoomBasic-MultiBinary-v1" => import_module("vizdoom.gymnasium_wrapper")?,
-            "popgym-BattleshipEasy-v0" => import_module("ppogym")?,
+            "popgym-BattleshipEasy-v0" => import_module("popgym")?,
             _ => {}
         }
         let Some(env_config) = zoo_config.supported_envs.get(&env) else {

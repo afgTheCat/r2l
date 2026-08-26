@@ -1,3 +1,7 @@
+# NOTE: this file is AI generated has not been throughly reviewed.
+# It is only used as a sanity check for explaining differences between sb3 and r2l
+#
+
 from __future__ import annotations
 
 import argparse
@@ -13,7 +17,6 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize
-
 
 SEED = 0
 EVAL_FREQUENCY = 10_000
