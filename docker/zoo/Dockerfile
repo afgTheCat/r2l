@@ -1,10 +1,17 @@
-FROM rust:bookworm AS rust-build
+FROM lukemathwalker/cargo-chef:0.1.78-rust-bookworm AS chef
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends python3-dev \
     && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /opt/r2l
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS rust-build
+COPY --from=planner /opt/r2l/recipe.json recipe.json
+RUN cargo chef cook --locked --release --package r2l-zoo-evaluator --recipe-path recipe.json
 COPY . .
 RUN cargo build --locked --release -p r2l-zoo-evaluator
 
