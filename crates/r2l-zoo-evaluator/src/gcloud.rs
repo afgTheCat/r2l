@@ -14,6 +14,26 @@ pub struct BatchJob {
     pub logs_policy: Option<LogsPolicy>,
 }
 
+impl BatchJob {
+    pub fn new(task_groups: Vec<TaskGroup>) -> Self {
+        Self {
+            task_groups,
+            allocation_policy: None,
+            logs_policy: None,
+        }
+    }
+
+    pub fn with_allocation_policy(mut self, allocation_policy: AllocationPolicy) -> Self {
+        self.allocation_policy = Some(allocation_policy);
+        self
+    }
+
+    pub fn with_logs_policy(mut self, logs_policy: LogsPolicy) -> Self {
+        self.logs_policy = Some(logs_policy);
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskGroup {
@@ -24,6 +44,26 @@ pub struct TaskGroup {
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub task_environments: Vec<Environment>,
+}
+
+impl TaskGroup {
+    pub fn new(task_spec: TaskSpec) -> Self {
+        Self {
+            task_spec,
+            parallelism: None,
+            task_environments: Vec::new(),
+        }
+    }
+
+    pub fn with_parallelism(mut self, parallelism: u64) -> Self {
+        self.parallelism = Some(parallelism);
+        self
+    }
+
+    pub fn with_task_environments(mut self, task_environments: Vec<Environment>) -> Self {
+        self.task_environments = task_environments;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +87,19 @@ pub struct TaskSpec {
     pub max_run_duration: Option<String>,
 }
 
+impl TaskSpec {
+    pub fn new(runnables: Vec<Runnable>) -> Self {
+        Self {
+            runnables,
+            volumes: Vec::new(),
+            compute_resource: None,
+            environment: None,
+            max_retry_count: None,
+            max_run_duration: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Runnable {
@@ -63,6 +116,18 @@ pub struct Runnable {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub always_run: Option<bool>,
+}
+
+impl Runnable {
+    pub fn container(container: Container) -> Self {
+        Self {
+            container,
+            environment: None,
+            ignore_exit_status: None,
+            background: None,
+            always_run: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +148,19 @@ pub struct Container {
     pub volumes: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Container {
+    pub fn new(image_uri: impl Into<String>, commands: Vec<String>) -> Self {
+        Self {
+            image_uri: image_uri.into(),
+            commands,
+            entrypoint: None,
+            options: None,
+            volumes: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Environment {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -91,6 +168,15 @@ pub struct Environment {
 
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub secret_variables: HashMap<String, String>,
+}
+
+impl Environment {
+    pub fn from_variable(key: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            variables: HashMap::from([(key.into(), value.into())]),
+            ..Self::default()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,6 +217,14 @@ pub struct AllocationPolicy {
     pub service_account: Option<ServiceAccount>,
 }
 
+impl AllocationPolicy {
+    pub fn with_service_account(service_account: ServiceAccount) -> Self {
+        Self {
+            service_account: Some(service_account),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceAccount {
@@ -140,6 +234,15 @@ pub struct ServiceAccount {
     pub scopes: Vec<String>,
 }
 
+impl ServiceAccount {
+    pub fn new(email: impl Into<String>) -> Self {
+        Self {
+            email: email.into(),
+            scopes: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogsPolicy {
@@ -147,6 +250,15 @@ pub struct LogsPolicy {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logs_path: Option<String>,
+}
+
+impl LogsPolicy {
+    pub fn cloud_logging() -> Self {
+        Self {
+            destination: LogsDestination::CloudLogging,
+            logs_path: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

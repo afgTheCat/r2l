@@ -1,11 +1,25 @@
-use std::path::PathBuf;
+use std::{
+    env::var,
+    io::Write,
+    path::PathBuf,
+    process::{Command as ProcessCommand, Stdio},
+};
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use clap::Parser;
 use r2l::{PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
 use serde::{Deserialize, Serialize};
 
-use crate::{Backend, zoo_parser::RlZooEnvironmentConfig};
+use crate::{
+    Backend,
+    gcloud::{
+        AllocationPolicy, BatchJob, Container, Environment, LogsPolicy, Runnable, ServiceAccount,
+        TaskGroup, TaskSpec,
+    },
+    zoo_parser::RlZooEnvironmentConfig,
+};
+
+const TASK_ENV_VAR: &str = "R2L_TASK";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct R2lTask {
@@ -13,14 +27,6 @@ struct R2lTask {
     rl_zoo_env_config: RlZooEnvironmentConfig,
     output_dir: PathBuf,
     env_name: String,
-}
-
-impl std::str::FromStr for R2lTask {
-    type Err = serde_json::Error;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(value)
-    }
 }
 
 impl R2lTask {
@@ -63,10 +69,7 @@ struct Args {
 #[derive(clap::Subcommand)]
 enum Command {
     Submit,
-    Run {
-        #[arg(long)]
-        task: R2lTask,
-    },
+    Run,
 }
 
 fn gather_tasks() -> Vec<R2lTask> {
@@ -84,13 +87,12 @@ struct Scheduler {
 
 impl Scheduler {
     fn new() -> anyhow::Result<Self> {
-        let project = std::env::var("PROJECT_ID").context("PROJECT_ID was not set")?;
-        let region = std::env::var("REGION").context("REGION was not set")?;
-        let job_name = std::env::var("JOB_NAME").context("JOB_NAME was not set")?;
-        let image_uri = std::env::var("IMAGE_URI").context("IMAGE_URI was not set")?;
-        let service_account =
-            std::env::var("SERVICE_ACCOUNT").context("SERVICE_ACCOUNT was not set")?;
-        let bucket = std::env::var("BUCKET").context("BUCKET was not set")?;
+        let project = var("PROJECT_ID").context("PROJECT_ID was not set")?;
+        let region = var("REGION").context("REGION was not set")?;
+        let job_name = var("JOB_NAME").context("JOB_NAME was not set")?;
+        let image_uri = var("IMAGE_URI").context("IMAGE_URI was not set")?;
+        let service_account = var("SERVICE_ACCOUNT").context("SERVICE_ACCOUNT was not set")?;
+        let bucket = var("BUCKET").context("BUCKET was not set")?;
         Ok(Self {
             project,
             region,
@@ -103,7 +105,52 @@ impl Scheduler {
 
     fn submit_tasks(&self) -> anyhow::Result<()> {
         let tasks = gather_tasks();
-        todo!()
+        let task_environments = tasks
+            .into_iter()
+            .map(|task| {
+                let task = serde_json::to_string(&task)?;
+                Ok(Environment::from_variable(TASK_ENV_VAR, task))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let parallelism = task_environments.len() as u64;
+        let container = Container::new(&self.image_uri, vec!["run".to_owned()]);
+        let task_spec = TaskSpec::new(vec![Runnable::container(container)]);
+        let task_group = TaskGroup::new(task_spec)
+            .with_parallelism(parallelism)
+            .with_task_environments(task_environments);
+        let allocation_policy =
+            AllocationPolicy::with_service_account(ServiceAccount::new(&self.service_account));
+        let job = BatchJob::new(vec![task_group])
+            .with_allocation_policy(allocation_policy)
+            .with_logs_policy(LogsPolicy::cloud_logging());
+        let job = serde_json::to_vec(&job).context("failed to serialize Batch job")?;
+        let mut child = ProcessCommand::new("gcloud")
+            .args([
+                "batch",
+                "jobs",
+                "submit",
+                &self.job_name,
+                "--project",
+                &self.project,
+                "--location",
+                &self.region,
+                "--config=-",
+                "--quiet",
+            ])
+            .stdin(Stdio::piped())
+            .spawn()
+            .context("failed to start gcloud")?;
+        child
+            .stdin
+            .take()
+            .context("failed to open gcloud stdin")?
+            .write_all(&job)
+            .context("failed to write Batch job to gcloud")?;
+        let status = child.wait().context("failed to wait for gcloud")?;
+        if !status.success() {
+            bail!("gcloud failed to submit Batch job: {status}");
+        }
+        Ok(())
     }
 }
 
@@ -114,6 +161,11 @@ fn main() -> anyhow::Result<()> {
             let scheduler = Scheduler::new()?;
             scheduler.submit_tasks()
         }
-        Command::Run { task } => task.train_ppo_algo(),
+        Command::Run => {
+            let task = var(TASK_ENV_VAR).context(format!("{TASK_ENV_VAR} was not set"))?;
+            let task: R2lTask = serde_json::from_str(&task)
+                .context(format!("{TASK_ENV_VAR} was not a valid task specification"))?;
+            task.train_ppo_algo()
+        }
     }
 }
