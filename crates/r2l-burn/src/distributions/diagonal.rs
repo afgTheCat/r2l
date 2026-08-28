@@ -2,13 +2,15 @@ use std::f32;
 
 use burn::module::{Module, Param};
 use burn::tensor::cast::ToElement;
-use burn::tensor::{Distribution as BurnDistribution, Shape, TensorData};
+use burn::tensor::{Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor};
 use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
 use r2l_core::{
     error::{Error, InvalidParameterError, Result},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
+    rng::with_rng,
 };
+use rand_distr::{Distribution, StandardNormal};
 
 use crate::sequential::Sequential;
 
@@ -75,7 +77,13 @@ impl<B: Backend> Actor for DiagGaussianDistribution<B> {
         let observation: Tensor<B, 2> = observation.unsqueeze();
         let mu = self.mu_net.forward(observation);
         let std = self.log_std.val().exp();
-        let noise = Tensor::random(mu.shape(), BurnDistribution::Normal(0., 1.), &device);
+        let shape = mu.shape();
+        let noise = with_rng(|rng| {
+            (0..shape.num_elements())
+                .map(|_| StandardNormal.sample(rng))
+                .collect::<Vec<f32>>()
+        });
+        let noise = Tensor::from_data(TensorData::new(noise, shape), &device);
         let action = mu + noise * std;
         Ok(action.squeeze_dims(&[0]))
     }

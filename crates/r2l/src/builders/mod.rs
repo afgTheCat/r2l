@@ -1017,6 +1017,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Arguments
     ///
     /// * `seed` - Seed used to initialize the random number generators.
+    #[cfg(not(feature = "simd"))]
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.builder.seed = Some(seed);
         self
@@ -1271,6 +1272,18 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         mut self,
     ) -> Result<OnPolicyAlgorithm<A, S, OnPolicyTrainingHooks<A, S, E>>, Error> {
         self.builder.validate_evaluation_schedule()?;
+        #[cfg(feature = "simd")]
+        if self.builder.seed.is_some()
+            && matches!(
+                self.builder.backend_configuration,
+                BackendConfiguration::Burn(_)
+            )
+        {
+            return Err(Error::Unsupported {
+                operation: "seeded Burn training".into(),
+                details: "the `simd` feature does not provide bitwise reproducibility".into(),
+            });
+        }
         if let Some(seed) = self.builder.seed {
             set_seed(seed);
         }
@@ -1285,6 +1298,17 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOCandle, S, E> {
+    /// Sets the random seed used when the algorithm is built.
+    ///
+    /// # Arguments
+    ///
+    /// * `seed` - Seed used to initialize the random number generators.
+    #[cfg(feature = "simd")]
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.builder.seed = Some(seed);
+        self
+    }
+
     /// Uses Candle on `device` for PPO learning.
     ///
     /// # Arguments
@@ -1396,6 +1420,17 @@ where
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CCandle, S, E> {
+    /// Sets the random seed used when the algorithm is built.
+    ///
+    /// # Arguments
+    ///
+    /// * `seed` - Seed used to initialize the random number generators.
+    #[cfg(feature = "simd")]
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.builder.seed = Some(seed);
+        self
+    }
+
     /// Uses Candle on `device` for A2C learning.
     ///
     /// # Arguments
