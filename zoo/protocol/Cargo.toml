@@ -1,0 +1,15 @@
+[package]
+name = "r2l-zoo-protocol"
+version.workspace = true
+edition.workspace = true
+description = "Shared task protocol for r2l Zoo evaluations"
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+yaml_serde = { workspace = true }
+
+[lints]
+workspace = true

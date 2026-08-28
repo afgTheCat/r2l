@@ -18,7 +18,6 @@ env:
   WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
   CI_SERVICE_ACCOUNT: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
   BATCH_SERVICE_ACCOUNT: ${{ vars.GCP_BATCH_SERVICE_ACCOUNT }}
-  R2L_BACKENDS: ${{ vars.R2L_BACKENDS }}
 
 jobs:
   benchmark:
@@ -38,38 +37,21 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Build scheduler
+        run: cargo build --locked --release -p r2l-zoo-scheduler
+
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/zoo/Dockerfile
+          file: zoo/Dockerfile
           push: true
           tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/r2l-zoo:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - env:
+      - name: Submit benchmark
+        env:
           IMAGE_URI: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/r2l-zoo:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          JOB_PREFIX="r2l-zoo-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          BUCKET_PATH="${RESULTS_BUCKET}/runs/${JOB_PREFIX}"
-          IFS=, read -ra BACKENDS <<< "${R2L_BACKENDS:-burn}"
-
-          for BACKEND in "${BACKENDS[@]}"; do
-            JOB_NAME="${JOB_PREFIX}-${BACKEND}"
-
-            jq \
-              --arg image "$IMAGE_URI" \
-              --arg bucket "$BUCKET_PATH" \
-              --arg service_account "$BATCH_SERVICE_ACCOUNT" \
-              --arg backend "$BACKEND" \
-              '.taskGroups[0].taskSpec.runnables[0].container.imageUri = $image
-               | .taskGroups[0].taskSpec.environment.variables.R2L_BACKEND = $backend
-               | .taskGroups[0].taskSpec.volumes[0].gcs.remotePath = $bucket
-               | .allocationPolicy.serviceAccount.email = $service_account' \
-              .github/batch/zoo-job.json > "job-${BACKEND}.json"
-
-            gcloud batch jobs submit "$JOB_NAME" \
-              --project "$PROJECT_ID" \
-              --location "$REGION" \
-              --config "job-${BACKEND}.json"
-          done
+          JOB_NAME: r2l-zoo-${{ github.run_id }}-${{ github.run_attempt }}
+          SERVICE_ACCOUNT: ${{ env.BATCH_SERVICE_ACCOUNT }}
+        run: target/release/r2l-zoo-scheduler

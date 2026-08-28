@@ -38,11 +38,11 @@ FROM python:3.11-slim-bookworm
 
 COPY --from=python-deps /opt/venv /opt/venv
 COPY --from=rust-build /opt/r2l/target/release/r2l-zoo-evaluator /usr/local/bin/
-COPY --from=rust-build /opt/r2l/assets/ppo.yaml /opt/r2l/assets/ppo.yaml
-COPY --from=rust-build /opt/r2l/sb3/ppo.py /opt/r2l/sb3/ppo.py
+COPY --from=rust-build /opt/r2l/zoo/assets/ppo.yaml /opt/r2l/assets/ppo.yaml
+COPY --from=rust-build /opt/r2l/zoo/sb3/ppo.py /opt/r2l/sb3/ppo.py
 
 ENV PATH=/opt/venv/bin:$PATH
 
-RUN mkdir -p /opt/r2l/crates/r2l-zoo-evaluator /opt/r2l/logs
+RUN mkdir -p /opt/r2l/logs
 
 ENTRYPOINT ["r2l-zoo-evaluator"]

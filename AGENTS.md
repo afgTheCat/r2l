@@ -14,6 +14,9 @@ This repository is a Rust workspace for reinforcement learning libraries and exa
 - `crates/r2l-candle`: Candle-based LM integrations
 - `crates/r2l-burn`: Burn-based LM integrations
 - `crates/r2l`: primary user-facing builders and interfaces
+- `zoo/protocol`: shared Zoo task and configuration types
+- `zoo/scheduler`: Google Batch job scheduler
+- `zoo/evaluator`: Zoo evaluation worker
 
 ## Working Style
 

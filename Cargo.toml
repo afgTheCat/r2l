@@ -8,7 +8,9 @@ members = [
   "crates/r2l-candle",
   "crates/r2l-burn",
   "crates/r2l-sampler",
-  "crates/r2l-zoo-evaluator",
+  "zoo/protocol",
+  "zoo/scheduler",
+  "zoo/evaluator",
 ]
 resolver = "3"
 
@@ -21,6 +23,7 @@ r2l = { path = "crates/r2l", version = "0.0.2" }
 r2l-candle = { path = "crates/r2l-candle", version = "0.0.2" }
 r2l-burn = { path = "crates/r2l-burn", version = "0.0.2" }
 r2l-sampler = { path = "crates/r2l-sampler", version = "0.0.2" }
+r2l-zoo-protocol = { path = "zoo/protocol" }
 burn = { version = "0.21.0", default-features = false, features = ["std", "ndarray", "autodiff"] }
 burn-ndarray = { version = "0.21.0", default-features = false, features = ["std", "multi-threads"] }
 burn-store = { version = "0.21.0" }

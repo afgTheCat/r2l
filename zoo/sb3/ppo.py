@@ -1,4 +1,4 @@
-# NOTE: this file is AI generated has not been throughly reviewed.
+# NOTE: this file is AI generated and has not been thoroughly reviewed.
 # It is only used as a sanity check for explaining differences between sb3 and r2l
 #
 
