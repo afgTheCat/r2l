@@ -30,6 +30,20 @@ const CPU_MILLI_PER_TASK: i64 = 1_000;
 const MEMORY_MIB_PER_TASK: i64 = 1_750;
 const MAX_RETRY_COUNT: u32 = 2;
 const TASK_ENV_VAR: &str = "R2L_TASK";
+const UNSUPPORTED_ENVIRONMENTS: [&str; 2] = ["MinitaurBulletEnv-v0", "MinitaurBulletDuckEnv-v0"];
+
+fn uses_flat_obs_wrapper(value: &Value) -> bool {
+    match value {
+        Value::String(wrapper) => wrapper.ends_with("FlatObsWrapper"),
+        Value::Sequence(wrappers) => wrappers.iter().any(uses_flat_obs_wrapper),
+        _ => false,
+    }
+}
+
+fn should_skip_environment(env_name: &str, value: &Value) -> bool {
+    UNSUPPORTED_ENVIRONMENTS.contains(&env_name)
+        || value.get("env_wrapper").is_some_and(uses_flat_obs_wrapper)
+}
 
 struct ZooConfig {
     supported_envs: BTreeMap<String, RlZooEnvironmentConfig>,
@@ -47,6 +61,9 @@ impl ZooConfig {
         parsed_content.remove("atari");
         let mut supported_envs = BTreeMap::new();
         for (env_name, value) in parsed_content {
+            if should_skip_environment(&env_name, &value) {
+                continue;
+            }
             let config = yaml_serde::from_value::<RlZooEnvironmentConfig>(value)
                 .with_context(|| format!("failed to parse RL Zoo configuration for {env_name}"))?;
             if config.supported() {
@@ -188,7 +205,7 @@ mod tests {
     #[test]
     fn gathers_all_backends_for_each_environment() {
         let tasks = gather_tasks().expect("Zoo configuration should parse");
-        assert!(!tasks.is_empty());
+        assert_eq!(tasks.len(), 84);
         let (task_groups, remainder) = tasks.as_chunks::<3>();
         assert!(remainder.is_empty());
 
@@ -207,5 +224,35 @@ mod tests {
             assert_eq!(decoded.env_name, task.env_name);
             assert_eq!(decoded.backend.name(), task.backend.name());
         }
+    }
+
+    #[test]
+    fn skips_unsupported_environment_configurations() {
+        let flat_obs_config: Value =
+            yaml_serde::from_str("env_wrapper: minigrid.wrappers.FlatObsWrapper\n")
+                .expect("wrapper configuration should parse");
+        let wrapper_list_config: Value =
+            yaml_serde::from_str("env_wrapper:\n  - minigrid.wrappers.FlatObsWrapper\n")
+                .expect("wrapper list configuration should parse");
+        let plain_config: Value =
+            yaml_serde::from_str("policy: MlpPolicy\n").expect("plain configuration should parse");
+
+        assert!(should_skip_environment(
+            "MiniGrid-Test-v0",
+            &flat_obs_config
+        ));
+        assert!(should_skip_environment(
+            "MiniGrid-Test-v0",
+            &wrapper_list_config
+        ));
+        assert!(should_skip_environment(
+            "MinitaurBulletEnv-v0",
+            &plain_config
+        ));
+        assert!(should_skip_environment(
+            "MinitaurBulletDuckEnv-v0",
+            &plain_config
+        ));
+        assert!(!should_skip_environment("CartPole-v1", &plain_config));
     }
 }
