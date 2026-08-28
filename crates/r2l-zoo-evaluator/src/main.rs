@@ -6,6 +6,9 @@
 
 //! Command-line evaluator for comparing `r2l` agents with RL Zoo configurations.
 
+mod gcloud;
+mod orchestrator;
+mod subprocess;
 mod zoo_parser;
 
 use std::{path::PathBuf, process::Command};
@@ -13,6 +16,7 @@ use std::{path::PathBuf, process::Command};
 use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
 use pyo3::Python;
+use serde::{Deserialize, Serialize};
 
 use crate::zoo_parser::ZooConfig;
 
@@ -31,7 +35,7 @@ const SMALL_ENVIRONMENTS: [&str; 9] = [
     "popgym-BattleshipEasy-v0",
 ];
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub(crate) enum Backend {
     Burn,
     Candle,

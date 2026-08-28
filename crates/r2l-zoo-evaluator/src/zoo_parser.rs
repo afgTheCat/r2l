@@ -6,19 +6,19 @@ use std::{
 
 use anyhow::Context as _;
 use r2l::{LearningRateSchedule, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
-use serde::{Deserialize, Deserializer, de};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use yaml_serde::Value;
 
 use crate::Backend;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub enum RlZooSchedule {
     Constant(f64),
     Linear(f64),
 }
 
 impl RlZooSchedule {
-    fn initial_value(self) -> f64 {
+    pub fn initial_value(self) -> f64 {
         match self {
             Self::Constant(value) | Self::Linear(value) => value,
         }
@@ -57,21 +57,21 @@ impl<'de> Deserialize<'de> for RlZooSchedule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum RlZooNormalize {
     Enabled(bool),
     Options { norm_obs: bool, norm_reward: bool },
 }
 
 impl RlZooNormalize {
-    fn norm_obs(&self) -> bool {
+    pub fn norm_obs(&self) -> bool {
         match self {
             Self::Enabled(enabled) => *enabled,
             Self::Options { norm_obs, .. } => *norm_obs,
         }
     }
 
-    fn norm_reward(&self) -> bool {
+    pub fn norm_reward(&self) -> bool {
         match self {
             Self::Enabled(enabled) => *enabled,
             Self::Options { norm_reward, .. } => *norm_reward,
@@ -122,25 +122,25 @@ fn parse_python_bool_option(value: &str, key: &str) -> Option<bool> {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RlZooEnvironmentConfig {
-    n_envs: usize,
-    n_timesteps: usize,
-    policy: String,
-    n_steps: usize,
-    batch_size: usize,
-    gae_lambda: f32,
-    gamma: f32,
-    n_epochs: usize,
-    ent_coef: f32,
-    learning_rate: RlZooSchedule,
-    clip_range: RlZooSchedule,
-    vf_coef: f32,
-    max_grad_norm: f32,
-    log_std_init: f32,
-    normalize: RlZooNormalize,
-    use_sde: bool,
-    sde_sample_freq: i32,
+    pub n_envs: usize,
+    pub n_timesteps: usize,
+    pub policy: String,
+    pub n_steps: usize,
+    pub batch_size: usize,
+    pub gae_lambda: f32,
+    pub gamma: f32,
+    pub n_epochs: usize,
+    pub ent_coef: f32,
+    pub learning_rate: RlZooSchedule,
+    pub clip_range: RlZooSchedule,
+    pub vf_coef: f32,
+    pub max_grad_norm: f32,
+    pub log_std_init: f32,
+    pub normalize: RlZooNormalize,
+    pub use_sde: bool,
+    pub sde_sample_freq: i32,
 }
 
 impl RlZooEnvironmentConfig {

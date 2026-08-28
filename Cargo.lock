@@ -5955,6 +5955,7 @@ dependencies = [
  "r2l-gym",
  "r2l-sampler",
  "serde",
+ "serde_json",
  "yaml_serde",
 ]
 
