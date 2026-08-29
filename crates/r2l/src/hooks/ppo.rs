@@ -24,6 +24,33 @@ use r2l_core::{
 
 use crate::utils::{fmt_stat, mean};
 
+/// Policy-ratio clipping range applied over the progress of PPO training.
+#[derive(Debug, Clone, Copy)]
+pub enum ClipRangeSchedule {
+    /// Keep the clipping range fixed throughout training.
+    Constant(f32),
+    /// Decay the initial clipping range linearly to zero.
+    Linear(f32),
+}
+
+impl ClipRangeSchedule {
+    pub(crate) fn initial_value(self) -> f32 {
+        match self {
+            Self::Constant(clip_range) | Self::Linear(clip_range) => clip_range,
+        }
+    }
+
+    fn value(self, rollout_idx: usize, total_rollouts: usize) -> f32 {
+        match self {
+            Self::Constant(clip_range) => clip_range,
+            Self::Linear(initial_clip_range) => {
+                let progress_remaining = 1.0 - rollout_idx as f32 / total_rollouts as f32;
+                initial_clip_range * progress_remaining.clamp(0.0, 1.0)
+            }
+        }
+    }
+}
+
 /// Training statistics for a single PPO optimization minibatch.
 ///
 /// These statistics are collected during one PPO epoch and reported by the
@@ -271,7 +298,18 @@ pub struct PPOLearningHook<T = ()> {
     pub(crate) reporter: Option<PPORolloutReporter>,
     pub(crate) rollout_idx: usize,
     pub(crate) total_rollouts: Option<usize>,
+    pub(crate) clip_range_schedule: ClipRangeSchedule,
     pub(crate) _lm: PhantomData<T>,
+}
+
+impl<T> PPOLearningHook<T> {
+    fn update_clip_range(&self, params: &mut PPOParams) {
+        if let Some(total_rollouts) = self.total_rollouts {
+            params.clip_range = self
+                .clip_range_schedule
+                .value(self.rollout_idx, total_rollouts);
+        }
+    }
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
@@ -281,7 +319,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
         BT: TrajectoryBatch<burn::Tensor<<B as AutodiffBackend>::InnerBackend, 1>>,
     >(
         &mut self,
-        _params: &mut PPOParams,
+        params: &mut PPOParams,
         module: &mut BurnPolicyValueLearner<B, D>,
         _batches: &[BT],
         advantages: &mut Advantages,
@@ -289,6 +327,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
     ) -> Result<HookResult> {
         self.current_epoch = 0;
         self.rollout_idx += 1;
+        self.update_clip_range(params);
         if self.normalize_advantage {
             advantages.normalize();
         }
@@ -380,7 +419,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
 impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLearner> {
     fn before_learning_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
-        _params: &mut PPOParams,
+        params: &mut PPOParams,
         module: &mut CandlePolicyValueLearner,
         _batches: &[BT],
         advantages: &mut Advantages,
@@ -388,6 +427,7 @@ impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLear
     ) -> Result<HookResult> {
         self.rollout_idx += 1;
         self.current_epoch = 0;
+        self.update_clip_range(params);
         if self.normalize_advantage {
             advantages.normalize();
         }
@@ -468,5 +508,28 @@ impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLear
         } else {
             Ok(HookResult::Continue)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ClipRangeSchedule;
+
+    #[test]
+    fn constant_clip_range_does_not_change() {
+        let schedule = ClipRangeSchedule::Constant(0.2);
+
+        assert_eq!(schedule.value(1, 4), 0.2);
+        assert_eq!(schedule.value(4, 4), 0.2);
+    }
+
+    #[test]
+    fn linear_clip_range_tracks_remaining_rollouts() {
+        let schedule = ClipRangeSchedule::Linear(0.2);
+
+        assert_eq!(schedule.value(1, 4), 0.15);
+        assert_eq!(schedule.value(2, 4), 0.1);
+        assert_eq!(schedule.value(4, 4), 0.0);
+        assert_eq!(schedule.value(5, 4), 0.0);
     }
 }

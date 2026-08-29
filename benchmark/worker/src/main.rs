@@ -3,7 +3,9 @@
 use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
-use r2l::{LearningRateSchedule, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
+use r2l::{
+    ClipRangeSchedule, LearningRateSchedule, PPOBuilder, TrainingArtifactsConfig, TrainingLimit,
+};
 use r2l_benchmark_task::{Backend, BenchmarkTask, RlZooSchedule};
 
 const SB3_SCRIPT_PATH: &str = "/opt/r2l/sb3/ppo.py";
@@ -31,7 +33,7 @@ fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
         .with_entropy_coefficient(config.ent_coef)
         .with_sample_size(config.batch_size)
         .with_learning_rate_schedule(Some(learning_rate_schedule(config.learning_rate)))
-        .with_clip_range(config.clip_range.initial_value() as f32)
+        .with_clip_range_schedule(clip_range_schedule(config.clip_range))
         .with_log_std_init(config.log_std_init)
         .with_value_loss_coefficient(Some(config.vf_coef))
         .with_seed(0) // TODO: should we keep this?
@@ -63,6 +65,13 @@ fn learning_rate_schedule(schedule: RlZooSchedule) -> LearningRateSchedule {
     match schedule {
         RlZooSchedule::Constant(value) => LearningRateSchedule::Constant(value),
         RlZooSchedule::Linear(value) => LearningRateSchedule::Linear(value),
+    }
+}
+
+fn clip_range_schedule(schedule: RlZooSchedule) -> ClipRangeSchedule {
+    match schedule {
+        RlZooSchedule::Constant(value) => ClipRangeSchedule::Constant(value as f32),
+        RlZooSchedule::Linear(value) => ClipRangeSchedule::Linear(value as f32),
     }
 }
 
