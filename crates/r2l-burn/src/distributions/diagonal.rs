@@ -4,7 +4,7 @@ use burn::module::{Module, Param};
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor};
-use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
+use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
     error::{Error, InvalidParameterError, Result},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
@@ -54,18 +54,6 @@ impl<B: Backend> DiagGaussianDistribution<B> {
             &device,
         );
         Ok(Self { mu_net, log_std })
-    }
-
-    /// Builds a diagonal-Guassian policy using a safetensor store
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the stored network dimensions or parameters are invalid.
-    pub fn from_store(store: &mut SafetensorsStore) -> Result<Self> {
-        let mu_layers = Sequential::<B>::dims_from_store("mu_net", store);
-        let mut distribution = Self::build(&mu_layers, ActivationFunction::default(), 0.0)?;
-        distribution.load_from(store).map_err(Error::wrap)?;
-        Ok(distribution)
     }
 }
 
