@@ -1,18 +1,15 @@
 [package]
-name = "r2l-zoo-scheduler"
+name = "r2l-benchmark-task"
 version.workspace = true
 edition.workspace = true
-description = "Google Batch scheduler for r2l Zoo evaluations"
+description = "Task definitions for r2l benchmarks"
 repository.workspace = true
 license.workspace = true
 publish = false
 
 [dependencies]
-r2l-zoo-protocol = { workspace = true }
 serde = { workspace = true }
-serde_json = "1.0.151"
 yaml_serde = { workspace = true }
-anyhow = { workspace = true }
 
 [lints]
 workspace = true

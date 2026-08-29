@@ -1,22 +1,22 @@
-//! Worker process for a single Zoo evaluation task.
+//! Worker process for a single benchmark task.
 
 use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
 use r2l::{LearningRateSchedule, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
-use r2l_zoo_protocol::{Backend, EvaluationTask, RlZooSchedule};
+use r2l_benchmark_task::{Backend, BenchmarkTask, RlZooSchedule};
 
 const SB3_SCRIPT_PATH: &str = "/opt/r2l/sb3/ppo.py";
 const TASK_ENV_VAR: &str = "R2L_TASK";
 
-fn run(task: &EvaluationTask) -> anyhow::Result<()> {
+fn run(task: &BenchmarkTask) -> anyhow::Result<()> {
     match task.backend {
         Backend::Burn | Backend::Candle => train_r2l(task),
         Backend::Sb3 => train_sb3(task),
     }
 }
 
-fn train_r2l(task: &EvaluationTask) -> anyhow::Result<()> {
+fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
     let config = &task.rl_zoo_env_config;
     let obs_clip = config.normalize.norm_obs().then_some(10.0);
     let artifacts_config = TrainingArtifactsConfig::new(&task.output_dir);
@@ -47,7 +47,7 @@ fn train_r2l(task: &EvaluationTask) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn train_sb3(task: &EvaluationTask) -> anyhow::Result<()> {
+fn train_sb3(task: &BenchmarkTask) -> anyhow::Result<()> {
     let status = Command::new("python")
         .arg(SB3_SCRIPT_PATH)
         .arg(&task.env_name)
@@ -68,7 +68,7 @@ fn learning_rate_schedule(schedule: RlZooSchedule) -> LearningRateSchedule {
 
 fn main() -> anyhow::Result<()> {
     let task = var(TASK_ENV_VAR).context(format!("{TASK_ENV_VAR} was not set"))?;
-    let task: EvaluationTask = serde_json::from_str(&task)
+    let task: BenchmarkTask = serde_json::from_str(&task)
         .context(format!("{TASK_ENV_VAR} was not a valid task specification"))?;
     run(&task)
 }

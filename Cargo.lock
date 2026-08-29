@@ -5747,6 +5747,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "r2l-benchmark-scheduler"
+version = "0.0.2"
+dependencies = [
+ "anyhow",
+ "r2l-benchmark-task",
+ "serde",
+ "serde_json",
+ "yaml_serde",
+]
+
+[[package]]
+name = "r2l-benchmark-task"
+version = "0.0.2"
+dependencies = [
+ "serde",
+ "yaml_serde",
+]
+
+[[package]]
+name = "r2l-benchmark-worker"
+version = "0.0.2"
+dependencies = [
+ "anyhow",
+ "r2l",
+ "r2l-benchmark-task",
+ "serde_json",
+]
+
+[[package]]
 name = "r2l-burn"
 version = "0.0.2"
 dependencies = [
@@ -5833,35 +5862,6 @@ dependencies = [
  "itertools 0.15.0",
  "r2l-core",
  "rand 0.10.2",
-]
-
-[[package]]
-name = "r2l-zoo-evaluator"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "r2l",
- "r2l-zoo-protocol",
- "serde_json",
-]
-
-[[package]]
-name = "r2l-zoo-protocol"
-version = "0.0.2"
-dependencies = [
- "serde",
- "yaml_serde",
-]
-
-[[package]]
-name = "r2l-zoo-scheduler"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "r2l-zoo-protocol",
- "serde",
- "serde_json",
- "yaml_serde",
 ]
 
 [[package]]

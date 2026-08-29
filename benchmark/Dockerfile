@@ -11,9 +11,9 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS rust-build
 COPY --from=planner /opt/r2l/recipe.json recipe.json
-RUN cargo chef cook --locked --release --package r2l-zoo-evaluator --recipe-path recipe.json
+RUN cargo chef cook --locked --profile benchmark --package r2l-benchmark-worker --recipe-path recipe.json
 COPY . .
-RUN cargo build --locked --release -p r2l-zoo-evaluator
+RUN cargo build --locked --profile benchmark -p r2l-benchmark-worker
 
 
 FROM python:3.11-slim-bookworm AS python-deps
@@ -65,9 +65,9 @@ RUN apt-get update \
 
 COPY --from=python-deps /opt/venv /opt/venv
 COPY --from=python-deps /opt/mujoco /opt/mujoco
-COPY --from=rust-build /opt/r2l/target/release/r2l-zoo-evaluator /usr/local/bin/
-COPY --from=rust-build /opt/r2l/zoo/assets/ppo.yaml /opt/r2l/assets/ppo.yaml
-COPY --from=rust-build /opt/r2l/zoo/sb3/ppo.py /opt/r2l/sb3/ppo.py
+COPY --from=rust-build /opt/r2l/target/benchmark/r2l-benchmark-worker /usr/local/bin/
+COPY --from=rust-build /opt/r2l/benchmark/assets/ppo.yaml /opt/r2l/assets/ppo.yaml
+COPY --from=rust-build /opt/r2l/benchmark/sb3/ppo.py /opt/r2l/sb3/ppo.py
 
 ENV PATH=/opt/venv/bin:$PATH
 ENV MUJOCO_PY_MUJOCO_PATH=/opt/mujoco/mujoco210
@@ -76,8 +76,8 @@ ENV LD_LIBRARY_PATH=/opt/mujoco/mujoco210/bin
 # Third-party Gymnasium environments register themselves when imported. The task
 # guard prevents native-library probe subprocesses from repeating these imports.
 RUN echo 'import os; os.environ.pop("R2L_TASK", None) and (__import__("gymnasium_robotics"), __import__("minigrid"), __import__("popgym"), __import__("pybullet_envs_gymnasium"))' \
-    > /opt/venv/lib/python3.11/site-packages/r2l_zoo_envs.pth
+    > /opt/venv/lib/python3.11/site-packages/r2l_benchmark_envs.pth
 
 RUN mkdir -p /opt/r2l/logs
 
-ENTRYPOINT ["r2l-zoo-evaluator"]
+ENTRYPOINT ["r2l-benchmark-worker"]

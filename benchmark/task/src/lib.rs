@@ -1,4 +1,4 @@
-//! Task protocol shared by the Zoo scheduler and evaluator.
+//! Task definitions shared by the benchmark scheduler and worker.
 
 use std::path::PathBuf;
 
@@ -24,7 +24,7 @@ impl Backend {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvaluationTask {
+pub struct BenchmarkTask {
     pub backend: Backend,
     pub rl_zoo_env_config: RlZooEnvironmentConfig,
     pub output_dir: PathBuf,

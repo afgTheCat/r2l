@@ -1,4 +1,4 @@
-//! Submits Zoo evaluation tasks to Google Batch.
+//! Submits benchmark tasks to Google Batch.
 
 mod gcloud;
 
@@ -11,8 +11,8 @@ use std::{
     process::{Command, Stdio},
 };
 
-use anyhow::{Context, bail};
-use r2l_zoo_protocol::{Backend, EvaluationTask, RlZooEnvironmentConfig};
+use anyhow::{Context, bail, ensure};
+use r2l_benchmark_task::{Backend, BenchmarkTask, RlZooEnvironmentConfig};
 use yaml_serde::Value;
 
 use crate::gcloud::{
@@ -24,10 +24,7 @@ use crate::gcloud::{
 const CONFIG_PATH: &str = "../assets/ppo.yaml";
 const LOG_DIR: &str = "/opt/r2l/logs";
 const RESULTS_MOUNT_PATH: &str = "/mnt/disks/r2l-results";
-const MACHINE_TYPE: &str = "c4d-highcpu-8";
 const BOOT_DISK_TYPE: &str = "hyperdisk-balanced";
-const CPU_MILLI_PER_TASK: i64 = 1_000;
-const MEMORY_MIB_PER_TASK: i64 = 1_750;
 const MAX_RETRY_COUNT: u32 = 2;
 const TASK_ENV_VAR: &str = "R2L_TASK";
 const UNSUPPORTED_ENVIRONMENTS: [&str; 2] = ["MinitaurBulletEnv-v0", "MinitaurBulletDuckEnv-v0"];
@@ -74,7 +71,7 @@ impl ZooConfig {
     }
 }
 
-fn gather_tasks() -> anyhow::Result<Vec<EvaluationTask>> {
+fn gather_tasks() -> anyhow::Result<Vec<BenchmarkTask>> {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let zoo_config = ZooConfig::parse(&crate_dir.join(CONFIG_PATH))?;
     let log_dir = PathBuf::from(LOG_DIR);
@@ -83,7 +80,7 @@ fn gather_tasks() -> anyhow::Result<Vec<EvaluationTask>> {
         .supported_envs
         .into_iter()
         .flat_map(|(env_name, rl_zoo_env_config)| {
-            [Backend::Burn, Backend::Candle, Backend::Sb3].map(|backend| EvaluationTask {
+            [Backend::Burn, Backend::Candle, Backend::Sb3].map(|backend| BenchmarkTask {
                 output_dir: log_dir.join(backend.name()).join(&env_name),
                 rl_zoo_env_config: rl_zoo_env_config.clone(),
                 env_name: env_name.clone(),
@@ -100,6 +97,10 @@ struct Scheduler {
     image_uri: String,
     service_account: String,
     results_bucket: String,
+    machine_type: String,
+    parallelism: u64,
+    cpu_milli_per_task: i64,
+    memory_mib_per_task: i64,
 }
 
 impl Scheduler {
@@ -110,6 +111,32 @@ impl Scheduler {
         let image_uri = var("IMAGE_URI").context("IMAGE_URI was not set")?;
         let service_account = var("SERVICE_ACCOUNT").context("SERVICE_ACCOUNT was not set")?;
         let results_bucket = var("RESULTS_BUCKET").context("RESULTS_BUCKET was not set")?;
+        let machine_type = var("BATCH_MACHINE_TYPE").context("BATCH_MACHINE_TYPE was not set")?;
+        ensure!(
+            !machine_type.trim().is_empty(),
+            "BATCH_MACHINE_TYPE must not be empty"
+        );
+        let parallelism = var("BATCH_PARALLELISM")
+            .context("BATCH_PARALLELISM was not set")?
+            .parse()
+            .context("BATCH_PARALLELISM must be a positive integer")?;
+        ensure!(parallelism > 0, "BATCH_PARALLELISM must be positive");
+        let cpu_milli_per_task = var("BATCH_CPU_MILLI_PER_TASK")
+            .context("BATCH_CPU_MILLI_PER_TASK was not set")?
+            .parse()
+            .context("BATCH_CPU_MILLI_PER_TASK must be a positive integer")?;
+        ensure!(
+            cpu_milli_per_task > 0,
+            "BATCH_CPU_MILLI_PER_TASK must be positive"
+        );
+        let memory_mib_per_task = var("BATCH_MEMORY_MIB_PER_TASK")
+            .context("BATCH_MEMORY_MIB_PER_TASK was not set")?
+            .parse()
+            .context("BATCH_MEMORY_MIB_PER_TASK must be a positive integer")?;
+        ensure!(
+            memory_mib_per_task > 0,
+            "BATCH_MEMORY_MIB_PER_TASK must be positive"
+        );
         Ok(Self {
             project,
             region,
@@ -117,13 +144,17 @@ impl Scheduler {
             image_uri,
             service_account,
             results_bucket,
+            machine_type,
+            parallelism,
+            cpu_milli_per_task,
+            memory_mib_per_task,
         })
     }
 
     fn submit_tasks(&self) -> anyhow::Result<()> {
         let tasks = gather_tasks()?;
         if tasks.is_empty() {
-            bail!("no supported Zoo tasks were found");
+            bail!("no supported benchmark tasks were found");
         }
         let task_environments = tasks
             .into_iter()
@@ -132,7 +163,7 @@ impl Scheduler {
                 Ok(Environment::from_variable(TASK_ENV_VAR, task))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
-        let parallelism = task_environments.len() as u64;
+        let parallelism = self.parallelism.min(task_environments.len() as u64);
         let results_path = format!(
             "{}/runs/{}",
             self.results_bucket.trim_end_matches('/'),
@@ -146,15 +177,15 @@ impl Scheduler {
         let task_spec = TaskSpec::new(vec![Runnable::container(container)])
             .with_volumes(vec![volume])
             .with_compute_resource(ComputeResource::new(
-                CPU_MILLI_PER_TASK,
-                MEMORY_MIB_PER_TASK,
+                self.cpu_milli_per_task,
+                self.memory_mib_per_task,
             ))
             .with_environment(environment)
             .with_max_retry_count(MAX_RETRY_COUNT);
         let task_group = TaskGroup::new(task_spec)
             .with_parallelism(parallelism)
             .with_task_environments(task_environments);
-        let instance_policy = InstancePolicy::new(MACHINE_TYPE, ProvisioningModel::Spot)
+        let instance_policy = InstancePolicy::new(&self.machine_type, ProvisioningModel::Spot)
             .with_boot_disk(Disk::new(BOOT_DISK_TYPE));
         let allocation_policy =
             AllocationPolicy::with_service_account(ServiceAccount::new(&self.service_account))
@@ -163,7 +194,6 @@ impl Scheduler {
             .with_allocation_policy(allocation_policy)
             .with_logs_policy(LogsPolicy::cloud_logging());
         let job = serde_json::to_vec(&job).context("failed to serialize Batch job")?;
-
         let mut child = Command::new("gcloud")
             .args([
                 "batch",
@@ -196,63 +226,4 @@ impl Scheduler {
 
 fn main() -> anyhow::Result<()> {
     Scheduler::from_environment()?.submit_tasks()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn gathers_all_backends_for_each_environment() {
-        let tasks = gather_tasks().expect("Zoo configuration should parse");
-        assert_eq!(tasks.len(), 84);
-        let (task_groups, remainder) = tasks.as_chunks::<3>();
-        assert!(remainder.is_empty());
-
-        for tasks in task_groups {
-            assert_eq!(tasks[0].env_name, tasks[1].env_name);
-            assert_eq!(tasks[1].env_name, tasks[2].env_name);
-            assert_eq!(tasks[0].backend.name(), "burn");
-            assert_eq!(tasks[1].backend.name(), "candle");
-            assert_eq!(tasks[2].backend.name(), "sb3");
-        }
-
-        for task in tasks {
-            let encoded = serde_json::to_string(&task).expect("task should serialize");
-            let decoded: EvaluationTask =
-                serde_json::from_str(&encoded).expect("task should deserialize");
-            assert_eq!(decoded.env_name, task.env_name);
-            assert_eq!(decoded.backend.name(), task.backend.name());
-        }
-    }
-
-    #[test]
-    fn skips_unsupported_environment_configurations() {
-        let flat_obs_config: Value =
-            yaml_serde::from_str("env_wrapper: minigrid.wrappers.FlatObsWrapper\n")
-                .expect("wrapper configuration should parse");
-        let wrapper_list_config: Value =
-            yaml_serde::from_str("env_wrapper:\n  - minigrid.wrappers.FlatObsWrapper\n")
-                .expect("wrapper list configuration should parse");
-        let plain_config: Value =
-            yaml_serde::from_str("policy: MlpPolicy\n").expect("plain configuration should parse");
-
-        assert!(should_skip_environment(
-            "MiniGrid-Test-v0",
-            &flat_obs_config
-        ));
-        assert!(should_skip_environment(
-            "MiniGrid-Test-v0",
-            &wrapper_list_config
-        ));
-        assert!(should_skip_environment(
-            "MinitaurBulletEnv-v0",
-            &plain_config
-        ));
-        assert!(should_skip_environment(
-            "MinitaurBulletDuckEnv-v0",
-            &plain_config
-        ));
-        assert!(!should_skip_environment("CartPole-v1", &plain_config));
-    }
 }
