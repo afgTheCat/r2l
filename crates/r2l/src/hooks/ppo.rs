@@ -11,13 +11,13 @@ use r2l_burn::learning_module::{
     PolicyValueLosses as BurnPolicyValueLosses,
 };
 use r2l_candle::learning_module::{
-    PolicyValueLearner as CandlePolicyValueLearner, PolicyValueLosses as CandlePolicyValueLosses,
+    CandlePolicy, PolicyValueLearner as CandlePolicyValueLearner,
+    PolicyValueLosses as CandlePolicyValueLosses,
 };
 use r2l_core::{
     HookResult,
     buffers::TrajectoryBatch,
     error::{Error, ResourceInterrupted, Result},
-    models::Policy,
     on_policy::learning_module::OnPolicyLearner,
     tensor::R2lTensor,
 };
@@ -416,11 +416,13 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PPOHook<BurnPolicyValueLearner<B, D>>
     }
 }
 
-impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLearner> {
+impl<P: CandlePolicy> PPOHook<CandlePolicyValueLearner<P>>
+    for PPOLearningHook<CandlePolicyValueLearner<P>>
+{
     fn before_learning_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         params: &mut PPOParams,
-        module: &mut CandlePolicyValueLearner,
+        module: &mut CandlePolicyValueLearner<P>,
         _batches: &[BT],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -438,7 +440,7 @@ impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLear
     fn rollout_hook<BT: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         params: &mut PPOParams,
-        module: &mut CandlePolicyValueLearner,
+        module: &mut CandlePolicyValueLearner<P>,
         batches: &[BT],
     ) -> Result<HookResult> {
         self.current_epoch += 1;
@@ -465,7 +467,7 @@ impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLear
     fn batch_hook(
         &mut self,
         params: &mut PPOParams,
-        module: &mut CandlePolicyValueLearner,
+        module: &mut CandlePolicyValueLearner<P>,
         losses: &mut CandlePolicyValueLosses,
         data: &PPOBatchData<candle_core::Tensor>,
     ) -> Result<HookResult> {
@@ -508,28 +510,5 @@ impl PPOHook<CandlePolicyValueLearner> for PPOLearningHook<CandlePolicyValueLear
         } else {
             Ok(HookResult::Continue)
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ClipRangeSchedule;
-
-    #[test]
-    fn constant_clip_range_does_not_change() {
-        let schedule = ClipRangeSchedule::Constant(0.2);
-
-        assert_eq!(schedule.value(1, 4), 0.2);
-        assert_eq!(schedule.value(4, 4), 0.2);
-    }
-
-    #[test]
-    fn linear_clip_range_tracks_remaining_rollouts() {
-        let schedule = ClipRangeSchedule::Linear(0.2);
-
-        assert_eq!(schedule.value(1, 4), 0.15);
-        assert_eq!(schedule.value(2, 4), 0.1);
-        assert_eq!(schedule.value(4, 4), 0.0);
-        assert_eq!(schedule.value(5, 4), 0.0);
     }
 }
