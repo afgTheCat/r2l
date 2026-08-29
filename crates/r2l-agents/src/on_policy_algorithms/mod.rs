@@ -101,31 +101,28 @@ fn batch_advantages_and_returns<
     lambda: f32,
     lifter: L,
 ) -> Result<(Vec<f32>, Vec<f32>)> {
-    let mut states = batch.states().iter().map(&lifter).collect::<Vec<_>>();
-    let next_state = batch
-        .next_states()
-        .last()
-        .ok_or_else(|| TensorError::EmptyInput {
+    if batch.is_empty() {
+        return Err(TensorError::EmptyInput {
             operation: "compute advantages and returns".into(),
-        })?;
-    states.push(lifter(next_state));
-    let values_stacked = value_func.values(&states)?;
-    let values: Vec<f32> = values_stacked.to_vec()?;
+        }
+        .into());
+    }
+    let states = batch.states().iter().map(&lifter).collect::<Vec<_>>();
+    let next_states = batch.next_states().iter().map(&lifter).collect::<Vec<_>>();
+    let values: Vec<f32> = value_func.values(&states)?.to_vec()?;
+    let next_values: Vec<f32> = value_func.values(&next_states)?.to_vec()?;
     let total_steps = batch.rewards().len();
     let mut advantages: Vec<f32> = vec![0.; total_steps];
     let mut returns: Vec<f32> = vec![0.; total_steps];
     let mut last_gae_lam: f32 = 0.;
 
     for i in (0..total_steps).rev() {
-        let done = batch.terminated()[i] || batch.truncated()[i];
-        let next_non_terminal = if done {
-            last_gae_lam = 0.;
-            0f32
-        } else {
-            1.
-        };
-        let delta = batch.rewards()[i] + next_non_terminal * gamma * values[i + 1] - values[i];
-        last_gae_lam = delta + next_non_terminal * gamma * lambda * last_gae_lam;
+        let terminated = batch.terminated()[i];
+        let truncated = batch.truncated()[i];
+        let bootstrap = if terminated { 0. } else { 1. };
+        let continue_trace = if terminated || truncated { 0. } else { 1. };
+        let delta = batch.rewards()[i] + bootstrap * gamma * next_values[i] - values[i];
+        last_gae_lam = delta + continue_trace * gamma * lambda * last_gae_lam;
         advantages[i] = last_gae_lam;
         returns[i] = last_gae_lam + values[i];
     }

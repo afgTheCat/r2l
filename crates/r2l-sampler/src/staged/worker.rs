@@ -43,16 +43,17 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
         let state = handle.lock().unwrap().clone();
         let action = policy.action(state.clone())?;
         let Snapshot {
-            state: mut next_state,
+            state: next_state,
             reward,
             terminated,
             truncated,
         } = self.env.step(action.clone())?;
         let done = terminated || truncated;
-        if done {
-            next_state = self.env.reset(sample_u64())?;
-        }
-        *handle.lock().unwrap() = next_state.clone();
+        *handle.lock().unwrap() = if done {
+            self.env.reset(sample_u64())?
+        } else {
+            next_state.clone()
+        };
         Ok(Memory {
             state,
             next_state,

@@ -31,15 +31,11 @@ pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     };
     let action = actor.action(state.clone())?;
     let Snapshot {
-        state: mut next_state,
+        state: next_state,
         reward,
         terminated,
         truncated,
     } = env.step(action.clone())?;
-    let done = terminated || truncated;
-    if done {
-        next_state = env.reset(sample_u64())?;
-    }
     Ok(Memory {
         state,
         next_state,
@@ -133,7 +129,11 @@ impl<E: Env> Worker<E> {
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, actor, last_state)?;
                     let terminates = memory.is_done();
-                    self.last_state = Some(memory.next_state.clone());
+                    self.last_state = Some(if terminates {
+                        self.env.reset(sample_u64())?
+                    } else {
+                        memory.next_state.clone()
+                    });
                     buffer.push(memory);
                     if terminates {
                         episodes += 1;
@@ -147,7 +147,11 @@ impl<E: Env> Worker<E> {
                 for _ in 0..n_steps {
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, actor, last_state)?;
-                    self.last_state = Some(memory.next_state.clone());
+                    self.last_state = Some(if memory.is_done() {
+                        self.env.reset(sample_u64())?
+                    } else {
+                        memory.next_state.clone()
+                    });
                     buffer.push(memory);
                 }
             }
