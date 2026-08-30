@@ -67,7 +67,9 @@ do not require or link against Python. Enabling `gym` requires Python 3.11 or
 newer and the `gymnasium` package installed in the Python environment used at
 runtime.
 
-## v0.0.2 capabilities
+## Current capabilities
+
+The current published version is `v0.0.2`.
 
 - On-policy PPO and A2C builders, plus lower-level PPO, A2C, and VPG
   implementations
@@ -86,37 +88,30 @@ Stable Baselines3 are outside the v0.0.2 release. The configurations in
 `envs_to_test.txt` are a benchmark plan, not a record of completed or passing
 training runs.
 
-## Roadmap
+## Status and direction
 
-**Current version: `v0.0.2`.** The project is in an early experimental phase.
-Expect missing features, frequent breaking changes, bugs, and everything in
-between.
+The project is pre-alpha and its public APIs may still change. The next release
+target is `v0.1.0`, recognizing the existing PPO/A2C on-policy foundation as a
+coherent first release rather than claiming algorithm parity with another
+library. Stable Baselines3 remains a benchmark reference, not a feature
+checklist.
 
-### `v0.0.3` – Gymnasium compatibility
+### Next focus: recurrent policies
 
-- Support non-zero `start` values in Gymnasium `Discrete` spaces.
+The next planned capability is an end-to-end recurrent PPO path for both Candle
+and Burn. This includes sequence-aware rollouts, per-environment recurrent
+state, correct state resets at episode boundaries, evaluation support, tests,
+and benchmarks on partially observable environments. A release version will be
+assigned once the design and scope are established.
 
-### `v0.1.0` – Core Algorithm Coverage (SB3 parity)
+### Possible future directions
 
-- Implement all algorithms available in
-  [Stable Baselines3](https://github.com/DLR-RM/stable-baselines3)
-- Add benchmarks for simple environments (e.g. CartPole, Pendulum)
-- Introduce a high-level builder API for setting up agents with established
-  hooks for logging, observability, and training control
-- Expect significant API changes
+- Off-policy learning, introduced one complete algorithm at a time
+- Hyperparameter tuning and monitoring integrations
+- Additional persistence formats
+- Multi-agent support
 
-### `v1.0.0` – Extended Algorithm Set (Tianshou parity)
-
-- Implement remaining algorithms from
-  [Tianshou](https://github.com/thu-ml/tianshou)
-- Finalize the hook and training APIs
-- Provide stable interfaces for embedding, visualization, and training control
-- Improve documentation, examples, and possibly add multi-agent support
-
-**Future directions may include:**
-
-- Snapshotting via SafeTensors or ONNX
-- TensorBoard integration for monitoring
+These are areas of interest, not release commitments.
 
 # Contributing
 
