@@ -5,13 +5,20 @@ use crossbeam::channel::{Receiver, Sender};
 use r2l_core::{
     buffers::{Memory, buffer::TrajectoryBuffer},
     env::{Env, Snapshot},
-    error::Result,
+    error::{Error, ResourceInterrupted, Result},
     models::Actor,
     rng::sample_u64,
     tensor::R2lTensor,
 };
 
 use crate::direct::RolloutMode;
+
+fn worker_interrupted(details: impl Into<String>) -> Error {
+    Error::ResourceInterrupted(ResourceInterrupted {
+        resource: "direct sampler worker".into(),
+        details: details.into(),
+    })
+}
 
 pub(crate) type CommandSender<T> = Sender<WorkerCommand<T>>;
 pub(crate) type CommandReceiver<T> = Receiver<WorkerCommand<T>>;
@@ -81,18 +88,19 @@ impl<T: R2lTensor> ThreadHandle<T> {
         }
     }
 
-    pub fn send(&self, command: WorkerCommand<T>) {
-        self.command_tx.send(command).unwrap();
+    pub fn send(&self, command: WorkerCommand<T>) -> bool {
+        self.command_tx.send(command).is_ok()
     }
 
-    pub fn recv(&self) -> WorkerResult {
-        self.worker_rx.recv().unwrap()
+    pub fn recv(&self) -> Option<WorkerResult> {
+        self.worker_rx.recv().ok()
     }
 
     pub fn shutdown(self) {
-        self.command_tx.send(WorkerCommand::Shutdown).unwrap();
-        self.worker_rx.recv().unwrap();
-        self.handle.join().unwrap();
+        if self.command_tx.send(WorkerCommand::Shutdown).is_ok() {
+            let _ = self.worker_rx.recv();
+        }
+        let _ = self.handle.join();
     }
 }
 
@@ -178,28 +186,35 @@ impl<E: Env> ThreadWorker<E> {
     }
 
     pub fn work(&mut self) {
-        loop {
-            let command = self.rx.recv().unwrap();
+        while let Ok(command) = self.rx.recv() {
             match command {
                 WorkerCommand::SetPolicy(policy) => {
                     self.worker.actor = Some(policy);
-                    self.tx.send(WorkerResult::PolicySet).unwrap();
+                    if self.tx.send(WorkerResult::PolicySet).is_err() {
+                        break;
+                    }
                 }
                 WorkerCommand::Collect(bound) => {
                     let result = self.worker.collect(bound);
-                    self.tx.send(WorkerResult::Collected(result)).unwrap();
+                    if self.tx.send(WorkerResult::Collected(result)).is_err() {
+                        break;
+                    }
                 }
                 WorkerCommand::Shutdown => {
-                    self.tx.send(WorkerResult::Shutdown).unwrap();
+                    let _ = self.tx.send(WorkerResult::Shutdown);
                     break;
                 }
                 WorkerCommand::ResetEnv(seed) => {
                     let result = self.worker.reset(seed);
-                    self.tx.send(WorkerResult::EnvReset(result)).unwrap();
+                    if self.tx.send(WorkerResult::EnvReset(result)).is_err() {
+                        break;
+                    }
                 }
                 WorkerCommand::ClearBuffer => {
                     self.worker.clear();
-                    self.tx.send(WorkerResult::BufferCleared).unwrap();
+                    if self.tx.send(WorkerResult::BufferCleared).is_err() {
+                        break;
+                    }
                 }
             }
         }
@@ -215,23 +230,32 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         Self { worker_handles }
     }
 
-    pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: &A) {
+    pub fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: &A) -> Result<()> {
         for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
+            if !worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone()))) {
+                return Err(worker_interrupted("command channel disconnected"));
+            }
         }
         for worker_handle in &self.worker_handles {
-            worker_handle.recv();
+            match worker_handle.recv() {
+                Some(WorkerResult::PolicySet) => {}
+                Some(_) => return Err(worker_interrupted("received an unexpected response")),
+                None => return Err(worker_interrupted("result channel disconnected")),
+            }
         }
+        Ok(())
     }
 
     pub fn collect_rollout(&self, bound: RolloutMode) -> Result<()> {
         for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::Collect(bound));
+            let _ = worker_handle.send(WorkerCommand::Collect(bound));
         }
         let mut result = Ok(());
         for worker_handle in &self.worker_handles {
-            let WorkerResult::Collected(worker_result) = worker_handle.recv() else {
-                unreachable!()
+            let worker_result = match worker_handle.recv() {
+                Some(WorkerResult::Collected(worker_result)) => worker_result,
+                Some(_) => return Err(worker_interrupted("received an unexpected response")),
+                None => return Err(worker_interrupted("result channel disconnected")),
             };
             if result.is_ok() {
                 result = worker_result;
@@ -242,12 +266,14 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     pub fn reset_all(&self) -> Result<()> {
         for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
+            let _ = worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
         }
         let mut result = Ok(());
         for worker_handle in &self.worker_handles {
-            let WorkerResult::EnvReset(worker_result) = worker_handle.recv() else {
-                unreachable!()
+            let worker_result = match worker_handle.recv() {
+                Some(WorkerResult::EnvReset(worker_result)) => worker_result,
+                Some(_) => return Err(worker_interrupted("received an unexpected response")),
+                None => return Err(worker_interrupted("result channel disconnected")),
             };
             if result.is_ok() {
                 result = worker_result;
@@ -265,10 +291,10 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     pub fn clear_buffers(&mut self) {
         for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::ClearBuffer);
+            let _ = worker_handle.send(WorkerCommand::ClearBuffer);
         }
         for worker_handle in &self.worker_handles {
-            worker_handle.recv();
+            let _ = worker_handle.recv();
         }
     }
 }
@@ -295,16 +321,15 @@ impl<E: Env> WorkerPool<E> {
     }
 
     /// Installs a clone of `policy` on every worker.
-    pub fn set_actor<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) {
+    pub fn set_actor<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) -> Result<()> {
         match self {
             Self::Vec(workers) => {
                 for worker in workers.iter_mut() {
                     worker.actor = Some(Box::new(policy.clone()));
                 }
+                Ok(())
             }
-            Self::Thread(thread_workers) => {
-                thread_workers.set_policy(policy);
-            }
+            Self::Thread(thread_workers) => thread_workers.set_policy(policy),
         }
     }
 

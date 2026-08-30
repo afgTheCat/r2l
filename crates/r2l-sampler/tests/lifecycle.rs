@@ -1,6 +1,9 @@
 mod support;
 
-use std::sync::{Arc, atomic::AtomicUsize};
+use std::{
+    sync::{Arc, atomic::AtomicUsize, mpsc::channel},
+    time::Duration,
+};
 
 use r2l_core::{env::EnvBuilder, on_policy::algorithm::Sampler, tensor::R2lTensor};
 use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
@@ -35,14 +38,12 @@ fn direct_trajectories(
     )
     .unwrap();
     sampler.collect_rollouts(ConstantActor).unwrap();
-    let trajectories = sampler
+    sampler
         .trajectory_views()
         .as_ref()
         .iter()
         .map(OwnedTrajectory::from_view)
-        .collect();
-    sampler.shutdown();
-    trajectories
+        .collect()
 }
 
 fn staged_trajectories(
@@ -59,14 +60,12 @@ fn staged_trajectories(
     )
     .unwrap();
     sampler.collect_rollouts(ConstantActor).unwrap();
-    let trajectories = sampler
+    sampler
         .trajectory_views()
         .as_ref()
         .iter()
         .map(OwnedTrajectory::from_view)
-        .collect();
-    sampler.shutdown();
-    trajectories
+        .collect()
 }
 
 fn expected_terminated_trajectory() -> OwnedTrajectory {
@@ -148,7 +147,6 @@ fn episode_bounds_collect_the_requested_number_of_complete_episodes() {
             assert_eq!(trajectory.episode_terminations(), 2);
         }
         drop(trajectories);
-        sampler.shutdown();
     }
 }
 
@@ -169,7 +167,6 @@ fn reset_all_envs_clears_active_episode_state() {
     let trajectories = sampler.trajectory_views();
     assert_eq!(trajectories.as_ref()[0].states[0].to_vec().unwrap(), [0.0]);
     drop(trajectories);
-    sampler.shutdown();
 }
 
 #[test]
@@ -187,6 +184,46 @@ fn environment_errors_propagate_instead_of_being_silently_ignored() {
         )
         .unwrap();
         assert!(sampler.collect_rollouts(ConstantActor).is_err());
-        sampler.shutdown();
+    }
+}
+
+#[test]
+fn dropping_multithreaded_samplers_releases_worker_environments() {
+    for staged in [false, true] {
+        let (drop_tx, drop_rx) = channel();
+        let resets = Arc::new(AtomicUsize::new(0));
+        let builder: Arc<dyn EnvBuilder<Env = TestEnv>> = Arc::new(move || {
+            Ok(
+                TestEnv::new(2, EpisodeEnd::Terminated, None, resets.clone())
+                    .with_drop_notifier(drop_tx.clone()),
+            )
+        });
+
+        if staged {
+            let sampler = StagedSampler::build_from_env_builder(
+                builder,
+                2,
+                OneBoundHook::steps(1),
+                SamplerExecutionMode::MultiThreaded,
+                None,
+            )
+            .unwrap();
+            drop(sampler);
+        } else {
+            let sampler = DirectSampler::build_from_env_builder(
+                builder,
+                2,
+                OneBoundHook::steps(1),
+                SamplerExecutionMode::MultiThreaded,
+            )
+            .unwrap();
+            drop(sampler);
+        }
+
+        for _ in 0..2 {
+            drop_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("worker environment was not released when its sampler was dropped");
+        }
     }
 }

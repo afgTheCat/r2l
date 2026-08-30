@@ -96,11 +96,7 @@ fn multithreaded_workers_enter_environment_steps_concurrently() {
     )
     .unwrap();
 
-    let collect = thread::spawn(move || {
-        let result = sampler.collect_rollouts(ActorStub);
-        sampler.shutdown();
-        result
-    });
+    let collect = thread::spawn(move || sampler.collect_rollouts(ActorStub));
 
     let first = entered_rx.recv_timeout(Duration::from_secs(2));
     let second = entered_rx.recv_timeout(Duration::from_secs(2));

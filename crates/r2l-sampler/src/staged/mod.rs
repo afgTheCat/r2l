@@ -207,8 +207,12 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     /// Installs a clone of `policy` on every worker.
-    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) {
-        self.pool.set_policy(policy);
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a worker has stopped or cannot acknowledge the update.
+    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) -> Result<()> {
+        self.pool.set_policy(policy)
     }
 
     /// Borrows all collected trajectories in worker order.
@@ -217,11 +221,6 @@ impl<E: Env> StagedSamplerCore<E> {
             .iter()
             .map(|buffer| buffer.to_trajectory_view())
             .collect::<Vec<_>>()
-    }
-
-    /// Stops threaded workers.
-    pub fn shutdown(&mut self) {
-        self.pool.shutdown();
     }
 }
 
@@ -303,7 +302,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
         actor: A,
     ) -> Result<()> {
         self.core.clear_buffers();
-        self.core.set_policy(&actor);
+        self.core.set_policy(&actor)?;
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {
@@ -316,9 +315,5 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
 
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {
         self.core.trajectory_views()
-    }
-
-    fn shutdown(&mut self) {
-        self.core.shutdown();
     }
 }

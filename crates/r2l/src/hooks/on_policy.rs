@@ -19,7 +19,7 @@ use r2l_core::{
 use crate::evaluator::BestActorEvaluator;
 
 enum OnPolicyCommand {
-    Shutdown,
+    StopTraining,
     SerializeCurrentPolicy(PathBuf),
 }
 
@@ -100,13 +100,13 @@ impl OnPolicyControlHandle {
         }
     }
 
-    /// Requests graceful shutdown and waits for the training loop to stop.
+    /// Requests that the current training loop stop and waits for it to finish.
     ///
     /// # Errors
     ///
     /// Returns an error if the training-side control endpoint has disconnected.
-    pub fn shutdown(&self) -> Result<(), Error> {
-        self.send(OnPolicyCommand::Shutdown)?;
+    pub fn stop_training(&self) -> Result<(), Error> {
+        self.send(OnPolicyCommand::StopTraining)?;
         loop {
             if matches!(self.receive()?, OnPolicyCommandResult::Stopped) {
                 return Ok(());
@@ -271,11 +271,11 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
         Ok(())
     }
 
-    fn shutdown(&mut self) -> Result<(), Error> {
+    fn finish_training(&self) -> Result<(), Error> {
         let Self::Enabled { evaluator, .. } = self else {
             return Ok(());
         };
-        evaluator.shutdown()
+        evaluator.finish_training()
     }
 }
 
@@ -309,7 +309,7 @@ impl OnPolicyCommandHandler {
         };
         while let Ok(command) = endpoint.rx.try_recv() {
             match command {
-                OnPolicyCommand::Shutdown => {
+                OnPolicyCommand::StopTraining => {
                     Self::send_result(endpoint, OnPolicyCommandResult::Stopping)?;
                     return Ok(HookResult::Break);
                 }
@@ -556,12 +556,11 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
         hook_result
     }
 
-    fn shutdown_hook(
+    fn finish_training_hook(
         &mut self,
-        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
+        _runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> Result<(), Error> {
-        let evaluator_result = self.evaluator.shutdown();
-        runtime.shutdown();
+        let evaluator_result = self.evaluator.finish_training();
         let notification_result = self.command_handler.notify_stopped();
         match self.error.take() {
             Some(error) => Err(error),

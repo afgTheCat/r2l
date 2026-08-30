@@ -1,6 +1,7 @@
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
+    mpsc::Sender,
 };
 
 use r2l_core::{
@@ -26,6 +27,7 @@ pub struct TestEnv {
     episode_end: EpisodeEnd,
     fail_at_step: Option<usize>,
     reset_count: Arc<AtomicUsize>,
+    drop_notifier: Option<Sender<()>>,
 }
 
 impl TestEnv {
@@ -41,6 +43,20 @@ impl TestEnv {
             episode_end,
             fail_at_step,
             reset_count,
+            drop_notifier: None,
+        }
+    }
+
+    pub fn with_drop_notifier(mut self, drop_notifier: Sender<()>) -> Self {
+        self.drop_notifier = Some(drop_notifier);
+        self
+    }
+}
+
+impl Drop for TestEnv {
+    fn drop(&mut self) {
+        if let Some(drop_notifier) = &self.drop_notifier {
+            let _ = drop_notifier.send(());
         }
     }
 }

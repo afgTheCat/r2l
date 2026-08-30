@@ -28,9 +28,6 @@ pub trait Agent {
 
     /// Sets the learning rate used by future updates.
     fn set_learning_rate(&mut self, learning_rate: f64);
-
-    /// Releases agent resources before the training loop exits.
-    fn shutdown(&mut self) {}
 }
 
 /// Rollout collector used by an on-policy training loop.
@@ -59,9 +56,6 @@ pub trait Sampler {
 
     /// Creates a view for the agents.
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]>;
-
-    /// Releases sampler resources before the training loop exits.
-    fn shutdown(&mut self) {}
 }
 
 /// Coupled runtime unit that binds an agent and sampler together.
@@ -108,12 +102,6 @@ impl<A: Agent, S: Sampler> OnPolicyRuntime<A, S> {
     pub fn actor(&self) -> A::Actor {
         self.agent.actor()
     }
-
-    /// Releases agent and sampler resources.
-    pub fn shutdown(&mut self) {
-        self.agent.shutdown();
-        self.sampler.shutdown();
-    }
 }
 
 /// Lifecycle hooks that control an [`OnPolicyAlgorithm`] training loop.
@@ -137,8 +125,8 @@ pub trait OnPolicyAlgorithmHooks {
     ///
     /// # Errors
     ///
-    /// Returns an error if hook shutdown fails.
-    fn shutdown_hook(
+    /// Returns an error if end-of-training finalization fails.
+    fn finish_training_hook(
         &mut self,
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> Result<(), Error>;
@@ -177,10 +165,10 @@ impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgo
     /// # Errors
     ///
     /// Returns an error if learning fails or a hook reports a deferred failure
-    /// during shutdown.
+    /// during end-of-training finalization.
     pub fn train(&mut self) -> Result<(), Error> {
         let training_result = self.training_loop();
-        let shutdown_result = self.hooks.shutdown_hook(&mut self.runtime);
-        training_result.and(shutdown_result)
+        let finalization_result = self.hooks.finish_training_hook(&mut self.runtime);
+        training_result.and(finalization_result)
     }
 }

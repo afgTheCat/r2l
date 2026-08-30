@@ -107,16 +107,6 @@ pub struct A2C<Module: OnPolicyLearner, Hooks: A2CHook<Module>> {
     pub hooks: Hooks,
 }
 
-impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
-    fn policy_loss<T: R2lTensor>(advantages: &T, logp: &T) -> Result<T> {
-        Ok(advantages.mul(logp)?.neg()?.mean()?)
-    }
-
-    fn value_loss<T: R2lTensor>(returns: &T, values_pred: &T) -> Result<T> {
-        Ok(returns.sub(values_pred)?.sqr()?.mean()?)
-    }
-}
-
 struct A2CObjective;
 
 impl A2CObjective {

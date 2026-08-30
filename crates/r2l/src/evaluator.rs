@@ -90,13 +90,6 @@ impl<E: Env> EvaluationSampler<E> {
                 .map_err(Into::into),
         }
     }
-
-    fn shutdown(&mut self) {
-        match self {
-            Self::Direct(sampler) => sampler.shutdown(),
-            Self::Staged(sampler) => sampler.shutdown(),
-        }
-    }
 }
 
 /// Configures how policies are evaluated during training.
@@ -251,9 +244,8 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         Ok(())
     }
 
-    /// Releases evaluator resources.
-    pub(crate) fn shutdown(&mut self) -> Result<(), Error> {
-        self.sampler.shutdown();
+    /// Validates that requested inference artifacts were produced during training.
+    pub(crate) fn finish_training(&self) -> Result<(), Error> {
         if self.inference_artifacts.is_some() && self.best_reward.is_none() {
             return Err(Error::InvalidState {
                 operation: "serializing actor".into(),
