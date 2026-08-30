@@ -129,15 +129,13 @@ impl<E: Env> Worker<E> {
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, actor, last_state)?;
                     let terminates = memory.is_done();
-                    self.last_state = Some(if terminates {
-                        self.env.reset(sample_u64())?
-                    } else {
-                        memory.next_state.clone()
-                    });
-                    buffer.push(memory);
-                    if terminates {
+                    self.last_state = if terminates {
                         episodes += 1;
-                    }
+                        Some(self.env.reset(sample_u64())?)
+                    } else {
+                        Some(memory.next_state.clone())
+                    };
+                    buffer.push(memory);
                     if episodes >= n_episodes {
                         break;
                     }
@@ -147,11 +145,11 @@ impl<E: Env> Worker<E> {
                 for _ in 0..n_steps {
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, actor, last_state)?;
-                    self.last_state = Some(if memory.is_done() {
-                        self.env.reset(sample_u64())?
+                    self.last_state = if memory.is_done() {
+                        Some(self.env.reset(sample_u64())?)
                     } else {
-                        memory.next_state.clone()
-                    });
+                        Some(memory.next_state.clone())
+                    };
                     buffer.push(memory);
                 }
             }

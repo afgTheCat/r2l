@@ -5733,7 +5733,9 @@ dependencies = [
  "r2l-gym",
  "r2l-sampler",
  "rand 0.10.2",
+ "safetensors 0.8.0",
  "serde",
+ "tempfile",
  "yaml_serde",
 ]
 
