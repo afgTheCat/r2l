@@ -13,6 +13,11 @@ fn assert_close(actual: &[f32], expected: &[f32]) {
     });
 }
 
+#[allow(clippy::float_cmp)] // Exact equality is the behavior under test.
+fn assert_exact(actual: f32, expected: f32) {
+    assert_eq!(actual, expected);
+}
+
 #[test]
 fn vector_running_statistics_match_direct_population_statistics() {
     let samples = [
@@ -25,7 +30,7 @@ fn vector_running_statistics_match_direct_population_statistics() {
 
     assert_close(&stats.mean.to_vec().unwrap(), &[3.0, 4.0]);
     assert_close(&stats.var.to_vec().unwrap(), &[8.0 / 3.0, 8.0 / 3.0]);
-    assert_eq!(stats.count, 3.0);
+    assert_exact(stats.count, 3.0);
 }
 
 #[test]
@@ -50,7 +55,7 @@ fn incremental_updates_match_one_combined_batch() {
         &incremental.var.to_vec().unwrap(),
         &combined.var.to_vec().unwrap(),
     );
-    assert_eq!(incremental.count, combined.count);
+    assert_exact(incremental.count, combined.count);
 }
 
 #[test]
@@ -67,6 +72,6 @@ fn scalar_running_statistics_match_direct_population_statistics() {
 fn empty_scalar_update_is_a_noop() {
     let mut stats = RunningMeanStdF32::with_epsilon(0.0);
     stats.update(&[]);
-    assert_eq!(stats.mean, 0.0);
-    assert_eq!(stats.var, 1.0);
+    assert_exact(stats.mean, 0.0);
+    assert_exact(stats.var, 1.0);
 }

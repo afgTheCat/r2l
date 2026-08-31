@@ -56,6 +56,7 @@ fn assert_artifacts_exist(path: &Path, normalized: bool) {
     assert_eq!(path.join("normalizer.yaml").is_file(), normalized);
 }
 
+#[allow(clippy::float_cmp)] // Exact equality is the behavior under test.
 fn assert_repeated_loads_are_equivalent(path: &Path) {
     let mut first = InferenceRunner::load(path, TinyEnv).unwrap();
     let mut second = InferenceRunner::load(path, TinyEnv).unwrap();
