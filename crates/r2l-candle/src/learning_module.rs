@@ -10,7 +10,7 @@ use candle_core::{DType, Device, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use r2l_core::{
     error::Result,
-    models::{ActivationFunction, Learner, ValueFunction},
+    models::{ActivationFunction, Learner, Policy, ValueFunction},
     on_policy::{learning_module::OnPolicyLearner, losses::FromPolicyValueLosses},
 };
 
@@ -19,6 +19,25 @@ use crate::{
     optimizer::OptimizerWithMaxGrad,
     sequential::{Sequential, build_sequential},
 };
+
+/// Candle policy behavior required by the on-policy learner.
+pub trait CandlePolicy: Policy<Tensor = Tensor> + Clone {
+    /// Returns the device used by the policy parameters.
+    fn device(&self) -> Device;
+
+    /// Returns the flattened observation size expected by the policy.
+    fn observation_size(&self) -> usize;
+}
+
+impl CandlePolicy for CandlePolicyKind {
+    fn device(&self) -> Device {
+        self.device()
+    }
+
+    fn observation_size(&self) -> usize {
+        self.observation_size()
+    }
+}
 
 /// Loss container used by Candle on-policy learners.
 ///
@@ -292,21 +311,21 @@ impl Learner for PolicyValueOptimizer {
 ///
 /// This is the main Candle learner type consumed by the higher-level
 /// A2C and PPO integrations in the workspace.
-pub struct PolicyValueLearner {
-    policy: CandlePolicyKind,
+pub struct PolicyValueLearner<P: CandlePolicy = CandlePolicyKind> {
+    policy: P,
     optimizer: PolicyValueOptimizer,
     value_function: SequentialValueFunction,
     device: Device,
 }
 
-impl PolicyValueLearner {
+impl<P: CandlePolicy> PolicyValueLearner<P> {
     /// Builds a policy/value module with a shared optimizer configuration.
     ///
     /// # Errors
     ///
     /// Returns an error if the value network or optimizer cannot be initialized.
     pub fn build_joint(
-        policy: CandlePolicyKind,
+        policy: P,
         value_hidden_layers: &[usize],
         policy_varmap: VarMap,
         max_grad_norm: Option<f32>,
@@ -340,7 +359,7 @@ impl PolicyValueLearner {
     /// Returns an error if the value network or either optimizer cannot be initialized.
     #[allow(clippy::too_many_arguments)]
     pub fn build_split(
-        policy: CandlePolicyKind,
+        policy: P,
         value_hidden_layers: &[usize],
         policy_varmap: VarMap,
         policy_max_grad_norm: Option<f32>,
@@ -389,7 +408,7 @@ impl PolicyValueLearner {
     }
 }
 
-impl ValueFunction for PolicyValueLearner {
+impl<P: CandlePolicy> ValueFunction for PolicyValueLearner<P> {
     type Tensor = Tensor;
 
     fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
@@ -398,7 +417,7 @@ impl ValueFunction for PolicyValueLearner {
     }
 }
 
-impl Learner for PolicyValueLearner {
+impl<P: CandlePolicy> Learner for PolicyValueLearner<P> {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
@@ -406,11 +425,11 @@ impl Learner for PolicyValueLearner {
     }
 }
 
-impl OnPolicyLearner for PolicyValueLearner {
+impl<P: CandlePolicy> OnPolicyLearner for PolicyValueLearner<P> {
     type LearningTensor = Tensor;
     type InferenceTensor = Tensor;
-    type Policy = CandlePolicyKind;
-    type InferencePolicy = CandlePolicyKind;
+    type Policy = P;
+    type InferencePolicy = P;
 
     fn inference_policy(&self) -> Self::InferencePolicy {
         self.policy.clone()

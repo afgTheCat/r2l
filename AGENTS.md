@@ -14,6 +14,9 @@ This repository is a Rust workspace for reinforcement learning libraries and exa
 - `crates/r2l-candle`: Candle-based LM integrations
 - `crates/r2l-burn`: Burn-based LM integrations
 - `crates/r2l`: primary user-facing builders and interfaces
+- `benchmark/task`: shared benchmark task and configuration types
+- `benchmark/scheduler`: Google Batch benchmark scheduler
+- `benchmark/worker`: benchmark worker
 
 ## Working Style
 

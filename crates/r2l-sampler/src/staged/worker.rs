@@ -9,6 +9,13 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
+fn worker_interrupted(details: impl Into<String>) -> Error {
+    Error::ResourceInterrupted(r2l_core::error::ResourceInterrupted {
+        resource: "staged sampler worker".into(),
+        details: details.into(),
+    })
+}
+
 pub enum WorkerCommand<T: R2lTensor> {
     Step,
     SetPolicy(Box<dyn Actor<Tensor = T>>),
@@ -43,16 +50,17 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
         let state = handle.lock().unwrap().clone();
         let action = policy.action(state.clone())?;
         let Snapshot {
-            state: mut next_state,
+            state: next_state,
             reward,
             terminated,
             truncated,
         } = self.env.step(action.clone())?;
         let done = terminated || truncated;
-        if done {
-            next_state = self.env.reset(sample_u64())?;
-        }
-        *handle.lock().unwrap() = next_state.clone();
+        *handle.lock().unwrap() = if done {
+            self.env.reset(sample_u64())?
+        } else {
+            next_state.clone()
+        };
         Ok(Memory {
             state,
             next_state,
@@ -163,20 +171,26 @@ impl<T: R2lTensor, E: Env<Tensor = T>> ElementWorker for ThreadWorker<T, E> {
             match command {
                 WorkerCommand::Step => {
                     let result = self.worker.step(&mut handle);
-                    self.tx.send(WorkerResult::Stepped(result)).unwrap();
+                    if self.tx.send(WorkerResult::Stepped(result)).is_err() {
+                        break;
+                    }
                 }
                 WorkerCommand::SetPolicy(policy) => {
                     self.worker.actor = Some(policy);
-                    self.tx.send(WorkerResult::PolicySet).unwrap();
+                    if self.tx.send(WorkerResult::PolicySet).is_err() {
+                        break;
+                    }
                 }
                 WorkerCommand::ResetEnv(seed) => {
                     let result = self.worker.env.reset(seed).map(|state| {
                         *handle.lock().unwrap() = state;
                     });
-                    self.tx.send(WorkerResult::EnvReset(result)).unwrap();
+                    if self.tx.send(WorkerResult::EnvReset(result)).is_err() {
+                        break;
+                    }
                 }
                 WorkerCommand::Stop => {
-                    self.tx.send(WorkerResult::Stopped).unwrap();
+                    let _ = self.tx.send(WorkerResult::Stopped);
                     break;
                 }
             }
@@ -232,12 +246,12 @@ impl<T: R2lTensor> ThreadHandle<T> {
         }
     }
 
-    fn send(&self, command: WorkerCommand<T>) {
-        self.command_tx.send(command).unwrap();
+    fn send(&self, command: WorkerCommand<T>) -> bool {
+        self.command_tx.send(command).is_ok()
     }
 
-    fn recv(&self) -> WorkerResult<T> {
-        self.result_rx.recv().unwrap()
+    fn recv(&self) -> Option<WorkerResult<T>> {
+        self.result_rx.recv().ok()
     }
 }
 
@@ -252,13 +266,15 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     fn step(&self) -> Result<MultiMemory<T>> {
         for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::Step);
+            let _ = worker_handle.send(WorkerCommand::Step);
         }
         let mut multi_memory = MultiMemory::with_capacity(self.worker_handles.len());
         let mut error = None;
         for worker_handle in &self.worker_handles {
-            let WorkerResult::Stepped(result) = worker_handle.recv() else {
-                unreachable!()
+            let result = match worker_handle.recv() {
+                Some(WorkerResult::Stepped(result)) => result,
+                Some(_) => return Err(worker_interrupted("received an unexpected response")),
+                None => return Err(worker_interrupted("result channel disconnected")),
             };
             match result {
                 Ok(memory) => multi_memory.push_memory(memory),
@@ -275,13 +291,15 @@ impl<T: R2lTensor> ThreadWorkers<T> {
 
     fn step_indexed(&self, indices: &[usize]) -> Result<MultiMemory<T>> {
         for idx in indices {
-            self.worker_handles[*idx].send(WorkerCommand::Step);
+            let _ = self.worker_handles[*idx].send(WorkerCommand::Step);
         }
         let mut multi_memory = MultiMemory::with_capacity(indices.len());
         let mut error = None;
         for idx in indices {
-            let WorkerResult::Stepped(result) = self.worker_handles[*idx].recv() else {
-                unreachable!()
+            let result = match self.worker_handles[*idx].recv() {
+                Some(WorkerResult::Stepped(result)) => result,
+                Some(_) => return Err(worker_interrupted("received an unexpected response")),
+                None => return Err(worker_interrupted("result channel disconnected")),
             };
             match result {
                 Ok(memory) => multi_memory.push_memory(memory),
@@ -296,25 +314,32 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         }
     }
 
-    fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: &A) {
+    fn set_policy<A: Actor<Tensor = T> + Clone>(&self, policy: &A) -> Result<()> {
         for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone())));
+            if !worker_handle.send(WorkerCommand::SetPolicy(Box::new(policy.clone()))) {
+                return Err(worker_interrupted("command channel disconnected"));
+            }
         }
         for worker_handle in &self.worker_handles {
-            let WorkerResult::PolicySet = worker_handle.recv() else {
-                unreachable!()
-            };
+            match worker_handle.recv() {
+                Some(WorkerResult::PolicySet) => {}
+                Some(_) => return Err(worker_interrupted("received an unexpected response")),
+                None => return Err(worker_interrupted("result channel disconnected")),
+            }
         }
+        Ok(())
     }
 
     fn reset_all(&self) -> Result<()> {
         for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
+            let _ = worker_handle.send(WorkerCommand::ResetEnv(sample_u64()));
         }
         let mut result = Ok(());
         for worker_handle in &self.worker_handles {
-            let WorkerResult::EnvReset(worker_result) = worker_handle.recv() else {
-                unreachable!()
+            let worker_result = match worker_handle.recv() {
+                Some(WorkerResult::EnvReset(worker_result)) => worker_result,
+                Some(_) => return Err(worker_interrupted("received an unexpected response")),
+                None => return Err(worker_interrupted("result channel disconnected")),
             };
             if result.is_ok() {
                 result = worker_result;
@@ -323,14 +348,13 @@ impl<T: R2lTensor> ThreadWorkers<T> {
         result
     }
 
-    fn shutdown(&self) {
-        for worker_handle in &self.worker_handles {
-            worker_handle.send(WorkerCommand::Stop);
+    fn shutdown(&mut self) {
+        let worker_handles = std::mem::take(&mut self.worker_handles);
+        for worker_handle in &worker_handles {
+            let _ = worker_handle.send(WorkerCommand::Stop);
         }
-        for worker_handle in &self.worker_handles {
-            let WorkerResult::Stopped = worker_handle.recv() else {
-                unreachable!()
-            };
+        for worker_handle in worker_handles {
+            let _ = worker_handle.recv();
         }
     }
 }
@@ -355,9 +379,12 @@ impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
         }
     }
 
-    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) {
+    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) -> Result<()> {
         match self {
-            Self::Vec(workers) => workers.set_policy(policy),
+            Self::Vec(workers) => {
+                workers.set_policy(policy);
+                Ok(())
+            }
             Self::Thread(workers) => workers.set_policy(policy),
         }
     }
@@ -374,5 +401,11 @@ impl<E: Env<Tensor: R2lTensor>> WorkerPool<E> {
             Self::Vec(_) => {}
             Self::Thread(threads) => threads.shutdown(),
         }
+    }
+}
+
+impl<E: Env<Tensor: R2lTensor>> Drop for WorkerPool<E> {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }

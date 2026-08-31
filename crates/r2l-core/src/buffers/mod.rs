@@ -33,6 +33,7 @@ impl<T> Memory<T> {
 /// A set of transitions collected from multiple environments in one step.
 pub struct MultiMemory<T: R2lTensor> {
     last_states: Vec<T>,
+    next_states: Vec<T>,
     actions: Vec<T>,
     rewards: Vec<f32>,
     terminateds: Vec<bool>,
@@ -45,6 +46,7 @@ impl<T: R2lTensor> MultiMemory<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             last_states: Vec::with_capacity(capacity),
+            next_states: Vec::with_capacity(capacity),
             actions: Vec::with_capacity(capacity),
             rewards: Vec::with_capacity(capacity),
             terminateds: Vec::with_capacity(capacity),
@@ -56,17 +58,55 @@ impl<T: R2lTensor> MultiMemory<T> {
     pub fn push_memory(&mut self, memory: Memory<T>) {
         let Memory {
             state,
+            next_state,
             action,
             reward,
             terminated,
             truncated,
-            ..
         } = memory;
         self.last_states.push(state);
+        self.next_states.push(next_state);
         self.actions.push(action);
         self.rewards.push(reward);
         self.terminateds.push(terminated);
         self.truncateds.push(truncated);
+    }
+
+    /// Returns mutable access to the observations produced by environment steps.
+    pub fn next_states_mut(&mut self) -> &mut [T] {
+        &mut self.next_states
+    }
+
+    /// Converts the stored transitions into individual memories.
+    #[must_use]
+    pub fn into_stored_memories(self) -> Vec<Memory<T>> {
+        let mut memories = Vec::with_capacity(self.last_states.len());
+        let Self {
+            last_states: states,
+            next_states,
+            actions,
+            rewards,
+            terminateds,
+            truncateds,
+        } = self;
+        for (state, next_state, action, reward, terminated, truncated) in izip!(
+            states,
+            next_states,
+            actions,
+            rewards,
+            terminateds,
+            truncateds
+        ) {
+            memories.push(Memory {
+                state,
+                next_state,
+                action,
+                reward,
+                terminated,
+                truncated,
+            });
+        }
+        memories
     }
 
     /// Completes the stored transitions with their corresponding next states.
@@ -76,6 +116,7 @@ impl<T: R2lTensor> MultiMemory<T> {
         let mut memories = Vec::with_capacity(self.last_states.len());
         let Self {
             last_states: states,
+            next_states: _,
             actions,
             rewards,
             terminateds,

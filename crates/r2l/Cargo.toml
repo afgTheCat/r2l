@@ -27,6 +27,7 @@ yaml_serde = { workspace = true }
 default = []
 gym = ["dep:r2l-gym"]
 test-utils = []
+simd = ["r2l-burn/simd"]
 cuda = [
   "r2l-core/cuda",
   "r2l-candle/cuda",
@@ -39,6 +40,8 @@ features = ["gym"]
 
 [dev-dependencies]
 r2l = { path = ".", features = ["test-utils"] }
+safetensors = { workspace = true }
+tempfile = "3.27.0"
 
 [lints]
 workspace = true

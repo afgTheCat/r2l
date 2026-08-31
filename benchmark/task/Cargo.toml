@@ -1,0 +1,15 @@
+[package]
+name = "r2l-benchmark-task"
+version.workspace = true
+edition.workspace = true
+description = "Task definitions for r2l benchmarks"
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+yaml_serde = { workspace = true }
+
+[lints]
+workspace = true

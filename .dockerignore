@@ -1,5 +1,8 @@
 .git
-.venv
+.venv*
+target
+.github
 target
 logs
 runs
+gha-creds-*.json

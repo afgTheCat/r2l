@@ -181,7 +181,7 @@ impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
         actor: A,
     ) -> Result<()> {
         self.core.worker_pool.clear_buffers();
-        self.core.worker_pool.set_actor(&actor);
+        self.core.worker_pool.set_actor(&actor)?;
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {
@@ -197,9 +197,5 @@ impl<E: Env, H: DirectSamplerHook<E = E>> Sampler for DirectSampler<E, H> {
             .buffers
             .lock_map(|buffer| buffer.to_trajectory_view())
             .unwrap()
-    }
-
-    fn shutdown(&mut self) {
-        self.core.worker_pool.shutdown();
     }
 }

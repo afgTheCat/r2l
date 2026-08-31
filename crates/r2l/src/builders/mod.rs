@@ -48,7 +48,7 @@ use crate::{
             OnPolicyCommandHandler, OnPolicyControlEndpoint, ScheduledEvaluator,
             TrainingTimingRecorder, on_policy_control_channel,
         },
-        ppo::TargetKl,
+        ppo::{ClipRangeSchedule, TargetKl},
     },
 };
 use crate::{BurnBackend, LearningRateSchedule, OnPolicyControlHandle, TrainingLimit};
@@ -334,7 +334,7 @@ enum AlgorithmConfiguration {
         normalize_advantage: Option<bool>,
         total_epochs: usize,
         target_kl: Option<f32>,
-        clip_range: f32,
+        clip_range_schedule: ClipRangeSchedule,
         reporter: Option<Sender<PPORolloutStats>>,
     },
     A2C {
@@ -509,6 +509,24 @@ impl<E: Env> Builder<E> {
                 ),
             }),
         }
+    }
+
+    fn validate_clip_range_schedule(&self) -> Result<(), Error> {
+        if matches!(
+            self.algorithm_configuration,
+            AlgorithmConfiguration::Ppo {
+                clip_range_schedule: ClipRangeSchedule::Linear(_),
+                ..
+            }
+        ) && self.total_rollouts().is_none()
+        {
+            return Err(Error::InvalidState {
+                operation: "configuring PPO clip range".into(),
+                details: "a linear clip-range schedule requires a statically known rollout count"
+                    .into(),
+            });
+        }
+        Ok(())
     }
 
     fn build_candle_learner(&self, device: &Device) -> Result<CandlePolicyValueLearner, Error> {
@@ -750,6 +768,7 @@ impl<E: Env> Builder<E> {
             total_epochs,
             target_kl,
             reporter,
+            clip_range_schedule,
             ..
         } = &mut self.algorithm_configuration
         else {
@@ -774,6 +793,7 @@ impl<E: Env> Builder<E> {
             ),
             rollout_idx: 0,
             total_rollouts,
+            clip_range_schedule: *clip_range_schedule,
             _lm: PhantomData,
         }
     }
@@ -804,11 +824,15 @@ impl<E: Env> Builder<E> {
     }
 
     fn ppo_params(&self) -> PPOParams {
-        let AlgorithmConfiguration::Ppo { clip_range, .. } = &self.algorithm_configuration else {
+        let AlgorithmConfiguration::Ppo {
+            clip_range_schedule,
+            ..
+        } = &self.algorithm_configuration
+        else {
             unreachable!("PPO agent type must use PPO configuration")
         };
         PPOParams {
-            clip_range: *clip_range,
+            clip_range: clip_range_schedule.initial_value(),
             gamma: self.gamma,
             lambda: self.lambda,
             sample_size: self.sample_size,
@@ -1017,6 +1041,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Arguments
     ///
     /// * `seed` - Seed used to initialize the random number generators.
+    #[cfg(not(feature = "simd"))]
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.builder.seed = Some(seed);
         self
@@ -1271,6 +1296,19 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         mut self,
     ) -> Result<OnPolicyAlgorithm<A, S, OnPolicyTrainingHooks<A, S, E>>, Error> {
         self.builder.validate_evaluation_schedule()?;
+        self.builder.validate_clip_range_schedule()?;
+        #[cfg(feature = "simd")]
+        if self.builder.seed.is_some()
+            && matches!(
+                self.builder.backend_configuration,
+                BackendConfiguration::Burn(_)
+            )
+        {
+            return Err(Error::Unsupported {
+                operation: "seeded Burn training".into(),
+                details: "the `simd` feature does not provide bitwise reproducibility".into(),
+            });
+        }
         if let Some(seed) = self.builder.seed {
             set_seed(seed);
         }
@@ -1285,6 +1323,17 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOCandle, S, E> {
+    /// Sets the random seed used when the algorithm is built.
+    ///
+    /// # Arguments
+    ///
+    /// * `seed` - Seed used to initialize the random number generators.
+    #[cfg(feature = "simd")]
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.builder.seed = Some(seed);
+        self
+    }
+
     /// Uses Candle on `device` for PPO learning.
     ///
     /// # Arguments
@@ -1384,18 +1433,46 @@ where
     /// * `clip_range` - Maximum allowed deviation of the policy ratio from `1.0`.
     pub fn with_clip_range(mut self, clip_range: f32) -> Self {
         let AlgorithmConfiguration::Ppo {
-            clip_range: configured,
+            clip_range_schedule,
             ..
         } = &mut self.builder.algorithm_configuration
         else {
             unreachable!("PPO agent type must use PPO configuration")
         };
-        *configured = clip_range;
+        *clip_range_schedule = ClipRangeSchedule::Constant(clip_range);
+        self
+    }
+
+    /// Sets the PPO policy-ratio clipping schedule.
+    ///
+    /// # Arguments
+    ///
+    /// * `clip_range_schedule` - Schedule applied to the clipping range as training progresses.
+    pub fn with_clip_range_schedule(mut self, clip_range_schedule: ClipRangeSchedule) -> Self {
+        let AlgorithmConfiguration::Ppo {
+            clip_range_schedule: configured,
+            ..
+        } = &mut self.builder.algorithm_configuration
+        else {
+            unreachable!("PPO agent type must use PPO configuration")
+        };
+        *configured = clip_range_schedule;
         self
     }
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CCandle, S, E> {
+    /// Sets the random seed used when the algorithm is built.
+    ///
+    /// # Arguments
+    ///
+    /// * `seed` - Seed used to initialize the random number generators.
+    #[cfg(feature = "simd")]
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.builder.seed = Some(seed);
+        self
+    }
+
     /// Uses Candle on `device` for A2C learning.
     ///
     /// # Arguments
@@ -1625,7 +1702,7 @@ impl<E: Env> PPOBuilder<E> {
                 normalize_advantage: None,
                 total_epochs: 10,
                 target_kl: None,
-                clip_range: 0.2,
+                clip_range_schedule: ClipRangeSchedule::Constant(0.2),
                 reporter: None,
             },
             BackendConfiguration::Candle(CandleBackend {

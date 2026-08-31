@@ -11,13 +11,13 @@ use r2l_burn::learning_module::{
     PolicyValueLosses as BurnPolicyValueLosses,
 };
 use r2l_candle::learning_module::{
-    PolicyValueLearner as CandlePolicyValueLearner, PolicyValueLosses as CandlePolicyValueLosses,
+    CandlePolicy, PolicyValueLearner as CandlePolicyValueLearner,
+    PolicyValueLosses as CandlePolicyValueLosses,
 };
 use r2l_core::{
     HookResult,
     buffers::TrajectoryBatch,
     error::{Error, ResourceInterrupted, Result},
-    models::Policy,
     on_policy::learning_module::OnPolicyLearner,
     tensor::R2lTensor,
 };
@@ -306,13 +306,15 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> A2CHook<BurnPolicyValueLearner<B, D>>
     }
 }
 
-impl A2CHook<CandlePolicyValueLearner> for A2CLearningHook<CandlePolicyValueLearner> {
+impl<P: CandlePolicy> A2CHook<CandlePolicyValueLearner<P>>
+    for A2CLearningHook<CandlePolicyValueLearner<P>>
+{
     fn before_learning_hook<
-        B: TrajectoryBatch<<CandlePolicyValueLearner as OnPolicyLearner>::InferenceTensor>,
+        B: TrajectoryBatch<<CandlePolicyValueLearner<P> as OnPolicyLearner>::InferenceTensor>,
     >(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut CandlePolicyValueLearner,
+        module: &mut CandlePolicyValueLearner<P>,
         _buffers: &[B],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -327,7 +329,7 @@ impl A2CHook<CandlePolicyValueLearner> for A2CLearningHook<CandlePolicyValueLear
     fn batch_hook(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut CandlePolicyValueLearner,
+        module: &mut CandlePolicyValueLearner<P>,
         losses: &mut CandlePolicyValueLosses,
         data: &A2CBatchData<candle_core::Tensor>,
     ) -> Result<HookResult> {
@@ -351,7 +353,7 @@ impl A2CHook<CandlePolicyValueLearner> for A2CLearningHook<CandlePolicyValueLear
     fn after_learning_hook<B: TrajectoryBatch<candle_core::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut CandlePolicyValueLearner,
+        module: &mut CandlePolicyValueLearner<P>,
         buffers: &[B],
     ) -> Result<HookResult> {
         if let Some(reporter) = &mut self.reporter {

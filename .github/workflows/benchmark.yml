@@ -1,0 +1,54 @@
+name: R2L benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - benchmark-test-*
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  AR_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+  RESULTS_BUCKET: ${{ vars.GCP_RESULTS_BUCKET }}
+  WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+  CI_SERVICE_ACCOUNT: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+  BATCH_SERVICE_ACCOUNT: ${{ vars.GCP_BATCH_SERVICE_ACCOUNT }}
+  BATCH_MACHINE_TYPE: ${{ vars.GCP_BATCH_MACHINE_TYPE }}
+  BATCH_PARALLELISM: ${{ vars.GCP_BATCH_PARALLELISM }}
+  BATCH_CPU_MILLI_PER_TASK: ${{ vars.GCP_BATCH_CPU_MILLI_PER_TASK }}
+  BATCH_MEMORY_MIB_PER_TASK: ${{ vars.GCP_BATCH_MEMORY_MIB_PER_TASK }}
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.CI_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+      - uses: docker/setup-buildx-action@v3
+      - name: Build scheduler
+        run: cargo build --locked --release -p r2l-benchmark-scheduler
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: benchmark/Dockerfile
+          push: true
+          tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/r2l-benchmark:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Submit benchmark
+        env:
+          IMAGE_URI: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/r2l-benchmark:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          JOB_NAME: r2l-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          SERVICE_ACCOUNT: ${{ env.BATCH_SERVICE_ACCOUNT }}
+        run: target/release/r2l-benchmark-scheduler

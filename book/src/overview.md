@@ -17,9 +17,16 @@ library. To be more exact:
 - **Embeddable**: **r2l** describes its backend requirements with traits.
   Candle and Burn implementations are currently available.
 
-The scope of **r2l** is what Stable Baselines3 covers (by version 0.1.0) and
-Tianshou (by version 1.0.0). On top of core algorithms, a hyperparameter tuning
-library is to be included in the future.
+The near-term scope of **r2l** is a dependable, well-tested on-policy stack for
+PPO and A2C. Stable Baselines3 is used as a benchmark reference, not as a
+feature-parity target. The next planned extension is recurrent-policy support,
+starting with an end-to-end recurrent PPO path across both tensor backends.
+Broader capabilities will be added as independently tested vertical slices
+rather than by trying to reproduce another library's entire algorithm catalog.
+
+Potential longer-term work includes hyperparameter tuning, monitoring
+integrations, additional persistence formats, and multi-agent support. These
+directions do not currently have release commitments.
 
 ## About this book
 

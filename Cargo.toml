@@ -8,7 +8,9 @@ members = [
   "crates/r2l-candle",
   "crates/r2l-burn",
   "crates/r2l-sampler",
-  "crates/r2l-zoo-evaluator",
+  "benchmark/task",
+  "benchmark/scheduler",
+  "benchmark/worker",
 ]
 resolver = "3"
 
@@ -21,7 +23,9 @@ r2l = { path = "crates/r2l", version = "0.0.2" }
 r2l-candle = { path = "crates/r2l-candle", version = "0.0.2" }
 r2l-burn = { path = "crates/r2l-burn", version = "0.0.2" }
 r2l-sampler = { path = "crates/r2l-sampler", version = "0.0.2" }
-burn = { version = "0.21.0", features = ["ndarray", "autodiff"] }
+r2l-benchmark-task = { path = "benchmark/task" }
+burn = { version = "0.21.0", default-features = false, features = ["std", "ndarray", "autodiff"] }
+burn-ndarray = { version = "0.21.0", default-features = false, features = ["std", "multi-threads"] }
 burn-store = { version = "0.21.0" }
 candle-core = { version = "0.11.0" }
 candle-nn = { version = "0.11.0" }
@@ -51,3 +55,8 @@ cast_possible_truncation = "allow"
 cast_possible_wrap = "allow"
 cast_precision_loss = "allow"
 cast_sign_loss = "allow"
+
+[profile.benchmark]
+inherits = "release"
+lto = "fat"
+codegen-units = 1

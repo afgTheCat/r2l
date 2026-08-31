@@ -6,7 +6,7 @@ use burn::{
         activation::{log_softmax, softmax},
     },
 };
-use burn_store::{ModuleSnapshot, ModuleStore, SafetensorsStore};
+use burn_store::{ModuleStore, SafetensorsStore};
 use itertools::Itertools;
 use r2l_core::{
     error::{Error, InvalidParameterError, Result, TensorError},
@@ -46,18 +46,6 @@ impl<B: Backend> CategoricalDistribution<B> {
         }
         let logits: Sequential<B> = Sequential::build(logits_layers, activation);
         Ok(Self { logits })
-    }
-
-    /// Builds a categoriacal policy using a safetensor store
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the stored network dimensions or parameters are invalid.
-    pub fn from_store(store: &mut SafetensorsStore) -> Result<Self> {
-        let logits_layers = Sequential::<B>::dims_from_store("logits", store);
-        let mut distribution = Self::build(&logits_layers, ActivationFunction::default())?;
-        distribution.load_from(store).map_err(Error::wrap)?;
-        Ok(distribution)
     }
 }
 

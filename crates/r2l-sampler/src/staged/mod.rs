@@ -6,7 +6,10 @@ use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
 use itertools::Itertools;
 use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
-    env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
+    env::{
+        Env, EnvBuilder, EnvBuilderType,
+        normalizer::{ClippedNormalizer, NormalizerMode},
+    },
     error::Result,
     models::Actor,
     on_policy::algorithm::Sampler,
@@ -154,7 +157,7 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     fn step_indexed(&mut self, indices: &[usize]) -> Result<Vec<bool>> {
-        let multi_memory = self.pool.step_indexed(indices)?;
+        let mut multi_memory = self.pool.step_indexed(indices)?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
             let mut next_states = indices
@@ -165,13 +168,11 @@ impl<E: Env> StagedSamplerCore<E> {
             for (idx, next_state) in indices.iter().zip(next_states) {
                 last_states[*idx] = next_state;
             }
+            obs_normalizer
+                .with_mode(NormalizerMode::ReadOnly)
+                .apply_slice_in_place(multi_memory.next_states_mut())?;
         }
-        let last_states = self.last_states.lock().unwrap();
-        let next_states = indices
-            .iter()
-            .map(|idx| last_states[*idx].clone())
-            .collect::<Vec<_>>();
-        let memories = multi_memory.into_memories(&next_states);
+        let memories = multi_memory.into_stored_memories();
         let terminations = memories
             .iter()
             .map(r2l_core::buffers::Memory::is_done)
@@ -183,13 +184,15 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     fn step(&mut self) -> Result<()> {
-        let multi_memory = self.pool.step()?;
+        let mut multi_memory = self.pool.step()?;
         if let Some(obs_normalizer) = &self.obs_normalizer {
             let mut last_states = self.last_states.lock().unwrap();
             obs_normalizer.apply_slice_in_place(&mut last_states)?;
+            obs_normalizer
+                .with_mode(NormalizerMode::ReadOnly)
+                .apply_slice_in_place(multi_memory.next_states_mut())?;
         }
-        let last_states = self.last_states.lock().unwrap();
-        let memories = multi_memory.into_memories(&last_states);
+        let memories = multi_memory.into_stored_memories();
         for (idx, memory) in memories.into_iter().enumerate() {
             self.buffers[idx].push(memory);
         }
@@ -204,8 +207,12 @@ impl<E: Env> StagedSamplerCore<E> {
     }
 
     /// Installs a clone of `policy` on every worker.
-    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) {
-        self.pool.set_policy(policy);
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a worker has stopped or cannot acknowledge the update.
+    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, policy: &A) -> Result<()> {
+        self.pool.set_policy(policy)
     }
 
     /// Borrows all collected trajectories in worker order.
@@ -214,11 +221,6 @@ impl<E: Env> StagedSamplerCore<E> {
             .iter()
             .map(|buffer| buffer.to_trajectory_view())
             .collect::<Vec<_>>()
-    }
-
-    /// Stops threaded workers.
-    pub fn shutdown(&mut self) {
-        self.pool.shutdown();
     }
 }
 
@@ -300,7 +302,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
         actor: A,
     ) -> Result<()> {
         self.core.clear_buffers();
-        self.core.set_policy(&actor);
+        self.core.set_policy(&actor)?;
         loop {
             let result = self.hook.hook(&mut self.core);
             match result {
@@ -313,9 +315,5 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
 
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {
         self.core.trajectory_views()
-    }
-
-    fn shutdown(&mut self) {
-        self.core.shutdown();
     }
 }

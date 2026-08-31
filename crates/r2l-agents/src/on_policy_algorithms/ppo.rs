@@ -116,6 +116,21 @@ pub struct PPO<Module: OnPolicyLearner, Hooks: PPOHook<Module>> {
     pub hooks: Hooks,
 }
 
+struct PPOObjective;
+
+impl PPOObjective {
+    fn policy_loss<T: R2lTensor>(ratio: &T, advantages: &T, clip_range: f32) -> Result<T> {
+        let clip_ratio = ratio.clamp(1. - clip_range, 1. + clip_range)?;
+        let clipped_adv = clip_ratio.mul(advantages)?;
+        let ratio_adv = ratio.mul(advantages)?;
+        Ok(ratio_adv.minimum(&clipped_adv)?.neg()?.mean()?)
+    }
+
+    fn value_loss<T: R2lTensor>(returns: &T, values_pred: &T) -> Result<T> {
+        Ok(returns.sub(values_pred)?.sqr()?.mean()?)
+    }
+}
+
 impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
     fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
         &mut self,
@@ -136,14 +151,11 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
             let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
             let logp = lm.policy().log_probs(&observations, &actions)?;
             let values_pred = lm.values(&observations)?;
-            let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
+            let value_loss = PPOObjective::value_loss(&returns, &values_pred)?;
             let logp_diff = logp.sub(&logp_old)?;
             let ratio = logp_diff.exp()?;
-            let clip_ratio =
-                ratio.clamp(1. - self.params.clip_range, 1. + self.params.clip_range)?;
-            let clipped_adv = clip_ratio.mul(&advantages)?;
-            let ratio_adv = ratio.mul(&advantages)?;
-            let policy_loss = ratio_adv.minimum(&clipped_adv)?.neg()?.mean()?;
+            let policy_loss =
+                PPOObjective::policy_loss(&ratio, &advantages, self.params.clip_range)?;
             let mut losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
             let ppo_data = PPOBatchData {
                 observations,
@@ -223,5 +235,40 @@ impl<M: OnPolicyLearner, H: PPOHook<M>> Agent for PPO<M, H> {
 
     fn set_learning_rate(&mut self, learning_rate: f64) {
         self.lm.set_learning_rate(learning_rate);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use r2l_core::tensor::{R2lTensor, VecTensor};
+
+    use super::PPOObjective;
+
+    fn scalar(tensor: &VecTensor) -> f32 {
+        tensor.to_vec().unwrap()[0]
+    }
+
+    #[test]
+    fn clipped_policy_loss_matches_hand_calculation() {
+        let ratios = VecTensor::from_vec(vec![1.3, 0.7, 1.1, 0.9]);
+        let advantages = VecTensor::from_vec(vec![1.0, 1.0, -1.0, -1.0]);
+        let loss = PPOObjective::policy_loss(&ratios, &advantages, 0.2).unwrap();
+        assert!((scalar(&loss) - 0.025).abs() < 1e-6);
+    }
+
+    #[test]
+    fn clipping_uses_the_pessimistic_surrogate_for_negative_advantages() {
+        let ratios = VecTensor::from_vec(vec![0.7]);
+        let advantages = VecTensor::from_vec(vec![-1.0]);
+        let loss = PPOObjective::policy_loss(&ratios, &advantages, 0.2).unwrap();
+        assert!((scalar(&loss) - 0.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn value_loss_is_mean_squared_error() {
+        let returns = VecTensor::from_vec(vec![1.0, 2.0, 5.0]);
+        let predictions = VecTensor::from_vec(vec![0.0, 4.0, 3.0]);
+        let loss = PPOObjective::value_loss(&returns, &predictions).unwrap();
+        assert!((scalar(&loss) - 3.0).abs() < 1e-6);
     }
 }
