@@ -80,6 +80,7 @@ pub use hooks::on_policy::{
 };
 pub use hooks::ppo::{ClipRangeSchedule, PPOMinibatchStats, PPORolloutStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
+pub use r2l_core::error::{self, Error};
 pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     models::ActivationFunction,

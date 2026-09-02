@@ -151,15 +151,14 @@ pub trait Env {
     /// # Errors
     ///
     /// Returns an error if the environment cannot be reset.
-    fn reset(&mut self, seed: u64) -> Result<Self::Tensor, crate::error::Error>;
+    fn reset(&mut self, seed: u64) -> Result<Self::Tensor, Error>;
 
     /// Applies one action and returns the resulting transition snapshot.
     ///
     /// # Errors
     ///
     /// Returns an error if the environment cannot apply the action.
-    fn step(&mut self, action: Self::Tensor)
-    -> Result<Snapshot<Self::Tensor>, crate::error::Error>;
+    fn step(&mut self, action: Self::Tensor) -> Result<Snapshot<Self::Tensor>, Error>;
 
     /// Returns static observation/action space metadata.
     fn env_description(&self) -> EnvDescription<Self::Tensor>;
@@ -177,16 +176,14 @@ pub trait EnvBuilder: Sync + Send + 'static {
     /// # Errors
     ///
     /// Returns an error if the environment cannot be constructed.
-    fn build_env(&self) -> Result<Self::Env, crate::error::Error>;
+    fn build_env(&self) -> Result<Self::Env, Error>;
 
     /// Returns the environment description for produced environments.
     ///
     /// # Errors
     ///
     /// Returns an error if a representative environment cannot be constructed.
-    fn env_description(
-        &self,
-    ) -> Result<EnvDescription<<Self::Env as Env>::Tensor>, crate::error::Error> {
+    fn env_description(&self) -> Result<EnvDescription<<Self::Env as Env>::Tensor>, Error> {
         let env = self.build_env()?;
         Ok(env.env_description())
     }
@@ -195,11 +192,11 @@ pub trait EnvBuilder: Sync + Send + 'static {
 
 impl<E: Env, F: Sync + Send + 'static> EnvBuilder for F
 where
-    F: Fn() -> Result<E, crate::error::Error>,
+    F: Fn() -> Result<E, Error>,
 {
     type Env = E;
 
-    fn build_env(&self) -> Result<E, crate::error::Error> {
+    fn build_env(&self) -> Result<E, Error> {
         (self)()
     }
 }

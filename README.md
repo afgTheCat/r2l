@@ -4,29 +4,32 @@
 > **Pre-alpha:** This library is under active development. APIs may change
 > between releases.
 
-## Getting started
+r2l is a Rust reinforcement learning library focused on on-policy methods such
+as A2C and PPO.
 
-Enable the optional Gymnasium integration in your `Cargo.toml`:
+## Example usage
+
+The following example uses the optional `gym` integration. Enable it in your
+`Cargo.toml`:
 
 ```toml
 r2l = { version = "0.0.2", features = ["gym"] }
 ```
 
-With the `gymnasium` Python package installed, a complete training and
-inference workflow looks like this:
+With the `gymnasium` Python package installed, a complete training and inference
+run looks like this:
 
 ```rust,no_run
-use r2l::{
-    GymEnv, InferenceRunner, PPOBuilder, TrainingArtifactsConfig, TrainingLimit,
-};
+use r2l::{GymEnv, InferenceRunner, PPOBuilder, TrainingArtifactsConfig, TrainingLimit, Error};
 
-const ENV_NAME: &str = "Pendulum-v1";
-const ARTIFACT_DIR: &str = "runs/pendulum";
+fn main() -> Result<(), Error> {
+    const ENV_NAME: &str = "Pendulum-v1";
+    const ARTIFACT_DIR: &str = "runs/pendulum";
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Train the agent and persist the best policy for inference.
     let artifacts_config = TrainingArtifactsConfig::new(ARTIFACT_DIR);
-    let mut ppo = PPOBuilder::gym(ENV_NAME, 10)?
+    let env_builder = || GymEnv::new(ENV_NAME, None);
+
+    let mut ppo = PPOBuilder::new(env_builder, 10)?
         .with_training_artifacts(artifacts_config)
         .with_policy_hidden_layers(vec![64, 64])
         .with_lambda(0.95)
@@ -34,87 +37,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_learning_rate(0.001)
         .with_training_limit(TrainingLimit::rollouts(30))
         .build()?;
+
     ppo.train()?;
 
-    // Reload the artifacts later without rebuilding the policy by hand.
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned()))?;
     let mut inference = InferenceRunner::load(ARTIFACT_DIR, env)?;
     for _ in 0..10 {
         inference.run_episode()?;
     }
+
     Ok(())
 }
 ```
 
-The evaluator periodically measures the current policy and persists the best one
-as an inference-ready bundle. The bundle contains the policy configuration,
-SafeTensors weights, and observation-normalizer state when normalization is
-enabled. Run this example from the workspace root with:
-
-```text
-cargo run -p r2l-examples --example ppo
-```
-
-For more information, read the [book](https://afgthecat.github.io/r2l/).
-
-## Requirements
-
-r2l is developed and tested against the latest stable Rust release. No formal
-minimum supported Rust version is currently maintained.
-
-The `gym` feature is disabled by default, so native and custom Rust environments
-do not require or link against Python. Enabling `gym` requires Python 3.11 or
-newer and the `gymnasium` package installed in the Python environment used at
-runtime.
+For more information on how to use r2l, read the
+[book](https://afgthecat.github.io/r2l/).
 
 ## Current capabilities
 
 The current published version is `v0.0.2`.
 
-- On-policy PPO and A2C builders, plus lower-level PPO, A2C, and VPG
-  implementations
-- Candle and Burn policy/value backends
-- Inline and threaded rollout workers
-- Step- and episode-bounded rollout hooks
-- Observation normalization, discounted-reward normalization, and linear
-  learning-rate schedules
+- On-policy PPO and A2C implementations (more to come)
+- Candle and Burn backends
+- Single- and multithreaded rollout collection
 - Native `Env` implementations and a Gymnasium adapter for Discrete spaces with
   `start = 0`, plus Box, MultiDiscrete, MultiBinary, Tuple, and Dict spaces
 - Best-actor evaluation and SafeTensors persistence for backend-specific
   policies
 
-Off-policy algorithms, a stable public API, and claimed benchmark parity with
-Stable Baselines3 are outside the v0.0.2 release. The configurations in
-`envs_to_test.txt` are a benchmark plan, not a record of completed or passing
-training runs.
-
-## Status and direction
-
-The project is pre-alpha and its public APIs may still change. The next release
-target is `v0.1.0`, recognizing the existing PPO/A2C on-policy foundation as a
-coherent first release rather than claiming algorithm parity with another
-library. Stable Baselines3 remains a benchmark reference, not a feature
-checklist.
-
-### Next focus: recurrent policies
-
-The next planned capability is an end-to-end recurrent PPO path for both Candle
-and Burn. This includes sequence-aware rollouts, per-environment recurrent
-state, correct state resets at episode boundaries, evaluation support, tests,
-and benchmarks on partially observable environments. A release version will be
-assigned once the design and scope are established.
-
-### Possible future directions
-
-- Off-policy learning, introduced one complete algorithm at a time
-- Hyperparameter tuning and monitoring integrations
-- Additional persistence formats
-- Multi-agent support
-
-These are areas of interest, not release commitments.
+PPO evaluation results across 28 environments and both supported backends are
+available in the [book](https://afgthecat.github.io/r2l/results.html). These
+results are broad integration tests, not a claim of parity with Stable
+Baselines3.
 
 # Contributing
 
 Any and all contributions are welcome. If you have a feature request, let me
-know by opening an issue about it, but please understand that while the project
-is ambitious, there are no corporate backers and I work on it in my spare time.
+know by opening an issue about it.
