@@ -4,7 +4,8 @@ High-level training builders and default hooks for `r2l`.
 
 The main entry points are `PPOBuilder` and `A2CBuilder`.
 They combine environment construction, rollout collection, a Candle or Burn
-learning module, scheduling, reporting, and optional best-actor evaluation.
+learning module, scheduling, reporting, and optional policy evaluation with
+best-policy checkpointing.
 
 Gymnasium support is opt-in and requires Python 3.11 or newer with the
 `gymnasium` package installed:

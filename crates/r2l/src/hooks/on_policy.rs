@@ -16,7 +16,7 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-use crate::evaluator::BestActorEvaluator;
+use crate::evaluator::BestPolicyEvaluator;
 
 enum OnPolicyCommand {
     StopTraining,
@@ -232,7 +232,7 @@ impl LearningRateScheduler {
 pub(crate) enum ScheduledEvaluator<A: Actor, E: Env> {
     Disabled,
     Enabled {
-        evaluator: BestActorEvaluator<A, E>,
+        evaluator: BestPolicyEvaluator<A, E>,
         rollouts_per_evaluation: usize,
     },
 }
@@ -242,7 +242,10 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
         Self::Disabled
     }
 
-    pub(crate) fn new(evaluator: BestActorEvaluator<A, E>, rollouts_per_evaluation: usize) -> Self {
+    pub(crate) fn new(
+        evaluator: BestPolicyEvaluator<A, E>,
+        rollouts_per_evaluation: usize,
+    ) -> Self {
         assert!(
             rollouts_per_evaluation > 0,
             "rollouts per evaluation must be greater than zero"

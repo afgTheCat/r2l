@@ -6,6 +6,8 @@ mod candle_tensor;
 
 use std::fmt::Debug;
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::TensorError;
 
 type Result<T> = std::result::Result<T, TensorError>;
@@ -215,7 +217,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
 ///
 /// `VecTensor` is useful for environments and for converting between backend
 /// tensor types.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VecTensor {
     data: Vec<f32>,
     shape: Vec<usize>,

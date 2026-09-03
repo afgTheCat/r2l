@@ -70,8 +70,8 @@ mod utils;
 pub type BurnBackend = Autodiff<NdArray>;
 
 pub use builders::{
-    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceRunner, OnPolicyBuilder, PPOBuilder,
-    PPOBurn, PPOCandle, TrainingArtifactsConfig,
+    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceEnv, InferencePolicy, InferenceRunner,
+    OnPolicyBuilder, PPOBuilder, PPOBurn, PPOCandle, TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
 pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};

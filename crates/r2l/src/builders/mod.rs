@@ -10,8 +10,8 @@ use burn::{
 };
 use candle_core::{Device, DeviceLocation};
 use candle_nn::ParamsAdamW;
-pub use inference::InferenceRunner;
 use inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
+pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};
 use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
@@ -54,7 +54,7 @@ use crate::{
 use crate::{BurnBackend, LearningRateSchedule, OnPolicyControlHandle, TrainingLimit};
 use crate::{EpisodeBoundHook, StepBoundHook};
 use crate::{
-    evaluator::BestActorEvaluator,
+    evaluator::BestPolicyEvaluator,
     hooks::{a2c::A2CLearningHook, ppo::PPOLearningHook},
 };
 use crate::{hooks::ppo::PPORolloutReporter, utils::RewardNormalizer};
@@ -649,7 +649,7 @@ impl<E: Env> Builder<E> {
                     obs_normalizer,
                 )?;
                 ScheduledEvaluator::new(
-                    BestActorEvaluator::new(
+                    BestPolicyEvaluator::new(
                         sampler,
                         config.output_dir.clone(),
                         config.evaluation_results,

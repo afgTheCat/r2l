@@ -37,7 +37,7 @@ fn main() -> Result<(), Error> {
     // by constructing an InferenceRunner. InferenceRunner can single step or run episodes on the
     // environment it recieves.
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned()))?;
-    let mut inference = InferenceRunner::load(ARTIFACT_DIR, env)?;
+    let mut inference = InferenceRunner::load_from_env(ARTIFACT_DIR, env)?;
     for _ in 0..10 {
         inference.run_episode()?;
     }

@@ -41,7 +41,7 @@ fn main() -> Result<(), Error> {
     ppo.train()?;
 
     let env = GymEnv::new(ENV_NAME, Some("human".to_owned()))?;
-    let mut inference = InferenceRunner::load(ARTIFACT_DIR, env)?;
+    let mut inference = InferenceRunner::load_from_env(ARTIFACT_DIR, env)?;
     for _ in 0..10 {
         inference.run_episode()?;
     }
@@ -62,8 +62,7 @@ The current published version is `v0.0.2`.
 - Single- and multithreaded rollout collection
 - Native `Env` implementations and a Gymnasium adapter for Discrete spaces with
   `start = 0`, plus Box, MultiDiscrete, MultiBinary, Tuple, and Dict spaces
-- Best-actor evaluation and SafeTensors persistence for backend-specific
-  policies
+- Policy evaluation and best-policy checkpointing
 
 PPO evaluation results across 28 environments and both supported backends are
 available in the [book](https://afgthecat.github.io/r2l/results.html). These

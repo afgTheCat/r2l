@@ -7,7 +7,7 @@ use r2l_burn::distributions::BurnPolicyKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     ActorWrapper,
-    env::{Env, Snapshot, normalizer::ClippedNormalizer},
+    env::{Env, EnvDescription, normalizer::ClippedNormalizer},
     error::{BoxedError, BrokenArtifact, Error},
     models::Actor,
     rng::sample_u64,
@@ -153,27 +153,28 @@ impl<T: R2lTensor> Actor for InferenceActor<T> {
     }
 }
 
-/// Stateful, single-environment inference runtime.
-pub struct InferenceRunner<E: Env> {
-    env: E,
-    obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    actor: InferenceActor<E::Tensor>,
-    last_state: E::Tensor,
+/// A loaded policy that applies its saved observation preprocessing before inference.
+pub struct InferencePolicy<T: R2lTensor> {
+    obs_normalizer: Option<ClippedNormalizer<T>>,
+    actor: InferenceActor<T>,
 }
 
-impl<E: Env> InferenceRunner<E> {
-    /// Loads an inference runtime from learned artifacts for `env`.
+impl<T: R2lTensor> InferencePolicy<T> {
+    /// Loads a policy from learned artifacts for the described observation and action spaces.
     ///
     /// # Arguments
     ///
     /// * `directory` - Directory containing the saved inference configuration and model artifacts.
-    /// * `env` - Environment in which the loaded policy will run.
+    /// * `env_description` - Observation and action spaces used to reconstruct the policy.
     ///
     /// # Errors
     ///
-    /// Returns an error if an artifact cannot be read or decoded, the configured
-    /// model cannot be built, or the environment cannot be reset.
-    pub fn load(directory: impl AsRef<Path>, mut env: E) -> Result<Self, Error> {
+    /// Returns an error if an artifact cannot be read or decoded or the configured model cannot be
+    /// built.
+    pub fn load(
+        directory: impl AsRef<Path>,
+        env_description: EnvDescription<T>,
+    ) -> Result<Self, Error> {
         let directory = directory.as_ref();
         let config = InferenceConfig::load_from_dir(directory)?;
         let obs_normalizer = match config.observation_mode {
@@ -187,7 +188,6 @@ impl<E: Env> InferenceRunner<E> {
                 Some(normalizer_builder.into_normalizer()?)
             }
         };
-        let env_description = env.env_description();
         let actor_artifact = ArtifactFile::new(directory.join(ACTOR_FILE), "actor");
         let actor_bytes = actor_artifact.read()?;
         let actor = match config.backend {
@@ -218,60 +218,161 @@ impl<E: Env> InferenceRunner<E> {
                 InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))
             }
         };
-        let mut last_state = env.reset(sample_u64())?;
-        if let Some(obs_normalizer) = &obs_normalizer {
-            obs_normalizer.apply_tensor_in_place(&mut last_state)?;
-        }
         Ok(Self {
-            env,
             obs_normalizer,
             actor,
-            last_state,
         })
     }
 
-    /// Resets the environment and its current actor observation.
+    /// Chooses an action for a raw observation.
+    ///
+    /// # Arguments
+    ///
+    /// * `observation` - Raw observation to normalize and pass to the policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if observation normalization or action inference fails.
+    pub fn action(&self, mut observation: T) -> Result<T, Error> {
+        if let Some(obs_normalizer) = &self.obs_normalizer {
+            obs_normalizer.apply_tensor_in_place(&mut observation)?;
+        }
+        self.actor.action(observation)
+    }
+
+    /// Chooses the modal action for a raw observation.
+    ///
+    /// # Arguments
+    ///
+    /// * `observation` - Raw observation to normalize and pass to the policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if observation normalization or action inference fails.
+    pub fn mode_action(&self, mut observation: T) -> Result<T, Error> {
+        if let Some(obs_normalizer) = &self.obs_normalizer {
+            obs_normalizer.apply_tensor_in_place(&mut observation)?;
+        }
+        self.actor.mode_action(observation)
+    }
+}
+
+/// External system that accepts policy actions and returns subsequent observations.
+pub trait InferenceEnv {
+    /// Tensor type used for observations and actions.
+    type Tensor: R2lTensor;
+
+    /// Applies an action and returns the subsequent raw observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the action cannot be applied or the observation cannot be obtained.
+    fn step(&mut self, action: Self::Tensor) -> Result<Self::Tensor, Error>;
+
+    /// Describes the observation and action spaces used by the policy.
+    fn policy_description(&self) -> EnvDescription<Self::Tensor>;
+}
+
+impl<E: Env> InferenceEnv for E {
+    type Tensor = E::Tensor;
+
+    fn step(&mut self, action: Self::Tensor) -> Result<Self::Tensor, Error> {
+        Ok(self.step(action)?.state)
+    }
+
+    fn policy_description(&self) -> EnvDescription<Self::Tensor> {
+        self.env_description()
+    }
+}
+
+/// Stateful, single-environment inference runtime.
+pub struct InferenceRunner<E: InferenceEnv> {
+    inference_env: E,
+    policy: InferencePolicy<E::Tensor>,
+    last_observation: E::Tensor,
+}
+
+impl<E: InferenceEnv> InferenceRunner<E> {
+    /// Loads an inference runtime with an initial raw observation.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory` - Directory containing the saved inference configuration and model artifacts.
+    /// * `inference_env` - External system in which the loaded policy will run.
+    /// * `initial_observation` - Raw observation from which inference starts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an artifact cannot be read or decoded or the configured model cannot be
+    /// built.
+    pub fn load(
+        directory: impl AsRef<Path>,
+        inference_env: E,
+        initial_observation: E::Tensor,
+    ) -> Result<Self, Error> {
+        let policy = InferencePolicy::load(directory, inference_env.policy_description())?;
+        Ok(Self {
+            inference_env,
+            policy,
+            last_observation: initial_observation,
+        })
+    }
+
+    /// Selects the modal action and advances the external system by one step.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if action inference or the environment step fails.
+    pub fn mode_step(&mut self) -> Result<E::Tensor, Error> {
+        let action = self.policy.mode_action(self.last_observation.clone())?;
+        let observation = self.inference_env.step(action)?;
+        self.last_observation = observation.clone();
+        Ok(observation)
+    }
+
+    /// Chooses an action and advances the external system by one step.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if action inference or the environment step fails.
+    pub fn step(&mut self) -> Result<E::Tensor, Error> {
+        let action = self.policy.action(self.last_observation.clone())?;
+        let observation = self.inference_env.step(action)?;
+        self.last_observation = observation.clone();
+        Ok(observation)
+    }
+}
+
+impl<E: Env> InferenceRunner<E> {
+    /// Loads an inference runtime and resets the environment to obtain its initial observation.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory` - Directory containing the saved inference configuration and model artifacts.
+    /// * `env` - Environment in which the loaded policy will run.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an artifact cannot be read or decoded, the configured model cannot be
+    /// built, or the environment cannot be reset.
+    pub fn load_from_env(directory: impl AsRef<Path>, mut env: E) -> Result<Self, Error> {
+        let policy = InferencePolicy::load(directory, Env::env_description(&env))?;
+        let initial_observation = env.reset(sample_u64())?;
+        Ok(Self {
+            inference_env: env,
+            policy,
+            last_observation: initial_observation,
+        })
+    }
+
+    /// Resets the environment and its current policy observation.
     ///
     /// # Errors
     ///
     /// Returns an error if the environment cannot be reset.
     pub fn reset(&mut self) -> Result<(), Error> {
-        let mut last_state = self.env.reset(sample_u64())?;
-        if let Some(obs_normalizer) = &self.obs_normalizer {
-            obs_normalizer.apply_tensor_in_place(&mut last_state)?;
-        }
-        self.last_state = last_state;
+        self.last_observation = self.inference_env.reset(sample_u64())?;
         Ok(())
-    }
-
-    /// Selects the modal action and advances the environment by one step.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if action inference or the environment step fails.
-    pub fn mode_step(&mut self) -> Result<Snapshot<E::Tensor>, Error> {
-        let action = self.actor.mode_action(self.last_state.clone())?;
-        let mut snapshot = self.env.step(action)?;
-        if let Some(obs_normalizer) = &self.obs_normalizer {
-            obs_normalizer.apply_tensor_in_place(&mut snapshot.state)?;
-        }
-        self.last_state = snapshot.state.clone();
-        Ok(snapshot)
-    }
-
-    /// Chooses an action and advances the environment by one step.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if action inference or the environment step fails.
-    pub fn step(&mut self) -> Result<Snapshot<E::Tensor>, Error> {
-        let action = self.actor.action(self.last_state.clone())?;
-        let mut snapshot = self.env.step(action)?;
-        if let Some(obs_normalizer) = &self.obs_normalizer {
-            obs_normalizer.apply_tensor_in_place(&mut snapshot.state)?;
-        }
-        self.last_state = snapshot.state.clone();
-        Ok(snapshot)
     }
 
     /// Runs the environment to completion and then resets it.
@@ -281,7 +382,9 @@ impl<E: Env> InferenceRunner<E> {
     /// Returns an error if action inference, an environment step, or the final reset fails.
     pub fn run_episode(&mut self) -> Result<(), Error> {
         loop {
-            let snapshot = self.step()?;
+            let action = self.policy.action(self.last_observation.clone())?;
+            let snapshot = <E as Env>::step(&mut self.inference_env, action)?;
+            self.last_observation = snapshot.state;
             if snapshot.terminated || snapshot.truncated {
                 break;
             }
@@ -296,7 +399,9 @@ impl<E: Env> InferenceRunner<E> {
     /// Returns an error if action inference, an environment step, or the final reset fails.
     pub fn mode_run_episode(&mut self) -> Result<(), Error> {
         loop {
-            let snapshot = self.mode_step()?;
+            let action = self.policy.mode_action(self.last_observation.clone())?;
+            let snapshot = <E as Env>::step(&mut self.inference_env, action)?;
+            self.last_observation = snapshot.state;
             if snapshot.terminated || snapshot.truncated {
                 break;
             }
