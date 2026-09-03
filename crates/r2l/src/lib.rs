@@ -58,20 +58,20 @@
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
 
-use burn::backend::{Autodiff, NdArray};
-
-// builders + hooks + higher level helpers
 mod builders;
 mod evaluator;
 mod hooks;
+mod inference;
 mod utils;
+
+use burn::backend::{Autodiff, NdArray};
 
 /// Default autodifferentiation backend used by Burn-based builders.
 pub type BurnBackend = Autodiff<NdArray>;
 
 pub use builders::{
-    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, InferenceEnv, InferencePolicy, InferenceRunner,
-    OnPolicyBuilder, PPOBuilder, PPOBurn, PPOCandle, TrainingArtifactsConfig,
+    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, OnPolicyBuilder, PPOBuilder, PPOBurn, PPOCandle,
+    TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
 pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
@@ -80,6 +80,7 @@ pub use hooks::on_policy::{
 };
 pub use hooks::ppo::{ClipRangeSchedule, PPOMinibatchStats, PPORolloutStats};
 pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
+pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};
 pub use r2l_core::error::{self, Error};
 pub use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},

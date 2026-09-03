@@ -7,7 +7,7 @@ use r2l_burn::distributions::BurnPolicyKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     ActorWrapper,
-    env::{Env, EnvDescription, normalizer::ClippedNormalizer},
+    env::{Env, normalizer::ClippedNormalizer},
     error::{BoxedError, BrokenArtifact, Error},
     models::Actor,
     rng::sample_u64,
@@ -15,8 +15,9 @@ use r2l_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::normalizer::NormalizerBuilder;
-use super::{BurnBackendConfig, CandleBackend, PolicyBuilder};
+use crate::builders::{
+    BurnBackendConfig, CandleBackend, normalizer::NormalizerBuilder, policy::PolicyBuilder,
+};
 
 pub(crate) const INFERENCE_CONFIG_FILE: &str = "inference.yaml";
 pub(crate) const ACTOR_FILE: &str = "actor.safetensors";
@@ -160,21 +161,17 @@ pub struct InferencePolicy<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> InferencePolicy<T> {
-    /// Loads a policy from learned artifacts for the described observation and action spaces.
+    /// Loads a policy from learned artifacts.
     ///
     /// # Arguments
     ///
     /// * `directory` - Directory containing the saved inference configuration and model artifacts.
-    /// * `env_description` - Observation and action spaces used to reconstruct the policy.
     ///
     /// # Errors
     ///
     /// Returns an error if an artifact cannot be read or decoded or the configured model cannot be
     /// built.
-    pub fn load(
-        directory: impl AsRef<Path>,
-        env_description: EnvDescription<T>,
-    ) -> Result<Self, Error> {
+    pub fn load(directory: impl AsRef<Path>) -> Result<Self, Error> {
         let directory = directory.as_ref();
         let config = InferenceConfig::load_from_dir(directory)?;
         let obs_normalizer = match config.observation_mode {
@@ -196,10 +193,10 @@ impl<T: R2lTensor> InferencePolicy<T> {
                     VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &backend.device)
                         .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 let actor = CandlePolicyKind::build(
-                    env_description.action_space.clone(),
+                    config.policy_builder.action_space.convert::<T>()?,
                     &var_builder,
                     &config.policy_builder.hidden_layers,
-                    env_description.observation_space.size(),
+                    config.policy_builder.observation_size,
                     config.policy_builder.activation_function,
                     config.policy_builder.log_std_init,
                 )
@@ -209,10 +206,7 @@ impl<T: R2lTensor> InferencePolicy<T> {
             InferenceBackend::Burn(_) => {
                 let actor = config
                     .policy_builder
-                    .build_burn::<NdArray, _>(
-                        env_description.observation_space.size(),
-                        env_description.action_space,
-                    )?
+                    .build_burn::<NdArray, T>()?
                     .load_from_bytes(actor_bytes)
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))
@@ -268,9 +262,6 @@ pub trait InferenceEnv {
     ///
     /// Returns an error if the action cannot be applied or the observation cannot be obtained.
     fn step(&mut self, action: Self::Tensor) -> Result<Self::Tensor, Error>;
-
-    /// Describes the observation and action spaces used by the policy.
-    fn policy_description(&self) -> EnvDescription<Self::Tensor>;
 }
 
 impl<E: Env> InferenceEnv for E {
@@ -278,10 +269,6 @@ impl<E: Env> InferenceEnv for E {
 
     fn step(&mut self, action: Self::Tensor) -> Result<Self::Tensor, Error> {
         Ok(self.step(action)?.state)
-    }
-
-    fn policy_description(&self) -> EnvDescription<Self::Tensor> {
-        self.env_description()
     }
 }
 
@@ -310,7 +297,7 @@ impl<E: InferenceEnv> InferenceRunner<E> {
         inference_env: E,
         initial_observation: E::Tensor,
     ) -> Result<Self, Error> {
-        let policy = InferencePolicy::load(directory, inference_env.policy_description())?;
+        let policy = InferencePolicy::load(directory)?;
         Ok(Self {
             inference_env,
             policy,
@@ -356,7 +343,7 @@ impl<E: Env> InferenceRunner<E> {
     /// Returns an error if an artifact cannot be read or decoded, the configured model cannot be
     /// built, or the environment cannot be reset.
     pub fn load_from_env(directory: impl AsRef<Path>, mut env: E) -> Result<Self, Error> {
-        let policy = InferencePolicy::load(directory, Env::env_description(&env))?;
+        let policy = InferencePolicy::load(directory)?;
         let initial_observation = env.reset(sample_u64())?;
         Ok(Self {
             inference_env: env,

@@ -48,10 +48,6 @@ impl InferenceEnv for TinyInferenceEnv {
     fn step(&mut self, _action: Self::Tensor) -> Result<Self::Tensor, Error> {
         Ok(VecTensor::from_vec(vec![0.0, 1.0]))
     }
-
-    fn policy_description(&self) -> EnvDescription<Self::Tensor> {
-        TinyEnv.env_description()
-    }
 }
 
 fn artifact_config(path: &Path) -> TrainingArtifactsConfig {
@@ -73,9 +69,8 @@ fn assert_artifacts_exist(path: &Path, normalized: bool) {
 
 #[allow(clippy::float_cmp)] // Exact equality is the behavior under test.
 fn assert_repeated_loads_are_equivalent(path: &Path) {
-    let description = TinyEnv.env_description();
-    let first = InferencePolicy::load(path, description.clone()).unwrap();
-    let second = InferencePolicy::load(path, description).unwrap();
+    let first = InferencePolicy::load(path).unwrap();
+    let second = InferencePolicy::load(path).unwrap();
     let observation = VecTensor::from_vec(vec![1.0, 0.0]);
     let first_action = first.mode_action(observation.clone()).unwrap();
     let second_action = second.mode_action(observation.clone()).unwrap();

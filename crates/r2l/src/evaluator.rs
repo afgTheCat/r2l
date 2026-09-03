@@ -12,11 +12,9 @@ use r2l_core::{
 use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
 
 use crate::{
-    builders::{
-        inference::{ACTOR_FILE, NORMALIZER_FILE},
-        normalizer::NormalizerBuilder,
-    },
+    builders::normalizer::NormalizerBuilder,
     hooks::sampler::EpisodeBoundHook,
+    inference::{ACTOR_FILE, NORMALIZER_FILE},
 };
 
 const EVALUATIONS_FILE: &str = "evaluations.csv";
