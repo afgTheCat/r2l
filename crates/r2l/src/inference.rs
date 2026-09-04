@@ -258,6 +258,10 @@ pub trait InferenceEnv {
 
     /// Applies an action and returns the subsequent raw observation.
     ///
+    /// # Arguments
+    ///
+    /// * `action` - Action to apply to the external system.
+    ///
     /// # Errors
     ///
     /// Returns an error if the action cannot be applied or the observation cannot be obtained.
