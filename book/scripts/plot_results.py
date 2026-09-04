@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the learning-curve figure used by the results chapter."""
+"""Generate the per-environment learning curves used by the results chapter."""
 
 from __future__ import annotations
 
@@ -14,17 +14,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 RUNS = ROOT / "runs"
 CONFIG = ROOT / "benchmark" / "assets" / "ppo.yaml"
-OUTPUT = ROOT / "book" / "src" / "images" / "results_learning_curves.png"
 GALLERY_OUTPUT = ROOT / "book" / "src" / "images" / "results"
-
-ENVIRONMENTS = (
-    "CartPole-v1",
-    "LunarLanderContinuous-v3",
-    "HalfCheetah-v4",
-    "Ant-v4",
-    "InvertedDoublePendulum-v2",
-    "popgym-BattleshipEasy-v0",
-)
 
 FRAMEWORKS = {
     "candle": ("Candle", "#E68619"),
@@ -32,7 +22,7 @@ FRAMEWORKS = {
     "sb3": ("Stable Baselines3", "#3B82B8"),
 }
 
-ALL_ENVIRONMENTS = (
+ENVIRONMENTS = (
     "Acrobot-v1",
     "Ant-v4",
     "AntBulletEnv-v0",
@@ -118,24 +108,8 @@ def main() -> None:
     with CONFIG.open() as file:
         config = yaml.safe_load(file)
 
-    figure, axes = plt.subplots(3, 2, figsize=(12, 11), constrained_layout=True)
-    legend_handles = {}
-
-    for axis, environment in zip(axes.flat, ENVIRONMENTS):
-        legend_handles.update(plot_environment(axis, environment, config))
-
-    figure.legend(
-        legend_handles.values(),
-        legend_handles.keys(),
-        loc="outside upper center",
-        ncols=3,
-        frameon=False,
-    )
-    figure.savefig(OUTPUT, dpi=180, bbox_inches="tight")
-    print(f"Saved {OUTPUT}")
-
     GALLERY_OUTPUT.mkdir(parents=True, exist_ok=True)
-    for environment in ALL_ENVIRONMENTS:
+    for environment in ENVIRONMENTS:
         figure, axis = plt.subplots(figsize=(10, 4.5), constrained_layout=True)
         handles = plot_environment(axis, environment, config)
         axis.legend(handles.values(), handles.keys(), frameon=False)
