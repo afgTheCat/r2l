@@ -57,17 +57,16 @@ For more information on how to use r2l, read the
 
 The current published version is `v0.0.2`.
 
-- On-policy PPO and A2C implementations (more to come)
+- On-policy PPO and A2C implementations
 - Candle and Burn backends
 - Single- and multithreaded rollout collection
 - Native `Env` implementations and a Gymnasium adapter for Discrete spaces with
   `start = 0`, plus Box, MultiDiscrete, MultiBinary, Tuple, and Dict spaces
 - Policy evaluation and best-policy checkpointing
 
-PPO evaluation results across 28 environments and both supported backends are
-available in the [book](https://afgthecat.github.io/r2l/results.html). These
-results are broad integration tests, not a claim of parity with Stable
-Baselines3.
+PPO evaluation runs across 28 environments show broadly consistent learning
+behavior between r2l's Candle and Burn backends. See the
+[results](https://afgthecat.github.io/r2l/results.html).
 
 # Contributing
 

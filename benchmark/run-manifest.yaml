@@ -1,0 +1,14 @@
+r2l_version: 0.0.3
+source_commit: 6030dd873545fcc71fe15be4142965f22ac8b6af
+
+google_batch:
+  region: europe-west1
+  machine_type: c4d-highcpu-2
+  provisioning_model: spot
+  parallelism: 36
+  cpu_milli_per_task: 1000
+  memory_mib_per_task: 1250
+
+thread_limits:
+  rayon: 1
+  openblas: 1
