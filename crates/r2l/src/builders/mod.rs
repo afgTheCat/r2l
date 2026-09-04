@@ -1,4 +1,3 @@
-pub(crate) mod inference;
 pub(crate) mod normalizer;
 pub(crate) mod policy;
 
@@ -10,8 +9,6 @@ use burn::{
 };
 use candle_core::{Device, DeviceLocation};
 use candle_nn::ParamsAdamW;
-pub use inference::InferenceRunner;
-use inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
 use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
@@ -39,6 +36,7 @@ use r2l_sampler::{
 use serde::{Deserialize, Serialize, de::Error as _};
 
 use crate::hooks::on_policy::OnPolicyTrainingHooks;
+use crate::inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
 use crate::{
     A2CRolloutStats, PPORolloutStats,
     evaluator::{EvaluationSampler, EvaluationSettings},
@@ -54,7 +52,7 @@ use crate::{
 use crate::{BurnBackend, LearningRateSchedule, OnPolicyControlHandle, TrainingLimit};
 use crate::{EpisodeBoundHook, StepBoundHook};
 use crate::{
-    evaluator::BestActorEvaluator,
+    evaluator::BestPolicyEvaluator,
     hooks::{a2c::A2CLearningHook, ppo::PPOLearningHook},
 };
 use crate::{hooks::ppo::PPORolloutReporter, utils::RewardNormalizer};
@@ -439,6 +437,7 @@ impl<E: Env> Builder<E> {
     ) -> Result<Self, Error> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
         let env_desription = env_builder.env_description()?;
+        let policy_config = PolicyBuilder::new(&env_desription)?;
         Ok(Self {
             env_build_plan: Box::new(TypedEnvBuildPlan { env_builder }),
             env_desription,
@@ -450,7 +449,7 @@ impl<E: Env> Builder<E> {
             learning_rate_schedule: None,
             training_artifacts: None,
             control_endpoint: None,
-            policy_config: PolicyBuilder::default(),
+            policy_config,
             value_hidden_layers: vec![64, 64],
             optimizer_layout: OnPolicyOptimizerLayout::Joint {
                 params: AdamWParams {
@@ -530,12 +529,9 @@ impl<E: Env> Builder<E> {
     }
 
     fn build_candle_learner(&self, device: &Device) -> Result<CandlePolicyValueLearner, Error> {
-        let observation_size = self.env_desription.observation_size();
-        let (policy, policy_varmap) = self.policy_config.build_candle_with_varmap(
-            observation_size,
-            self.env_desription.action_space.clone(),
-            device,
-        )?;
+        let (policy, policy_varmap) = self
+            .policy_config
+            .build_candle_with_varmap::<E::Tensor>(device)?;
         let activation_function = self.policy_config.activation_function;
         match &self.optimizer_layout {
             OnPolicyOptimizerLayout::Joint {
@@ -569,9 +565,7 @@ impl<E: Env> Builder<E> {
 
     fn build_burn_learner<B: AutodiffBackend>(&self) -> Result<BurnPolicyValueLearner<B>, Error> {
         let observation_size = self.env_desription.observation_size();
-        let policy = self
-            .policy_config
-            .build_burn::<B, _>(observation_size, self.env_desription.action_space.clone())?;
+        let policy = self.policy_config.build_burn::<B, E::Tensor>()?;
         let activation_function = self.policy_config.activation_function;
         let value_layers = &[&[observation_size][..], &self.value_hidden_layers[..], &[1]].concat();
         Ok(match &self.optimizer_layout {
@@ -649,7 +643,7 @@ impl<E: Env> Builder<E> {
                     obs_normalizer,
                 )?;
                 ScheduledEvaluator::new(
-                    BestActorEvaluator::new(
+                    BestPolicyEvaluator::new(
                         sampler,
                         config.output_dir.clone(),
                         config.evaluation_results,

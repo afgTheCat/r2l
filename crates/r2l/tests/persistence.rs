@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use r2l::{
-    Env, EnvDescription, EvaluationSettings, InferenceRunner, PPOBuilder, SamplerExecutionMode,
-    Snapshot, Space, TrainingArtifactsConfig, TrainingLimit, VecTensor,
+    Env, EnvDescription, EvaluationSettings, InferenceEnv, InferencePolicy, InferenceRunner,
+    PPOBuilder, SamplerExecutionMode, Snapshot, Space, TrainingArtifactsConfig, TrainingLimit,
+    VecTensor,
 };
 use r2l_core::{error::Error, tensor::R2lTensor};
 use tempfile::TempDir;
@@ -39,6 +40,16 @@ impl Env for TinyEnv {
     }
 }
 
+struct TinyInferenceEnv;
+
+impl InferenceEnv for TinyInferenceEnv {
+    type Tensor = VecTensor;
+
+    fn step(&mut self, _action: Self::Tensor) -> Result<Self::Tensor, Error> {
+        Ok(VecTensor::from_vec(vec![0.0, 1.0]))
+    }
+}
+
 fn artifact_config(path: &Path) -> TrainingArtifactsConfig {
     TrainingArtifactsConfig::new(path)
         .with_evaluation_results(false)
@@ -58,14 +69,24 @@ fn assert_artifacts_exist(path: &Path, normalized: bool) {
 
 #[allow(clippy::float_cmp)] // Exact equality is the behavior under test.
 fn assert_repeated_loads_are_equivalent(path: &Path) {
-    let mut first = InferenceRunner::load(path, TinyEnv).unwrap();
-    let mut second = InferenceRunner::load(path, TinyEnv).unwrap();
-    let first = first.mode_step().unwrap();
-    let second = second.mode_step().unwrap();
+    let first = InferencePolicy::load(path).unwrap();
+    let second = InferencePolicy::load(path).unwrap();
+    let observation = VecTensor::from_vec(vec![1.0, 0.0]);
+    let first_action = first.mode_action(observation.clone()).unwrap();
+    let second_action = second.mode_action(observation.clone()).unwrap();
+    assert_eq!(
+        first_action.to_vec().unwrap(),
+        second_action.to_vec().unwrap()
+    );
 
-    assert_eq!(first.reward, second.reward);
-    assert!(first.terminated);
-    assert!(second.terminated);
+    let mut runner = InferenceRunner::load(path, TinyInferenceEnv, observation).unwrap();
+    assert_eq!(
+        runner.mode_step().unwrap().to_vec().unwrap(),
+        vec![0.0, 1.0]
+    );
+
+    let mut env_runner = InferenceRunner::load_from_env(path, TinyEnv).unwrap();
+    env_runner.mode_run_episode().unwrap();
 }
 
 #[test]
@@ -134,7 +155,7 @@ fn observation_normalizer_round_trips_with_policy() {
     assert_repeated_loads_are_equivalent(output.path());
 
     std::fs::remove_file(output.path().join("normalizer.yaml")).unwrap();
-    let error = InferenceRunner::load(output.path(), TinyEnv)
+    let error = InferenceRunner::load_from_env(output.path(), TinyEnv)
         .err()
         .expect("missing observation normalizer should fail");
     assert!(error.to_string().contains("missing observation normalizer"));
@@ -143,7 +164,7 @@ fn observation_normalizer_round_trips_with_policy() {
 #[test]
 fn missing_and_corrupt_artifacts_report_contextual_errors() {
     let missing = TempDir::new().unwrap();
-    let error = InferenceRunner::load(missing.path(), TinyEnv)
+    let error = InferenceRunner::load_from_env(missing.path(), TinyEnv)
         .err()
         .expect("missing inference configuration should fail");
     assert!(
@@ -153,7 +174,7 @@ fn missing_and_corrupt_artifacts_report_contextual_errors() {
     );
 
     std::fs::write(missing.path().join("inference.yaml"), "not: [valid").unwrap();
-    let error = InferenceRunner::load(missing.path(), TinyEnv)
+    let error = InferenceRunner::load_from_env(missing.path(), TinyEnv)
         .err()
         .expect("corrupt inference configuration should fail");
     assert!(
@@ -180,13 +201,13 @@ fn missing_actor_is_reported_after_valid_configuration_is_loaded() {
     algorithm.train().unwrap();
     std::fs::remove_file(output.path().join("actor.safetensors")).unwrap();
 
-    let error = InferenceRunner::load(output.path(), TinyEnv)
+    let error = InferenceRunner::load_from_env(output.path(), TinyEnv)
         .err()
         .expect("missing actor should fail");
     assert!(error.to_string().contains("missing actor"));
 
     std::fs::write(output.path().join("actor.safetensors"), b"not safetensors").unwrap();
-    let error = InferenceRunner::load(output.path(), TinyEnv)
+    let error = InferenceRunner::load_from_env(output.path(), TinyEnv)
         .err()
         .expect("corrupt actor should fail");
     assert!(error.to_string().contains("failed to decode actor"));

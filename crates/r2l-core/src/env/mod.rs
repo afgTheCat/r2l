@@ -2,11 +2,13 @@ pub mod normalizer;
 
 use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::{Error, InvalidParameterError};
 use crate::tensor::R2lTensor;
 
 /// Description of an observation or action space.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Space<T: R2lTensor> {
     /// Discrete space with `usize` possible values.
     Discrete(usize),
@@ -38,6 +40,38 @@ pub enum Space<T: R2lTensor> {
 }
 
 impl<T: R2lTensor> Space<T> {
+    /// Converts tensor values in this space to another tensor type.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a tensor cannot be converted.
+    pub fn convert<U: R2lTensor>(&self) -> Result<Space<U>, Error> {
+        Ok(match self {
+            Self::Discrete(size) => Space::Discrete(*size),
+            Self::Box { min, max, shape } => Space::Box {
+                min: min.as_ref().map(U::convert).transpose()?,
+                max: max.as_ref().map(U::convert).transpose()?,
+                shape: shape.clone(),
+            },
+            Self::MultiDiscrete { nvec, shape } => Space::MultiDiscrete {
+                nvec: U::convert(nvec)?,
+                shape: shape.clone(),
+            },
+            Self::MultiBinary { shape } => Space::MultiBinary {
+                shape: shape.clone(),
+            },
+            Self::Tuple(spaces) => {
+                Space::Tuple(spaces.iter().map(Self::convert).collect::<Result<_, _>>()?)
+            }
+            Self::Dict(spaces) => Space::Dict(
+                spaces
+                    .iter()
+                    .map(|(key, space)| Ok((key.clone(), space.convert()?)))
+                    .collect::<Result<_, Error>>()?,
+            ),
+        })
+    }
+
     /// Returns the Gymnasium shape when the space has one.
     pub fn shape(&self) -> Option<&[usize]> {
         match self {
@@ -151,15 +185,14 @@ pub trait Env {
     /// # Errors
     ///
     /// Returns an error if the environment cannot be reset.
-    fn reset(&mut self, seed: u64) -> Result<Self::Tensor, crate::error::Error>;
+    fn reset(&mut self, seed: u64) -> Result<Self::Tensor, Error>;
 
     /// Applies one action and returns the resulting transition snapshot.
     ///
     /// # Errors
     ///
     /// Returns an error if the environment cannot apply the action.
-    fn step(&mut self, action: Self::Tensor)
-    -> Result<Snapshot<Self::Tensor>, crate::error::Error>;
+    fn step(&mut self, action: Self::Tensor) -> Result<Snapshot<Self::Tensor>, Error>;
 
     /// Returns static observation/action space metadata.
     fn env_description(&self) -> EnvDescription<Self::Tensor>;
@@ -177,16 +210,14 @@ pub trait EnvBuilder: Sync + Send + 'static {
     /// # Errors
     ///
     /// Returns an error if the environment cannot be constructed.
-    fn build_env(&self) -> Result<Self::Env, crate::error::Error>;
+    fn build_env(&self) -> Result<Self::Env, Error>;
 
     /// Returns the environment description for produced environments.
     ///
     /// # Errors
     ///
     /// Returns an error if a representative environment cannot be constructed.
-    fn env_description(
-        &self,
-    ) -> Result<EnvDescription<<Self::Env as Env>::Tensor>, crate::error::Error> {
+    fn env_description(&self) -> Result<EnvDescription<<Self::Env as Env>::Tensor>, Error> {
         let env = self.build_env()?;
         Ok(env.env_description())
     }
@@ -195,11 +226,11 @@ pub trait EnvBuilder: Sync + Send + 'static {
 
 impl<E: Env, F: Sync + Send + 'static> EnvBuilder for F
 where
-    F: Fn() -> Result<E, crate::error::Error>,
+    F: Fn() -> Result<E, Error>,
 {
     type Env = E;
 
-    fn build_env(&self) -> Result<E, crate::error::Error> {
+    fn build_env(&self) -> Result<E, Error> {
         (self)()
     }
 }

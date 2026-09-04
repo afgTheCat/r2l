@@ -12,11 +12,9 @@ use r2l_core::{
 use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
 
 use crate::{
-    builders::{
-        inference::{ACTOR_FILE, NORMALIZER_FILE},
-        normalizer::NormalizerBuilder,
-    },
+    builders::normalizer::NormalizerBuilder,
     hooks::sampler::EpisodeBoundHook,
+    inference::{ACTOR_FILE, NORMALIZER_FILE},
 };
 
 const EVALUATIONS_FILE: &str = "evaluations.csv";
@@ -167,12 +165,12 @@ impl EvaluationSettings {
     }
 }
 
-/// Evaluates an actor through the sampler path and keeps the best one seen.
+/// Evaluates a policy through the sampler path and keeps the best one seen.
 ///
 /// This evaluator collects episode-bounded rollouts,
-/// computes the average completed-episode reward, and retains the best actor
+/// computes the average completed-episode reward, and retains the best policy
 /// observed so far.
-pub(crate) struct BestActorEvaluator<A: Actor, E: Env> {
+pub(crate) struct BestPolicyEvaluator<A: Actor, E: Env> {
     sampler: EvaluationSampler<E>,
     evaluation_results: Option<File>,
     inference_artifacts: Option<PathBuf>,
@@ -180,7 +178,7 @@ pub(crate) struct BestActorEvaluator<A: Actor, E: Env> {
     _actor: PhantomData<A>,
 }
 
-impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvaluator<A, E> {
+impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestPolicyEvaluator<A, E> {
     pub(crate) fn new(
         sampler: EvaluationSampler<E>,
         output_dir: PathBuf,
@@ -214,7 +212,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestActorEvalu
         Ok(())
     }
 
-    /// Evaluates the actor and persists it if it outperforms the current best actor.
+    /// Evaluates the policy and persists it if it outperforms the current best policy.
     pub(crate) fn eval_adapted(
         &mut self,
         adapted_actor: impl Actor<Tensor = E::Tensor> + Clone,

@@ -93,7 +93,7 @@ use r2l::{GymEnv, InferenceRunner};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let env = GymEnv::new("Pendulum-v1", Some("human".to_owned()))?;
-    let mut inference = InferenceRunner::load("runs/pendulum", env)?;
+    let mut inference = InferenceRunner::load_from_env("runs/pendulum", env)?;
     for _ in 0..4 {
         inference.run_episode()?;
     }
@@ -104,6 +104,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 The inference configuration records the backend, policy architecture settings,
 and observation normalization mode needed to rebuild the policy. It does not
 contain training hyperparameters such as the learning rate or discount factor.
+
+Applications that receive observations outside an [`Env`](https://docs.rs/r2l/latest/r2l/trait.Env.html)
+can load an `InferencePolicy` directly and request actions from raw observations.
+For a stateful control loop, implement `InferenceEnv` and initialize an
+`InferenceRunner` with the first raw observation. Full `Env` implementations
+also support resetting and running complete episodes.
 
 # Environments
 
