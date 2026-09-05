@@ -11,7 +11,7 @@ Gymnasium support is opt-in and requires Python 3.11 or newer with the
 `gymnasium` package installed:
 
 ```toml
-r2l = { version = "0.0.2", features = ["gym"] }
+r2l = { version = "0.0.3", features = ["gym"] }
 ```
 
 ```rust,no_run
@@ -29,4 +29,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 See the [book](https://afgthecat.github.io/r2l/) for a user guide and
-[docs.rs](https://docs.rs/r2l/0.0.2/r2l/) for the complete API.
+[docs.rs](https://docs.rs/r2l/0.0.3/r2l/) for the complete API.

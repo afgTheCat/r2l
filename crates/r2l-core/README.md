@@ -10,4 +10,4 @@ configuration; use [`r2l`](https://crates.io/crates/r2l) for high-level
 PPO and A2C builders.
 
 API documentation is available on
-[docs.rs](https://docs.rs/r2l-core/0.0.2/r2l_core/).
+[docs.rs](https://docs.rs/r2l-core/0.0.3/r2l_core/).

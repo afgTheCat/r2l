@@ -17,7 +17,7 @@ tensor types.
 ![On-policy algorithm overview](./images/on_policy_algo.png)
 
 The public traits and their method contracts are documented in the
-[`r2l-core` API](https://docs.rs/r2l-core/0.0.2/r2l_core/on_policy/algorithm/).
+[`r2l-core` API](https://docs.rs/r2l-core/0.0.3/r2l_core/on_policy/algorithm/).
 
 ## Samplers
 

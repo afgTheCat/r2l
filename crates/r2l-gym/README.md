@@ -12,4 +12,4 @@ The crate uses PyO3's Python 3.11 stable ABI. The `gymnasium` package must be
 installed in the Python environment used at runtime.
 
 API documentation is available on
-[docs.rs](https://docs.rs/r2l-gym/0.0.2/r2l_gym/).
+[docs.rs](https://docs.rs/r2l-gym/0.0.3/r2l_gym/).

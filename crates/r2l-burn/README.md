@@ -8,4 +8,4 @@ policy/value learning modules. Most applications select this backend through
 `r2l`'s `with_burn()` builder method.
 
 API documentation is available on
-[docs.rs](https://docs.rs/r2l-burn/0.0.2/r2l_burn/).
+[docs.rs](https://docs.rs/r2l-burn/0.0.3/r2l_burn/).

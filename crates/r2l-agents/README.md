@@ -8,4 +8,4 @@ builders and default hooks from
 [`r2l`](https://crates.io/crates/r2l).
 
 API documentation is available on
-[docs.rs](https://docs.rs/r2l-agents/0.0.2/r2l_agents/).
+[docs.rs](https://docs.rs/r2l-agents/0.0.3/r2l_agents/).

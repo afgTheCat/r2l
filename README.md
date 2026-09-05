@@ -13,7 +13,7 @@ The following example uses the optional `gym` integration. Enable it in your
 `Cargo.toml`:
 
 ```toml
-r2l = { version = "0.0.2", features = ["gym"] }
+r2l = { version = "0.0.3", features = ["gym"] }
 ```
 
 With the `gymnasium` Python package installed, a complete training and inference
@@ -55,7 +55,7 @@ For more information on how to use r2l, read the
 
 ## Current capabilities
 
-The current published version is `v0.0.2`.
+The current published version is `v0.0.3`.
 
 - On-policy PPO and A2C implementations
 - Candle and Burn backends
