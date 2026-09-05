@@ -12,7 +12,7 @@ setup does not satisfy you, the lower level hooks allow for a lot of hackability
 The shortest Gymnasium-based PPO setup is:
 
 ```toml
-r2l = { version = "0.0.2", features = ["gym"] }
+r2l = { version = "0.0.3", features = ["gym"] }
 ```
 
 ```rust,no_run
@@ -194,4 +194,4 @@ configured training schedule.
 
 For the underlying traits and hook points, continue with
 [On-policy algorithms](./on_policy_algorithms.md). For exact builder methods,
-use the [`r2l` reference](https://docs.rs/r2l/0.0.2/r2l/).
+use the [`r2l` reference](https://docs.rs/r2l/0.0.3/r2l/).

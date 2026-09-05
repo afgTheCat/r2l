@@ -15,14 +15,14 @@ members = [
 resolver = "3"
 
 [workspace.dependencies]
-# r2l-macros = { path = "crates/r2l-macros", version = "0.0.2" }
-r2l-core = { path = "crates/r2l-core", version = "0.0.2" }
-r2l-gym = { path = "crates/r2l-gym", version = "0.0.2" }
-r2l-agents = { path = "crates/r2l-agents", version = "0.0.2" }
-r2l = { path = "crates/r2l", version = "0.0.2" }
-r2l-candle = { path = "crates/r2l-candle", version = "0.0.2" }
-r2l-burn = { path = "crates/r2l-burn", version = "0.0.2" }
-r2l-sampler = { path = "crates/r2l-sampler", version = "0.0.2" }
+# r2l-macros = { path = "crates/r2l-macros", version = "0.0.3" }
+r2l-core = { path = "crates/r2l-core", version = "0.0.3" }
+r2l-gym = { path = "crates/r2l-gym", version = "0.0.3" }
+r2l-agents = { path = "crates/r2l-agents", version = "0.0.3" }
+r2l = { path = "crates/r2l", version = "0.0.3" }
+r2l-candle = { path = "crates/r2l-candle", version = "0.0.3" }
+r2l-burn = { path = "crates/r2l-burn", version = "0.0.3" }
+r2l-sampler = { path = "crates/r2l-sampler", version = "0.0.3" }
 r2l-benchmark-task = { path = "benchmark/task" }
 burn = { version = "0.21.0", default-features = false, features = ["std", "ndarray", "autodiff"] }
 burn-ndarray = { version = "0.21.0", default-features = false, features = ["std", "multi-threads"] }
@@ -42,7 +42,7 @@ itertools = "0.15.0"
 thiserror = { version = "2.0.20" } 
 
 [workspace.package]
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 description = "A rust reinforcement learning library"
 repository = "https://github.com/afgTheCat/r2l"
