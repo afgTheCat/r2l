@@ -17,12 +17,12 @@ use r2l_core::{
 use rand::distr::Distribution as RandDistribution;
 use rand::distr::weighted::WeightedIndex;
 
-use crate::sequential::Sequential;
+use crate::networks::mlp::Mlp;
 
 /// Multi-categorical Burn policy for Gymnasium `MultiDiscrete` action spaces.
 #[derive(Debug, Module)]
 pub struct MultiCategoricalDistribution<B: Backend> {
-    logits: Sequential<B>,
+    logits: Mlp<B>,
     nvec: Vec<usize>,
 }
 
@@ -37,7 +37,7 @@ impl<B: Backend> MultiCategoricalDistribution<B> {
     ) -> Self {
         let logits_size = nvec.iter().sum();
         let layers = &[&[observation_size], hidden_layers, &[logits_size]].concat();
-        let logits = Sequential::build(layers, activation);
+        let logits = Mlp::build(layers, activation);
         Self { logits, nvec }
     }
 }

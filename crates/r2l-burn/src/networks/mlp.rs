@@ -1,20 +1,24 @@
 use burn::nn::activation::{Activation, ActivationConfig};
-use burn::nn::{EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig};
+use burn::nn::{Dropout, EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig};
 use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
 use r2l_core::models::ActivationFunction;
 
+use crate::networks::Network;
+
 #[derive(Debug, Module)]
 #[allow(clippy::large_enum_variant)]
-pub enum Layer<B: Backend> {
+pub enum LinearLayer<B: Backend> {
     Activation(Activation<B>),
     LinearLayer(Linear<B>),
+    Dropout(Dropout),
 }
 
-impl<B: Backend> Layer<B> {
-    fn forward(&self, t: Tensor<B, 2>) -> Tensor<B, 2> {
+impl<B: Backend> LinearLayer<B> {
+    pub fn forward(&self, t: Tensor<B, 2>) -> Tensor<B, 2> {
         match &self {
             Self::LinearLayer(linear) => linear.forward(t),
             Self::Activation(activation) => activation.forward(t),
+            Self::Dropout(dropout) => dropout.forward(t),
         }
     }
 
@@ -45,11 +49,11 @@ impl<B: Backend> Layer<B> {
 }
 
 #[derive(Debug, Module)]
-pub struct Sequential<B: Backend> {
-    layers: Vec<Layer<B>>,
+pub struct Mlp<B: Backend> {
+    layers: Vec<LinearLayer<B>>,
 }
 
-impl<B: Backend> Sequential<B> {
+impl<B: Backend> Mlp<B> {
     pub fn forward(&self, mut t: Tensor<B, 2>) -> Tensor<B, 2> {
         for layer in &self.layers {
             t = layer.forward(t);
@@ -63,13 +67,25 @@ impl<B: Backend> Sequential<B> {
         let num_layers = layer_sizes.len();
         for (layer_idx, layer_size) in layer_sizes.iter().enumerate().skip(1) {
             if layer_idx == num_layers - 1 {
-                layers.push(Layer::linear(last_dim, *layer_size));
+                layers.push(LinearLayer::linear(last_dim, *layer_size));
             } else {
-                layers.push(Layer::linear(last_dim, *layer_size));
-                layers.push(Layer::activation(activation));
+                layers.push(LinearLayer::linear(last_dim, *layer_size));
+                layers.push(LinearLayer::activation(activation));
             }
             last_dim = *layer_size;
         }
         Self { layers }
+    }
+}
+
+impl<B: Backend> Network<B> for Mlp<B> {
+    fn forward(&self, t: Tensor<B, 1>) -> Tensor<B, 2> {
+        let t = t.unsqueeze();
+        self.forward(t)
+    }
+
+    fn batch_forward(&self, t: &[Tensor<B, 1>]) -> Tensor<B, 2> {
+        let t = Tensor::stack(t.to_vec(), 0);
+        self.forward(t)
     }
 }

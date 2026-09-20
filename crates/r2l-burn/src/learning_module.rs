@@ -18,7 +18,7 @@ use r2l_core::{
     on_policy::{learning_module::OnPolicyLearner, losses::FromPolicyValueLosses},
 };
 
-use crate::{distributions::BurnPolicyKind, sequential::Sequential};
+use crate::{distributions::BurnPolicyKind, networks::mlp::Mlp};
 
 // Constraints needed for the policy to work with Adam optimization and decoupled weight decay.
 /// Trait alias-like bound for Burn policies used by on-policy learners.
@@ -88,12 +88,12 @@ impl<B: AutodiffBackend> PolicyValueLosses<B> {
 #[derive(Debug, Module)]
 pub struct JointActorModel<B: Backend, M: Module<B>> {
     policy: M,
-    value_net: Sequential<B>,
+    value_net: Mlp<B>,
 }
 
 impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
     /// Creates a joint model from a policy and value network.
-    pub fn new(policy: M, value_net: Sequential<B>) -> Self {
+    pub fn new(policy: M, value_net: Mlp<B>) -> Self {
         Self { policy, value_net }
     }
 }
@@ -193,20 +193,20 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueL
 /// Burn on-policy learner with separate policy and value optimizers.
 pub struct SplitPolicyValueLearner<B: AutodiffBackend, M: BurnPolicy<B>> {
     policy: M,
-    value_net: Sequential<B>,
+    value_net: Mlp<B>,
     policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
     policy_lr: f64,
-    value_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
+    value_optimizer: OptimizerAdaptor<AdamW, Mlp<B>, B>,
     value_lr: f64,
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
     fn new(
         policy: M,
-        value_net: Sequential<B>,
+        value_net: Mlp<B>,
         policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
         policy_lr: f64,
-        value_optimizer: OptimizerAdaptor<AdamW, Sequential<B>, B>,
+        value_optimizer: OptimizerAdaptor<AdamW, Mlp<B>, B>,
         value_lr: f64,
     ) -> Self {
         Self {
@@ -317,7 +317,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
         optimizer_config: &AdamWConfig,
         lr: f64,
     ) -> Self {
-        let value_net: Sequential<B> = Sequential::build(value_layers, activation);
+        let value_net: Mlp<B> = Mlp::build(value_layers, activation);
         let model = JointActorModel::new(policy, value_net);
         let model = JointPolicyValueLearner::new(model, optimizer_config.init(), lr);
         Self::Joint(model)
@@ -333,7 +333,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
         value_optimizer_config: &AdamWConfig,
         value_lr: f64,
     ) -> Self {
-        let value_net: Sequential<B> = Sequential::build(value_layers, activation);
+        let value_net: Mlp<B> = Mlp::build(value_layers, activation);
         let model = SplitPolicyValueLearner::new(
             policy,
             value_net,

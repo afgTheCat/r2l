@@ -19,10 +19,12 @@ use crate::distributions::{
     composite::CompositeDistribution, diagonal::DiagGaussianDistribution,
     multi_categorical::MultiCategoricalDistribution,
 };
+
 /// Multi-Bernoulli policy distribution for multi-binary action spaces.
 pub mod bernoulli;
 /// Categorical policy distribution for discrete action spaces.
 pub mod categorical;
+pub mod categorical2;
 /// Composite policy distribution for tuple and dict action spaces.
 pub mod composite;
 /// Diagonal-Gaussian policy distribution for Box action spaces.

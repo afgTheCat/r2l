@@ -1,40 +1,29 @@
-use burn::{
-    module::Module,
-    prelude::Backend,
-    tensor::{
-        Tensor, TensorData,
-        activation::{log_softmax, softmax},
-    },
-};
+use std::marker::PhantomData;
+
+use burn::module::ModuleDisplay;
+use burn::tensor::TensorData;
+use burn::tensor::activation::{log_softmax, softmax};
+use burn::{Tensor, module::Module, tensor::backend::Backend};
 use burn_store::{ModuleStore, SafetensorsStore};
 use itertools::Itertools;
-use r2l_core::{
-    error::{Error, InvalidParameterError, Result, TensorError},
-    models::{ActivationFunction, Actor, Policy, ToSafetensors},
-    rng::with_rng,
-};
-use rand::distr::Distribution as RandDistributiion;
-use rand::distr::weighted::WeightedIndex;
+use r2l_core::error::{Error, InvalidParameterError, Result, TensorError};
+use r2l_core::models::{ActivationFunction, Actor, Policy, ToSafetensors};
+use r2l_core::rng::with_rng;
+use rand_distr::Distribution;
+use rand_distr::weighted::WeightedIndex;
 
+use crate::networks::Network;
 use crate::networks::mlp::Mlp;
 
-/// Categorical Burn policy for discrete action spaces.
-///
-/// This policy produces category indices sampled from logits predicted by a
-/// feed-forward network and implements the `r2l-core` [`Actor`] and [`Policy`]
-/// traits.
+// TODO: we probably want Network here, not Module. Whatever
 #[derive(Debug, Module)]
-pub struct CategoricalDistribution<B: Backend> {
-    logits: Mlp<B>,
+pub struct CategoricalDistribution2<B: Backend, N: Module<B>> {
+    logits: N,
+    _b: PhantomData<B>,
 }
 
-impl<B: Backend> CategoricalDistribution<B> {
-    /// Builds a categorical policy network.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if `logits_layers` is empty.
-    pub fn build(logits_layers: &[usize], activation: ActivationFunction) -> Result<Self> {
+impl<B: Backend> CategoricalDistribution2<B, Mlp<B>> {
+    fn build_mlp(logits_layers: &[usize], activation: ActivationFunction) -> Result<Self> {
         if logits_layers.is_empty() {
             return Err(Error::InvalidParameter(Box::new(
                 InvalidParameterError::InvalidValue {
@@ -45,16 +34,25 @@ impl<B: Backend> CategoricalDistribution<B> {
             )));
         }
         let logits: Mlp<B> = Mlp::build(logits_layers, activation);
-        Ok(Self { logits })
+        Ok(Self {
+            logits,
+            _b: PhantomData,
+        })
     }
 }
 
-impl<B: Backend> Actor for CategoricalDistribution<B> {
+impl<B: Backend, N: Module<B> + ModuleDisplay> ToSafetensors for CategoricalDistribution2<B, N> {
+    fn to_safetensors(&self) -> Result<Vec<u8>> {
+        let mut store = SafetensorsStore::default();
+        store.collect_from(self).map_err(Error::wrap)?;
+        store.get_bytes().map_err(Error::wrap)
+    }
+}
+
+impl<B: Backend, N: Network<B>> Actor for CategoricalDistribution2<B, N> {
     type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let device = Default::default();
-        let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation);
         let action_probs: Vec<f32> = softmax(logits, 1)
             .to_data()
@@ -62,13 +60,14 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
             .map_err(|error| TensorError::operation("read categorical probabilities", error))?;
         let distribution = WeightedIndex::new(&action_probs).map_err(Error::wrap)?;
         let action = with_rng(|rng| distribution.sample(rng));
-        let action = Tensor::from_data(TensorData::new(vec![action as f32], vec![1]), &device);
+        let action = Tensor::from_data(
+            TensorData::new(vec![action as f32], vec![1]),
+            &Default::default(),
+        );
         Ok(action)
     }
 
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let device = Default::default();
-        let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits: Vec<f32> = self
             .logits
             .forward(observation)
@@ -81,21 +80,15 @@ impl<B: Backend> Actor for CategoricalDistribution<B> {
             .ok_or_else(|| TensorError::EmptyInput {
                 operation: "select categorical modal action".into(),
             })?;
-        let action = Tensor::from_data(TensorData::new(vec![action as f32], vec![1]), &device);
+        let action = Tensor::from_data(
+            TensorData::new(vec![action as f32], vec![1]),
+            &Default::default(),
+        );
         Ok(action)
     }
 }
 
-impl<B: Backend> ToSafetensors for CategoricalDistribution<B> {
-    fn to_safetensors(&self) -> Result<Vec<u8>> {
-        let mut store = SafetensorsStore::default();
-        store.collect_from(self).map_err(Error::wrap)?;
-        store.get_bytes().map_err(Error::wrap)
-    }
-}
-
-impl<B: Backend> Policy for CategoricalDistribution<B> {
-    // FIXME: check the other fixme comment for DiagGaussian
+impl<B: Backend, N: Network<B>> Policy for CategoricalDistribution2<B, N> {
     fn log_probs(
         &self,
         observations: &[Self::Tensor],
@@ -103,17 +96,14 @@ impl<B: Backend> Policy for CategoricalDistribution<B> {
     ) -> Result<Self::Tensor> {
         debug_assert!(!observations.is_empty());
         debug_assert_eq!(observations.len(), actions.len());
-        let states: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
+        let logits = self.logits.batch_forward(observations);
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
-        let logits = self.logits.forward(states);
         let log_probs = log_softmax(logits, 1);
         Ok(log_probs.gather(1, actions.int()).squeeze_dim::<1>(1))
     }
 
-    fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor> {
-        debug_assert!(!states.is_empty());
-        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
-        let logits = self.logits.forward(states);
+    fn entropy(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
+        let logits = self.logits.batch_forward(observations);
         let probs = softmax(logits.clone(), 1);
         let log_probs = log_softmax(logits, 1);
         let entropy_per_state = (probs * log_probs).neg().sum_dim(1);

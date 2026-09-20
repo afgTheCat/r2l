@@ -12,7 +12,7 @@ use r2l_core::{
 };
 use rand_distr::{Distribution, StandardNormal};
 
-use crate::sequential::Sequential;
+use crate::networks::mlp::Mlp;
 
 /// Diagonal-Gaussian Burn policy for Box action spaces.
 ///
@@ -21,7 +21,7 @@ use crate::sequential::Sequential;
 /// `r2l-core` [`Actor`] and [`Policy`] traits.
 #[derive(Debug, Module)]
 pub struct DiagGaussianDistribution<B: Backend> {
-    mu_net: Sequential<B>,
+    mu_net: Mlp<B>,
     log_std: Param<Tensor<B, 2>>,
 }
 
@@ -45,7 +45,7 @@ impl<B: Backend> DiagGaussianDistribution<B> {
                 value: "[]".into(),
             }))
         })?;
-        let mu_net: Sequential<B> = Sequential::build(mu_layers, activation);
+        let mu_net: Mlp<B> = Mlp::build(mu_layers, activation);
         let log_std = Param::from_data(
             TensorData::new(
                 vec![log_std_init; action_size],

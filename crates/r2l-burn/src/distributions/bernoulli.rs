@@ -11,7 +11,7 @@ use r2l_core::{
     rng::with_rng,
 };
 
-use crate::sequential::Sequential;
+use crate::networks::mlp::Mlp;
 
 /// Independent Bernoulli policy for Gymnasium `MultiBinary` action spaces.
 ///
@@ -19,7 +19,7 @@ use crate::sequential::Sequential;
 /// action component, but uses one logit per component instead of two.
 #[derive(Debug, Module)]
 pub struct MultiBernoulliDistribution<B: Backend> {
-    logits: Sequential<B>,
+    logits: Mlp<B>,
     action_size: usize,
 }
 
@@ -33,7 +33,7 @@ impl<B: Backend> MultiBernoulliDistribution<B> {
         activation: ActivationFunction,
     ) -> Self {
         let layers = &[&[observation_size], hidden_layers, &[action_size]].concat();
-        let logits = Sequential::build(layers, activation);
+        let logits = Mlp::build(layers, activation);
         Self {
             logits,
             action_size,

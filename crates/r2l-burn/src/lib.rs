@@ -15,4 +15,4 @@
 pub mod distributions;
 /// Burn policy/value learners and associated loss types.
 pub mod learning_module;
-mod sequential;
+mod networks;
