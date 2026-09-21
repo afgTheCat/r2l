@@ -105,6 +105,28 @@ fn nonlinear_operations_and_reductions_have_backend_parity() {
 }
 
 #[test]
+fn multidimensional_mean_reduces_all_elements() {
+    let values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+    let candle = CandleTensor::from_slice_and_shape(&values, vec![2, 3]).unwrap();
+    let burn = BurnTensor::<NdArray, 2>::from_slice_and_shape(&values, vec![2, 3]).unwrap();
+    let burn_3d = BurnTensor::<NdArray, 3>::from_slice_and_shape(&values, vec![2, 1, 3]).unwrap();
+
+    let candle_mean = R2lTensor::mean(&candle).unwrap();
+    let burn_mean = R2lTensor::mean(&burn).unwrap();
+    let burn_3d_mean = R2lTensor::mean(&burn_3d).unwrap();
+
+    assert!(candle_mean.to_shape().is_empty());
+    assert_eq!(burn_mean.to_shape(), vec![1, 1]);
+    assert_eq!(burn_3d_mean.to_shape(), vec![1, 1, 1]);
+    assert_close(&candle_mean.to_vec().unwrap(), &[3.5]);
+    assert_close(&burn_mean.to_vec().unwrap(), &candle_mean.to_vec().unwrap());
+    assert_close(
+        &burn_3d_mean.to_vec().unwrap(),
+        &candle_mean.to_vec().unwrap(),
+    );
+}
+
+#[test]
 fn aggregate_statistics_have_backend_parity() {
     let candle_samples = [
         candle(&[1.0, 2.0]),

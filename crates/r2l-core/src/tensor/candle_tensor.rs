@@ -1,4 +1,5 @@
 use candle_core::{Device, Tensor};
+use candle_nn::ops::{log_softmax, softmax};
 use itertools::izip;
 
 use crate::{
@@ -100,6 +101,15 @@ impl R2lTensor for Tensor {
             .map_err(|error| TensorError::operation("create scalar", error))?;
         self.broadcast_mul(&scalar)
             .map_err(|error| TensorError::operation("multiply by scalar", error))
+    }
+
+    // TODO: we really need to check dim={0,1}, cuz I don't realy know what that means tbh
+    fn softmax(&self, dim: usize) -> Result<Self> {
+        softmax(self, dim).map_err(|err| TensorError::operation("softmax", err))
+    }
+
+    fn log_softmax(&self, dim: usize) -> super::Result<Self> {
+        log_softmax(self, dim).map_err(|err| TensorError::operation("softmax", err))
     }
 }
 

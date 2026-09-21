@@ -9,8 +9,8 @@ use r2l_core::{
 
 use crate::{
     distributions::{
-        bernoulli::MultiBernoulliDistribution, categorical2::CategoricalDistribution2,
-        diagonal::DiagGaussianDistribution, multi_categorical::MultiCategoricalDistribution,
+        bernoulli2::MultiBernoulliDistribution2, categorical2::CategoricalDistribution2,
+        diagonal2::DiagGaussianDistribution2, multi_categorical2::MultiCategoricalDistribution2,
     },
     networks::mlp::Mlp,
 };
@@ -18,9 +18,9 @@ use crate::{
 #[derive(Debug, Module)]
 enum CompositePolicyChildren<B: Backend> {
     Categorical(CategoricalDistribution2<B, Mlp<B>>),
-    Diag(DiagGaussianDistribution<B>),
-    MultiCategorical(MultiCategoricalDistribution<B>),
-    MultiBernoulli(MultiBernoulliDistribution<B>),
+    Diag(DiagGaussianDistribution2<B, Mlp<B>>),
+    MultiCategorical(MultiCategoricalDistribution2<B, Mlp<B>>),
+    MultiBernoulli(MultiBernoulliDistribution2<B, Mlp<B>>),
 }
 
 impl<B: Backend> CompositePolicyChildren<B> {
@@ -134,14 +134,14 @@ impl<B: Backend> CompositeDistribution<B> {
                 ]
                 .concat();
                 policies.push(CompositePolicyChildren::Diag(
-                    DiagGaussianDistribution::build(&child_layers, activation, log_std_init)?,
+                    DiagGaussianDistribution2::build_mlp(&child_layers, activation, log_std_init)?,
                 ));
                 action_sizes.push(action_size);
             }
             Space::MultiDiscrete { nvec, .. } => {
                 let nvec = nvec.to_vec()?;
                 policies.push(CompositePolicyChildren::MultiCategorical(
-                    MultiCategoricalDistribution::build(
+                    MultiCategoricalDistribution2::build_mlp(
                         policy_layers[0],
                         &policy_layers[1..policy_layers.len() - 1],
                         nvec.into_iter().map(|n| n as usize).collect(),
@@ -152,7 +152,7 @@ impl<B: Backend> CompositeDistribution<B> {
             }
             Space::MultiBinary { .. } => {
                 policies.push(CompositePolicyChildren::MultiBernoulli(
-                    MultiBernoulliDistribution::build(
+                    MultiBernoulliDistribution2::build_mlp(
                         policy_layers[0],
                         &policy_layers[1..policy_layers.len() - 1],
                         action_size,

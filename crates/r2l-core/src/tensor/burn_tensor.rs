@@ -1,13 +1,16 @@
 use burn::{
     prelude::Backend,
-    tensor::{Tensor, TensorData as BurnTensorData},
+    tensor::{
+        Tensor, TensorData as BurnTensorData,
+        activation::{log_softmax, softmax},
+    },
 };
 
 use crate::{error::TensorError, tensor::R2lTensor};
 
 type Result<T> = std::result::Result<T, TensorError>;
 
-impl<B: Backend> R2lTensor for Tensor<B, 1> {
+impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
     fn to_vec(&self) -> Result<Vec<f32>> {
         self.to_data()
             .to_vec()
@@ -68,7 +71,8 @@ impl<B: Backend> R2lTensor for Tensor<B, 1> {
                 operation: "mean".into(),
             });
         }
-        Ok(self.clone().mean())
+        // Preserve the static rank while representing the all-element mean as one value.
+        Ok(self.clone().mean().reshape([1; D]))
     }
 
     fn sqr(&self) -> Result<Self> {
@@ -82,6 +86,14 @@ impl<B: Backend> R2lTensor for Tensor<B, 1> {
 
     fn mul_scalar(&self, scalar: f32) -> Result<Self> {
         Ok(self.clone().mul_scalar(scalar))
+    }
+
+    fn softmax(&self, dim: usize) -> super::Result<Self> {
+        Ok(softmax(self.clone(), dim))
+    }
+
+    fn log_softmax(&self, dim: usize) -> super::Result<Self> {
+        Ok(log_softmax(self.clone(), dim))
     }
 }
 
@@ -97,9 +109,9 @@ fn validate_shape(data_len: usize, shape: &[usize]) -> Result<()> {
     Ok(())
 }
 
-fn ensure_same_shape<B: Backend>(
-    left: &Tensor<B, 1>,
-    right: &Tensor<B, 1>,
+fn ensure_same_shape<const D: usize, B: Backend>(
+    left: &Tensor<B, D>,
+    right: &Tensor<B, D>,
     operation: &str,
 ) -> Result<()> {
     let left = left.shape().to_vec();

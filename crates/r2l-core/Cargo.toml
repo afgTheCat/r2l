@@ -12,13 +12,14 @@ rayon = "1.10.0"
 derive_more = { version = "2.0.1", features = ["full"] }
 either = {workspace = true}
 candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
 burn = { workspace = true, optional = true }
 itertools = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
 [features]
-candle = ["dep:candle-core"]
+candle = ["dep:candle-core", "dep:candle-nn"]
 burn = ["dep:burn"]
 cuda = ["candle", "candle-core/cuda"]
 default = ["candle", "burn"]

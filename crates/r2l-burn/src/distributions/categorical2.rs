@@ -97,7 +97,7 @@ impl<B: Backend, N: Network<B>> Policy for CategoricalDistribution2<B, N> {
         debug_assert!(!observations.is_empty());
         debug_assert_eq!(observations.len(), actions.len());
         let logits = self.logits.batch_forward(observations);
-        let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
+        let actions = Tensor::stack(actions.to_vec(), 0);
         let log_probs = log_softmax(logits, 1);
         Ok(log_probs.gather(1, actions.int()).squeeze_dim::<1>(1))
     }

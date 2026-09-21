@@ -1,0 +1,18 @@
+[package]
+name = "r2l-distributions"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+r2l-core = { workspace = true }
+burn = { workspace = true }
+burn-ndarray = { workspace = true }
+burn-store = { workspace = true }
+itertools = { workspace = true }
+rand_distr = { workspace = true }
+
+[lints]
+workspace = true

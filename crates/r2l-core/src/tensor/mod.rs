@@ -6,6 +6,7 @@ mod candle_tensor;
 
 use std::fmt::Debug;
 
+use candle_nn::ops::softmax;
 use serde::{Deserialize, Serialize};
 
 use crate::error::TensorError;
@@ -143,6 +144,10 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     ///
     /// Returns an error if the tensor backend cannot perform the operation.
     fn sqr(&self) -> Result<Self>;
+
+    fn softmax(&self, dim: usize) -> Result<Self>;
+
+    fn log_softmax(&self, dim: usize) -> Result<Self>;
 
     /// Creates a zero-filled tensor with `shape`.
     ///
@@ -378,5 +383,13 @@ impl R2lTensor for VecTensor {
             self.data.iter().map(|value| value * scalar).collect(),
             self.shape.clone(),
         )
+    }
+
+    fn softmax(&self, dim: usize) -> Result<Self> {
+        todo!()
+    }
+
+    fn log_softmax(&self, dim: usize) -> Result<Self> {
+        todo!()
     }
 }

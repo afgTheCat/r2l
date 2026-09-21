@@ -45,25 +45,17 @@ impl<B: Backend> Cnn<B> {
         for layer in &self.cnn_layers {
             t = layer.forward(t);
         }
-        let mut t: Tensor<B, 2> = t.flatten(1, 3);
+        let t: Tensor<B, 2> = t.flatten(1, 3);
         self.mlp.forward(t)
     }
 }
 
-impl<B: Backend> Network<B> for Cnn<B> {
-    fn batch_forward(&self, t: &[Tensor<B, 1>]) -> Tensor<B, 2> {
-        let t: Tensor<B, 4> = Tensor::stack(
-            t.iter()
-                .map(|t| t.clone().reshape::<3, _>(self.shape.clone()))
-                .collect(),
-            0,
-        );
-        self.forward_inner(t)
-    }
+impl<B: Backend> Network for Cnn<B> {
+    type Tensor = Tensor<B, 2>;
 
-    fn forward(&self, t: Tensor<B, 1>) -> Tensor<B, 2> {
+    fn forward(&self, t: Self::Tensor) -> Self::Tensor {
         let t: Tensor<B, 3> = t.reshape(self.shape.clone());
         let t: Tensor<B, 4> = t.unsqueeze();
-        self.forward_inner(t)
+        self.forward_inner(t).squeeze()
     }
 }

@@ -5824,6 +5824,7 @@ version = "0.0.3"
 dependencies = [
  "burn",
  "candle-core 0.11.0",
+ "candle-nn",
  "derive_more",
  "either",
  "itertools 0.15.0",
@@ -5831,6 +5832,18 @@ dependencies = [
  "rayon",
  "serde",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "r2l-distributions"
+version = "0.0.3"
+dependencies = [
+ "burn",
+ "burn-ndarray",
+ "burn-store",
+ "itertools 0.15.0",
+ "r2l-core",
+ "rand_distr 0.6.0",
 ]
 
 [[package]]

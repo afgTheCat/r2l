@@ -16,24 +16,23 @@ use r2l_core::{
 
 use crate::{
     distributions::{
-        bernoulli::MultiBernoulliDistribution, categorical2::CategoricalDistribution2,
-        composite::CompositeDistribution, diagonal::DiagGaussianDistribution,
-        multi_categorical::MultiCategoricalDistribution,
+        bernoulli2::MultiBernoulliDistribution2, categorical2::CategoricalDistribution2,
+        composite::CompositeDistribution, diagonal2::DiagGaussianDistribution2,
+        multi_categorical2::MultiCategoricalDistribution2,
     },
     networks::mlp::Mlp,
 };
 
 /// Multi-Bernoulli policy distribution for multi-binary action spaces.
-pub mod bernoulli;
+pub mod bernoulli2;
 /// Categorical policy distribution for discrete action spaces.
-// pub mod categorical;
 pub mod categorical2;
 /// Composite policy distribution for tuple and dict action spaces.
 pub mod composite;
 /// Diagonal-Gaussian policy distribution for Box action spaces.
-pub mod diagonal;
+pub mod diagonal2;
 /// Multi-categorical policy distribution for multi-discrete action spaces.
-pub mod multi_categorical;
+pub mod multi_categorical2;
 
 /// Erased Burn policy type covering the supported action-space variants.
 ///
@@ -45,11 +44,11 @@ pub enum BurnPolicyKind<B: Backend> {
     /// Policy for discrete action spaces.
     Categorical(CategoricalDistribution2<B, Mlp<B>>),
     /// Policy for Box action spaces.
-    Diag(DiagGaussianDistribution<B>),
+    Diag(DiagGaussianDistribution2<B, Mlp<B>>),
     /// Policy for multi-discrete action spaces.
-    MultiCategorical(MultiCategoricalDistribution<B>),
+    MultiCategorical(MultiCategoricalDistribution2<B, Mlp<B>>),
     /// Policy for multi-binary action spaces.
-    MultiBernoulli(MultiBernoulliDistribution<B>),
+    MultiBernoulli(MultiBernoulliDistribution2<B, Mlp<B>>),
     /// Policy for tuple and dict action spaces.
     Composite(CompositeDistribution<B>),
 }
@@ -86,7 +85,7 @@ impl<B: Backend> BurnPolicyKind<B> {
         activation: ActivationFunction,
         log_std_init: f32,
     ) -> Result<Self> {
-        Ok(BurnPolicyKind::Diag(DiagGaussianDistribution::build(
+        Ok(BurnPolicyKind::Diag(DiagGaussianDistribution2::build_mlp(
             policy_layers,
             activation,
             log_std_init,
@@ -98,7 +97,7 @@ impl<B: Backend> BurnPolicyKind<B> {
         nvec: Vec<usize>,
         activation: ActivationFunction,
     ) -> Self {
-        BurnPolicyKind::MultiCategorical(MultiCategoricalDistribution::build(
+        BurnPolicyKind::MultiCategorical(MultiCategoricalDistribution2::build_mlp(
             policy_layers[0],
             &policy_layers[1..policy_layers.len() - 1],
             nvec,
@@ -111,7 +110,7 @@ impl<B: Backend> BurnPolicyKind<B> {
         action_size: usize,
         activation: ActivationFunction,
     ) -> Self {
-        BurnPolicyKind::MultiBernoulli(MultiBernoulliDistribution::build(
+        BurnPolicyKind::MultiBernoulli(MultiBernoulliDistribution2::build_mlp(
             policy_layers[0],
             &policy_layers[1..policy_layers.len() - 1],
             action_size,
