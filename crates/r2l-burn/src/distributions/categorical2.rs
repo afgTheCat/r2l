@@ -23,7 +23,7 @@ pub struct CategoricalDistribution2<B: Backend, N: Module<B>> {
 }
 
 impl<B: Backend> CategoricalDistribution2<B, Mlp<B>> {
-    fn build_mlp(logits_layers: &[usize], activation: ActivationFunction) -> Result<Self> {
+    pub fn build_mlp(logits_layers: &[usize], activation: ActivationFunction) -> Result<Self> {
         if logits_layers.is_empty() {
             return Err(Error::InvalidParameter(Box::new(
                 InvalidParameterError::InvalidValue {

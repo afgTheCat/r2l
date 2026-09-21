@@ -7,14 +7,17 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-use crate::distributions::{
-    bernoulli::MultiBernoulliDistribution, categorical::CategoricalDistribution,
-    diagonal::DiagGaussianDistribution, multi_categorical::MultiCategoricalDistribution,
+use crate::{
+    distributions::{
+        bernoulli::MultiBernoulliDistribution, categorical2::CategoricalDistribution2,
+        diagonal::DiagGaussianDistribution, multi_categorical::MultiCategoricalDistribution,
+    },
+    networks::mlp::Mlp,
 };
 
 #[derive(Debug, Module)]
 enum CompositePolicyChildren<B: Backend> {
-    Categorical(CategoricalDistribution<B>),
+    Categorical(CategoricalDistribution2<B, Mlp<B>>),
     Diag(DiagGaussianDistribution<B>),
     MultiCategorical(MultiCategoricalDistribution<B>),
     MultiBernoulli(MultiBernoulliDistribution<B>),
@@ -119,7 +122,7 @@ impl<B: Backend> CompositeDistribution<B> {
                 ]
                 .concat();
                 policies.push(CompositePolicyChildren::Categorical(
-                    CategoricalDistribution::build(&child_layers, activation)?,
+                    CategoricalDistribution2::build_mlp(&child_layers, activation)?,
                 ));
                 action_sizes.push(action_size);
             }

@@ -14,16 +14,19 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-use crate::distributions::{
-    bernoulli::MultiBernoulliDistribution, categorical::CategoricalDistribution,
-    composite::CompositeDistribution, diagonal::DiagGaussianDistribution,
-    multi_categorical::MultiCategoricalDistribution,
+use crate::{
+    distributions::{
+        bernoulli::MultiBernoulliDistribution, categorical2::CategoricalDistribution2,
+        composite::CompositeDistribution, diagonal::DiagGaussianDistribution,
+        multi_categorical::MultiCategoricalDistribution,
+    },
+    networks::mlp::Mlp,
 };
 
 /// Multi-Bernoulli policy distribution for multi-binary action spaces.
 pub mod bernoulli;
 /// Categorical policy distribution for discrete action spaces.
-pub mod categorical;
+// pub mod categorical;
 pub mod categorical2;
 /// Composite policy distribution for tuple and dict action spaces.
 pub mod composite;
@@ -40,7 +43,7 @@ pub mod multi_categorical;
 #[derive(Debug, Module)]
 pub enum BurnPolicyKind<B: Backend> {
     /// Policy for discrete action spaces.
-    Categorical(CategoricalDistribution<B>),
+    Categorical(CategoricalDistribution2<B, Mlp<B>>),
     /// Policy for Box action spaces.
     Diag(DiagGaussianDistribution<B>),
     /// Policy for multi-discrete action spaces.
@@ -70,9 +73,12 @@ impl<B: Backend> BurnPolicyKind<B> {
     }
 
     fn categorical(policy_layers: &[usize], activation: ActivationFunction) -> Result<Self> {
-        Ok(BurnPolicyKind::Categorical(
-            CategoricalDistribution::<B>::build(policy_layers, activation)?,
-        ))
+        Ok(BurnPolicyKind::Categorical(CategoricalDistribution2::<
+            B,
+            Mlp<B>,
+        >::build_mlp(
+            policy_layers, activation
+        )?))
     }
 
     fn box_policy(
