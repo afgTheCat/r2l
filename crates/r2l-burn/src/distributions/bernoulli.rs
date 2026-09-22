@@ -1,3 +1,6 @@
+use std::marker::PhantomData;
+
+use burn::module::ModuleDisplay;
 use burn::{
     Tensor,
     module::Module,
@@ -11,22 +14,23 @@ use r2l_core::{
     rng::with_rng,
 };
 
-use crate::networks::mlp::Mlp;
+use crate::networks::{Network, mlp::Mlp};
 
 /// Independent Bernoulli policy for Gymnasium `MultiBinary` action spaces.
 ///
 /// This is equivalent to a multi-categorical policy with two categories per
 /// action component, but uses one logit per component instead of two.
 #[derive(Debug, Module)]
-pub struct MultiBernoulliDistribution<B: Backend> {
-    logits: Mlp<B>,
+pub struct MultiBernoulliDistribution<B: Backend, N: Module<B>> {
+    logits: N,
+    backend: PhantomData<B>,
     action_size: usize,
 }
 
-impl<B: Backend> MultiBernoulliDistribution<B> {
+impl<B: Backend> MultiBernoulliDistribution<B, Mlp<B>> {
     /// Builds a multi-Bernoulli policy network.
     #[must_use]
-    pub fn build(
+    pub fn build_mlp(
         observation_size: usize,
         hidden_layers: &[usize],
         action_size: usize,
@@ -36,17 +40,17 @@ impl<B: Backend> MultiBernoulliDistribution<B> {
         let logits = Mlp::build(layers, activation);
         Self {
             logits,
+            backend: PhantomData,
             action_size,
         }
     }
 }
 
-impl<B: Backend> Actor for MultiBernoulliDistribution<B> {
+impl<B: Backend, N: Network<B>> Actor for MultiBernoulliDistribution<B, N> {
     type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device = Default::default();
-        let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation).squeeze::<1>();
         let probs: Vec<f32> = sigmoid(logits)
             .to_data()
@@ -70,7 +74,6 @@ impl<B: Backend> Actor for MultiBernoulliDistribution<B> {
 
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device = Default::default();
-        let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation).squeeze::<1>();
         let probs: Vec<f32> = sigmoid(logits)
             .to_data()
@@ -87,7 +90,7 @@ impl<B: Backend> Actor for MultiBernoulliDistribution<B> {
     }
 }
 
-impl<B: Backend> ToSafetensors for MultiBernoulliDistribution<B> {
+impl<B: Backend, N: Module<B> + ModuleDisplay> ToSafetensors for MultiBernoulliDistribution<B, N> {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
         store.collect_from(self).map_err(Error::wrap)?;
@@ -95,13 +98,12 @@ impl<B: Backend> ToSafetensors for MultiBernoulliDistribution<B> {
     }
 }
 
-impl<B: Backend> Policy for MultiBernoulliDistribution<B> {
+impl<B: Backend, N: Network<B>> Policy for MultiBernoulliDistribution<B, N> {
     fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
         debug_assert!(!states.is_empty());
         debug_assert_eq!(states.len(), actions.len());
-        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
-        let probs = sigmoid(self.logits.forward(states)).clamp(1e-6, 1. - 1e-6);
+        let probs = sigmoid(self.logits.batch_forward(states)).clamp(1e-6, 1. - 1e-6);
         let ones = probs.ones_like();
         let log_probs =
             actions.clone() * probs.clone().log() + (ones.clone() - actions) * (ones - probs).log();
@@ -110,8 +112,7 @@ impl<B: Backend> Policy for MultiBernoulliDistribution<B> {
 
     fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor> {
         debug_assert!(!states.is_empty());
-        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
-        let probs = sigmoid(self.logits.forward(states)).clamp(1e-6, 1. - 1e-6);
+        let probs = sigmoid(self.logits.batch_forward(states)).clamp(1e-6, 1. - 1e-6);
         let ones = probs.ones_like();
         let entropy_per_bit = probs.clone() * probs.clone().log()
             + (ones.clone() - probs.clone()) * (ones - probs).log();

@@ -1,3 +1,6 @@
+use std::marker::PhantomData;
+
+use burn::module::ModuleDisplay;
 use burn::{
     Tensor,
     module::Module,
@@ -17,19 +20,20 @@ use r2l_core::{
 use rand::distr::Distribution as RandDistribution;
 use rand::distr::weighted::WeightedIndex;
 
-use crate::networks::mlp::Mlp;
+use crate::networks::{Network, mlp::Mlp};
 
 /// Multi-categorical Burn policy for Gymnasium `MultiDiscrete` action spaces.
 #[derive(Debug, Module)]
-pub struct MultiCategoricalDistribution<B: Backend> {
-    logits: Mlp<B>,
+pub struct MultiCategoricalDistribution<B: Backend, N: Module<B>> {
+    logits: N,
+    backend: PhantomData<B>,
     nvec: Vec<usize>,
 }
 
-impl<B: Backend> MultiCategoricalDistribution<B> {
+impl<B: Backend> MultiCategoricalDistribution<B, Mlp<B>> {
     /// Builds a multi-categorical policy network.
     #[must_use]
-    pub fn build(
+    pub fn build_mlp(
         observation_size: usize,
         hidden_layers: &[usize],
         nvec: Vec<usize>,
@@ -38,16 +42,19 @@ impl<B: Backend> MultiCategoricalDistribution<B> {
         let logits_size = nvec.iter().sum();
         let layers = &[&[observation_size], hidden_layers, &[logits_size]].concat();
         let logits = Mlp::build(layers, activation);
-        Self { logits, nvec }
+        Self {
+            logits,
+            nvec,
+            backend: PhantomData,
+        }
     }
 }
 
-impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
+impl<B: Backend, N: Network<B>> Actor for MultiCategoricalDistribution<B, N> {
     type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device = Default::default();
-        let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation).squeeze::<1>();
         let mut actions = Vec::new();
         for (offset, choices) in action_ranges(&self.nvec) {
@@ -69,7 +76,6 @@ impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
 
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device = Default::default();
-        let observation: Tensor<B, 2> = observation.unsqueeze();
         let logits = self.logits.forward(observation).squeeze::<1>();
         let actions = action_ranges(&self.nvec)
             .map(|(offset, choices)| {
@@ -99,7 +105,9 @@ impl<B: Backend> Actor for MultiCategoricalDistribution<B> {
     }
 }
 
-impl<B: Backend> ToSafetensors for MultiCategoricalDistribution<B> {
+impl<B: Backend, N: Module<B> + ModuleDisplay> ToSafetensors
+    for MultiCategoricalDistribution<B, N>
+{
     fn to_safetensors(&self) -> Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
         store.collect_from(self).map_err(Error::wrap)?;
@@ -107,13 +115,12 @@ impl<B: Backend> ToSafetensors for MultiCategoricalDistribution<B> {
     }
 }
 
-impl<B: Backend> Policy for MultiCategoricalDistribution<B> {
+impl<B: Backend, N: Network<B>> Policy for MultiCategoricalDistribution<B, N> {
     fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
         debug_assert!(!states.is_empty());
         debug_assert_eq!(states.len(), actions.len());
-        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
-        let logits = self.logits.forward(states);
+        let logits = self.logits.batch_forward(states);
         let mut selected_log_probs = Vec::new();
         for (action_idx, (offset, choices)) in action_ranges(&self.nvec).enumerate() {
             let logits = logits.clone().narrow(1, offset, choices);
@@ -128,8 +135,7 @@ impl<B: Backend> Policy for MultiCategoricalDistribution<B> {
 
     fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor> {
         debug_assert!(!states.is_empty());
-        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
-        let logits = self.logits.forward(states);
+        let logits = self.logits.batch_forward(states);
         let mut entropies = Vec::new();
         for (offset, choices) in action_ranges(&self.nvec) {
             let logits = logits.clone().narrow(1, offset, choices);

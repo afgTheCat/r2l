@@ -1,5 +1,6 @@
 use std::f32;
 
+use burn::module::ModuleDisplay;
 use burn::module::{Module, Param};
 use burn::tensor::cast::ToElement;
 use burn::tensor::{Shape, TensorData};
@@ -12,7 +13,7 @@ use r2l_core::{
 };
 use rand_distr::{Distribution, StandardNormal};
 
-use crate::networks::mlp::Mlp;
+use crate::networks::{Network, mlp::Mlp};
 
 /// Diagonal-Gaussian Burn policy for Box action spaces.
 ///
@@ -20,19 +21,19 @@ use crate::networks::mlp::Mlp;
 /// learned diagonal log-standard-deviation parameter. It implements the
 /// `r2l-core` [`Actor`] and [`Policy`] traits.
 #[derive(Debug, Module)]
-pub struct DiagGaussianDistribution<B: Backend> {
-    mu_net: Mlp<B>,
+pub struct DiagGaussianDistribution<B: Backend, N: Module<B>> {
+    mu_net: N,
     log_std: Param<Tensor<B, 2>>,
 }
 
-impl<B: Backend> DiagGaussianDistribution<B> {
+impl<B: Backend> DiagGaussianDistribution<B, Mlp<B>> {
     /// Builds a diagonal-Gaussian policy network.
     ///
     /// # Errors
     ///
     /// Returns an error if `mu_layers` is empty or the log-standard-deviation tensor cannot be
     /// created.
-    pub fn build(
+    pub fn build_mlp(
         mu_layers: &[usize],
         activation: ActivationFunction,
         log_std_init: f32,
@@ -57,12 +58,11 @@ impl<B: Backend> DiagGaussianDistribution<B> {
     }
 }
 
-impl<B: Backend> Actor for DiagGaussianDistribution<B> {
+impl<B: Backend, N: Network<B>> Actor for DiagGaussianDistribution<B, N> {
     type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let device = Default::default();
-        let observation: Tensor<B, 2> = observation.unsqueeze();
         let mu = self.mu_net.forward(observation);
         let std = self.log_std.val().exp();
         let shape = mu.shape();
@@ -77,12 +77,11 @@ impl<B: Backend> Actor for DiagGaussianDistribution<B> {
     }
 
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
-        let observation: Tensor<B, 2> = observation.unsqueeze();
         Ok(self.mu_net.forward(observation).squeeze_dims(&[0]))
     }
 }
 
-impl<B: Backend> ToSafetensors for DiagGaussianDistribution<B> {
+impl<B: Backend, N: Module<B> + ModuleDisplay> ToSafetensors for DiagGaussianDistribution<B, N> {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
         let mut store = SafetensorsStore::default();
         store.collect_from(self).map_err(Error::wrap)?;
@@ -90,16 +89,15 @@ impl<B: Backend> ToSafetensors for DiagGaussianDistribution<B> {
     }
 }
 
-impl<B: Backend> Policy for DiagGaussianDistribution<B> {
+impl<B: Backend, N: Network<B>> Policy for DiagGaussianDistribution<B, N> {
     // FIXME: we probably want a differnt type states, actions etc. Alternatively we should have a
     // different trait, as log_probs are not really used during inference.
     fn log_probs(&self, states: &[Self::Tensor], actions: &[Self::Tensor]) -> Result<Self::Tensor> {
         debug_assert!(!states.is_empty());
         debug_assert_eq!(states.len(), actions.len());
         let device = Default::default();
-        let states: Tensor<B, 2> = Tensor::stack(states.to_vec(), 0);
         let actions: Tensor<B, 2> = Tensor::stack(actions.to_vec(), 0);
-        let mu = self.mu_net.forward(states);
+        let mu = self.mu_net.batch_forward(states);
         let log_std = self.log_std.val();
         let std = log_std.clone().exp();
         let var = std.clone() * std;
