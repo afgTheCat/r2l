@@ -16,7 +16,7 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-use crate::evaluator::BestPolicyEvaluator;
+use crate::{constants::TRAINING_TIMINGS_FILE, evaluator::BestPolicyEvaluator};
 
 enum OnPolicyCommand {
     StopTraining,
@@ -125,8 +125,6 @@ pub(crate) fn on_policy_control_channel() -> (OnPolicyControlEndpoint, OnPolicyC
         OnPolicyControlHandle::new(result_rx, command_tx),
     )
 }
-
-const TRAINING_TIMINGS_FILE: &str = "training_timings.csv";
 
 macro_rules! break_on_error {
     ($hooks:expr, $body:block) => {{
@@ -348,16 +346,44 @@ struct TrainingLoopTimings {
     total: Duration,
 }
 
-pub(crate) enum TrainingTimingRecorder {
-    Disabled,
-    Enabled(EnabledTrainingTimingRecorder),
-}
-
 pub(crate) struct EnabledTrainingTimingRecorder {
     file: File,
     training_started: Instant,
     phase_started: Instant,
     current: TrainingLoopTimings,
+}
+
+impl EnabledTrainingTimingRecorder {
+    fn finish_phase(&mut self, phase: TrainingPhase) {
+        let now = Instant::now();
+        let duration = now - self.phase_started;
+        match phase {
+            TrainingPhase::Collection => self.current.collection = duration,
+            TrainingPhase::Training => self.current.training = duration,
+        }
+    }
+
+    fn finish_evaluation(&mut self, completed_rollouts: usize) -> Result<(), Error> {
+        let now = Instant::now();
+        self.current.evaluation = now - self.phase_started;
+        self.current.total = now - self.training_started;
+        let timings = std::mem::take(&mut self.current);
+        writeln!(
+            self.file,
+            "{},{:.3},{:.3},{:.3},{:.3}",
+            completed_rollouts,
+            timings.collection.as_secs_f64() * 1000.0,
+            timings.training.as_secs_f64() * 1000.0,
+            timings.evaluation.as_secs_f64() * 1000.0,
+            timings.total.as_secs_f64() * 1000.0,
+        )
+        .map_err(Error::wrap)
+    }
+}
+
+pub(crate) enum TrainingTimingRecorder {
+    Disabled,
+    Enabled(EnabledTrainingTimingRecorder),
 }
 
 impl TrainingTimingRecorder {
@@ -406,34 +432,6 @@ impl TrainingTimingRecorder {
             return Ok(());
         };
         recorder.finish_evaluation(completed_rollouts)
-    }
-}
-
-impl EnabledTrainingTimingRecorder {
-    fn finish_phase(&mut self, phase: TrainingPhase) {
-        let now = Instant::now();
-        let duration = now - self.phase_started;
-        match phase {
-            TrainingPhase::Collection => self.current.collection = duration,
-            TrainingPhase::Training => self.current.training = duration,
-        }
-    }
-
-    fn finish_evaluation(&mut self, completed_rollouts: usize) -> Result<(), Error> {
-        let now = Instant::now();
-        self.current.evaluation = now - self.phase_started;
-        self.current.total = now - self.training_started;
-        let timings = std::mem::take(&mut self.current);
-        writeln!(
-            self.file,
-            "{},{:.3},{:.3},{:.3},{:.3}",
-            completed_rollouts,
-            timings.collection.as_secs_f64() * 1000.0,
-            timings.training.as_secs_f64() * 1000.0,
-            timings.evaluation.as_secs_f64() * 1000.0,
-            timings.total.as_secs_f64() * 1000.0,
-        )
-        .map_err(Error::wrap)
     }
 }
 

@@ -15,13 +15,12 @@ use r2l_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::builders::{
-    BurnBackendConfig, CandleBackend, normalizer::NormalizerBuilder, policy::PolicyBuilder,
+use crate::{
+    builders::{
+        BurnBackendConfig, CandleBackend, normalizer::NormalizerBuilder, policy::PolicyBuilder,
+    },
+    constants::{ACTOR_FILE, INFERENCE_CONFIG_FILE, NORMALIZER_FILE},
 };
-
-pub(crate) const INFERENCE_CONFIG_FILE: &str = "inference.yaml";
-pub(crate) const ACTOR_FILE: &str = "actor.safetensors";
-pub(crate) const NORMALIZER_FILE: &str = "normalizer.yaml";
 
 struct ArtifactFile {
     path: PathBuf,

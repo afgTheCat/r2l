@@ -13,11 +13,9 @@ use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
 
 use crate::{
     builders::normalizer::NormalizerBuilder,
+    constants::{ACTOR_FILE, EVALUATIONS_FILE, NORMALIZER_FILE},
     hooks::sampler::EpisodeBoundHook,
-    inference::{ACTOR_FILE, NORMALIZER_FILE},
 };
-
-const EVALUATIONS_FILE: &str = "evaluations.csv";
 
 pub(crate) enum EvaluationSampler<E: Env> {
     Direct(DirectSampler<E, EpisodeBoundHook<E>>),
