@@ -56,6 +56,14 @@ impl R2lTensor for Tensor {
             .map_err(|error| TensorError::operation("multiply", error))
     }
 
+    fn gather(&self, dim: usize, indices: &Self) -> Result<Self> {
+        super::validate_gather(self.dims(), indices.dims(), dim)?;
+        indices
+            .to_dtype(candle_core::DType::U32)
+            .and_then(|indices| self.gather(&indices, dim))
+            .map_err(|error| TensorError::operation("gather", error))
+    }
+
     fn exp(&self) -> Result<Self> {
         self.exp()
             .map_err(|error| TensorError::operation("exponential", error))

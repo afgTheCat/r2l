@@ -48,6 +48,11 @@ impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
         Ok(self.clone() * other.clone())
     }
 
+    fn gather(&self, dim: usize, indices: &Self) -> Result<Self> {
+        super::validate_gather(&self.to_shape(), &indices.to_shape(), dim)?;
+        Ok(self.clone().gather(dim, indices.clone().int()))
+    }
+
     fn exp(&self) -> Result<Self> {
         Ok(self.clone().exp())
     }

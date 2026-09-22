@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use r2l_core::{
-    error::{Error, Result},
+    error::{Error, Result, TensorError},
     models::{Actor, ToSafetensors},
     rng::with_rng,
     tensor::R2lTensor,
@@ -26,21 +26,31 @@ impl<T: R2lTensor, N: Network<Tensor = T>> Actor for Categorical<N> {
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let logits = self.logits.forward(observation);
-        let action_probs = logits.softmax(0)?.to_vec()?;
+        let shape = logits.to_shape();
+        let dim = shape.len().saturating_sub(1);
+        let action_probs = logits.softmax(dim)?.to_vec()?;
         let distribution = WeightedIndex::new(&action_probs).map_err(Error::wrap)?;
         let action = with_rng(|rng| distribution.sample(rng));
-        Ok(T::from_vec_and_shape(vec![action as f32], vec![1])?)
+        Ok(T::from_vec_and_shape(
+            vec![action as f32],
+            vec![1; shape.len()],
+        )?)
     }
 
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         let logits = self.logits.forward(observation);
+        let shape = logits.to_shape();
         let logits = logits.to_vec()?;
-        // TODO: ensure that the size of the logits can not be 0
         let action = logits
             .iter()
             .position_max_by(|a, b| a.total_cmp(b))
-            .unwrap();
-        Ok(T::from_vec_and_shape(vec![action as f32], vec![1])?)
+            .ok_or_else(|| TensorError::EmptyInput {
+                operation: "select categorical modal action".into(),
+            })?;
+        Ok(T::from_vec_and_shape(
+            vec![action as f32],
+            vec![1; shape.len()],
+        )?)
     }
 }
 
@@ -73,22 +83,25 @@ pub trait Policy2: Actor {
 }
 
 impl<T: R2lTensor, N: Network<Tensor = T>> Policy2 for Categorical<N> {
+    /// Evaluates `[batch, categories]` logits and `[batch, 1]` actions,
+    /// returning log probabilities with shape `[batch, 1]`.
     fn log_probs(&self, observations: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
         let logits = self.logits.forward(observations);
-        let log_probs = logits.softmax(1)?;
-        // Somethting like this. Basically selecting the log prob for the correct action.
-        // Ok(log_probs.gather(1, actions.int()).squeeze_dim::<1>(1))
-        todo!()
+        let log_probs = logits.log_softmax(1)?;
+        Ok(log_probs.gather(1, &actions)?)
     }
 
     fn entropy(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
         let logits = self.logits.forward(observations);
         let probs = logits.softmax(1)?;
         let log_probs = logits.log_softmax(1)?;
-        // let entropy_per_state = (probs * log_probs).neg().sum_dim(1);
-        // let entropy = entropy_per_state.mean();
-        // Ok(entropy)
-        todo!()
+        // Scaling the elementwise mean sums over categories and averages over states.
+        let categories = logits.to_shape()[1];
+        Ok(probs
+            .mul(&log_probs)?
+            .neg()?
+            .mean()?
+            .mul_scalar(categories as f32)?)
     }
 
     fn std(&self) -> Result<Option<f32>> {

@@ -1,13 +1,10 @@
-use burn::{module::Module, prelude::Backend, tensor::Tensor};
-use burn::{
-    nn::{
-        Dropout,
-        activation::Activation,
-        conv::Conv2d,
-        pool::{AvgPool2d, MaxPool2d},
-    },
-    tensor::Shape,
+use burn::nn::{
+    Dropout,
+    activation::Activation,
+    conv::Conv2d,
+    pool::{AvgPool2d, MaxPool2d},
 };
+use burn::{module::Module, prelude::Backend, tensor::Tensor};
 
 use crate::networks::Network;
 use crate::networks::mlp::Mlp;
@@ -35,7 +32,8 @@ impl<B: Backend> CNNLayer<B> {
 
 #[derive(Module, Debug)]
 pub struct Cnn<B: Backend> {
-    shape: Shape,
+    /// Shape of one observation: [channels, height, width].
+    shape: [usize; 3],
     cnn_layers: Vec<CNNLayer<B>>,
     mlp: Mlp<B>,
 }
@@ -54,8 +52,9 @@ impl<B: Backend> Network for Cnn<B> {
     type Tensor = Tensor<B, 2>;
 
     fn forward(&self, t: Self::Tensor) -> Self::Tensor {
-        let t: Tensor<B, 3> = t.reshape(self.shape.clone());
-        let t: Tensor<B, 4> = t.unsqueeze();
-        self.forward_inner(t).squeeze()
+        let [channels, height, width] = self.shape;
+        let batch_size = t.dims()[0];
+        let t: Tensor<B, 4> = t.reshape([batch_size, channels, height, width]);
+        self.forward_inner(t)
     }
 }

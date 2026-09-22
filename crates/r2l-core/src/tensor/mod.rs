@@ -6,7 +6,6 @@ mod candle_tensor;
 
 use std::fmt::Debug;
 
-use candle_nn::ops::softmax;
 use serde::{Deserialize, Serialize};
 
 use crate::error::TensorError;
@@ -103,6 +102,18 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns an error if the tensor backend cannot perform the operation.
     fn mul(&self, other: &Self) -> Result<Self>;
 
+    /// Selects values along `dim` using category indices stored in `indices`.
+    ///
+    /// The tensors must have the same rank and match in every dimension except
+    /// `dim`. The result has the shape of `indices`. Index values must be
+    /// non-negative integers smaller than the size of `dim`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the shapes are incompatible or the backend cannot
+    /// perform the operation.
+    fn gather(&self, dim: usize, indices: &Self) -> Result<Self>;
+
     /// Elementwise exponential.
     ///
     /// # Errors
@@ -145,8 +156,18 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns an error if the tensor backend cannot perform the operation.
     fn sqr(&self) -> Result<Self>;
 
+    /// Normalizes values into probabilities along `dim`, preserving the shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot perform the operation.
     fn softmax(&self, dim: usize) -> Result<Self>;
 
+    /// Computes log probabilities along `dim`, preserving the shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot perform the operation.
     fn log_softmax(&self, dim: usize) -> Result<Self>;
 
     /// Creates a zero-filled tensor with `shape`.
@@ -229,6 +250,43 @@ pub struct VecTensor {
 }
 
 impl VecTensor {
+    fn normalized_exp(&self, dim: usize, logarithmic: bool) -> Result<Self> {
+        let Some(&width) = self.shape.get(dim).filter(|&&width| width > 0) else {
+            return Err(TensorError::operation(
+                "softmax",
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "invalid softmax dimension",
+                ),
+            ));
+        };
+        let stride: usize = self.shape[dim + 1..].iter().product();
+        let outer: usize = self.shape[..dim].iter().product();
+        let mut data = self.data.clone();
+        for batch in 0..outer {
+            for offset in 0..stride {
+                let start = batch * width * stride + offset;
+                let max = (0..width)
+                    .map(|index| self.data[start + index * stride])
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let sum = (0..width)
+                    .map(|index| (self.data[start + index * stride] - max).exp())
+                    .sum::<f32>();
+                let log_sum = sum.ln();
+                for index in 0..width {
+                    let position = start + index * stride;
+                    let shifted = self.data[position] - max;
+                    data[position] = if logarithmic {
+                        shifted - log_sum
+                    } else {
+                        shifted.exp() / sum
+                    };
+                }
+            }
+        }
+        Self::new(data, self.shape.clone())
+    }
+
     fn ensure_same_shape(&self, other: &Self, operation: &str) -> Result<()> {
         if self.shape != other.shape {
             return Err(TensorError::ShapeMismatch {
@@ -321,6 +379,35 @@ impl R2lTensor for VecTensor {
         Self::new(data, self.shape.clone())
     }
 
+    fn gather(&self, dim: usize, indices: &Self) -> Result<Self> {
+        validate_gather(&self.shape, &indices.shape, dim)?;
+        let stride: usize = self.shape[dim + 1..].iter().product();
+        let data = indices
+            .data
+            .iter()
+            .enumerate()
+            .map(|(position, &index)| {
+                if !index.is_finite()
+                    || index < 0.0
+                    || index.fract() != 0.0
+                    || index as usize >= self.shape[dim]
+                {
+                    return Err(TensorError::operation(
+                        "gather",
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "invalid gather index",
+                        ),
+                    ));
+                }
+                let outer = position / (indices.shape[dim] * stride);
+                let offset = position % stride;
+                Ok(self.data[(outer * self.shape[dim] + index as usize) * stride + offset])
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Self::new(data, indices.shape.clone())
+    }
+
     fn exp(&self) -> Result<Self> {
         Self::new(
             self.data.iter().map(|value| value.exp()).collect(),
@@ -386,10 +473,28 @@ impl R2lTensor for VecTensor {
     }
 
     fn softmax(&self, dim: usize) -> Result<Self> {
-        todo!()
+        self.normalized_exp(dim, false)
     }
 
     fn log_softmax(&self, dim: usize) -> Result<Self> {
-        todo!()
+        self.normalized_exp(dim, true)
     }
+}
+
+fn validate_gather(shape: &[usize], indices_shape: &[usize], dim: usize) -> Result<()> {
+    if dim >= shape.len()
+        || shape.len() != indices_shape.len()
+        || shape
+            .iter()
+            .zip(indices_shape)
+            .enumerate()
+            .any(|(axis, (left, right))| axis != dim && left != right)
+    {
+        return Err(TensorError::ShapeMismatch {
+            operation: "gather".into(),
+            left: shape.to_vec(),
+            right: indices_shape.to_vec(),
+        });
+    }
+    Ok(())
 }
