@@ -2,9 +2,9 @@ use r2l_core::{
     buffers::buffer::TrajectoryBuffer, running_mean::RunningMeanStdF32, tensor::R2lTensor,
 };
 
-pub(crate) fn mean(numbers: &[f32]) -> f32 {
-    let sum: f32 = numbers.iter().sum();
-    sum / numbers.len() as f32
+pub(crate) fn mean(numbers: impl ExactSizeIterator<Item = f32>) -> f32 {
+    let count = numbers.len();
+    numbers.sum::<f32>() / count as f32
 }
 
 pub(crate) fn fmt_stat(x: f32) -> String {
@@ -24,7 +24,7 @@ const EPSILON: f32 = 1e-8;
 
 /// Normalizes rewards using the running variance of discounted returns.
 #[derive(Clone)]
-pub struct RewardNormalizer {
+pub(crate) struct RewardNormalizer {
     reward_accumulator: Vec<f32>,
     return_rms: RunningMeanStdF32,
     gamma: f32,
@@ -39,7 +39,7 @@ impl RewardNormalizer {
     /// * `n_envs` - Number of independent environment return streams to track.
     /// * `gamma` - Discount factor used to accumulate returns.
     /// * `clip_reward` - Absolute limit applied to normalized rewards.
-    pub fn new(n_envs: usize, gamma: f32, clip_reward: f32) -> Self {
+    pub(crate) fn new(n_envs: usize, gamma: f32, clip_reward: f32) -> Self {
         Self {
             reward_accumulator: vec![0.0; n_envs],
             return_rms: RunningMeanStdF32::new(),
@@ -71,7 +71,7 @@ impl RewardNormalizer {
     }
 
     /// Clears environment-local discounted returns while preserving running statistics.
-    pub fn reset_returns(&mut self) {
+    pub(crate) fn reset_returns(&mut self) {
         self.reward_accumulator.fill(0.0);
     }
 }

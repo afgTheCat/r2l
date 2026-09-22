@@ -76,12 +76,17 @@ pub use builders::{
     TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
-pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
+pub use hooks::on_policy::coordinator::{
+    EpisodeBoundHook, Episodes, SamplerHook, StepBoundHook, Steps,
+};
+pub use hooks::on_policy::learning::{
+    A2CLearningHook, A2CSettings, LearningHook, PPOLearningHook, PPOSettings,
+};
 pub use hooks::on_policy::{
     LearningRateSchedule, OnPolicyControlHandle, OnPolicyTrainingHooks, TrainingLimit,
 };
-pub use hooks::ppo::{ClipRangeSchedule, PPOMinibatchStats, PPORolloutStats};
-pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
+pub use hooks::stats::{A2CMinibatchStats, A2CRolloutStats};
+pub use hooks::stats::{ClipRangeSchedule, PPOMinibatchStats, PPORolloutStats};
 pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};
 pub use r2l_core::error::{self, Error};
 pub use r2l_core::{

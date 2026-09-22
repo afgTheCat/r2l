@@ -1,6 +1,5 @@
-pub(crate) mod a2c;
 pub(crate) mod coordinator;
-pub(crate) mod ppo;
+pub(crate) mod learning;
 
 use std::{
     fs::File,
@@ -16,10 +15,7 @@ use r2l_core::{
     env::Env,
     error::{Error, ResourceInterrupted},
     models::{Actor, ToSafetensors},
-    on_policy::{
-        algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
-        learning_module::OnPolicyLearner,
-    },
+    on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
 
@@ -56,8 +52,10 @@ struct TrainingLoopTimings {
 
 pub(crate) struct EnabledTimingRecorder {
     file: File,
+    coordinator: SharedCoordinator,
     timings: TrainingLoopTimings,
     phase_recorder: Option<RecordedPhase>,
+    training_started: Instant,
 }
 
 impl EnabledTimingRecorder {
@@ -65,7 +63,7 @@ impl EnabledTimingRecorder {
         let Some(RecordedPhase { phase, started }) = self.phase_recorder.take() else {
             return;
         };
-        let elapsed = Instant::now() - started;
+        let elapsed = started.elapsed();
         match phase {
             Phase::Rollout => self.timings.collection = elapsed,
             Phase::Training => self.timings.training = elapsed,
@@ -77,15 +75,17 @@ impl EnabledTimingRecorder {
         self.phase_recorder = Some(RecordedPhase::new(phase));
     }
 
-    fn flush(&mut self, completed_rollouts: usize) -> Result<(), Error> {
+    fn flush(&mut self) -> Result<(), Error> {
+        let completed_rollouts = self.coordinator.borrow().completed_rollouts();
         let timings = std::mem::take(&mut self.timings);
         writeln!(
             self.file,
-            "{},{:.3},{:.3},{:.3}",
+            "{},{:.3},{:.3},{:.3},{:.3}",
             completed_rollouts,
             timings.collection.as_secs_f64() * 1000.0,
             timings.training.as_secs_f64() * 1000.0,
             timings.evaluation.as_secs_f64() * 1000.0,
+            self.training_started.elapsed().as_secs_f64() * 1000.0,
         )
         .map_err(Error::wrap)
     }
@@ -106,15 +106,27 @@ impl TimingRecorder {
     /// # Arguments
     ///
     /// * `output_dir` - Directory in which the timings CSV is created.
-    pub(crate) fn create(output_dir: &Path) -> Result<Self, Error> {
+    /// * `coordinator` - Training progress used to label each timings row.
+    pub(crate) fn create(output_dir: &Path, coordinator: SharedCoordinator) -> Result<Self, Error> {
         std::fs::create_dir_all(output_dir).map_err(Error::wrap)?;
         let mut file = File::create(output_dir.join(TRAINING_TIMINGS_FILE)).map_err(Error::wrap)?;
-        writeln!(file, "rollout,collect_ms,learn_ms,evaluate_ms").map_err(Error::wrap)?;
+        writeln!(file, "rollout,collect_ms,learn_ms,evaluate_ms,total_ms").map_err(Error::wrap)?;
         Ok(Self::Enabled(EnabledTimingRecorder {
             file,
+            coordinator,
             timings: TrainingLoopTimings::default(),
             phase_recorder: None,
+            training_started: Instant::now(),
         }))
+    }
+
+    fn init(&mut self) {
+        if let Self::Enabled(recorder) = self {
+            recorder.training_started = Instant::now();
+            recorder.timings = TrainingLoopTimings::default();
+            recorder.phase_recorder = None;
+        }
+        self.record_new_phase(Phase::Rollout);
     }
 
     fn record_new_phase(&mut self, phase: Phase) {
@@ -131,49 +143,41 @@ impl TimingRecorder {
         }
     }
 
-    fn flush(&mut self, completed_rollouts: usize) -> Result<(), Error> {
+    fn flush(&mut self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
-            Self::Enabled(enabled) => enabled.flush(completed_rollouts),
+            Self::Enabled(enabled) => enabled.flush(),
         }
     }
 }
 
+/// Learning-rate policy applied to shared collection progress.
 #[derive(Debug, Clone, Copy)]
 pub enum LearningRateSchedule {
     /// Keep the learning rate fixed throughout training.
     Constant(f64),
-    /// Decay the initial learning rate linearly to zero.
+    /// Decay the initial learning rate to zero, including the current collection in progress.
+    /// The final learning pass uses zero learning rate, including a one-rollout run.
     Linear(f64),
 }
 
-pub(crate) struct LearningRateScheduler {
-    schedule: Option<LearningRateSchedule>,
-}
-
-impl LearningRateScheduler {
-    /// Creates an optional learning-rate scheduler for an agent hook.
+impl LearningRateSchedule {
+    /// Returns the learning rate for the remaining training fraction.
     ///
     /// # Arguments
     ///
-    /// * `schedule` - Schedule to apply before learning; `None` preserves the learner's rate.
-    pub(crate) fn new(schedule: Option<LearningRateSchedule>) -> Self {
-        Self { schedule }
-    }
-
-    fn update<M: OnPolicyLearner>(&self, progress_remaining: f64, module: &mut M) {
-        if let Some(schedule) = self.schedule {
-            let learning_rate = match schedule {
-                LearningRateSchedule::Constant(learning_rate) => learning_rate,
-                LearningRateSchedule::Linear(initial_learning_rate) => {
-                    initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
-                }
-            };
-            module.set_learning_rate(learning_rate);
+    /// * `progress_remaining` - Remaining fraction, clamped to `[0, 1]` for linear decay.
+    pub(crate) fn value(self, progress_remaining: f64) -> f64 {
+        match self {
+            Self::Constant(learning_rate) => learning_rate,
+            Self::Linear(initial_learning_rate) => {
+                initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
+            }
         }
     }
 }
 
+/// Stop policy for the on-policy training loop.
 #[derive(Debug, Clone, Copy)]
 pub enum TrainingLimit {
     /// Stop after `total_rollouts` completed rollouts.
@@ -186,6 +190,41 @@ pub enum TrainingLimit {
         /// Number of sampled steps after which training stops.
         total_steps: usize,
     },
+}
+
+impl TrainingLimit {
+    /// Creates a schedule bounded by total sampled environment steps.
+    ///
+    /// # Arguments
+    ///
+    /// * `total_steps` - Minimum number of sampled steps after which training stops.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `total_steps` is zero.
+    #[must_use]
+    pub fn steps(total_steps: usize) -> Self {
+        assert!(total_steps > 0, "total steps must be greater than zero");
+        Self::TotalStepBound { total_steps }
+    }
+
+    /// Creates a schedule bounded by completed rollouts.
+    ///
+    /// # Arguments
+    ///
+    /// * `total_rollouts` - Number of completed rollouts after which training stops.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `total_rollouts` is zero.
+    #[must_use]
+    pub fn rollouts(total_rollouts: usize) -> Self {
+        assert!(
+            total_rollouts > 0,
+            "total rollouts must be greater than zero"
+        );
+        Self::RolloutBound { total_rollouts }
+    }
 }
 
 enum OnPolicyCommand {
@@ -358,6 +397,7 @@ pub(crate) enum ScheduledEvaluator<A: Actor, E: Env> {
     Enabled {
         evaluator: BestPolicyEvaluator<A, E>,
         rollouts_per_evaluation: usize,
+        coordinator: SharedCoordinator,
     },
 }
 
@@ -366,9 +406,17 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
         Self::Disabled
     }
 
+    /// Creates an evaluator scheduled using shared training progress.
+    ///
+    /// # Arguments
+    ///
+    /// * `evaluator` - Evaluates and tracks the best policy.
+    /// * `rollouts_per_evaluation` - Number of training rollouts between evaluations.
+    /// * `coordinator` - Training progress used to determine when evaluation is due.
     pub(crate) fn new(
         evaluator: BestPolicyEvaluator<A, E>,
         rollouts_per_evaluation: usize,
+        coordinator: SharedCoordinator,
     ) -> Self {
         assert!(
             rollouts_per_evaluation > 0,
@@ -377,22 +425,24 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
         Self::Enabled {
             evaluator,
             rollouts_per_evaluation,
+            coordinator,
         }
     }
 
     fn evaluate<AG: Agent<Actor = A>, S: Sampler<Tensor = E::Tensor>>(
         &mut self,
         runtime: &mut OnPolicyRuntime<AG, S>,
-        completed_rollouts: usize,
     ) -> Result<(), Error> {
         let Self::Enabled {
             evaluator,
             rollouts_per_evaluation,
+            coordinator,
         } = self
         else {
             return Ok(());
         };
-        if (completed_rollouts + 1).is_multiple_of(*rollouts_per_evaluation) {
+        let completed_rollouts = coordinator.borrow().completed_rollouts();
+        if completed_rollouts.is_multiple_of(*rollouts_per_evaluation) {
             return evaluator.evaluate(runtime);
         }
         Ok(())
@@ -406,7 +456,8 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
     }
 }
 
-pub(crate) struct OnPolicyTrainingHook<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
+/// Lifecycle hooks sharing progress with the sampler and learning hooks.
+pub struct OnPolicyTrainingHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     timing_recorder: TimingRecorder,
     coordinator: SharedCoordinator,
     evaluator: ScheduledEvaluator<A::Actor, E>,
@@ -416,7 +467,7 @@ pub(crate) struct OnPolicyTrainingHook<A: Agent, S: Sampler, E: Env<Tensor = S::
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
-    OnPolicyTrainingHook<A, S, E>
+    OnPolicyTrainingHooks<A, S, E>
 {
     /// Creates lifecycle hooks around shared training progress.
     ///
@@ -449,13 +500,13 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgorithmHooks
-    for OnPolicyTrainingHook<A, S, E>
+    for OnPolicyTrainingHooks<A, S, E>
 {
     type A = A;
     type S = S;
 
     fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
-        self.timing_recorder.record_new_phase(Phase::Rollout);
+        self.timing_recorder.init();
         HookResult::Continue
     }
 
@@ -480,12 +531,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
     ) -> HookResult {
         self.timing_recorder.finish_current_phase_recording();
         self.timing_recorder.record_new_phase(Phase::Evaluation);
-        let completed_rollouts = self.coordinator.borrow().completed_rollouts();
-        let evaluation_result = self.evaluator.evaluate(runtime, completed_rollouts);
+        let evaluation_result = self.evaluator.evaluate(runtime);
         self.timing_recorder.finish_current_phase_recording();
-        let timing_result = self.timing_recorder.flush(completed_rollouts + 1);
-        // The learning pass completed even if evaluation or recording failed.
-        self.coordinator.borrow_mut().finish_rollout();
+        let timing_result = self.timing_recorder.flush();
         if let Err(error) = evaluation_result.and(timing_result) {
             return self.break_with_error(error);
         }
