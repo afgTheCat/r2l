@@ -1,3 +1,7 @@
+use burn::nn::DropoutConfig;
+use burn::nn::activation::ActivationConfig;
+use burn::nn::conv::Conv2dConfig;
+use burn::nn::pool::{AvgPool1dConfig, AvgPool2dConfig, MaxPool1dConfig, MaxPool2dConfig};
 use burn::{module::Module, prelude::Backend, tensor::Tensor};
 use burn::{
     nn::{
@@ -29,6 +33,33 @@ impl<B: Backend> CNNLayer<B> {
             CNNLayer::MaxPool(max_pool2d) => max_pool2d.forward(input),
             CNNLayer::AvgPool(avg_pool2d) => avg_pool2d.forward(input),
             CNNLayer::Dropout(dropout) => dropout.forward(input),
+        }
+    }
+}
+
+enum CNNLayerBuilder {
+    Activation(ActivationConfig),
+    Conv2d(Conv2dConfig),
+    MaxPool(MaxPool2dConfig),
+    AvgPool(AvgPool2dConfig),
+    Dropout(DropoutConfig),
+}
+
+impl CNNLayerBuilder {
+    fn init<B: Backend>(self) -> CNNLayer<B> {
+        let device = Default::default();
+        match self {
+            CNNLayerBuilder::Activation(activation_config) => {
+                let activation = activation_config.init(&device);
+                CNNLayer::Activation(activation)
+            }
+            CNNLayerBuilder::Conv2d(conv2d_config) => {
+                let conv2d = conv2d_config.init(&device);
+                CNNLayer::Conv(conv2d)
+            }
+            CNNLayerBuilder::MaxPool(max_pool2d_config) => todo!(),
+            CNNLayerBuilder::AvgPool(avg_pool2d_config) => todo!(),
+            CNNLayerBuilder::Dropout(dropout_config) => todo!(),
         }
     }
 }
@@ -66,4 +97,8 @@ impl<B: Backend> Network<B> for Cnn<B> {
         let t: Tensor<B, 4> = t.unsqueeze();
         self.forward_inner(t)
     }
+}
+
+struct CNNBuilder {
+    cnn_config: Vec<CNNLayerBuilder>,
 }

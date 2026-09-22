@@ -1,5 +1,7 @@
 use burn::nn::activation::{Activation, ActivationConfig};
-use burn::nn::{Dropout, EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig};
+use burn::nn::{
+    Dropout, DropoutConfig, EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig,
+};
 use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
 use r2l_core::models::ActivationFunction;
 
@@ -87,5 +89,35 @@ impl<B: Backend> Network<B> for Mlp<B> {
     fn batch_forward(&self, t: &[Tensor<B, 1>]) -> Tensor<B, 2> {
         let t = Tensor::stack(t.to_vec(), 0);
         self.forward(t)
+    }
+}
+
+enum LinearLayerBuilder {
+    Activation(ActivationConfig),
+    Dropout(DropoutConfig),
+    Linear(LinearConfig),
+}
+
+impl LinearLayerBuilder {
+    fn init<B: Backend>(self) -> LinearLayer<B> {
+        let device = Default::default();
+        match self {
+            LinearLayerBuilder::Activation(activation_config) => {
+                let activation = activation_config.init(&device);
+                LinearLayer::Activation(activation)
+            }
+            LinearLayerBuilder::Dropout(dropout_config) => todo!(),
+            LinearLayerBuilder::Linear(linear_config) => todo!(),
+        }
+    }
+}
+
+struct LinearBuilder {
+    layers: Vec<LinearLayerBuilder>,
+}
+
+impl LinearBuilder {
+    fn init<B: Backend>(&self) -> Mlp<B> {
+        todo!()
     }
 }
