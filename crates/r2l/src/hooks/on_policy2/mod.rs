@@ -1,11 +1,13 @@
-mod coordinator;
+pub(crate) mod a2c;
+pub(crate) mod coordinator;
+pub(crate) mod ppo;
 
 use std::{
     fs::File,
     io::Write,
     marker::PhantomData,
-    path::PathBuf,
-    sync::mpsc::{Receiver, Sender},
+    path::{Path, PathBuf},
+    sync::mpsc::{Receiver, Sender, channel},
     time::{Duration, Instant},
 };
 
@@ -14,11 +16,15 @@ use r2l_core::{
     env::Env,
     error::{Error, ResourceInterrupted},
     models::{Actor, ToSafetensors},
-    on_policy::algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
+    on_policy::{
+        algorithm::{Agent, OnPolicyAlgorithmHooks, OnPolicyRuntime, Sampler},
+        learning_module::OnPolicyLearner,
+    },
     tensor::R2lTensor,
 };
 
-use crate::{evaluator::BestPolicyEvaluator, hooks::on_policy2::coordinator::Coordinator};
+use self::coordinator::SharedCoordinator;
+use crate::{constants::TRAINING_TIMINGS_FILE, evaluator::BestPolicyEvaluator};
 
 #[derive(Debug, Clone, Copy)]
 enum Phase {
@@ -48,7 +54,7 @@ struct TrainingLoopTimings {
     evaluation: Duration,
 }
 
-struct EnabledTimingRecorder {
+pub(crate) struct EnabledTimingRecorder {
     file: File,
     timings: TrainingLoopTimings,
     phase_recorder: Option<RecordedPhase>,
@@ -68,10 +74,7 @@ impl EnabledTimingRecorder {
     }
 
     fn record_new_phase(&mut self, phase: Phase) {
-        self.phase_recorder = Some(RecordedPhase {
-            phase,
-            started: Instant::now(),
-        })
+        self.phase_recorder = Some(RecordedPhase::new(phase));
     }
 
     fn flush(&mut self, completed_rollouts: usize) -> Result<(), Error> {
@@ -88,12 +91,32 @@ impl EnabledTimingRecorder {
     }
 }
 
-enum TimingRecorder {
+pub(crate) enum TimingRecorder {
     Disabled,
     Enabled(EnabledTimingRecorder),
 }
 
 impl TimingRecorder {
+    pub(crate) fn disabled() -> Self {
+        Self::Disabled
+    }
+
+    /// Creates a CSV recorder for training phase durations.
+    ///
+    /// # Arguments
+    ///
+    /// * `output_dir` - Directory in which the timings CSV is created.
+    pub(crate) fn create(output_dir: &Path) -> Result<Self, Error> {
+        std::fs::create_dir_all(output_dir).map_err(Error::wrap)?;
+        let mut file = File::create(output_dir.join(TRAINING_TIMINGS_FILE)).map_err(Error::wrap)?;
+        writeln!(file, "rollout,collect_ms,learn_ms,evaluate_ms").map_err(Error::wrap)?;
+        Ok(Self::Enabled(EnabledTimingRecorder {
+            file,
+            timings: TrainingLoopTimings::default(),
+            phase_recorder: None,
+        }))
+    }
+
     fn record_new_phase(&mut self, phase: Phase) {
         match self {
             Self::Disabled => {}
@@ -116,11 +139,6 @@ impl TimingRecorder {
     }
 }
 
-// so we had training loop state
-// we also training limit
-// we had learning rate scheduler
-// we also had scheduled evaluator (I think this can remain in a different struct)
-
 #[derive(Debug, Clone, Copy)]
 pub enum LearningRateSchedule {
     /// Keep the learning rate fixed throughout training.
@@ -134,15 +152,16 @@ pub(crate) struct LearningRateScheduler {
 }
 
 impl LearningRateScheduler {
-    fn new(schedule: Option<LearningRateSchedule>) -> Self {
+    /// Creates an optional learning-rate scheduler for an agent hook.
+    ///
+    /// # Arguments
+    ///
+    /// * `schedule` - Schedule to apply before learning; `None` preserves the learner's rate.
+    pub(crate) fn new(schedule: Option<LearningRateSchedule>) -> Self {
         Self { schedule }
     }
 
-    fn update<A: Agent, S: Sampler>(
-        &self,
-        progress_remaining: f64,
-        runtime: &mut OnPolicyRuntime<A, S>,
-    ) {
+    fn update<M: OnPolicyLearner>(&self, progress_remaining: f64, module: &mut M) {
         if let Some(schedule) = self.schedule {
             let learning_rate = match schedule {
                 LearningRateSchedule::Constant(learning_rate) => learning_rate,
@@ -150,7 +169,7 @@ impl LearningRateScheduler {
                     initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
                 }
             };
-            runtime.agent.set_learning_rate(learning_rate);
+            module.set_learning_rate(learning_rate);
         }
     }
 }
@@ -167,23 +186,6 @@ pub enum TrainingLimit {
         /// Number of sampled steps after which training stops.
         total_steps: usize,
     },
-}
-
-struct LearningState {
-    completed_rollouts: usize,
-    steps_taken: usize,
-    training_limit: TrainingLimit,
-}
-
-impl LearningState {
-    fn update_rollout(&mut self, steps_taken: usize) {
-        self.steps_taken += steps_taken;
-        self.completed_rollouts += 1;
-    }
-
-    fn learning_rate(&self) -> f64 {
-        todo!()
-    }
 }
 
 enum OnPolicyCommand {
@@ -281,6 +283,16 @@ impl OnPolicyControlHandle {
             }
         }
     }
+}
+
+/// Creates paired training and caller endpoints for on-policy control.
+pub(crate) fn on_policy_control_channel() -> (OnPolicyControlEndpoint, OnPolicyControlHandle) {
+    let (command_tx, command_rx) = channel();
+    let (result_tx, result_rx) = channel();
+    (
+        OnPolicyControlEndpoint::new(command_rx, result_tx),
+        OnPolicyControlHandle::new(result_rx, command_tx),
+    )
 }
 
 pub(crate) struct OnPolicyCommandHandler {
@@ -394,13 +406,46 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
     }
 }
 
-struct OnPolicyTrainingHook<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
+pub(crate) struct OnPolicyTrainingHook<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     timing_recorder: TimingRecorder,
-    coorinator: Coordinator,
-    learning_rate_schedule: LearningRateScheduler,
+    coordinator: SharedCoordinator,
+    evaluator: ScheduledEvaluator<A::Actor, E>,
     command_handler: OnPolicyCommandHandler,
     error: Option<Error>,
     _phantom: PhantomData<(A, S, E)>,
+}
+
+impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
+    OnPolicyTrainingHook<A, S, E>
+{
+    /// Creates lifecycle hooks around shared training progress.
+    ///
+    /// # Arguments
+    ///
+    /// * `coordinator` - Progress shared with the agent and sampler hooks.
+    /// * `evaluator` - Evaluation cadence and best-policy tracking.
+    /// * `command_handler` - Handles control requests between training phases.
+    /// * `timing_recorder` - Records durations for each completed training iteration.
+    pub(crate) fn new(
+        coordinator: SharedCoordinator,
+        evaluator: ScheduledEvaluator<A::Actor, E>,
+        command_handler: OnPolicyCommandHandler,
+        timing_recorder: TimingRecorder,
+    ) -> Self {
+        Self {
+            coordinator,
+            evaluator,
+            command_handler,
+            timing_recorder,
+            error: None,
+            _phantom: PhantomData,
+        }
+    }
+
+    fn break_with_error(&mut self, error: Error) -> HookResult {
+        self.error.get_or_insert(error);
+        HookResult::Break
+    }
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyAlgorithmHooks
@@ -416,18 +461,16 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
 
     fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
         self.timing_recorder.finish_current_phase_recording();
-        let progress = self.coorinator.update_rollout_progress(runtime);
-        self.learning_rate_schedule.update(progress, runtime);
+        self.coordinator
+            .borrow_mut()
+            .update_rollout_progress(runtime);
         match self.command_handler.process_pending(runtime) {
             Ok(HookResult::Continue) => {
                 self.timing_recorder.record_new_phase(Phase::Training);
                 HookResult::Continue
             }
             Ok(HookResult::Break) => HookResult::Break,
-            Err(error) => {
-                self.error = Some(error);
-                HookResult::Break
-            }
+            Err(error) => self.break_with_error(error),
         }
     }
 
@@ -436,30 +479,38 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
         runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> HookResult {
         self.timing_recorder.finish_current_phase_recording();
-        todo!()
-        // let command_result = break_on_error!(self, {
-        //     self.finish_training_and_evaluate(runtime)?;
-        //     self.command_handler.process_pending(runtime)
-        // });
-        // let hook_result = if self.progress_remaining() <= 0.0 {
-        //     HookResult::Break
-        // } else {
-        //     command_result
-        // };
-        // self.timing_recorder.start_phase();
-        // hook_result
+        self.timing_recorder.record_new_phase(Phase::Evaluation);
+        let completed_rollouts = self.coordinator.borrow().completed_rollouts();
+        let evaluation_result = self.evaluator.evaluate(runtime, completed_rollouts);
+        self.timing_recorder.finish_current_phase_recording();
+        let timing_result = self.timing_recorder.flush(completed_rollouts + 1);
+        // The learning pass completed even if evaluation or recording failed.
+        self.coordinator.borrow_mut().finish_rollout();
+        if let Err(error) = evaluation_result.and(timing_result) {
+            return self.break_with_error(error);
+        }
+        let command_result = match self.command_handler.process_pending(runtime) {
+            Ok(result) => result,
+            Err(error) => return self.break_with_error(error),
+        };
+        let hook_result = if self.coordinator.borrow().progress_remaining() <= 0.0 {
+            HookResult::Break
+        } else {
+            command_result
+        };
+        self.timing_recorder.record_new_phase(Phase::Rollout);
+        hook_result
     }
 
     fn finish_training_hook(
         &mut self,
         _runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> Result<(), Error> {
-        todo!()
-        // let evaluator_result = self.evaluator.finish_training();
-        // let notification_result = self.command_handler.notify_stopped();
-        // match self.error.take() {
-        //     Some(error) => Err(error),
-        //     None => evaluator_result.and(notification_result),
-        // }
+        let evaluator_result = self.evaluator.finish_training();
+        let notification_result = self.command_handler.notify_stopped();
+        match self.error.take() {
+            Some(error) => Err(error),
+            None => evaluator_result.and(notification_result),
+        }
     }
 }
