@@ -58,7 +58,8 @@
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
 
-mod builders;
+/// Algorithm and network builders.
+pub mod builders;
 mod evaluator;
 mod hooks;
 mod inference;

@@ -46,6 +46,16 @@ impl<B: Backend> MultiBernoulliDistribution<B, Mlp<B>> {
     }
 }
 
+impl<B: Backend, N: Network<B>> MultiBernoulliDistribution<B, N> {
+    pub(crate) fn from_network(logits: N, action_size: usize) -> Self {
+        Self {
+            logits,
+            backend: PhantomData,
+            action_size,
+        }
+    }
+}
+
 impl<B: Backend, N: Network<B>> Actor for MultiBernoulliDistribution<B, N> {
     type Tensor = Tensor<B, 1>;
 

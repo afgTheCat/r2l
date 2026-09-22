@@ -192,15 +192,10 @@ impl<T: R2lTensor> InferencePolicy<T> {
                 let var_builder =
                     VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &backend.device)
                         .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
-                let actor = CandlePolicyKind::build(
-                    config.policy_builder.action_space.convert::<T>()?,
-                    &var_builder,
-                    &config.policy_builder.hidden_layers,
-                    config.policy_builder.observation_size,
-                    config.policy_builder.activation_function,
-                    config.policy_builder.log_std_init,
-                )
-                .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
+                let actor = config
+                    .policy_builder
+                    .build_candle::<T>(&var_builder)
+                    .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
             InferenceBackend::Burn(_) => {

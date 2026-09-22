@@ -58,6 +58,19 @@ impl<B: Backend> DiagGaussianDistribution<B, Mlp<B>> {
     }
 }
 
+impl<B: Backend, N: Network<B>> DiagGaussianDistribution<B, N> {
+    pub(crate) fn from_network(mu_net: N, action_size: usize, log_std_init: f32) -> Self {
+        let log_std = Param::from_data(
+            TensorData::new(
+                vec![log_std_init; action_size],
+                Shape::new([1, action_size]),
+            ),
+            &Default::default(),
+        );
+        Self { mu_net, log_std }
+    }
+}
+
 impl<B: Backend, N: Network<B>> Actor for DiagGaussianDistribution<B, N> {
     type Tensor = Tensor<B, 1>;
 

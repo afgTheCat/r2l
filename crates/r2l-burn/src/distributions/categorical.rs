@@ -49,6 +49,15 @@ impl<B: Backend, N: Module<B> + ModuleDisplay> ToSafetensors for CategoricalDist
     }
 }
 
+impl<B: Backend, N: Network<B>> CategoricalDistribution<B, N> {
+    pub(crate) fn from_network(logits: N) -> Self {
+        Self {
+            logits,
+            _b: PhantomData,
+        }
+    }
+}
+
 impl<B: Backend, N: Network<B>> Actor for CategoricalDistribution<B, N> {
     type Tensor = Tensor<B, 1>;
 

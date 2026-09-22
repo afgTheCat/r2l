@@ -4,23 +4,25 @@ use r2l_core::{
     env::Space,
     error::{Error, Result, TensorError},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
+    networks::{MlpConfig, NetworkConfig},
     tensor::R2lTensor,
 };
 
 use crate::{
     distributions::{
-        bernoulli::MultiBernoulliDistribution, categorical::CategoricalDistribution,
-        diagonal::DiagGaussianDistribution, multi_categorical::MultiCategoricalDistribution,
+        BurnPolicyKind, bernoulli::MultiBernoulliDistribution,
+        categorical::CategoricalDistribution, diagonal::DiagGaussianDistribution,
+        multi_categorical::MultiCategoricalDistribution,
     },
-    networks::mlp::Mlp,
+    networks::NetworkKind,
 };
 
 #[derive(Debug, Module)]
 enum CompositePolicyChildren<B: Backend> {
-    Categorical(CategoricalDistribution<B, Mlp<B>>),
-    Diag(DiagGaussianDistribution<B, Mlp<B>>),
-    MultiCategorical(MultiCategoricalDistribution<B, Mlp<B>>),
-    MultiBernoulli(MultiBernoulliDistribution<B, Mlp<B>>),
+    Categorical(CategoricalDistribution<B, NetworkKind<B>>),
+    Diag(DiagGaussianDistribution<B, NetworkKind<B>>),
+    MultiCategorical(MultiCategoricalDistribution<B, NetworkKind<B>>),
+    MultiBernoulli(MultiBernoulliDistribution<B, NetworkKind<B>>),
 }
 
 impl<B: Backend> CompositePolicyChildren<B> {
@@ -80,13 +82,31 @@ impl<B: Backend> CompositeDistribution<B> {
         activation: ActivationFunction,
         log_std_init: f32,
     ) -> Result<Self> {
+        if policy_layers.len() < 2 {
+            return Err(NetworkKind::<B>::invalid_config(
+                "expected input and output layer widths",
+            ));
+        }
+        let config = NetworkConfig::Mlp(MlpConfig {
+            hidden_layers: policy_layers[1..policy_layers.len() - 1].to_vec(),
+            activation,
+        });
+        Self::build_with_network(action_spaces, &[policy_layers[0]], &config, log_std_init)
+    }
+
+    pub(crate) fn build_with_network<T: R2lTensor>(
+        action_spaces: Vec<Space<T>>,
+        observation_shape: &[usize],
+        config: &NetworkConfig,
+        log_std_init: f32,
+    ) -> Result<Self> {
         let mut policies = Vec::new();
         let mut action_sizes = Vec::new();
         for action_space in action_spaces {
             Self::push_child(
                 action_space,
-                policy_layers,
-                activation,
+                observation_shape,
+                config,
                 log_std_init,
                 &mut policies,
                 &mut action_sizes,
@@ -106,85 +126,49 @@ impl<B: Backend> CompositeDistribution<B> {
 
     fn push_child<T: R2lTensor>(
         action_space: Space<T>,
-        policy_layers: &[usize],
-        activation: ActivationFunction,
+        observation_shape: &[usize],
+        config: &NetworkConfig,
         log_std_init: f32,
         policies: &mut Vec<CompositePolicyChildren<B>>,
         action_sizes: &mut Vec<usize>,
     ) -> Result<()> {
         let action_size = action_space.action_size();
-        match action_space {
-            Space::Discrete(choices) => {
-                let child_layers = [
-                    &[policy_layers[0]],
-                    &policy_layers[1..policy_layers.len() - 1],
-                    &[choices],
-                ]
-                .concat();
-                policies.push(CompositePolicyChildren::Categorical(
-                    CategoricalDistribution::build_mlp(&child_layers, activation)?,
-                ));
+        let children = match action_space {
+            Space::Tuple(spaces) => spaces,
+            Space::Dict(spaces) => spaces.into_values().collect(),
+            space => {
+                let policy = BurnPolicyKind::build_with_network(
+                    space,
+                    observation_shape,
+                    config,
+                    log_std_init,
+                )?;
+                policies.push(match policy {
+                    BurnPolicyKind::Categorical(policy) => {
+                        CompositePolicyChildren::Categorical(policy)
+                    }
+                    BurnPolicyKind::Diag(policy) => CompositePolicyChildren::Diag(policy),
+                    BurnPolicyKind::MultiCategorical(policy) => {
+                        CompositePolicyChildren::MultiCategorical(policy)
+                    }
+                    BurnPolicyKind::MultiBernoulli(policy) => {
+                        CompositePolicyChildren::MultiBernoulli(policy)
+                    }
+                    BurnPolicyKind::Composite(_) => unreachable!(),
+                });
                 action_sizes.push(action_size);
+                return Ok(());
             }
-            Space::Box { .. } => {
-                let child_layers = [
-                    &[policy_layers[0]],
-                    &policy_layers[1..policy_layers.len() - 1],
-                    &[action_size],
-                ]
-                .concat();
-                policies.push(CompositePolicyChildren::Diag(
-                    DiagGaussianDistribution::build_mlp(&child_layers, activation, log_std_init)?,
-                ));
-                action_sizes.push(action_size);
-            }
-            Space::MultiDiscrete { nvec, .. } => {
-                let nvec = nvec.to_vec()?;
-                policies.push(CompositePolicyChildren::MultiCategorical(
-                    MultiCategoricalDistribution::build_mlp(
-                        policy_layers[0],
-                        &policy_layers[1..policy_layers.len() - 1],
-                        nvec.into_iter().map(|n| n as usize).collect(),
-                        activation,
-                    ),
-                ));
-                action_sizes.push(action_size);
-            }
-            Space::MultiBinary { .. } => {
-                policies.push(CompositePolicyChildren::MultiBernoulli(
-                    MultiBernoulliDistribution::build_mlp(
-                        policy_layers[0],
-                        &policy_layers[1..policy_layers.len() - 1],
-                        action_size,
-                        activation,
-                    ),
-                ));
-                action_sizes.push(action_size);
-            }
-            Space::Tuple(spaces) => {
-                for space in spaces {
-                    Self::push_child(
-                        space,
-                        policy_layers,
-                        activation,
-                        log_std_init,
-                        policies,
-                        action_sizes,
-                    )?;
-                }
-            }
-            Space::Dict(spaces) => {
-                for space in spaces.into_values() {
-                    Self::push_child(
-                        space,
-                        policy_layers,
-                        activation,
-                        log_std_init,
-                        policies,
-                        action_sizes,
-                    )?;
-                }
-            }
+        };
+        for child in children {
+            Self::push_child(
+                child,
+                observation_shape,
+                config,
+                log_std_init,
+                policies,
+                action_sizes,
+            )?;
         }
         Ok(())
     }
@@ -232,7 +216,7 @@ impl<B: Backend> Policy for CompositeDistribution<B> {
             log_probs.push(policy.log_probs(states, &child_actions)?);
             offset += action_size;
         }
-        Ok(Tensor::stack::<2>(log_probs, 0).sum_dim(0).squeeze())
+        Ok(Tensor::stack::<2>(log_probs, 0).sum_dim(0).squeeze_dim(0))
     }
 
     fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor> {
@@ -241,7 +225,7 @@ impl<B: Backend> Policy for CompositeDistribution<B> {
         for policy in &self.policies {
             entropies.push(policy.entropy(states)?);
         }
-        Ok(Tensor::stack::<2>(entropies, 0).sum_dim(0).squeeze())
+        Ok(Tensor::stack::<2>(entropies, 0).sum_dim(0).squeeze_dim(0))
     }
 
     fn std(&self) -> Result<Option<f32>> {

@@ -1,3 +1,5 @@
+/// Backend-independent network configuration and construction.
+pub mod networks;
 pub(crate) mod normalizer;
 pub(crate) mod policy;
 
@@ -9,6 +11,7 @@ use burn::{
 };
 use candle_core::{Device, DeviceLocation};
 use candle_nn::ParamsAdamW;
+use networks::{MlpConfig, NetworkBuilder, NetworkConfig};
 use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
@@ -411,7 +414,7 @@ struct Builder<E: Env> {
 
     // for the agent
     policy_config: PolicyBuilder,
-    value_hidden_layers: Vec<usize>,
+    value_network: NetworkConfig,
     optimizer_layout: OnPolicyOptimizerLayout,
     log_progress: bool,
     entropy_coeff: f32,
@@ -450,7 +453,10 @@ impl<E: Env> Builder<E> {
             training_artifacts: None,
             control_endpoint: None,
             policy_config,
-            value_hidden_layers: vec![64, 64],
+            value_network: NetworkConfig::Mlp(MlpConfig {
+                hidden_layers: vec![64, 64],
+                activation: ActivationFunction::default(),
+            }),
             optimizer_layout: OnPolicyOptimizerLayout::Joint {
                 params: AdamWParams {
                     lr: 3e-4,
@@ -532,18 +538,20 @@ impl<E: Env> Builder<E> {
         let (policy, policy_varmap) = self
             .policy_config
             .build_candle_with_varmap::<E::Tensor>(device)?;
-        let activation_function = self.policy_config.activation_function;
+        let NetworkConfig::Mlp(value_config) = &self.value_network else {
+            todo!("Candle CNN value network construction")
+        };
         match &self.optimizer_layout {
             OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
                 params,
             } => CandlePolicyValueLearner::build_joint(
                 policy,
-                &self.value_hidden_layers,
+                &value_config.hidden_layers,
                 policy_varmap,
                 *max_grad_norm,
                 Self::candle_optimizer_params(params),
-                activation_function,
+                value_config.activation,
             ),
             OnPolicyOptimizerLayout::Split {
                 policy_max_grad_norm,
@@ -552,32 +560,33 @@ impl<E: Env> Builder<E> {
                 value_params,
             } => CandlePolicyValueLearner::build_split(
                 policy,
-                &self.value_hidden_layers,
+                &value_config.hidden_layers,
                 policy_varmap,
                 *policy_max_grad_norm,
                 *value_max_grad_norm,
                 Self::candle_optimizer_params(policy_params),
                 Self::candle_optimizer_params(value_params),
-                activation_function,
+                value_config.activation,
             ),
         }
     }
 
     fn build_burn_learner<B: AutodiffBackend>(&self) -> Result<BurnPolicyValueLearner<B>, Error> {
-        let observation_size = self.env_desription.observation_size();
         let policy = self.policy_config.build_burn::<B, E::Tensor>()?;
-        let activation_function = self.policy_config.activation_function;
-        let value_layers = &[&[observation_size][..], &self.value_hidden_layers[..], &[1]].concat();
+        let value_net = NetworkBuilder::new(self.value_network.clone()).build_burn::<B>(
+            &self.policy_config.observation_space.observation_shape(),
+            1,
+            &Default::default(),
+        )?;
         Ok(match &self.optimizer_layout {
             OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
                 params,
             } => {
                 let optimizer_config = Self::burn_optimizer_config(params, *max_grad_norm);
-                BurnPolicyValueLearner::joint(
+                BurnPolicyValueLearner::joint_with_network(
                     policy,
-                    value_layers,
-                    activation_function,
+                    value_net,
                     &optimizer_config,
                     params.lr,
                 )
@@ -592,10 +601,9 @@ impl<E: Env> Builder<E> {
                     Self::burn_optimizer_config(policy_params, *policy_max_grad_norm);
                 let value_optimizer_config =
                     Self::burn_optimizer_config(value_params, *value_max_grad_norm);
-                BurnPolicyValueLearner::split(
+                BurnPolicyValueLearner::split_with_network(
                     policy,
-                    value_layers,
-                    activation_function,
+                    value_net,
                     &optimizer_config,
                     policy_params.lr,
                     &value_optimizer_config,
@@ -1051,23 +1059,54 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
+    /// Selects the policy architecture. CNN construction currently requires Burn.
+    /// CNNs reshape flat observations using the environment's `[channels, height, width]` shape.
+    ///
+    /// # Arguments
+    ///
+    /// * `network` - Hidden architecture; observation shape and action-space outputs are inferred.
+    pub fn with_policy_network(mut self, network: NetworkConfig) -> Self {
+        self.builder.policy_config.network = network;
+        self
+    }
+
+    /// Selects the value architecture independently of the policy. CNNs currently require Burn.
+    /// CNNs reshape flat observations using the environment's `[channels, height, width]` shape.
+    ///
+    /// # Arguments
+    ///
+    /// * `network` - Hidden architecture; observation shape is inferred and output width is one.
+    pub fn with_value_network(mut self, network: NetworkConfig) -> Self {
+        self.builder.value_network = network;
+        self
+    }
+
     /// Sets the hidden-layer widths of the policy network.
     ///
     /// # Arguments
     ///
-    /// * `policy_hidden_layers` - Hidden-layer widths in network order.
+    /// * `policy_hidden_layers` - Dense hidden-layer widths, including the dense layers after a CNN.
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
-        self.builder.policy_config.hidden_layers = policy_hidden_layers;
+        self.builder
+            .policy_config
+            .network
+            .mlp_config_mut()
+            .hidden_layers = policy_hidden_layers;
         self
     }
 
-    /// Sets the hidden-layer activation used by the policy and value networks.
+    /// Sets dense hidden-layer activation for both networks, preserving explicit CNN activations.
     ///
     /// # Arguments
     ///
     /// * `activation_function` - Activation function applied by hidden layers.
     pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
-        self.builder.policy_config.activation_function = activation_function;
+        self.builder
+            .policy_config
+            .network
+            .mlp_config_mut()
+            .activation = activation_function;
+        self.builder.value_network.mlp_config_mut().activation = activation_function;
         self
     }
 
@@ -1184,9 +1223,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// # Arguments
     ///
-    /// * `value_hidden_layers` - Hidden-layer widths in network order.
+    /// * `value_hidden_layers` - Dense hidden-layer widths, including the dense layers after a CNN.
     pub fn with_value_hidden_layers(mut self, value_hidden_layers: Vec<usize>) -> Self {
-        self.builder.value_hidden_layers = value_hidden_layers;
+        self.builder.value_network.mlp_config_mut().hidden_layers = value_hidden_layers;
         self
     }
 

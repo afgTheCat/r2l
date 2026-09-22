@@ -50,6 +50,16 @@ impl<B: Backend> MultiCategoricalDistribution<B, Mlp<B>> {
     }
 }
 
+impl<B: Backend, N: Network<B>> MultiCategoricalDistribution<B, N> {
+    pub(crate) fn from_network(logits: N, nvec: Vec<usize>) -> Self {
+        Self {
+            logits,
+            backend: PhantomData,
+            nvec,
+        }
+    }
+}
+
 impl<B: Backend, N: Network<B>> Actor for MultiCategoricalDistribution<B, N> {
     type Tensor = Tensor<B, 1>;
 

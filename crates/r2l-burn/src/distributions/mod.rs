@@ -11,6 +11,7 @@ use r2l_core::{
     env::Space,
     error::{Error, InvalidParameterError, Result},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
+    networks::{MlpConfig, NetworkConfig},
     tensor::R2lTensor,
 };
 
@@ -20,7 +21,7 @@ use crate::{
         composite::CompositeDistribution, diagonal::DiagGaussianDistribution,
         multi_categorical::MultiCategoricalDistribution,
     },
-    networks::mlp::Mlp,
+    networks::NetworkKind,
 };
 
 /// Multi-Bernoulli policy distribution for multi-binary action spaces.
@@ -42,13 +43,13 @@ pub mod multi_categorical;
 #[derive(Debug, Module)]
 pub enum BurnPolicyKind<B: Backend> {
     /// Policy for discrete action spaces.
-    Categorical(CategoricalDistribution<B, Mlp<B>>),
+    Categorical(CategoricalDistribution<B, NetworkKind<B>>),
     /// Policy for Box action spaces.
-    Diag(DiagGaussianDistribution<B, Mlp<B>>),
+    Diag(DiagGaussianDistribution<B, NetworkKind<B>>),
     /// Policy for multi-discrete action spaces.
-    MultiCategorical(MultiCategoricalDistribution<B, Mlp<B>>),
+    MultiCategorical(MultiCategoricalDistribution<B, NetworkKind<B>>),
     /// Policy for multi-binary action spaces.
-    MultiBernoulli(MultiBernoulliDistribution<B, Mlp<B>>),
+    MultiBernoulli(MultiBernoulliDistribution<B, NetworkKind<B>>),
     /// Policy for tuple and dict action spaces.
     Composite(CompositeDistribution<B>),
 }
@@ -71,53 +72,6 @@ impl<B: Backend> BurnPolicyKind<B> {
         Ok(self)
     }
 
-    fn categorical(policy_layers: &[usize], activation: ActivationFunction) -> Result<Self> {
-        Ok(BurnPolicyKind::Categorical(CategoricalDistribution::<
-            B,
-            Mlp<B>,
-        >::build_mlp(
-            policy_layers, activation
-        )?))
-    }
-
-    fn box_policy(
-        policy_layers: &[usize],
-        activation: ActivationFunction,
-        log_std_init: f32,
-    ) -> Result<Self> {
-        Ok(BurnPolicyKind::Diag(DiagGaussianDistribution::build_mlp(
-            policy_layers,
-            activation,
-            log_std_init,
-        )?))
-    }
-
-    fn multi_categorical(
-        policy_layers: &[usize],
-        nvec: Vec<usize>,
-        activation: ActivationFunction,
-    ) -> Self {
-        BurnPolicyKind::MultiCategorical(MultiCategoricalDistribution::build_mlp(
-            policy_layers[0],
-            &policy_layers[1..policy_layers.len() - 1],
-            nvec,
-            activation,
-        ))
-    }
-
-    fn multi_bernoulli(
-        policy_layers: &[usize],
-        action_size: usize,
-        activation: ActivationFunction,
-    ) -> Self {
-        BurnPolicyKind::MultiBernoulli(MultiBernoulliDistribution::build_mlp(
-            policy_layers[0],
-            &policy_layers[1..policy_layers.len() - 1],
-            action_size,
-            activation,
-        ))
-    }
-
     /// Builds the appropriate Burn policy for the given action space.
     ///
     /// # Errors
@@ -138,27 +92,68 @@ impl<B: Backend> BurnPolicyKind<B> {
                 },
             )));
         }
+        let config = NetworkConfig::Mlp(MlpConfig {
+            hidden_layers: policy_layers[1..policy_layers.len() - 1].to_vec(),
+            activation,
+        });
+        Self::build_with_network(action_space, &[policy_layers[0]], &config, log_std_init)
+    }
+
+    /// Builds an action distribution using the selected network architecture.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the action space or network dimensions are invalid.
+    pub fn build_with_network<T: R2lTensor>(
+        action_space: Space<T>,
+        observation_shape: &[usize],
+        config: &NetworkConfig,
+        log_std_init: f32,
+    ) -> Result<Self> {
+        let network = |output_size| {
+            NetworkKind::build(config, observation_shape, output_size, &Default::default())
+        };
         Ok(match action_space {
-            Space::Discrete(_) => Self::categorical(policy_layers, activation)?,
-            Space::Box { .. } => Self::box_policy(policy_layers, activation, log_std_init)?,
+            Space::Discrete(choices) => {
+                Self::Categorical(CategoricalDistribution::from_network(network(choices)?))
+            }
+            Space::Box { shape, .. } => {
+                let size = shape.iter().product();
+                Self::Diag(DiagGaussianDistribution::from_network(
+                    network(size)?,
+                    size,
+                    log_std_init,
+                ))
+            }
             Space::MultiDiscrete { nvec, .. } => {
-                let nvec = nvec.to_vec()?.into_iter().map(|n| n as usize).collect();
-                Self::multi_categorical(policy_layers, nvec, activation)
+                let nvec: Vec<usize> = nvec.to_vec()?.into_iter().map(|n| n as usize).collect();
+                if nvec.contains(&0) {
+                    return Err(NetworkKind::<B>::invalid_config(
+                        "category counts must be positive",
+                    ));
+                }
+                Self::MultiCategorical(MultiCategoricalDistribution::from_network(
+                    network(nvec.iter().sum())?,
+                    nvec,
+                ))
             }
             Space::MultiBinary { shape } => {
                 let size = shape.iter().product();
-                Self::multi_bernoulli(policy_layers, size, activation)
+                Self::MultiBernoulli(MultiBernoulliDistribution::from_network(
+                    network(size)?,
+                    size,
+                ))
             }
-            Space::Tuple(spaces) => BurnPolicyKind::Composite(CompositeDistribution::build(
+            Space::Tuple(spaces) => Self::Composite(CompositeDistribution::build_with_network(
                 spaces,
-                policy_layers,
-                activation,
+                observation_shape,
+                config,
                 log_std_init,
             )?),
-            Space::Dict(spaces) => BurnPolicyKind::Composite(CompositeDistribution::build(
+            Space::Dict(spaces) => Self::Composite(CompositeDistribution::build_with_network(
                 spaces.into_values().collect(),
-                policy_layers,
-                activation,
+                observation_shape,
+                config,
                 log_std_init,
             )?),
         })

@@ -44,6 +44,8 @@ pub mod env;
 pub mod error;
 /// Actor, policy, value-function, and learner traits.
 pub mod models;
+/// Backend-independent network architecture configurations.
+pub mod networks;
 /// Shared interfaces for on-policy training loops.
 pub mod on_policy;
 /// Reproducible random-number utilities.

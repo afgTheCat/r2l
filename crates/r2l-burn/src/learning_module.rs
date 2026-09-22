@@ -18,7 +18,10 @@ use r2l_core::{
     on_policy::{learning_module::OnPolicyLearner, losses::FromPolicyValueLosses},
 };
 
-use crate::{distributions::BurnPolicyKind, networks::mlp::Mlp};
+use crate::{
+    distributions::BurnPolicyKind,
+    networks::{Network, NetworkKind, mlp::Mlp},
+};
 
 // Constraints needed for the policy to work with Adam optimization and decoupled weight decay.
 /// Trait alias-like bound for Burn policies used by on-policy learners.
@@ -88,13 +91,16 @@ impl<B: AutodiffBackend> PolicyValueLosses<B> {
 #[derive(Debug, Module)]
 pub struct JointActorModel<B: Backend, M: Module<B>> {
     policy: M,
-    value_net: Mlp<B>,
+    value_net: NetworkKind<B>,
 }
 
 impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
     /// Creates a joint model from a policy and value network.
-    pub fn new(policy: M, value_net: Mlp<B>) -> Self {
-        Self { policy, value_net }
+    pub fn new(policy: M, value_net: impl Into<NetworkKind<B>>) -> Self {
+        Self {
+            policy,
+            value_net: value_net.into(),
+        }
     }
 }
 
@@ -157,9 +163,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueLea
 
     fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
         debug_assert!(!observations.is_empty());
-        let observation: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
-        let value = self.model.value_net.forward(observation);
-        Ok(value.squeeze())
+        let value = self.model.value_net.batch_forward(observations);
+        Ok(value.squeeze_dim(1))
     }
 }
 
@@ -193,20 +198,20 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueL
 /// Burn on-policy learner with separate policy and value optimizers.
 pub struct SplitPolicyValueLearner<B: AutodiffBackend, M: BurnPolicy<B>> {
     policy: M,
-    value_net: Mlp<B>,
+    value_net: NetworkKind<B>,
     policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
     policy_lr: f64,
-    value_optimizer: OptimizerAdaptor<AdamW, Mlp<B>, B>,
+    value_optimizer: OptimizerAdaptor<AdamW, NetworkKind<B>, B>,
     value_lr: f64,
 }
 
 impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
     fn new(
         policy: M,
-        value_net: Mlp<B>,
+        value_net: NetworkKind<B>,
         policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
         policy_lr: f64,
-        value_optimizer: OptimizerAdaptor<AdamW, Mlp<B>, B>,
+        value_optimizer: OptimizerAdaptor<AdamW, NetworkKind<B>, B>,
         value_lr: f64,
     ) -> Self {
         Self {
@@ -267,9 +272,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueLea
 
     fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
         debug_assert!(!observations.is_empty());
-        let observation: Tensor<B, 2> = Tensor::stack(observations.to_vec(), 0);
-        let value = self.value_net.forward(observation);
-        Ok(value.squeeze())
+        let value = self.value_net.batch_forward(observations);
+        Ok(value.squeeze_dim(1))
     }
 }
 
@@ -317,7 +321,21 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
         optimizer_config: &AdamWConfig,
         lr: f64,
     ) -> Self {
-        let value_net: Mlp<B> = Mlp::build(value_layers, activation);
+        Self::joint_with_network(
+            policy,
+            NetworkKind::Mlp(Mlp::build(value_layers, activation)),
+            optimizer_config,
+            lr,
+        )
+    }
+
+    /// Builds a joint learner with an independently constructed value network.
+    pub fn joint_with_network(
+        policy: D,
+        value_net: NetworkKind<B>,
+        optimizer_config: &AdamWConfig,
+        lr: f64,
+    ) -> Self {
         let model = JointActorModel::new(policy, value_net);
         let model = JointPolicyValueLearner::new(model, optimizer_config.init(), lr);
         Self::Joint(model)
@@ -333,7 +351,25 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
         value_optimizer_config: &AdamWConfig,
         value_lr: f64,
     ) -> Self {
-        let value_net: Mlp<B> = Mlp::build(value_layers, activation);
+        Self::split_with_network(
+            policy,
+            NetworkKind::Mlp(Mlp::build(value_layers, activation)),
+            policy_optimizer_config,
+            policy_lr,
+            value_optimizer_config,
+            value_lr,
+        )
+    }
+
+    /// Builds a split learner with an independently constructed value network.
+    pub fn split_with_network(
+        policy: D,
+        value_net: NetworkKind<B>,
+        policy_optimizer_config: &AdamWConfig,
+        policy_lr: f64,
+        value_optimizer_config: &AdamWConfig,
+        value_lr: f64,
+    ) -> Self {
         let model = SplitPolicyValueLearner::new(
             policy,
             value_net,

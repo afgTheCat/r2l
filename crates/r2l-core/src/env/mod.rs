@@ -83,6 +83,25 @@ impl<T: R2lTensor> Space<T> {
         }
     }
 
+    /// Returns the encoded shape of one observation, excluding the batch dimension.
+    ///
+    /// Discrete observations are one-hot vectors. Tuple and dictionary observations
+    /// concatenate their encoded fields into a flat vector. Other spaces preserve
+    /// their declared dimensions and axis order, including an empty shape for scalars.
+    /// This describes the logical shape even when observations are stored flat;
+    /// it does not imply an image channel layout or transpose the observation.
+    #[must_use]
+    pub fn observation_shape(&self) -> Vec<usize> {
+        match self {
+            Self::Discrete(_) | Self::Tuple(_) | Self::Dict(_) => {
+                vec![self.size()]
+            }
+            Self::Box { shape, .. }
+            | Self::MultiDiscrete { shape, .. }
+            | Self::MultiBinary { shape } => shape.clone(),
+        }
+    }
+
     /// Returns the flattened model width for this space.
     ///
     /// Discrete spaces use one-hot observations and categorical logits, so
@@ -137,6 +156,14 @@ impl<T: R2lTensor> EnvDescription<T> {
     /// Returns the flattened action-space size.
     pub fn action_size(&self) -> usize {
         self.action_space.action_size()
+    }
+
+    /// Returns the encoded shape of one observation, excluding the batch dimension.
+    ///
+    /// See [`Space::observation_shape`] for the encoding of each space variant.
+    #[must_use]
+    pub fn observation_shape(&self) -> Vec<usize> {
+        self.observation_space.observation_shape()
     }
 
     /// Returns the flattened observation-space size.

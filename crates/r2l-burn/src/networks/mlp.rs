@@ -1,9 +1,7 @@
 use burn::nn::activation::{Activation, ActivationConfig};
-use burn::nn::{
-    Dropout, DropoutConfig, EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig,
-};
+use burn::nn::{Dropout, EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig};
 use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
-use r2l_core::models::ActivationFunction;
+use r2l_core::{models::ActivationFunction, networks::MlpConfig};
 
 use crate::networks::Network;
 
@@ -24,8 +22,7 @@ impl<B: Backend> LinearLayer<B> {
         }
     }
 
-    fn activation(activation: ActivationFunction) -> Self {
-        let device = Default::default();
+    pub(super) fn activation(activation: ActivationFunction, device: &B::Device) -> Activation<B> {
         let config = match activation {
             ActivationFunction::Elu => ActivationConfig::Elu(EluConfig::new()),
             ActivationFunction::Gelu => ActivationConfig::Gelu,
@@ -39,13 +36,12 @@ impl<B: Backend> LinearLayer<B> {
             ActivationFunction::Sigmoid => ActivationConfig::Sigmoid,
             ActivationFunction::Tanh => ActivationConfig::Tanh,
         };
-        Self::Activation(config.init::<B>(&device))
+        config.init::<B>(device)
     }
 
-    fn linear(input: usize, output: usize) -> Self {
-        let device = Default::default();
+    fn linear(input: usize, output: usize, device: &B::Device) -> Self {
         let liner_config = LinearConfig::new(input, output).with_bias(true);
-        let linear: Linear<B> = liner_config.init::<B>(&device);
+        let linear: Linear<B> = liner_config.init::<B>(device);
         Self::LinearLayer(linear)
     }
 }
@@ -64,15 +60,35 @@ impl<B: Backend> Mlp<B> {
     }
 
     pub fn build(layer_sizes: &[usize], activation: ActivationFunction) -> Self {
+        Self::build_on_device(layer_sizes, activation, &Default::default())
+    }
+
+    pub(super) fn from_config(
+        config: &MlpConfig,
+        input_size: usize,
+        output_size: usize,
+        device: &B::Device,
+    ) -> Self {
+        let layers = [&[input_size][..], &config.hidden_layers, &[output_size]].concat();
+        Self::build_on_device(&layers, config.activation, device)
+    }
+
+    fn build_on_device(
+        layer_sizes: &[usize],
+        activation: ActivationFunction,
+        device: &B::Device,
+    ) -> Self {
         let mut last_dim = layer_sizes[0];
         let mut layers = vec![];
         let num_layers = layer_sizes.len();
         for (layer_idx, layer_size) in layer_sizes.iter().enumerate().skip(1) {
             if layer_idx == num_layers - 1 {
-                layers.push(LinearLayer::linear(last_dim, *layer_size));
+                layers.push(LinearLayer::linear(last_dim, *layer_size, device));
             } else {
-                layers.push(LinearLayer::linear(last_dim, *layer_size));
-                layers.push(LinearLayer::activation(activation));
+                layers.push(LinearLayer::linear(last_dim, *layer_size, device));
+                layers.push(LinearLayer::Activation(LinearLayer::activation(
+                    activation, device,
+                )));
             }
             last_dim = *layer_size;
         }
@@ -89,35 +105,5 @@ impl<B: Backend> Network<B> for Mlp<B> {
     fn batch_forward(&self, t: &[Tensor<B, 1>]) -> Tensor<B, 2> {
         let t = Tensor::stack(t.to_vec(), 0);
         self.forward(t)
-    }
-}
-
-enum LinearLayerBuilder {
-    Activation(ActivationConfig),
-    Dropout(DropoutConfig),
-    Linear(LinearConfig),
-}
-
-impl LinearLayerBuilder {
-    fn init<B: Backend>(self) -> LinearLayer<B> {
-        let device = Default::default();
-        match self {
-            LinearLayerBuilder::Activation(activation_config) => {
-                let activation = activation_config.init(&device);
-                LinearLayer::Activation(activation)
-            }
-            LinearLayerBuilder::Dropout(dropout_config) => todo!(),
-            LinearLayerBuilder::Linear(linear_config) => todo!(),
-        }
-    }
-}
-
-struct LinearBuilder {
-    layers: Vec<LinearLayerBuilder>,
-}
-
-impl LinearBuilder {
-    fn init<B: Backend>(&self) -> Mlp<B> {
-        todo!()
     }
 }
