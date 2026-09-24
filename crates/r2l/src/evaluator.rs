@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fs::File, io::Write as _, marker::PhantomData, path::PathBuf, rc::Rc};
+use std::{fs::File, io::Write as _, marker::PhantomData, path::PathBuf};
 
 use r2l_core::{
     ActorWrapper,
@@ -14,9 +14,9 @@ use r2l_sampler::{DirectSampler, RolloutMode, SamplerExecutionMode, StagedSample
 use crate::{
     builders::normalizer::NormalizerBuilder,
     constants::{ACTOR_FILE, EVALUATIONS_FILE, NORMALIZER_FILE},
-    hooks::on_policy::{
-        TrainingLimit,
-        coordinator::{Coordinator, EpisodeBoundHook},
+    hooks::{
+        progress::{TrainingLimit, TrainingProgress},
+        sampler::EpisodeBoundHook,
     },
 };
 
@@ -32,12 +32,12 @@ impl<E: Env> EvaluationSampler<E> {
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
     ) -> Result<Self, Error> {
-        let coordinator = Rc::new(RefCell::new(Coordinator::new(
+        let progress = TrainingProgress::shared(
             TrainingLimit::rollouts(1),
             RolloutMode::EpisodeBound { n_episodes },
             env_builder.num_envs(),
-        )));
-        let hook = EpisodeBoundHook::new(coordinator, None);
+        );
+        let hook = EpisodeBoundHook::new(progress, None);
         if let Some(obs_normalizer) = obs_normalizer {
             Ok(Self::Staged(StagedSampler::build_with_obs_normalizer(
                 &env_builder,

@@ -1,4 +1,4 @@
-use crate::{error::TensorError, tensor::R2lTensor};
+use crate::{error::TensorError, tensor::R2lTensor, utils::slice_mean};
 
 type Result<T> = std::result::Result<T, TensorError>;
 
@@ -140,7 +140,7 @@ impl RunningMeanStdF32 {
             return;
         }
         let batch_count = samples.len() as f32;
-        let batch_mean = samples.iter().sum::<f32>() / batch_count;
+        let batch_mean = slice_mean(samples);
         let batch_var = samples
             .iter()
             .map(|sample| (*sample - batch_mean).powi(2))

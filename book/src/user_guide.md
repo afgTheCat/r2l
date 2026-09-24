@@ -190,7 +190,11 @@ across all workers.
 
 `LearningRateSchedule::Constant(rate)` keeps the configured rate fixed.
 `LearningRateSchedule::Linear(rate)` decays it from `rate` to zero over the
-configured training schedule.
+configured training schedule. Pass the schedule directly to
+`with_learning_rate_schedule`; the default is `LearningRateSchedule::Constant(3e-4)`.
+Before each learning pass, the schedule sets the same rate for policy and value
+optimizers, overriding the initial rates supplied through joint or split optimizer
+parameters.
 
 For the underlying traits and hook points, continue with
 [On-policy algorithms](./on_policy_algorithms.md). For exact builder methods,

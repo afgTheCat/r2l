@@ -1,6 +1,9 @@
 //! Shared PPO and A2C learning behavior for Candle and Burn.
 
-use std::{fmt::Display, marker::PhantomData, sync::mpsc::Sender};
+pub(crate) mod reporter;
+pub(crate) mod stats;
+
+use std::marker::PhantomData;
 
 use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
 use candle_core::Tensor;
@@ -16,17 +19,58 @@ use r2l_candle::learning_module::{
     CandlePolicy, PolicyValueLearner as CandleLearner, PolicyValueLosses as CandleLosses,
 };
 use r2l_core::{
-    HookResult,
-    buffers::TrajectoryBatch,
-    error::{Error, ResourceInterrupted, Result},
-    on_policy::learning_module::OnPolicyLearner,
-    tensor::R2lTensor,
+    HookResult, buffers::TrajectoryBatch, error::Result,
+    on_policy::learning_module::OnPolicyLearner, tensor::R2lTensor,
 };
 
-use super::{LearningRateSchedule, coordinator::SharedCoordinator};
-use crate::hooks::stats::{
-    A2CMinibatchStats, A2CRolloutStats, ClipRangeSchedule, PPOMinibatchStats, PPORolloutStats,
+use self::{
+    reporter::RolloutReporter,
+    stats::{A2CMinibatchStats, A2CRolloutStats, PPORolloutStats},
 };
+use super::progress::SharedTrainingProgress;
+
+/// Learning-rate policy applied to shared collection progress.
+#[derive(Debug, Clone, Copy)]
+pub enum LearningRateSchedule {
+    /// Keep the learning rate fixed throughout training.
+    Constant(f64),
+    /// Decay the initial learning rate to zero, including the current collection in progress.
+    /// The final learning pass uses zero learning rate, including a one-rollout run.
+    Linear(f64),
+}
+
+impl LearningRateSchedule {
+    /// Returns the learning rate for the remaining training fraction.
+    ///
+    /// # Arguments
+    ///
+    /// * `progress_remaining` - Remaining fraction, clamped to `[0, 1]` for linear decay.
+    pub(crate) fn value(self, progress_remaining: f64) -> f64 {
+        match self {
+            Self::Constant(learning_rate) => learning_rate,
+            Self::Linear(initial_learning_rate) => {
+                initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
+            }
+        }
+    }
+}
+
+/// Policy-ratio clipping range applied over the progress of PPO training.
+#[derive(Debug, Clone, Copy)]
+pub enum ClipRangeSchedule {
+    /// Keep the clipping range fixed throughout training.
+    Constant(f32),
+    /// Decay the initial clipping range linearly to zero.
+    Linear(f32),
+}
+
+impl ClipRangeSchedule {
+    pub(crate) fn initial_value(self) -> f32 {
+        match self {
+            Self::Constant(clip_range) | Self::Linear(clip_range) => clip_range,
+        }
+    }
+}
 
 /// Shared learning configuration with algorithm-specific state in `A`.
 pub struct LearningHook<M, A> {
@@ -34,15 +78,15 @@ pub struct LearningHook<M, A> {
     pub(crate) entropy_coeff: f32,
     pub(crate) vf_coeff: Option<f32>,
     pub(crate) gradient_clipping: Option<f32>,
-    pub(crate) coordinator: SharedCoordinator,
-    pub(crate) learning_rate_schedule: Option<LearningRateSchedule>,
+    pub(crate) progress: SharedTrainingProgress,
+    pub(crate) learning_rate_schedule: LearningRateSchedule,
     pub(crate) algorithm: A,
     pub(crate) _lm: PhantomData<M>,
 }
 
 /// Reporting state specific to A2C learning.
 pub struct A2CSettings {
-    pub(crate) reporter: Option<RolloutReporter<A2CRolloutStats>>,
+    pub(crate) reporter: RolloutReporter<A2CRolloutStats>,
 }
 
 /// Epoch, clipping, KL, and reporting state specific to PPO learning.
@@ -51,7 +95,7 @@ pub struct PPOSettings {
     pub(crate) current_epoch: usize,
     pub(crate) clip_range_schedule: ClipRangeSchedule,
     pub(crate) target_kl: Option<TargetKl>,
-    pub(crate) reporter: Option<RolloutReporter<PPORolloutStats>>,
+    pub(crate) reporter: RolloutReporter<PPORolloutStats>,
 }
 
 /// Shared hook specialized for PPO learning.
@@ -100,79 +144,10 @@ impl PPOSettings {
     }
 }
 
-/// Shared reward tracking and delivery, retaining the existing statistics payloads.
-pub(crate) struct RolloutReporter<R> {
-    report: R,
-    tx: Option<Sender<R>>,
-    log_progress: bool,
-    unfinished_episode_rewards: Vec<f32>,
-    latest_average_reward: f32,
-}
-
-impl<R: Default + Display> RolloutReporter<R> {
-    /// Creates a reporter when logging or channel delivery is enabled.
-    ///
-    /// # Arguments
-    ///
-    /// * `tx` - Optional channel receiving each rollout's statistics.
-    /// * `log_progress` - Whether to print rollout statistics.
-    /// * `n_envs` - Number of environment reward streams to track.
-    pub(crate) fn new(tx: Option<Sender<R>>, log_progress: bool, n_envs: usize) -> Option<Self> {
-        (tx.is_some() || log_progress).then(|| Self {
-            report: R::default(),
-            tx,
-            log_progress,
-            unfinished_episode_rewards: vec![0.; n_envs],
-            latest_average_reward: 0.,
-        })
-    }
-
-    fn update_average_reward<T: R2lTensor, B: TrajectoryBatch<T>>(&mut self, batches: &[B]) {
-        let mut completed_episode_rewards = vec![];
-        for (running_reward, batch) in self.unfinished_episode_rewards.iter_mut().zip(batches) {
-            for (reward, done) in batch.rewards().iter().copied().zip(
-                batch
-                    .terminated()
-                    .iter()
-                    .zip(batch.truncated())
-                    .map(|(terminated, truncated)| *terminated || *truncated),
-            ) {
-                *running_reward += reward;
-                if done {
-                    completed_episode_rewards.push(*running_reward);
-                    *running_reward = 0.;
-                }
-            }
-        }
-        if !completed_episode_rewards.is_empty() {
-            self.latest_average_reward = completed_episode_rewards.iter().sum::<f32>()
-                / completed_episode_rewards.len() as f32;
-        }
-    }
-
-    fn send_report(&mut self) -> Result<()> {
-        let report = std::mem::take(&mut self.report);
-        if self.log_progress {
-            println!("{report}");
-        }
-        if let Some(tx) = &self.tx {
-            tx.send(report).map_err(|error| {
-                Error::ResourceInterrupted(ResourceInterrupted {
-                    resource: "on-policy rollout reporter".into(),
-                    details: error.to_string(),
-                })
-            })?;
-        }
-        Ok(())
-    }
-}
-
 impl<M: OnPolicyLearner, A> LearningHook<M, A> {
     fn prepare_learning(&self, module: &mut M, advantages: &mut Advantages) -> f64 {
-        let progress = self.coordinator.borrow().progress_remaining();
-        if let Some(schedule) = self.learning_rate_schedule {
-            module.set_learning_rate(schedule.value(progress));
-        }
+        let progress = self.progress.borrow().progress_remaining();
+        module.set_learning_rate(self.learning_rate_schedule.value(progress));
         if self.normalize_advantage {
             advantages.normalize();
         }
@@ -249,75 +224,6 @@ impl<P: CandlePolicy, A> LearningHook<CandleLearner<P>, A> {
     }
 }
 
-impl<M> LearningHook<M, A2CSettings> {
-    fn record_batch(&mut self, stats: Option<A2CMinibatchStats>) {
-        if let (Some(reporter), Some(stats)) = (&mut self.algorithm.reporter, stats) {
-            reporter.report.minibatch_stats.push(stats);
-        }
-    }
-
-    fn report<T: R2lTensor, B: TrajectoryBatch<T>>(
-        &mut self,
-        batches: &[B],
-        std: Option<f32>,
-        learning_rate: f64,
-    ) -> Result<()> {
-        if let Some(reporter) = &mut self.algorithm.reporter {
-            reporter.update_average_reward(batches);
-            let coordinator = self.coordinator.borrow();
-            reporter.report.rollout_idx = coordinator.completed_rollouts();
-            reporter.report.total_rollouts = coordinator.total_rollouts();
-            drop(coordinator);
-            reporter.report.average_reward = reporter.latest_average_reward;
-            reporter.report.std = std;
-            reporter.report.learning_rate = learning_rate;
-            reporter.send_report()?;
-        }
-        Ok(())
-    }
-}
-
-impl<M> LearningHook<M, PPOSettings> {
-    fn record_batch(
-        &mut self,
-        stats: Option<A2CMinibatchStats>,
-        clip_fraction: f32,
-        approx_kl: f32,
-    ) {
-        if let (Some(reporter), Some(stats)) = (&mut self.algorithm.reporter, stats) {
-            reporter.report.minibatch_stats.push(PPOMinibatchStats {
-                policy_loss: stats.policy_loss,
-                entropy_loss: stats.entropy_loss,
-                value_loss: stats.value_loss,
-                clip_fraction,
-                approx_kl,
-            });
-        }
-    }
-
-    fn report<T: R2lTensor, B: TrajectoryBatch<T>>(
-        &mut self,
-        batches: &[B],
-        std: Option<f32>,
-        learning_rate: f64,
-        clip_range: f32,
-    ) -> Result<()> {
-        if let Some(reporter) = &mut self.algorithm.reporter {
-            reporter.update_average_reward(batches);
-            let coordinator = self.coordinator.borrow();
-            reporter.report.rollout_idx = coordinator.completed_rollouts();
-            reporter.report.total_rollouts = coordinator.total_rollouts();
-            drop(coordinator);
-            reporter.report.average_reward = reporter.latest_average_reward;
-            reporter.report.std = std;
-            reporter.report.learning_rate = learning_rate;
-            reporter.report.clip_range = clip_range;
-            reporter.send_report()?;
-        }
-        Ok(())
-    }
-}
-
 impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
     for LearningHook<BurnLearner<B, P>, A2CSettings>
 {
@@ -344,9 +250,9 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
             module,
             losses,
             &data.observations,
-            self.algorithm.reporter.is_some(),
+            self.algorithm.reporter.is_enabled(),
         )?;
-        self.record_batch(stats);
+        self.algorithm.reporter.record_batch(stats);
         Ok(HookResult::Continue)
     }
 
@@ -356,9 +262,15 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
         module: &mut BurnLearner<B, P>,
         batches: &[T],
     ) -> Result<HookResult> {
-        if self.algorithm.reporter.is_some() {
-            self.report(
+        if self.algorithm.reporter.is_enabled() {
+            let (completed_rollouts, total_rollouts) = {
+                let progress = self.progress.borrow();
+                (progress.completed_rollouts(), progress.total_rollouts())
+            };
+            self.algorithm.reporter.report(
                 batches,
+                completed_rollouts,
+                total_rollouts,
                 module.policy().std()?,
                 module.policy_learning_rate(),
             )?;
@@ -391,9 +303,9 @@ impl<P: CandlePolicy> A2CHook<CandleLearner<P>> for LearningHook<CandleLearner<P
             module,
             losses,
             &data.observations,
-            self.algorithm.reporter.is_some(),
+            self.algorithm.reporter.is_enabled(),
         )?;
-        self.record_batch(stats);
+        self.algorithm.reporter.record_batch(stats);
         Ok(HookResult::Continue)
     }
 
@@ -403,9 +315,15 @@ impl<P: CandlePolicy> A2CHook<CandleLearner<P>> for LearningHook<CandleLearner<P
         module: &mut CandleLearner<P>,
         batches: &[T],
     ) -> Result<HookResult> {
-        if self.algorithm.reporter.is_some() {
-            self.report(
+        if self.algorithm.reporter.is_enabled() {
+            let (completed_rollouts, total_rollouts) = {
+                let progress = self.progress.borrow();
+                (progress.completed_rollouts(), progress.total_rollouts())
+            };
+            self.algorithm.reporter.report(
                 batches,
+                completed_rollouts,
+                total_rollouts,
                 module.policy().std()?,
                 module.policy_learning_rate(),
             )?;
@@ -439,9 +357,15 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
         if !self.algorithm.finish_epoch() {
             return Ok(HookResult::Continue);
         }
-        if self.algorithm.reporter.is_some() {
-            self.report(
+        if self.algorithm.reporter.is_enabled() {
+            let (completed_rollouts, total_rollouts) = {
+                let progress = self.progress.borrow();
+                (progress.completed_rollouts(), progress.total_rollouts())
+            };
+            self.algorithm.reporter.report(
                 batches,
+                completed_rollouts,
+                total_rollouts,
                 module.policy().std()?,
                 module.policy_learning_rate(),
                 params.clip_range,
@@ -461,7 +385,7 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
             module,
             losses,
             &data.observations,
-            self.algorithm.reporter.is_some(),
+            self.algorithm.reporter.is_enabled(),
         )?;
         let ratio = data.ratio.to_vec()?;
         let log_ratio = data.logp_diff.to_vec()?;
@@ -480,7 +404,9 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
         } else {
             0.
         };
-        self.record_batch(stats, clip_fraction, approx_kl);
+        self.algorithm
+            .reporter
+            .record_batch(stats, clip_fraction, approx_kl);
         Ok(self.algorithm.check_kl(approx_kl))
     }
 }
@@ -508,9 +434,15 @@ impl<P: CandlePolicy> PPOHook<CandleLearner<P>> for LearningHook<CandleLearner<P
         if !self.algorithm.finish_epoch() {
             return Ok(HookResult::Continue);
         }
-        if self.algorithm.reporter.is_some() {
-            self.report(
+        if self.algorithm.reporter.is_enabled() {
+            let (completed_rollouts, total_rollouts) = {
+                let progress = self.progress.borrow();
+                (progress.completed_rollouts(), progress.total_rollouts())
+            };
+            self.algorithm.reporter.report(
                 batches,
+                completed_rollouts,
+                total_rollouts,
                 module.policy().std()?,
                 module.policy_learning_rate(),
                 params.clip_range,
@@ -530,7 +462,7 @@ impl<P: CandlePolicy> PPOHook<CandleLearner<P>> for LearningHook<CandleLearner<P
             module,
             losses,
             &data.observations,
-            self.algorithm.reporter.is_some(),
+            self.algorithm.reporter.is_enabled(),
         )?;
         let ratio = data.ratio.detach();
         let log_ratio = data.logp_diff.detach();
@@ -549,7 +481,9 @@ impl<P: CandlePolicy> PPOHook<CandleLearner<P>> for LearningHook<CandleLearner<P
         } else {
             0.
         };
-        self.record_batch(stats, clip_fraction, approx_kl);
+        self.algorithm
+            .reporter
+            .record_batch(stats, clip_fraction, approx_kl);
         Ok(self.algorithm.check_kl(approx_kl))
     }
 }

@@ -8,7 +8,7 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::TensorError;
+use crate::{error::TensorError, utils::slice_mean};
 
 type Result<T> = std::result::Result<T, TensorError>;
 
@@ -449,7 +449,7 @@ impl R2lTensor for VecTensor {
                 operation: "mean".into(),
             });
         }
-        let mean = self.data.iter().sum::<f32>() / self.data.len() as f32;
+        let mean = slice_mean(&self.data);
         Ok(Self::from_vec(vec![mean]))
     }
 

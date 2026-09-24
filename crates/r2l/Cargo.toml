@@ -21,6 +21,7 @@ derive_more = "2.0.1"
 bimodal-array = { workspace = true }
 serde = { workspace = true }
 yaml_serde = { workspace = true } 
+itertools = { workspace = true }
 
 [features]
 default = []

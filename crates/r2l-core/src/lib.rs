@@ -54,7 +54,7 @@ pub mod rng;
 pub mod running_mean;
 /// Backend-neutral tensor interfaces and adapters.
 pub mod tensor;
-mod utils;
+pub mod utils;
 
 pub use utils::actor_wrapper::ActorWrapper;
 
@@ -67,6 +67,16 @@ pub enum HookResult {
     Continue,
     /// Stop the current training loop at the current hook boundary.
     Break,
+}
+
+impl HookResult {
+    #[must_use]
+    pub const fn and(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Continue, Self::Continue) => Self::Continue,
+            _ => Self::Break,
+        }
+    }
 }
 
 #[macro_export]

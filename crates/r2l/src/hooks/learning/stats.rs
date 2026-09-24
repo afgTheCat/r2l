@@ -90,23 +90,6 @@ impl std::fmt::Display for A2CRolloutStats {
     }
 }
 
-/// Policy-ratio clipping range applied over the progress of PPO training.
-#[derive(Debug, Clone, Copy)]
-pub enum ClipRangeSchedule {
-    /// Keep the clipping range fixed throughout training.
-    Constant(f32),
-    /// Decay the initial clipping range linearly to zero.
-    Linear(f32),
-}
-
-impl ClipRangeSchedule {
-    pub(crate) fn initial_value(self) -> f32 {
-        match self {
-            Self::Constant(clip_range) | Self::Linear(clip_range) => clip_range,
-        }
-    }
-}
-
 /// Training statistics for a single PPO optimization minibatch.
 ///
 /// These statistics are collected during one PPO epoch and reported by the

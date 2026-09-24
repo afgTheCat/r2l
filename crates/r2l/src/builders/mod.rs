@@ -45,17 +45,19 @@ use crate::{
     PPORolloutStats, StepBoundHook, TrainingLimit,
     evaluator::{BestPolicyEvaluator, EvaluationSampler, EvaluationSettings},
     hooks::{
-        on_policy::{
-            OnPolicyCommandHandler, OnPolicyControlEndpoint, OnPolicyTrainingHooks,
-            ScheduledEvaluator, TimingRecorder,
-            coordinator::{Coordinator, SharedCoordinator},
-            learning::{
-                A2CLearningHook, A2CSettings, LearningHook, PPOLearningHook, PPOSettings,
-                RolloutReporter, TargetKl,
-            },
-            on_policy_control_channel,
+        learning::{
+            A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, PPOLearningHook,
+            PPOSettings, TargetKl, reporter::RolloutReporter,
         },
-        stats::ClipRangeSchedule,
+        on_policy::{
+            OnPolicyTrainingHooks,
+            commands::{
+                OnPolicyCommandHandler, OnPolicyControlEndpoint, on_policy_control_channel,
+            },
+            evaluation::ScheduledEvaluator,
+            timing::TimingRecorder,
+        },
+        progress::{SharedTrainingProgress, TrainingProgress},
     },
     utils::RewardNormalizer,
 };
@@ -421,7 +423,7 @@ struct Builder<E: Env> {
 
     // for the hooks
     training_limit: TrainingLimit,
-    learning_rate_schedule: Option<LearningRateSchedule>,
+    learning_rate_schedule: LearningRateSchedule,
     training_artifacts: Option<TrainingArtifactsConfig>,
     control_endpoint: Option<OnPolicyControlEndpoint>,
 
@@ -462,7 +464,7 @@ impl<E: Env> Builder<E> {
             backend_configuration,
             algorithm_configuration,
             training_limit: TrainingLimit::rollouts(50),
-            learning_rate_schedule: None,
+            learning_rate_schedule: LearningRateSchedule::Constant(3e-4),
             training_artifacts: None,
             control_endpoint: None,
             policy_config,
@@ -633,7 +635,7 @@ impl<E: Env> Builder<E> {
 
     fn default_on_policy_hook<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>>(
         self,
-        coordinator: SharedCoordinator,
+        progress: SharedTrainingProgress,
     ) -> Result<OnPolicyTrainingHooks<A, S, E>, Error> {
         let (evaluator, timing_recorder) = if let Some(config) = self.training_artifacts {
             let evaluator = if config.needs_evaluator() {
@@ -654,13 +656,13 @@ impl<E: Env> Builder<E> {
                         config.inference_artifacts,
                     )?,
                     config.evaluation_settings.rollouts_per_evaluation,
-                    coordinator.clone(),
+                    progress.clone(),
                 )
             } else {
                 ScheduledEvaluator::disabled()
             };
             let timing_recorder = if config.needs_timing_recorder() {
-                TimingRecorder::create(&config.output_dir, coordinator.clone())?
+                TimingRecorder::create(&config.output_dir, progress.clone())?
             } else {
                 TimingRecorder::disabled()
             };
@@ -669,7 +671,7 @@ impl<E: Env> Builder<E> {
             (ScheduledEvaluator::disabled(), TimingRecorder::disabled())
         };
         Ok(OnPolicyTrainingHooks::new(
-            coordinator,
+            progress,
             evaluator,
             OnPolicyCommandHandler::new(self.control_endpoint),
             timing_recorder,
@@ -679,7 +681,7 @@ impl<E: Env> Builder<E> {
     #[allow(clippy::unnecessary_wraps)]
     fn direct_sampler_step_bound(
         &self,
-        coordinator: SharedCoordinator,
+        progress: SharedTrainingProgress,
     ) -> Result<DirectSampler<E, StepBoundHook<E>>, Error> {
         let SamplerConfiguration::DirectStep {
             reward_normalizer, ..
@@ -690,14 +692,14 @@ impl<E: Env> Builder<E> {
         let sampler_core = self
             .env_build_plan
             .build_direct_sampler_core(self.sampler_execution_mode);
-        let step_bound_hook = StepBoundHook::new(coordinator, reward_normalizer.clone());
+        let step_bound_hook = StepBoundHook::new(progress, reward_normalizer.clone());
         Ok(DirectSampler::new(sampler_core, step_bound_hook))
     }
 
     #[allow(clippy::unnecessary_wraps)]
     fn direct_sampler_episode_bound(
         &self,
-        coordinator: SharedCoordinator,
+        progress: SharedTrainingProgress,
     ) -> Result<DirectSampler<E, EpisodeBoundHook<E>>, Error> {
         let SamplerConfiguration::DirectEpisode { .. } = &self.sampler_configuration else {
             unreachable!("direct episode-bound sampler type must use matching configuration")
@@ -705,13 +707,13 @@ impl<E: Env> Builder<E> {
         let sampler_core = self
             .env_build_plan
             .build_direct_sampler_core(self.sampler_execution_mode);
-        let episode_bound_hook = EpisodeBoundHook::new(coordinator, None);
+        let episode_bound_hook = EpisodeBoundHook::new(progress, None);
         Ok(DirectSampler::new(sampler_core, episode_bound_hook))
     }
 
     fn staged_sampler_step_bound(
         &self,
-        coordinator: SharedCoordinator,
+        progress: SharedTrainingProgress,
     ) -> Result<StagedSampler<E, StepBoundHook<E>>, Error> {
         let SamplerConfiguration::StagedStep {
             reward_normalizer,
@@ -727,7 +729,7 @@ impl<E: Env> Builder<E> {
         let sampler_core = self
             .env_build_plan
             .build_staged_sampler_core(self.sampler_execution_mode, obs_normalizer)?;
-        let step_bound_hook = StepBoundHook::new(coordinator, reward_normalizer.clone());
+        let step_bound_hook = StepBoundHook::new(progress, reward_normalizer.clone());
         Ok(StagedSampler::new(sampler_core, step_bound_hook))
     }
 
@@ -749,8 +751,8 @@ impl<E: Env> Builder<E> {
         Ok(())
     }
 
-    fn coordinator(&self) -> Coordinator {
-        Coordinator::new(
+    fn progress(&self) -> SharedTrainingProgress {
+        TrainingProgress::shared(
             self.training_limit,
             self.sampler_configuration.rollout_mode(),
             self.n_envs,
@@ -758,10 +760,10 @@ impl<E: Env> Builder<E> {
     }
 
     fn total_rollouts(&self) -> Option<usize> {
-        self.coordinator().total_rollouts()
+        self.progress().borrow().total_rollouts()
     }
 
-    fn ppo_hook<M>(&mut self, coordinator: SharedCoordinator) -> PPOLearningHook<M> {
+    fn ppo_hook<M>(&mut self, progress: SharedTrainingProgress) -> PPOLearningHook<M> {
         let AlgorithmConfiguration::Ppo {
             normalize_advantage,
             total_epochs,
@@ -778,7 +780,7 @@ impl<E: Env> Builder<E> {
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
             gradient_clipping: self.gradient_clipping,
-            coordinator,
+            progress,
             learning_rate_schedule: self.learning_rate_schedule,
             algorithm: PPOSettings {
                 total_epochs: *total_epochs,
@@ -794,7 +796,7 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn a2c_hook<M>(&mut self, coordinator: SharedCoordinator) -> A2CLearningHook<M> {
+    fn a2c_hook<M>(&mut self, progress: SharedTrainingProgress) -> A2CLearningHook<M> {
         let AlgorithmConfiguration::A2C {
             normalize_advantage,
             reporter,
@@ -807,7 +809,7 @@ impl<E: Env> Builder<E> {
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
             gradient_clipping: self.gradient_clipping,
-            coordinator,
+            progress,
             learning_rate_schedule: self.learning_rate_schedule,
             algorithm: A2CSettings {
                 reporter: RolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
@@ -840,7 +842,7 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn ppo_candle_agent(&mut self, coordinator: SharedCoordinator) -> Result<PPOCandle, Error> {
+    fn ppo_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<PPOCandle, Error> {
         let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
             unreachable!("Candle agent type must use Candle backend configuration")
         };
@@ -850,7 +852,7 @@ impl<E: Env> Builder<E> {
             backend.seed(seed)?;
         }
         let learner = self.build_candle_learner(&backend.device)?;
-        let hooks = self.ppo_hook(coordinator);
+        let hooks = self.ppo_hook(progress);
         Ok(PPO {
             lm: learner,
             hooks,
@@ -860,7 +862,7 @@ impl<E: Env> Builder<E> {
 
     fn ppo_burn_agent(
         &mut self,
-        coordinator: SharedCoordinator,
+        progress: SharedTrainingProgress,
     ) -> Result<PPOBurn<BurnBackend>, Error> {
         let BackendConfiguration::Burn(backend) = self.backend_configuration else {
             unreachable!("Burn agent type must use Burn backend configuration")
@@ -870,7 +872,7 @@ impl<E: Env> Builder<E> {
             BurnBackend::seed(&NdArrayDevice::default(), seed);
         }
         let learner = self.build_burn_learner::<BurnBackend>()?;
-        let hooks = self.ppo_hook(coordinator);
+        let hooks = self.ppo_hook(progress);
         Ok(PPO {
             lm: learner,
             hooks,
@@ -878,7 +880,7 @@ impl<E: Env> Builder<E> {
         })
     }
 
-    fn a2c_candle_agent(&mut self, coordinator: SharedCoordinator) -> Result<A2CCandle, Error> {
+    fn a2c_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<A2CCandle, Error> {
         let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
             unreachable!("Candle agent type must use Candle backend configuration")
         };
@@ -888,7 +890,7 @@ impl<E: Env> Builder<E> {
             backend.seed(seed)?;
         }
         let learner = self.build_candle_learner(&backend.device)?;
-        let hooks = self.a2c_hook(coordinator);
+        let hooks = self.a2c_hook(progress);
         Ok(A2C {
             lm: learner,
             hooks,
@@ -898,7 +900,7 @@ impl<E: Env> Builder<E> {
 
     fn a2c_burn_agent(
         &mut self,
-        coordinator: SharedCoordinator,
+        progress: SharedTrainingProgress,
     ) -> Result<A2CBurn<BurnBackend>, Error> {
         let BackendConfiguration::Burn(backend) = self.backend_configuration else {
             unreachable!("Burn agent type must use Burn backend configuration")
@@ -908,7 +910,7 @@ impl<E: Env> Builder<E> {
             BurnBackend::seed(&NdArrayDevice::default(), seed);
         }
         let learner = self.build_burn_learner::<BurnBackend>()?;
-        let hooks = self.a2c_hook(coordinator);
+        let hooks = self.a2c_hook(progress);
         Ok(A2C {
             lm: learner,
             hooks,
@@ -918,8 +920,8 @@ impl<E: Env> Builder<E> {
 }
 
 struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
-    build_agent: fn(&mut Builder<E>, SharedCoordinator) -> Result<A, Error>,
-    build_sampler: fn(&Builder<E>, SharedCoordinator) -> Result<S, Error>,
+    build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
+    build_sampler: fn(&Builder<E>, SharedTrainingProgress) -> Result<S, Error>,
 }
 
 /// Configures and builds a complete PPO or A2C training algorithm.
@@ -949,8 +951,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         algorithm_configuration: AlgorithmConfiguration,
         backend_configuration: BackendConfiguration,
         sampler_configuration: SamplerConfiguration<E>,
-        build_agent: fn(&mut Builder<E>, SharedCoordinator) -> Result<A, Error>,
-        build_sampler: fn(&Builder<E>, SharedCoordinator) -> Result<S, Error>,
+        build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
+        build_sampler: fn(&Builder<E>, SharedTrainingProgress) -> Result<S, Error>,
     ) -> Result<Self, Error> {
         Ok(Self {
             builder: Builder::new(
@@ -969,7 +971,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     fn with_agent<A2: Agent>(
         self,
-        build_agent: fn(&mut Builder<E>, SharedCoordinator) -> Result<A2, Error>,
+        build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A2, Error>,
     ) -> OnPolicyBuilder<A2, S, E> {
         OnPolicyBuilder {
             builder: self.builder,
@@ -982,7 +984,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     fn with_sampler<S2: Sampler<Tensor = E::Tensor>>(
         self,
-        build_sampler: fn(&Builder<E>, SharedCoordinator) -> Result<S2, Error>,
+        build_sampler: fn(&Builder<E>, SharedTrainingProgress) -> Result<S2, Error>,
     ) -> OnPolicyBuilder<A, S2, E> {
         OnPolicyBuilder {
             builder: self.builder,
@@ -1022,14 +1024,15 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     /// Sets the learning-rate schedule applied as training progresses.
     ///
-    /// Passing `None` leaves the optimizer at its configured learning rate.
+    /// Defaults to `Constant(3e-4)`. Before each learning pass, the schedule sets the
+    /// same rate for policy and value optimizers, overriding their initial parameters.
     ///
     /// # Arguments
     ///
-    /// * `learning_rate_schedule` - The schedule to apply, or `None` to disable scheduling.
+    /// * `learning_rate_schedule` - Schedule applied to every optimizer before learning.
     pub fn with_learning_rate_schedule(
         mut self,
-        learning_rate_schedule: Option<LearningRateSchedule>,
+        learning_rate_schedule: LearningRateSchedule,
     ) -> Self {
         self.builder.learning_rate_schedule = learning_rate_schedule;
         self
@@ -1125,7 +1128,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.builder
             .update_optimizer_layout(|layout| layout.with_lr(learning_rate));
-        self.builder.learning_rate_schedule = Some(LearningRateSchedule::Constant(learning_rate));
+        self.builder.learning_rate_schedule = LearningRateSchedule::Constant(learning_rate);
         self
     }
 
@@ -1175,6 +1178,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     /// Uses one optimizer for the policy and value networks.
     ///
+    /// The learning-rate schedule overrides `params.lr` before each learning pass.
+    ///
     /// # Arguments
     ///
     /// * `max_grad_norm` - Optional maximum gradient norm applied before each update.
@@ -1190,6 +1195,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     }
 
     /// Uses independent optimizers for the policy and value networks.
+    ///
+    /// The learning-rate schedule overrides both optimizers' initial rates with the
+    /// same rate before each learning pass.
     ///
     /// # Arguments
     ///
@@ -1344,10 +1352,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         if let Some(seed) = self.builder.seed {
             set_seed(seed);
         }
-        let coordinator = Rc::new(RefCell::new(self.builder.coordinator()));
-        let agent = (self.config.build_agent)(&mut self.builder, coordinator.clone())?;
-        let sampler = (self.config.build_sampler)(&self.builder, coordinator.clone())?;
-        let hooks = self.builder.default_on_policy_hook(coordinator)?;
+        let progress = self.builder.progress();
+        let agent = (self.config.build_agent)(&mut self.builder, progress.clone())?;
+        let sampler = (self.config.build_sampler)(&self.builder, progress.clone())?;
+        let hooks = self.builder.default_on_policy_hook(progress)?;
         Ok(OnPolicyAlgorithm::new(
             OnPolicyRuntime { agent, sampler },
             hooks,

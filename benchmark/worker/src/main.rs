@@ -32,7 +32,7 @@ fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
         .with_total_epochs(config.n_epochs)
         .with_entropy_coefficient(config.ent_coef)
         .with_sample_size(config.batch_size)
-        .with_learning_rate_schedule(Some(learning_rate_schedule(config.learning_rate)))
+        .with_learning_rate_schedule(learning_rate_schedule(config.learning_rate))
         .with_clip_range_schedule(clip_range_schedule(config.clip_range))
         .with_log_std_init(config.log_std_init)
         .with_value_loss_coefficient(Some(config.vf_coef))
