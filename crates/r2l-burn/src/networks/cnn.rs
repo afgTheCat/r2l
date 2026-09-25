@@ -6,6 +6,7 @@ use burn::nn::{
     pool::{AvgPool2d, MaxPool2d},
 };
 use burn::{module::Module, prelude::Backend, tensor::Tensor};
+use r2l_core::Shape;
 use r2l_core::{
     error::Result,
     networks::{CnnConfig, CnnLayerConfig},
@@ -35,7 +36,8 @@ impl<B: Backend> CNNLayer<B> {
 
 #[derive(Module, Debug)]
 pub struct Cnn<B: Backend> {
-    shape: [usize; 3],
+    #[module(skip)]
+    shape: Shape,
     cnn_layers: Vec<CNNLayer<B>>,
     mlp: Mlp<B>,
 }
@@ -43,11 +45,11 @@ pub struct Cnn<B: Backend> {
 impl<B: Backend> Cnn<B> {
     pub(super) fn build(
         config: &CnnConfig,
-        observation_shape: &[usize],
+        observation_shape: &Shape,
         output_size: usize,
         device: &B::Device,
     ) -> Result<Self> {
-        let shape: [usize; 3] = observation_shape.try_into().map_err(|_| {
+        let shape: [usize; 3] = observation_shape.dims().try_into().map_err(|_| {
             NetworkKind::<B>::invalid_config(
                 "CNN observations must have shape [channels, height, width]",
             )
@@ -115,10 +117,10 @@ impl<B: Backend> Cnn<B> {
             };
             cnn_layers.push(layer);
         }
-        let input_size = NetworkKind::<B>::flat_size(&[channels, height, width])?;
+        let input_size = NetworkKind::<B>::flat_size(&Shape::from([channels, height, width]))?;
         let mlp = Mlp::from_config(&config.mlp, input_size, output_size, device);
         Ok(Self {
-            shape,
+            shape: shape.into(),
             cnn_layers,
             mlp,
         })
@@ -137,7 +139,10 @@ impl<B: Backend> Network<B> for Cnn<B> {
     fn batch_forward(&self, t: &[Tensor<B, 1>]) -> Tensor<B, 2> {
         let t: Tensor<B, 4> = Tensor::stack(
             t.iter()
-                .map(|t| t.clone().reshape::<3, _>(self.shape))
+                .map(|t| {
+                    t.clone()
+                        .reshape::<3, _>(burn::tensor::Shape::from(self.shape.dims()))
+                })
                 .collect(),
             0,
         );
@@ -145,7 +150,7 @@ impl<B: Backend> Network<B> for Cnn<B> {
     }
 
     fn forward(&self, t: Tensor<B, 1>) -> Tensor<B, 2> {
-        let t: Tensor<B, 3> = t.reshape(self.shape);
+        let t: Tensor<B, 3> = t.reshape(burn::tensor::Shape::from(self.shape.dims()));
         let t: Tensor<B, 4> = t.unsqueeze();
         self.forward_inner(t)
     }

@@ -215,7 +215,7 @@ fn diagonal_gaussian_backends_agree_on_std_and_entropy() {
     let action_space = Space::<VecTensor>::Box {
         min: None,
         max: None,
-        shape: vec![2],
+        shape: vec![2].into(),
     };
     let log_std = -0.7;
     let varmap = VarMap::new();

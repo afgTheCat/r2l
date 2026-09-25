@@ -1,3 +1,5 @@
+use crate::Shape;
+
 #[cfg(feature = "burn")]
 mod burn_tensor;
 
@@ -31,14 +33,14 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn to_vec(&self) -> Result<Vec<f32>>;
 
     /// Returns the tensor shape.
-    fn to_shape(&self) -> Vec<usize>;
+    fn to_shape(&self) -> Shape;
 
     /// Returns the tensor values and shape.
     ///
     /// # Errors
     ///
     /// Returns an error if the backend values cannot be extracted.
-    fn to_vec_and_shape(&self) -> Result<(Vec<f32>, Vec<usize>)> {
+    fn to_vec_and_shape(&self) -> Result<(Vec<f32>, Shape)> {
         let vec = self.to_vec()?;
         let shape = self.to_shape();
         Ok((vec, shape))
@@ -49,14 +51,14 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// # Errors
     ///
     /// Returns an error if the values and shape cannot form a backend tensor.
-    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Result<Self>;
+    fn from_slice_and_shape(data: &[f32], shape: impl Into<Shape>) -> Result<Self>;
 
     /// Creates a tensor from owned flat values and a shape.
     ///
     /// # Errors
     ///
     /// Returns an error if the values and shape cannot form a backend tensor.
-    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Result<Self> {
+    fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
         Self::from_slice_and_shape(&data, shape)
     }
 
@@ -73,7 +75,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
 
     /// Returns the size of the tensor
     fn size(&self) -> usize {
-        self.to_shape().iter().product()
+        self.to_shape().num_elements()
     }
 
     /// Returns true if the tensor is empty
@@ -175,8 +177,10 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// # Errors
     ///
     /// Returns an error if the backend cannot create a tensor with `shape`.
-    fn zeros(shape: Vec<usize>) -> Result<Self> {
-        let data = vec![0f32; shape.iter().product()];
+    fn zeros(shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
+        let len = shape.num_elements();
+        let data = vec![0f32; len];
         Self::from_vec_and_shape(data, shape)
     }
 
@@ -246,7 +250,7 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VecTensor {
     data: Vec<f32>,
-    shape: Vec<usize>,
+    shape: Shape,
 }
 
 impl VecTensor {
@@ -301,7 +305,7 @@ impl VecTensor {
     /// Creates a one-dimensional tensor from a vector.
     #[must_use]
     pub fn from_vec(data: Vec<f32>) -> Self {
-        let shape = vec![data.len()];
+        let shape = Shape::from([data.len()]);
         Self { data, shape }
     }
 
@@ -310,8 +314,9 @@ impl VecTensor {
     /// # Errors
     ///
     /// Returns an error if `shape` does not describe exactly `data.len()` values.
-    pub fn new(data: Vec<f32>, shape: Vec<usize>) -> Result<Self> {
-        let expected = shape.iter().product();
+    pub fn new(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
+        let expected = shape.num_elements();
         if expected != data.len() {
             return Err(TensorError::InvalidShape {
                 shape,
@@ -334,15 +339,15 @@ impl R2lTensor for VecTensor {
         Ok(self.data.clone())
     }
 
-    fn to_shape(&self) -> Vec<usize> {
+    fn to_shape(&self) -> Shape {
         self.shape.clone()
     }
 
-    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Result<Self> {
+    fn from_slice_and_shape(data: &[f32], shape: impl Into<Shape>) -> Result<Self> {
         Self::new(data.to_vec(), shape)
     }
 
-    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Result<Self> {
+    fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
         Self::new(data, shape)
     }
 
@@ -460,8 +465,9 @@ impl R2lTensor for VecTensor {
         )
     }
 
-    fn zeros(shape: Vec<usize>) -> Result<Self> {
-        let len = shape.iter().product();
+    fn zeros(shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
+        let len = shape.num_elements();
         Self::new(vec![0.0; len], shape)
     }
 
@@ -492,8 +498,8 @@ fn validate_gather(shape: &[usize], indices_shape: &[usize], dim: usize) -> Resu
     {
         return Err(TensorError::ShapeMismatch {
             operation: "gather".into(),
-            left: shape.to_vec(),
-            right: indices_shape.to_vec(),
+            left: shape.into(),
+            right: indices_shape.into(),
         });
     }
     Ok(())

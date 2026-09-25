@@ -88,7 +88,7 @@ mod tests {
             Space::Box {
                 min: None,
                 max: None,
-                shape: vec![3, 8, 8],
+                shape: vec![3, 8, 8].into(),
             },
             Space::Discrete(2),
         ))
@@ -98,7 +98,10 @@ mod tests {
     #[test]
     fn policy_config_preserves_observation_shape() {
         let builder = image_policy_builder();
-        assert_eq!(builder.observation_space.observation_shape(), vec![3, 8, 8]);
+        assert_eq!(
+            builder.observation_space.observation_shape().dims(),
+            &[3, 8, 8]
+        );
         assert_eq!(builder.observation_space.size(), 192);
 
         let serialized = yaml_serde::to_string(&builder).unwrap();

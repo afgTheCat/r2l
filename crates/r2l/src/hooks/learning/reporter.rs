@@ -10,47 +10,12 @@ use r2l_core::{
 
 use super::stats::{A2CMinibatchStats, A2CRolloutStats, PPOMinibatchStats, PPORolloutStats};
 
-/// Shared reward tracking and delivery, retaining the existing statistics payloads.
-pub(crate) enum RolloutReporter<R> {
-    Disabled,
-    Enabled(EnabledRolloutReporter<R>),
-}
-
 pub(crate) struct EnabledRolloutReporter<R> {
     report: R,
     tx: Option<Sender<R>>,
     log_progress: bool,
     unfinished_episode_rewards: Vec<f32>,
     latest_average_reward: f32,
-}
-
-impl<R> RolloutReporter<R> {
-    /// Whether reporting statistics should be computed.
-    pub(super) fn is_enabled(&self) -> bool {
-        matches!(self, Self::Enabled(_))
-    }
-}
-
-impl<R: Default + Display> RolloutReporter<R> {
-    /// Creates a reporter when logging or channel delivery is enabled.
-    ///
-    /// # Arguments
-    ///
-    /// * `tx` - Optional channel receiving each rollout's statistics.
-    /// * `log_progress` - Whether to print rollout statistics.
-    /// * `n_envs` - Number of environment reward streams to track.
-    pub(crate) fn new(tx: Option<Sender<R>>, log_progress: bool, n_envs: usize) -> Self {
-        if tx.is_none() && !log_progress {
-            return Self::Disabled;
-        }
-        Self::Enabled(EnabledRolloutReporter {
-            report: R::default(),
-            tx,
-            log_progress,
-            unfinished_episode_rewards: vec![0.; n_envs],
-            latest_average_reward: 0.,
-        })
-    }
 }
 
 impl<R: Default + Display> EnabledRolloutReporter<R> {
@@ -84,6 +49,41 @@ impl<R: Default + Display> EnabledRolloutReporter<R> {
             })?;
         }
         Ok(())
+    }
+}
+
+/// Shared reward tracking and delivery, retaining the existing statistics payloads.
+pub(crate) enum RolloutReporter<R> {
+    Disabled,
+    Enabled(EnabledRolloutReporter<R>),
+}
+
+impl<R> RolloutReporter<R> {
+    /// Whether reporting statistics should be computed.
+    pub(super) fn is_enabled(&self) -> bool {
+        matches!(self, Self::Enabled(_))
+    }
+}
+
+impl<R: Default + Display> RolloutReporter<R> {
+    /// Creates a reporter when logging or channel delivery is enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Optional channel receiving each rollout's statistics.
+    /// * `log_progress` - Whether to print rollout statistics.
+    /// * `n_envs` - Number of environment reward streams to track.
+    pub(crate) fn new(tx: Option<Sender<R>>, log_progress: bool, n_envs: usize) -> Self {
+        if tx.is_none() && !log_progress {
+            return Self::Disabled;
+        }
+        Self::Enabled(EnabledRolloutReporter {
+            report: R::default(),
+            tx,
+            log_progress,
+            unfinished_episode_rewards: vec![0.; n_envs],
+            latest_average_reward: 0.,
+        })
     }
 }
 

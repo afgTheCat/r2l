@@ -18,11 +18,6 @@ pub struct Steps;
 /// Marker for a sampler configured to collect a fixed number of episodes.
 pub struct Episodes;
 
-/// Step-bound specialization of the shared sampler hook.
-pub type StepBoundHook<E> = SamplerHook<E, Steps>;
-/// Episode-bound specialization of the shared sampler hook.
-pub type EpisodeBoundHook<E> = SamplerHook<E, Episodes>;
-
 /// Controls collection and optional reward normalization using shared progress.
 pub struct SamplerHook<E: Env, Bound> {
     progress: SharedTrainingProgress,
@@ -30,6 +25,11 @@ pub struct SamplerHook<E: Env, Bound> {
     phase: Phase,
     _p: PhantomData<(E, Bound)>,
 }
+
+/// Step-bound specialization of the shared sampler hook.
+pub type StepBoundHook<E> = SamplerHook<E, Steps>;
+/// Episode-bound specialization of the shared sampler hook.
+pub type EpisodeBoundHook<E> = SamplerHook<E, Episodes>;
 
 impl<E: Env, Bound> SamplerHook<E, Bound> {
     /// Creates a sampler hook using the shared collection configuration.

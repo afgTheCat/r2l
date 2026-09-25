@@ -26,7 +26,7 @@ pub(crate) fn parse_gym_space(
                 VecTensor::new(high, shape.clone())
                     .map_err(|error| PyValueError::new_err(error.to_string()))?,
             ),
-            shape,
+            shape: shape.into(),
         })
     } else if is_space("MultiDiscrete")? {
         let nvec = space.getattr("nvec")?;
@@ -36,11 +36,13 @@ pub(crate) fn parse_gym_space(
         Ok(Space::MultiDiscrete {
             nvec: VecTensor::new(nvec, shape.clone())
                 .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            shape,
+            shape: shape.into(),
         })
     } else if is_space("MultiBinary")? {
-        let shape = space.getattr("shape")?.extract()?;
-        Ok(Space::MultiBinary { shape })
+        let shape: Vec<usize> = space.getattr("shape")?.extract()?;
+        Ok(Space::MultiBinary {
+            shape: shape.into(),
+        })
     } else if is_space("Tuple")? {
         let spaces = space.getattr("spaces")?;
         let mut parsed = Vec::new();
@@ -209,7 +211,7 @@ mod tests {
             for gym_space in gym_spaces {
                 let gym_shape: Vec<usize> = gym_space.getattr("shape")?.extract()?;
                 let space = parse_gym_space(&gym_space, &spaces)?;
-                assert_eq!(space.shape(), Some(gym_shape.as_slice()));
+                assert_eq!(space.shape(), Some(gym_shape.into()));
             }
             Ok(())
         })

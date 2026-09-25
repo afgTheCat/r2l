@@ -4,7 +4,7 @@ use candle_nn::ops::log_softmax;
 use candle_nn::{Module, ops::softmax};
 use itertools::Itertools;
 use r2l_core::{
-    error::{Error, InvalidParameterError, Result, TensorError},
+    error::{Error, Result, TensorError},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
@@ -41,13 +41,11 @@ impl CategoricalDistribution {
         activation: ActivationFunction,
     ) -> Result<Self> {
         if layers.last().copied() != Some(action_size) {
-            return Err(Error::InvalidParameter(Box::new(
-                InvalidParameterError::InvalidValue {
-                    name: "layers".into(),
-                    expected: format!("a final layer of size {action_size}"),
-                    value: format!("{layers:?}"),
-                },
-            )));
+            return Err(Error::invalid_parameter(
+                "layers",
+                format!("a final layer of size {action_size}"),
+                format!("{layers:?}"),
+            ));
         }
         let logits = build_sequential(observation_size, layers, vb, prefix, activation)?;
         Ok(Self { logits, device })

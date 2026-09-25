@@ -1,6 +1,7 @@
 use burn::{Tensor, module::Module, tensor::backend::Backend};
+use r2l_core::Shape;
 use r2l_core::{
-    error::{Error, InvalidParameterError, Result},
+    error::{Error, Result},
     networks::NetworkConfig,
 };
 
@@ -30,7 +31,7 @@ impl<B: Backend> NetworkKind<B> {
     /// Returns an error for invalid dimensions or incompatible spatial layers.
     pub fn build(
         config: &NetworkConfig,
-        observation_shape: &[usize],
+        observation_shape: &Shape,
         output_size: usize,
         device: &B::Device,
     ) -> Result<Self> {
@@ -58,22 +59,20 @@ impl<B: Backend> NetworkKind<B> {
         })
     }
 
-    pub(super) fn flat_size(shape: &[usize]) -> Result<usize> {
-        shape.iter().try_fold(1_usize, |size, &dim| {
-            size.checked_mul(dim)
-                .filter(|&size| size > 0)
-                .ok_or_else(|| {
-                    Self::invalid_config("shape must have a positive, representable size")
-                })
-        })
+    pub(super) fn flat_size(shape: &Shape) -> Result<usize> {
+        let size = shape.num_elements();
+        if size == 0 {
+            return Err(Self::invalid_config("shape must have a positive size"));
+        }
+        Ok(size)
     }
 
     pub(super) fn invalid_config(details: &str) -> Error {
-        Error::InvalidParameter(Box::new(InvalidParameterError::InvalidValue {
-            name: "network config".into(),
-            expected: "compatible, positive network dimensions".into(),
-            value: details.into(),
-        }))
+        Error::invalid_parameter(
+            "network config",
+            "compatible, positive network dimensions",
+            details,
+        )
     }
 }
 

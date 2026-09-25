@@ -63,14 +63,14 @@ struct TrainingCounters {
     steps_taken: usize,
 }
 
-pub(crate) type SharedTrainingProgress = Rc<RefCell<TrainingProgress>>;
-
 pub(crate) struct TrainingProgress {
     counters: TrainingCounters,
     training_limit: TrainingLimit,
     rollout_mode: RolloutMode,
     n_envs: usize,
 }
+
+pub(crate) type SharedTrainingProgress = Rc<RefCell<TrainingProgress>>;
 
 impl TrainingProgress {
     /// Creates progress shared by the training, agent, and sampler hooks.

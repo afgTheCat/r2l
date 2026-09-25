@@ -1,1 +1,1 @@
-mod categorical;
+pub mod categorical;

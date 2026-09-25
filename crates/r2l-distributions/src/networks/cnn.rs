@@ -5,6 +5,7 @@ use burn::nn::{
     pool::{AvgPool2d, MaxPool2d},
 };
 use burn::{module::Module, prelude::Backend, tensor::Tensor};
+use r2l_core::{Shape, error::Result};
 
 use crate::networks::Network;
 use crate::networks::mlp::Mlp;
@@ -32,8 +33,8 @@ impl<B: Backend> CNNLayer<B> {
 
 #[derive(Module, Debug)]
 pub struct Cnn<B: Backend> {
-    /// Shape of one observation: [channels, height, width].
-    shape: [usize; 3],
+    #[module(skip)]
+    shape: Shape,
     cnn_layers: Vec<CNNLayer<B>>,
     mlp: Mlp<B>,
 }
@@ -51,10 +52,20 @@ impl<B: Backend> Cnn<B> {
 impl<B: Backend> Network for Cnn<B> {
     type Tensor = Tensor<B, 2>;
 
-    fn forward(&self, t: Self::Tensor) -> Self::Tensor {
-        let [channels, height, width] = self.shape;
-        let batch_size = t.dims()[0];
+    fn input_shape(&self) -> Shape {
+        self.shape.clone()
+    }
+
+    fn output_shape(&self) -> Shape {
+        self.mlp.output_shape()
+    }
+
+    fn forward(&self, t: Self::Tensor) -> Result<Self::Tensor> {
+        let batch_size = self.batch_size(&t)?;
+        let [channels, height, width] = *self.shape.dims() else {
+            unreachable!("CNN input shape must have three dimensions");
+        };
         let t: Tensor<B, 4> = t.reshape([batch_size, channels, height, width]);
-        self.forward_inner(t)
+        Ok(self.forward_inner(t))
     }
 }

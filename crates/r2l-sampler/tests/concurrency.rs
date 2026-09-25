@@ -41,7 +41,7 @@ impl Env for CoordinatedEnv {
             Space::Box {
                 min: None,
                 max: None,
-                shape: vec![1],
+                shape: vec![1].into(),
             },
             Space::Discrete(1),
         )

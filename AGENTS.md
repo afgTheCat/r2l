@@ -27,6 +27,9 @@ This repository is a Rust workspace for reinforcement learning libraries and exa
 - Preserve public APIs unless the task explicitly calls for API changes.
 - Avoid incidental renames, formatting churn, or workspace-wide rewrites.
 - Keep crate responsibilities clear; do not move logic across crates without a strong reason.
+- Within a module, order components roughly by dependency: define supporting types before the
+  types that contain or wrap them, and place type aliases after the types they refer to. Keep
+  related implementations near their types where practical.
 - Add brief comments only where the intent would otherwise be hard to infer.
 
 ## Validation

@@ -1,5 +1,6 @@
 use burn::{Tensor, module::Module, prelude::Backend};
 use burn_store::{ModuleStore, SafetensorsStore};
+use r2l_core::Shape;
 use r2l_core::{
     env::Space,
     error::{Error, Result, TensorError},
@@ -91,12 +92,17 @@ impl<B: Backend> CompositeDistribution<B> {
             hidden_layers: policy_layers[1..policy_layers.len() - 1].to_vec(),
             activation,
         });
-        Self::build_with_network(action_spaces, &[policy_layers[0]], &config, log_std_init)
+        Self::build_with_network(
+            action_spaces,
+            &Shape::from([policy_layers[0]]),
+            &config,
+            log_std_init,
+        )
     }
 
     pub(crate) fn build_with_network<T: R2lTensor>(
         action_spaces: Vec<Space<T>>,
-        observation_shape: &[usize],
+        observation_shape: &Shape,
         config: &NetworkConfig,
         log_std_init: f32,
     ) -> Result<Self> {
@@ -126,7 +132,7 @@ impl<B: Backend> CompositeDistribution<B> {
 
     fn push_child<T: R2lTensor>(
         action_space: Space<T>,
-        observation_shape: &[usize],
+        observation_shape: &Shape,
         config: &NetworkConfig,
         log_std_init: f32,
         policies: &mut Vec<CompositePolicyChildren<B>>,

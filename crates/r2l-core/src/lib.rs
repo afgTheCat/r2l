@@ -52,10 +52,13 @@ pub mod on_policy;
 pub mod rng;
 /// Online mean and variance estimators.
 pub mod running_mean;
+/// Shared tensor, space, and network dimensions.
+pub mod shape;
 /// Backend-neutral tensor interfaces and adapters.
 pub mod tensor;
 pub mod utils;
 
+pub use shape::Shape;
 pub use utils::actor_wrapper::ActorWrapper;
 
 /// Control-flow result returned by training hooks.

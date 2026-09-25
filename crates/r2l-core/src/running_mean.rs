@@ -1,3 +1,4 @@
+use crate::Shape;
 use crate::{error::TensorError, tensor::R2lTensor, utils::slice_mean};
 
 type Result<T> = std::result::Result<T, TensorError>;
@@ -19,7 +20,8 @@ impl<T: R2lTensor> RunningMeanStd<T> {
     /// # Errors
     ///
     /// Returns an error if the tensor backend cannot create tensors with `shape`.
-    pub fn new(shape: Vec<usize>) -> Result<Self> {
+    pub fn new(shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
         let mean = T::zeros(shape.clone())?;
         let var = T::zeros(shape)?;
         Ok(Self {

@@ -88,6 +88,7 @@ pub use hooks::sampler::{EpisodeBoundHook, Episodes, SamplerHook, StepBoundHook,
 pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};
 pub use r2l_core::error::{self, Error};
 pub use r2l_core::{
+    Shape,
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     models::ActivationFunction,
     on_policy::algorithm::OnPolicyAlgorithm,

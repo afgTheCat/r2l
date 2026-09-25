@@ -7,9 +7,10 @@
 
 use burn::{Tensor, module::Module, prelude::Backend};
 use burn_store::{ModuleSnapshot, SafetensorsStore};
+use r2l_core::Shape;
 use r2l_core::{
     env::Space,
-    error::{Error, InvalidParameterError, Result},
+    error::{Error, Result},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
     networks::{MlpConfig, NetworkConfig},
     tensor::R2lTensor,
@@ -84,19 +85,22 @@ impl<B: Backend> BurnPolicyKind<B> {
         log_std_init: f32,
     ) -> Result<Self> {
         if policy_layers.len() < 2 {
-            return Err(Error::InvalidParameter(Box::new(
-                InvalidParameterError::InvalidValue {
-                    name: "policy_layers".into(),
-                    expected: "at least an input and output layer".into(),
-                    value: format!("{policy_layers:?}"),
-                },
-            )));
+            return Err(Error::invalid_parameter(
+                "policy_layers",
+                "at least an input and output layer",
+                format!("{policy_layers:?}"),
+            ));
         }
         let config = NetworkConfig::Mlp(MlpConfig {
             hidden_layers: policy_layers[1..policy_layers.len() - 1].to_vec(),
             activation,
         });
-        Self::build_with_network(action_space, &[policy_layers[0]], &config, log_std_init)
+        Self::build_with_network(
+            action_space,
+            &Shape::from([policy_layers[0]]),
+            &config,
+            log_std_init,
+        )
     }
 
     /// Builds an action distribution using the selected network architecture.
@@ -106,7 +110,7 @@ impl<B: Backend> BurnPolicyKind<B> {
     /// Returns an error if the action space or network dimensions are invalid.
     pub fn build_with_network<T: R2lTensor>(
         action_space: Space<T>,
-        observation_shape: &[usize],
+        observation_shape: &Shape,
         config: &NetworkConfig,
         log_std_init: f32,
     ) -> Result<Self> {

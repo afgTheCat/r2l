@@ -13,7 +13,7 @@ fn observation_shapes_follow_the_encoded_space() {
             Space::Box {
                 min: None,
                 max: None,
-                shape: vec![8],
+                shape: vec![8].into(),
             },
             vec![8],
             8,
@@ -22,7 +22,7 @@ fn observation_shapes_follow_the_encoded_space() {
             Space::Box {
                 min: None,
                 max: None,
-                shape: vec![3, 84, 84],
+                shape: vec![3, 84, 84].into(),
             },
             vec![3, 84, 84],
             3 * 84 * 84,
@@ -31,16 +31,22 @@ fn observation_shapes_follow_the_encoded_space() {
             Space::Box {
                 min: None,
                 max: None,
-                shape: vec![],
+                shape: vec![].into(),
             },
             vec![],
             1,
         ),
-        (Space::MultiBinary { shape: vec![2, 3] }, vec![2, 3], 6),
+        (
+            Space::MultiBinary {
+                shape: vec![2, 3].into(),
+            },
+            vec![2, 3],
+            6,
+        ),
         (
             Space::MultiDiscrete {
                 nvec: VecTensor::new(vec![2., 3., 4., 5.], vec![2, 2]).unwrap(),
-                shape: vec![2, 2],
+                shape: vec![2, 2].into(),
             },
             vec![2, 2],
             4,
@@ -48,14 +54,21 @@ fn observation_shapes_follow_the_encoded_space() {
         (
             Space::Tuple(vec![
                 Space::Discrete(3),
-                Space::MultiBinary { shape: vec![2, 2] },
+                Space::MultiBinary {
+                    shape: vec![2, 2].into(),
+                },
             ]),
             vec![7],
             7,
         ),
         (
             Space::Dict(BTreeMap::from([
-                ("position".into(), Space::MultiBinary { shape: vec![2, 3] }),
+                (
+                    "position".into(),
+                    Space::MultiBinary {
+                        shape: vec![2, 3].into(),
+                    },
+                ),
                 ("state".into(), Space::Tuple(vec![Space::Discrete(4)])),
             ])),
             vec![10],
@@ -64,9 +77,9 @@ fn observation_shapes_follow_the_encoded_space() {
     ];
 
     for (space, shape, size) in cases {
-        assert_eq!(space.observation_shape(), shape);
+        assert_eq!(space.observation_shape().dims(), shape.as_slice());
         let description = EnvDescription::new(space, Space::Discrete(2));
-        assert_eq!(description.observation_shape(), shape);
+        assert_eq!(description.observation_shape().dims(), shape.as_slice());
         assert_eq!(description.observation_size(), size);
         assert_eq!(shape.iter().product::<usize>(), size);
     }

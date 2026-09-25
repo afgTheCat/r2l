@@ -7,7 +7,7 @@ use burn::tensor::{Shape, TensorData};
 use burn::{prelude::Backend, tensor::Tensor};
 use burn_store::{ModuleStore, SafetensorsStore};
 use r2l_core::{
-    error::{Error, InvalidParameterError, Result},
+    error::{Error, Result},
     models::{ActivationFunction, Actor, Policy, ToSafetensors},
     rng::with_rng,
 };
@@ -39,13 +39,10 @@ impl<B: Backend> DiagGaussianDistribution<B, Mlp<B>> {
         log_std_init: f32,
     ) -> Result<Self> {
         let device = Default::default();
-        let action_size = mu_layers.last().copied().ok_or_else(|| {
-            Error::InvalidParameter(Box::new(InvalidParameterError::InvalidValue {
-                name: "mu_layers".into(),
-                expected: "at least one layer".into(),
-                value: "[]".into(),
-            }))
-        })?;
+        let action_size = mu_layers
+            .last()
+            .copied()
+            .ok_or_else(|| Error::invalid_parameter("mu_layers", "at least one layer", "[]"))?;
         let mu_net: Mlp<B> = Mlp::build(mu_layers, activation);
         let log_std = Param::from_data(
             TensorData::new(

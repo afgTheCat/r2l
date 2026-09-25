@@ -34,7 +34,7 @@ impl Env for TinyEnv {
                 min: None,
                 max: None,
                 // Keep flat storage while exercising multidimensional network metadata.
-                shape: vec![1, 2],
+                shape: vec![1, 2].into(),
             },
             Space::Discrete(2),
         )
@@ -69,7 +69,7 @@ fn assert_artifacts_exist(path: &Path, normalized: bool) {
             .unwrap();
     let space: Space<VecTensor> =
         yaml_serde::from_value(config["policy_builder"]["observation_space"].clone()).unwrap();
-    assert_eq!(space.observation_shape(), vec![1, 2]);
+    assert_eq!(space.observation_shape().dims(), &[1, 2]);
     assert!(path.join("actor.safetensors").is_file());
     assert_eq!(path.join("normalizer.yaml").is_file(), normalized);
 }

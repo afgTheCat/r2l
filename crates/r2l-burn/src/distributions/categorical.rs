@@ -6,7 +6,7 @@ use burn::tensor::activation::{log_softmax, softmax};
 use burn::{Tensor, module::Module, tensor::backend::Backend};
 use burn_store::{ModuleStore, SafetensorsStore};
 use itertools::Itertools;
-use r2l_core::error::{Error, InvalidParameterError, Result, TensorError};
+use r2l_core::error::{Error, Result, TensorError};
 use r2l_core::models::{ActivationFunction, Actor, Policy, ToSafetensors};
 use r2l_core::rng::with_rng;
 use rand_distr::Distribution;
@@ -25,13 +25,11 @@ pub struct CategoricalDistribution<B: Backend, N: Module<B>> {
 impl<B: Backend> CategoricalDistribution<B, Mlp<B>> {
     pub fn build_mlp(logits_layers: &[usize], activation: ActivationFunction) -> Result<Self> {
         if logits_layers.is_empty() {
-            return Err(Error::InvalidParameter(Box::new(
-                InvalidParameterError::InvalidValue {
-                    name: "logits_layers".into(),
-                    expected: "at least one layer".into(),
-                    value: "[]".into(),
-                },
-            )));
+            return Err(Error::invalid_parameter(
+                "logits_layers",
+                "at least one layer",
+                "[]",
+            ));
         }
         let logits: Mlp<B> = Mlp::build(logits_layers, activation);
         Ok(Self {

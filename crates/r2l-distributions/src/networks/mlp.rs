@@ -1,7 +1,7 @@
 use burn::nn::activation::{Activation, ActivationConfig};
 use burn::nn::{Dropout, EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig};
 use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
-use r2l_core::models::ActivationFunction;
+use r2l_core::{Shape, error::Result, models::ActivationFunction};
 
 use crate::networks::Network;
 
@@ -51,6 +51,8 @@ impl<B: Backend> LinearLayer<B> {
 #[derive(Debug, Module)]
 pub struct Mlp<B: Backend> {
     layers: Vec<LinearLayer<B>>,
+    input_size: usize,
+    output_size: usize,
 }
 
 impl<B: Backend> Mlp<B> {
@@ -61,7 +63,22 @@ impl<B: Backend> Mlp<B> {
         t
     }
 
+    /// Builds a dense network from input, hidden, and output widths.
+    ///
+    /// # Arguments
+    ///
+    /// * `layer_sizes` - Positive layer widths, including input and output.
+    /// * `activation` - Activation after hidden layers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if fewer than two widths are supplied or any width is zero.
+    #[must_use]
     pub fn build(layer_sizes: &[usize], activation: ActivationFunction) -> Self {
+        assert!(
+            layer_sizes.len() >= 2 && !layer_sizes.contains(&0),
+            "MLP requires positive input and output widths"
+        );
         let mut last_dim = layer_sizes[0];
         let mut layers = vec![];
         let num_layers = layer_sizes.len();
@@ -74,14 +91,27 @@ impl<B: Backend> Mlp<B> {
             }
             last_dim = *layer_size;
         }
-        Self { layers }
+        Self {
+            layers,
+            input_size: layer_sizes[0],
+            output_size: last_dim,
+        }
     }
 }
 
 impl<B: Backend> Network for Mlp<B> {
     type Tensor = Tensor<B, 2>;
 
-    fn forward(&self, t: Self::Tensor) -> Self::Tensor {
-        self.forward(t)
+    fn input_shape(&self) -> Shape {
+        [self.input_size].into()
+    }
+
+    fn output_shape(&self) -> Shape {
+        [self.output_size].into()
+    }
+
+    fn forward(&self, t: Self::Tensor) -> Result<Self::Tensor> {
+        self.batch_size(&t)?;
+        Ok(self.forward(t))
     }
 }

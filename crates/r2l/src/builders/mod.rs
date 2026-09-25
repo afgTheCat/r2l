@@ -3,7 +3,7 @@ pub mod networks;
 pub(crate) mod normalizer;
 pub(crate) mod policy;
 
-use std::{cell::RefCell, marker::PhantomData, path::PathBuf, rc::Rc, sync::mpsc::Sender};
+use std::{marker::PhantomData, path::PathBuf, sync::mpsc::Sender};
 
 use burn::{
     backend::ndarray::NdArrayDevice, grad_clipping::GradientClippingConfig, optim::AdamWConfig,
@@ -247,16 +247,16 @@ impl OnPolicyOptimizerLayout {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub(crate) struct BurnBackendConfig;
 
-#[derive(Debug, Clone)]
-pub(crate) struct CandleBackend {
-    pub(crate) device: Device,
-}
-
 #[derive(Serialize, Deserialize)]
 enum CandleDeviceConfig {
     Cpu,
     Cuda { ordinal: usize },
     Metal { ordinal: usize },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CandleBackend {
+    pub(crate) device: Device,
 }
 
 impl Serialize for CandleBackend {

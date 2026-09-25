@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use itertools::izip;
 use serde::{Deserialize, Serialize};
 
+use crate::Shape;
 use crate::{error::TensorError, running_mean::RunningMeanStd, tensor::R2lTensor};
 
 type Result<T> = std::result::Result<T, TensorError>;
@@ -65,7 +66,7 @@ pub struct ClippedNormalizer<T: R2lTensor> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ClippedNormalizerSnapshot {
     normalizer_mode: NormalizerMode,
-    obs_shape: Vec<usize>,
+    obs_shape: Shape,
     mean: Vec<f32>,
     var: Vec<f32>,
     count: f32,
@@ -95,7 +96,11 @@ impl<T: R2lTensor> ClippedNormalizer<T> {
     /// # Errors
     ///
     /// Returns an error if the tensor backend cannot create statistics for `shape`.
-    pub fn build(normalizer_mode: NormalizerMode, clip: f32, shape: Vec<usize>) -> Result<Self> {
+    pub fn build(
+        normalizer_mode: NormalizerMode,
+        clip: f32,
+        shape: impl Into<Shape>,
+    ) -> Result<Self> {
         let rm = RunningMeanStd::new(shape)?;
         let inner = ClippedRunningMean { rm, clip };
         Ok(Self {

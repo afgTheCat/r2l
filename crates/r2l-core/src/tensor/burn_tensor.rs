@@ -6,6 +6,7 @@ use burn::{
     },
 };
 
+use crate::Shape;
 use crate::{error::TensorError, tensor::R2lTensor};
 
 type Result<T> = std::result::Result<T, TensorError>;
@@ -17,19 +18,33 @@ impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
             .map_err(|error| TensorError::operation("convert to vector", error))
     }
 
-    fn to_shape(&self) -> Vec<usize> {
-        self.shape().into()
+    fn to_shape(&self) -> Shape {
+        self.shape().to_vec().into()
     }
 
-    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Result<Self> {
+    fn from_slice_and_shape(data: &[f32], shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
         validate_shape(data.len(), &shape)?;
-        let data = BurnTensorData::new(data.to_vec(), shape);
+        if shape.rank() != D {
+            return Err(TensorError::InvalidRank {
+                expected: D,
+                actual: shape.rank(),
+            });
+        }
+        let data = BurnTensorData::new(data.to_vec(), shape.dims());
         Ok(Tensor::from_data(data, &Default::default()))
     }
 
-    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Result<Self> {
+    fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
         validate_shape(data.len(), &shape)?;
-        let data = BurnTensorData::new(data, shape);
+        if shape.rank() != D {
+            return Err(TensorError::InvalidRank {
+                expected: D,
+                actual: shape.rank(),
+            });
+        }
+        let data = BurnTensorData::new(data, shape.dims());
         Ok(Tensor::from_data(data, &Default::default()))
     }
 
@@ -84,11 +99,6 @@ impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
         Ok(self.clone().powf_scalar(2.0))
     }
 
-    fn zeros(shape: Vec<usize>) -> Result<Self> {
-        let data = BurnTensorData::new(vec![0.0; shape.iter().product()], shape);
-        Ok(Tensor::from_data(data, &Default::default()))
-    }
-
     fn mul_scalar(&self, scalar: f32) -> Result<Self> {
         Ok(self.clone().mul_scalar(scalar))
     }
@@ -102,11 +112,11 @@ impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
     }
 }
 
-fn validate_shape(data_len: usize, shape: &[usize]) -> Result<()> {
-    let expected = shape.iter().product();
+fn validate_shape(data_len: usize, shape: &Shape) -> Result<()> {
+    let expected = shape.num_elements();
     if expected != data_len {
         return Err(TensorError::InvalidShape {
-            shape: shape.to_vec(),
+            shape: shape.clone(),
             expected,
             actual: data_len,
         });
@@ -124,8 +134,8 @@ fn ensure_same_shape<const D: usize, B: Backend>(
     if left != right {
         return Err(TensorError::ShapeMismatch {
             operation: operation.into(),
-            left,
-            right,
+            left: left.into(),
+            right: right.into(),
         });
     }
     Ok(())

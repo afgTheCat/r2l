@@ -2,6 +2,7 @@ use candle_core::{Device, Tensor};
 use candle_nn::ops::{log_softmax, softmax};
 use itertools::izip;
 
+use crate::Shape;
 use crate::{
     error::{Error, TensorError},
     tensor::{R2lTensor, VecTensor},
@@ -22,19 +23,21 @@ impl R2lTensor for Tensor {
             .map_err(|error| TensorError::operation("convert to vector", error))
     }
 
-    fn to_shape(&self) -> Vec<usize> {
-        self.shape().dims().to_vec()
+    fn to_shape(&self) -> Shape {
+        self.shape().dims().into()
     }
 
-    fn from_slice_and_shape(data: &[f32], shape: Vec<usize>) -> Result<Self> {
+    fn from_slice_and_shape(data: &[f32], shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
         validate_shape(data.len(), &shape)?;
-        Tensor::from_slice(data, shape, &Device::Cpu)
+        Tensor::from_slice(data, shape.dims(), &Device::Cpu)
             .map_err(|error| TensorError::operation("construct from slice", error))
     }
 
-    fn from_vec_and_shape(data: Vec<f32>, shape: Vec<usize>) -> Result<Self> {
+    fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
         validate_shape(data.len(), &shape)?;
-        Tensor::from_vec(data, shape, &Device::Cpu)
+        Tensor::from_vec(data, shape.dims(), &Device::Cpu)
             .map_err(|error| TensorError::operation("construct from vector", error))
     }
 
@@ -99,8 +102,9 @@ impl R2lTensor for Tensor {
             .map_err(|error| TensorError::operation("square", error))
     }
 
-    fn zeros(shape: Vec<usize>) -> Result<Self> {
-        Tensor::zeros(shape, candle_core::DType::F32, &Device::Cpu)
+    fn zeros(shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
+        Tensor::zeros(shape.dims(), candle_core::DType::F32, &Device::Cpu)
             .map_err(|error| TensorError::operation("create zeros", error))
     }
 
@@ -121,11 +125,11 @@ impl R2lTensor for Tensor {
     }
 }
 
-fn validate_shape(data_len: usize, shape: &[usize]) -> Result<()> {
-    let expected = shape.iter().product();
+fn validate_shape(data_len: usize, shape: &Shape) -> Result<()> {
+    let expected = shape.num_elements();
     if expected != data_len {
         return Err(TensorError::InvalidShape {
-            shape: shape.to_vec(),
+            shape: shape.clone(),
             expected,
             actual: data_len,
         });
@@ -139,8 +143,8 @@ fn ensure_same_shape(left: &Tensor, right: &Tensor, operation: &str) -> Result<(
     if left != right {
         return Err(TensorError::ShapeMismatch {
             operation: operation.into(),
-            left,
-            right,
+            left: left.into(),
+            right: right.into(),
         });
     }
     Ok(())

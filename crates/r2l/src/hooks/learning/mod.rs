@@ -72,16 +72,15 @@ impl ClipRangeSchedule {
     }
 }
 
-/// Shared learning configuration with algorithm-specific state in `A`.
-pub struct LearningHook<M, A> {
-    pub(crate) normalize_advantage: bool,
-    pub(crate) entropy_coeff: f32,
-    pub(crate) vf_coeff: Option<f32>,
-    pub(crate) gradient_clipping: Option<f32>,
-    pub(crate) progress: SharedTrainingProgress,
-    pub(crate) learning_rate_schedule: LearningRateSchedule,
-    pub(crate) algorithm: A,
-    pub(crate) _lm: PhantomData<M>,
+pub(crate) struct TargetKl {
+    pub target: f32,
+    pub target_exceeded: bool,
+}
+
+impl TargetKl {
+    pub(crate) fn target_kl_exceeded(&mut self) -> bool {
+        std::mem::take(&mut self.target_exceeded)
+    }
 }
 
 /// Reporting state specific to A2C learning.
@@ -96,22 +95,6 @@ pub struct PPOSettings {
     pub(crate) clip_range_schedule: ClipRangeSchedule,
     pub(crate) target_kl: Option<TargetKl>,
     pub(crate) reporter: RolloutReporter<PPORolloutStats>,
-}
-
-/// Shared hook specialized for PPO learning.
-pub type PPOLearningHook<M = ()> = LearningHook<M, PPOSettings>;
-/// Shared hook specialized for A2C learning.
-pub type A2CLearningHook<M = ()> = LearningHook<M, A2CSettings>;
-
-pub(crate) struct TargetKl {
-    pub target: f32,
-    pub target_exceeded: bool,
-}
-
-impl TargetKl {
-    pub(crate) fn target_kl_exceeded(&mut self) -> bool {
-        std::mem::take(&mut self.target_exceeded)
-    }
 }
 
 impl PPOSettings {
@@ -143,6 +126,23 @@ impl PPOSettings {
         }
     }
 }
+
+/// Shared learning configuration with algorithm-specific state in `A`.
+pub struct LearningHook<M, A> {
+    pub(crate) normalize_advantage: bool,
+    pub(crate) entropy_coeff: f32,
+    pub(crate) vf_coeff: Option<f32>,
+    pub(crate) gradient_clipping: Option<f32>,
+    pub(crate) progress: SharedTrainingProgress,
+    pub(crate) learning_rate_schedule: LearningRateSchedule,
+    pub(crate) algorithm: A,
+    pub(crate) _lm: PhantomData<M>,
+}
+
+/// Shared hook specialized for PPO learning.
+pub type PPOLearningHook<M = ()> = LearningHook<M, PPOSettings>;
+/// Shared hook specialized for A2C learning.
+pub type A2CLearningHook<M = ()> = LearningHook<M, A2CSettings>;
 
 impl<M: OnPolicyLearner, A> LearningHook<M, A> {
     fn prepare_learning(&self, module: &mut M, advantages: &mut Advantages) -> f64 {

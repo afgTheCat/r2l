@@ -1,10 +1,12 @@
+use crate::Shape;
+
 pub mod normalizer;
 
 use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, InvalidParameterError};
+use crate::error::Error;
 use crate::tensor::R2lTensor;
 
 /// Description of an observation or action space.
@@ -19,19 +21,19 @@ pub enum Space<T: R2lTensor> {
         /// Optional maximum values.
         max: Option<T>,
         /// Tensor shape of the space.
-        shape: Vec<usize>,
+        shape: Shape,
     },
     /// Multiple discrete spaces packed into one tensor.
     MultiDiscrete {
         /// Number of categories for each discrete dimension.
         nvec: T,
         /// Tensor shape of the discrete dimensions.
-        shape: Vec<usize>,
+        shape: Shape,
     },
     /// Binary tensor space.
     MultiBinary {
         /// Tensor shape of the binary dimensions.
-        shape: Vec<usize>,
+        shape: Shape,
     },
     /// Ordered collection of spaces.
     Tuple(Vec<Space<T>>),
@@ -73,12 +75,12 @@ impl<T: R2lTensor> Space<T> {
     }
 
     /// Returns the Gymnasium shape when the space has one.
-    pub fn shape(&self) -> Option<&[usize]> {
+    pub fn shape(&self) -> Option<Shape> {
         match self {
-            Self::Discrete(_) => Some(&[]),
+            Self::Discrete(_) => Some(Shape::default()),
             Self::Box { shape, .. }
             | Self::MultiDiscrete { shape, .. }
-            | Self::MultiBinary { shape } => Some(shape),
+            | Self::MultiBinary { shape } => Some(shape.clone()),
             Self::Tuple(_) | Self::Dict(_) => None,
         }
     }
@@ -91,11 +93,9 @@ impl<T: R2lTensor> Space<T> {
     /// This describes the logical shape even when observations are stored flat;
     /// it does not imply an image channel layout or transpose the observation.
     #[must_use]
-    pub fn observation_shape(&self) -> Vec<usize> {
+    pub fn observation_shape(&self) -> Shape {
         match self {
-            Self::Discrete(_) | Self::Tuple(_) | Self::Dict(_) => {
-                vec![self.size()]
-            }
+            Self::Discrete(_) | Self::Tuple(_) | Self::Dict(_) => Shape::from([self.size()]),
             Self::Box { shape, .. }
             | Self::MultiDiscrete { shape, .. }
             | Self::MultiBinary { shape } => shape.clone(),
@@ -112,7 +112,7 @@ impl<T: R2lTensor> Space<T> {
             Self::Discrete(size) => *size,
             Self::Box { shape, .. }
             | Self::MultiDiscrete { shape, .. }
-            | Self::MultiBinary { shape, .. } => shape.iter().product(),
+            | Self::MultiBinary { shape, .. } => shape.num_elements(),
             Self::Tuple(spaces) => spaces.iter().map(Self::size).sum(),
             Self::Dict(spaces) => spaces.values().map(Self::size).sum(),
         }
@@ -128,7 +128,7 @@ impl<T: R2lTensor> Space<T> {
             Self::Discrete(_) => 1,
             Self::Box { shape, .. }
             | Self::MultiDiscrete { shape, .. }
-            | Self::MultiBinary { shape } => shape.iter().product(),
+            | Self::MultiBinary { shape } => shape.num_elements(),
             Self::Tuple(spaces) => spaces.iter().map(Self::action_size).sum(),
             Self::Dict(spaces) => spaces.values().map(Self::action_size).sum(),
         }
@@ -162,7 +162,7 @@ impl<T: R2lTensor> EnvDescription<T> {
     ///
     /// See [`Space::observation_shape`] for the encoding of each space variant.
     #[must_use]
-    pub fn observation_shape(&self) -> Vec<usize> {
+    pub fn observation_shape(&self) -> Shape {
         self.observation_space.observation_shape()
     }
 
@@ -298,22 +298,18 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     fn from_kind(kind: EnvBuilderKind<EB>) -> Result<Self, Error> {
         match &kind {
             EnvBuilderKind::Homogeneous { n_envs: 0, .. } => {
-                return Err(Error::InvalidParameter(Box::new(
-                    InvalidParameterError::InvalidValue {
-                        name: "n_envs".into(),
-                        expected: "a value greater than zero".into(),
-                        value: "0".into(),
-                    },
-                )));
+                return Err(Error::invalid_parameter(
+                    "n_envs",
+                    "a value greater than zero",
+                    "0",
+                ));
             }
             EnvBuilderKind::Heterogeneous { builders } if builders.is_empty() => {
-                return Err(Error::InvalidParameter(Box::new(
-                    InvalidParameterError::InvalidValue {
-                        name: "builders".into(),
-                        expected: "at least one environment builder".into(),
-                        value: "empty".into(),
-                    },
-                )));
+                return Err(Error::invalid_parameter(
+                    "builders",
+                    "at least one environment builder",
+                    "empty",
+                ));
             }
             _ => {}
         }
@@ -351,13 +347,11 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     pub fn build_idx(&self, idx: usize) -> Result<EB::Env, Error> {
         let n_envs = self.num_envs();
         if idx >= self.num_envs() {
-            return Err(Error::InvalidParameter(Box::new(
-                InvalidParameterError::InvalidValue {
-                    name: "environment index".into(),
-                    expected: format!("an index below {n_envs}"),
-                    value: idx.to_string(),
-                },
-            )));
+            return Err(Error::invalid_parameter(
+                "environment index",
+                format!("an index below {n_envs}"),
+                idx.to_string(),
+            ));
         }
         match &self.0 {
             EnvBuilderKind::Homogeneous { builder, .. } => builder.build_env(),

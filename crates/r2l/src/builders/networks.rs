@@ -3,6 +3,7 @@
 use burn::prelude::Backend;
 use candle_nn::{Sequential, VarBuilder};
 pub use r2l_burn::networks::{Network as BurnNetwork, NetworkKind as BurnNetworkKind};
+use r2l_core::Shape;
 use r2l_core::error::{Error, Result};
 pub use r2l_core::networks::{CnnConfig, CnnLayerConfig, MlpConfig, NetworkConfig};
 
@@ -37,7 +38,7 @@ impl NetworkBuilder {
     /// Returns an error if layer dimensions or the observation shape are invalid.
     pub fn build_burn<B: Backend>(
         &self,
-        observation_shape: &[usize],
+        observation_shape: &Shape,
         output_size: usize,
         device: &B::Device,
     ) -> Result<BurnNetworkKind<B>> {
@@ -61,7 +62,7 @@ impl NetworkBuilder {
     /// CNN construction is a placeholder and panics.
     pub fn build_candle(
         &self,
-        _observation_shape: &[usize],
+        _observation_shape: &Shape,
         _output_size: usize,
         _var_builder: &VarBuilder<'_>,
     ) -> Result<Sequential> {
