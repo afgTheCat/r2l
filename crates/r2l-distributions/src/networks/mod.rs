@@ -1,24 +1,25 @@
 use std::fmt::Debug;
 
-use r2l_core::{
-    Shape,
-    error::{Error, Result},
-    tensor::R2lTensor,
-};
+use r2l_core::{Shape, error::Result, tensor::R2lTensor};
 
 pub mod cnn;
 pub mod mlp;
 
-/// A network with input and output shapes defined per observation, without a batch axis.
+/// A network mapping flat observations to flat outputs.
 ///
-/// Inputs use flattened rows `[batch, input_shape.num_elements()]`, including CNN inputs.
-/// A successful forward pass must preserve the nonzero batch size and return
-/// `[batch, ..output_shape]`. Shapes must remain stable for the lifetime of the network.
+/// Input and output shapes describe one batch element: `[input_size]` and
+/// `[output_size]`, both with positive widths. Forwarding accepts
+/// `[batch, input_size]` and returns `[batch, output_size]`, preserving the
+/// nonzero batch size. CNNs reshape flat inputs internally using their spatial shape.
+/// Declared shapes must remain stable for the lifetime of the network.
 pub trait Network: Send + Debug + Clone + 'static {
     type Tensor: R2lTensor;
 
     fn input_shape(&self) -> Shape;
     fn output_shape(&self) -> Shape;
+    fn io_shape(&self) -> (Shape, Shape) {
+        (self.input_shape(), self.output_shape())
+    }
 
     /// Evaluates a nonempty batch, preserving gradients through network parameters.
     ///
@@ -26,26 +27,4 @@ pub trait Network: Send + Debug + Clone + 'static {
     ///
     /// Returns an error for incompatible input dimensions or failed evaluation.
     fn forward(&self, t: Self::Tensor) -> Result<Self::Tensor>;
-
-    /// Validates flattened input rows and returns the batch size.
-    ///
-    /// # Arguments
-    ///
-    /// * `input` - Tensor with a batch axis followed by flattened observation features.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error for empty batches or incompatible observation dimensions.
-    fn batch_size(&self, input: &Self::Tensor) -> Result<usize> {
-        let shape = input.to_shape();
-        let size = self.input_shape().num_elements();
-        match shape.dims() {
-            &[batch, features] if batch > 0 && features > 0 && features == size => Ok(batch),
-            _ => Err(Error::invalid_parameter(
-                "network input shape",
-                format!("[nonzero batch, flattened {:?}]", self.input_shape()),
-                format!("{shape:?}"),
-            )),
-        }
-    }
 }

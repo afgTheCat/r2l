@@ -28,28 +28,28 @@ impl<N: Network> Categorical<N> {
     ///
     /// # Errors
     ///
-    /// Returns an error for empty input shapes, or outputs other than
-    /// a one-dimensional vector with at least one category.
+    /// Returns an error for outputs other than a one-dimensional vector with
+    /// at least one category.
     pub fn new(logits: N) -> Result<Self> {
-        let input = logits.input_shape();
         let output = logits.output_shape();
-        if input.num_elements() == 0 || !matches!(output.dims(), &[categories] if categories > 0) {
-            return Err(Error::invalid_parameter(
-                "categorical network shape",
-                "nonempty input and output shape [positive category count]",
-                format!("input {input:?}, output {output:?}"),
-            ));
+        if output.rank() == 1 && output.num_elements() > 0 {
+            Ok(Self { logits })
+        } else {
+            Err(Error::invalid_parameter(
+                "categorical output shape",
+                "[positive category count]",
+                format!("{output:?}"),
+            ))
         }
-        Ok(Self { logits })
     }
 
     fn single_logits(&self, observation: N::Tensor) -> Result<N::Tensor> {
-        let batch_size = self.logits.batch_size(&observation)?;
-        if batch_size != 1 {
+        let shape = observation.to_shape();
+        if shape.dims()[0] != 1 {
             return Err(Error::invalid_parameter(
-                "categorical action batch",
-                "one observation",
-                batch_size.to_string(),
+                "categorical action input shape",
+                "[1, features]",
+                format!("{shape:?}"),
             ));
         }
         self.logits.forward(observation)

@@ -1,7 +1,11 @@
 use burn::nn::activation::{Activation, ActivationConfig};
 use burn::nn::{Dropout, EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig};
 use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
-use r2l_core::{Shape, error::Result, models::ActivationFunction};
+use r2l_core::{
+    Shape,
+    error::{Error, Result},
+    models::ActivationFunction,
+};
 
 use crate::networks::Network;
 
@@ -111,7 +115,14 @@ impl<B: Backend> Network for Mlp<B> {
     }
 
     fn forward(&self, t: Self::Tensor) -> Result<Self::Tensor> {
-        self.batch_size(&t)?;
+        let [batch_size, features] = t.dims();
+        if batch_size == 0 || features != self.input_size {
+            return Err(Error::invalid_parameter(
+                "network input shape",
+                format!("[nonzero batch, {}]", self.input_size),
+                format!("{:?}", t.dims()),
+            ));
+        }
         Ok(self.forward(t))
     }
 }

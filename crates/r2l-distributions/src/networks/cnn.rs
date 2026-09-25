@@ -5,7 +5,10 @@ use burn::nn::{
     pool::{AvgPool2d, MaxPool2d},
 };
 use burn::{module::Module, prelude::Backend, tensor::Tensor};
-use r2l_core::{Shape, error::Result};
+use r2l_core::{
+    Shape,
+    error::{Error, Result},
+};
 
 use crate::networks::Network;
 use crate::networks::mlp::Mlp;
@@ -53,7 +56,7 @@ impl<B: Backend> Network for Cnn<B> {
     type Tensor = Tensor<B, 2>;
 
     fn input_shape(&self) -> Shape {
-        self.shape.clone()
+        [self.shape.num_elements()].into()
     }
 
     fn output_shape(&self) -> Shape {
@@ -61,7 +64,15 @@ impl<B: Backend> Network for Cnn<B> {
     }
 
     fn forward(&self, t: Self::Tensor) -> Result<Self::Tensor> {
-        let batch_size = self.batch_size(&t)?;
+        let [batch_size, features] = t.dims();
+        let input_size = self.shape.num_elements();
+        if batch_size == 0 || features == 0 || features != input_size {
+            return Err(Error::invalid_parameter(
+                "network input shape",
+                format!("[nonzero batch, {input_size}]"),
+                format!("{:?}", t.dims()),
+            ));
+        }
         let [channels, height, width] = *self.shape.dims() else {
             unreachable!("CNN input shape must have three dimensions");
         };
