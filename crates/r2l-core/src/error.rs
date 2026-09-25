@@ -149,6 +149,14 @@ pub struct EnvironmentError {
 /// Reason a tensor operation failed.
 #[derive(Debug, thiserror::Error)]
 pub enum TensorError {
+    /// An operation received an invalid axis, range, or dimension.
+    #[error("invalid argument for tensor operation `{operation}`: {details}")]
+    InvalidArgument {
+        /// Operation being attempted.
+        operation: String,
+        /// Reason the argument is invalid.
+        details: String,
+    },
     /// The backend requires a different tensor rank.
     #[error("expected tensor rank {expected}, got {actual}")]
     InvalidRank {
@@ -195,6 +203,14 @@ pub enum TensorError {
 }
 
 impl TensorError {
+    /// Describes an invalid tensor-operation argument.
+    pub fn invalid_argument(operation: impl Into<String>, details: impl Into<String>) -> Self {
+        Self::InvalidArgument {
+            operation: operation.into(),
+            details: details.into(),
+        }
+    }
+
     /// Wraps a backend failure with the operation being attempted.
     pub fn operation(
         operation: impl Into<String>,

@@ -62,6 +62,12 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
         Self::from_slice_and_shape(&data, shape)
     }
 
+    /// Creates values on the same device as `like`, without connecting them to its gradient graph.
+    ///
+    /// # Errors
+    /// Returns an error if values and dimensions are incompatible or allocation fails.
+    fn from_vec_like(data: Vec<f32>, shape: impl Into<Shape>, like: &Self) -> Result<Self>;
+
     /// Converts a tensor from another backend.
     ///
     /// # Errors
@@ -191,6 +197,42 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns an error if the tensor backend cannot perform the operation.
     fn mul_scalar(&self, scalar: f32) -> Result<Self>;
 
+    /// Adds `scalar` to every element.
+    ///
+    /// # Errors
+    /// Returns an error if the backend cannot perform the operation.
+    fn add_scalar(&self, scalar: f32) -> Result<Self>;
+
+    /// Sums an axis, retaining it with length one.
+    ///
+    /// # Errors
+    /// Returns an error for an invalid axis or failed reduction.
+    fn sum_dim(&self, dim: usize) -> Result<Self>;
+
+    /// Selects a contiguous range along an axis, preserving rank.
+    ///
+    /// # Errors
+    /// Returns an error if the axis or range is invalid.
+    fn narrow(&self, dim: usize, start: usize, length: usize) -> Result<Self>;
+
+    /// Concatenates a nonempty sequence of tensors along an axis.
+    ///
+    /// # Errors
+    /// Returns an error if ranks or non-concatenated dimensions differ.
+    fn cat(tensors: &[Self], dim: usize) -> Result<Self>;
+
+    /// Expands singleton axes to a target shape of the same rank.
+    ///
+    /// # Errors
+    /// Returns an error if dimensions cannot be broadcast.
+    fn broadcast_as(&self, shape: impl Into<Shape>) -> Result<Self>;
+
+    /// Computes elementwise log-sigmoid without overflowing for large finite logits.
+    ///
+    /// # Errors
+    /// Returns an error if the backend cannot perform the operation.
+    fn log_sigmoid(&self) -> Result<Self>;
+
     /// Adds a non-empty slice of equally shaped tensors.
     ///
     /// # Errors
@@ -202,9 +244,10 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
                 operation: "add multiple".into(),
             });
         }
-        let shape = tensors[0].to_shape();
-        let init = Self::zeros(shape)?;
-        tensors.iter().try_fold(init, |acc, elem| acc.add(elem))
+        tensors
+            .iter()
+            .skip(1)
+            .try_fold(tensors[0].clone(), |acc, elem| acc.add(elem))
     }
 
     /// Calculates the mean of the tensors.
@@ -349,6 +392,101 @@ impl R2lTensor for VecTensor {
 
     fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
         Self::new(data, shape)
+    }
+
+    fn from_vec_like(data: Vec<f32>, shape: impl Into<Shape>, _like: &Self) -> Result<Self> {
+        Self::new(data, shape)
+    }
+
+    fn add_scalar(&self, scalar: f32) -> Result<Self> {
+        Self::new(
+            self.data.iter().map(|value| value + scalar).collect(),
+            self.shape.clone(),
+        )
+    }
+
+    fn sum_dim(&self, dim: usize) -> Result<Self> {
+        validate_axis(&self.shape, dim)?;
+        let mut shape = self.shape.to_vec();
+        shape[dim] = 1;
+        let shape = Shape::from(shape);
+        let stride: usize = self.shape[dim + 1..].iter().product();
+        let outer: usize = self.shape[..dim].iter().product();
+        let width = self.shape[dim];
+        let mut data = Vec::with_capacity(shape.num_elements());
+        for group in 0..outer {
+            for offset in 0..stride {
+                data.push(
+                    (0..width)
+                        .map(|k| self.data[(group * width + k) * stride + offset])
+                        .sum(),
+                );
+            }
+        }
+        Self::new(data, shape)
+    }
+
+    fn narrow(&self, dim: usize, start: usize, length: usize) -> Result<Self> {
+        let shape = narrow_shape(&self.shape, dim, start, length)?;
+        let stride: usize = self.shape[dim + 1..].iter().product();
+        let outer: usize = self.shape[..dim].iter().product();
+        let mut data = Vec::with_capacity(shape.num_elements());
+        for group in 0..outer {
+            let begin = (group * self.shape[dim] + start) * stride;
+            data.extend_from_slice(&self.data[begin..begin + length * stride]);
+        }
+        Self::new(data, shape)
+    }
+
+    fn cat(tensors: &[Self], dim: usize) -> Result<Self> {
+        let shapes: Vec<_> = tensors.iter().map(Self::to_shape).collect();
+        let shape = concatenated_shape(&shapes, dim)?;
+        let outer: usize = shape[..dim].iter().product();
+        let stride: usize = shape[dim + 1..].iter().product();
+        let mut data = Vec::with_capacity(shape.num_elements());
+        for group in 0..outer {
+            for tensor in tensors {
+                let width = tensor.shape[dim] * stride;
+                data.extend_from_slice(&tensor.data[group * width..(group + 1) * width]);
+            }
+        }
+        Self::new(data, shape)
+    }
+
+    fn broadcast_as(&self, shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
+        validate_broadcast(&self.shape, &shape)?;
+        let data = (0..shape.num_elements())
+            .map(|mut index| {
+                let mut source = 0;
+                let mut stride = 1;
+                for (&src, &dst) in self.shape.iter().zip(shape.iter()).rev() {
+                    let coordinate = index % dst;
+                    index /= dst;
+                    if src != 1 {
+                        source += coordinate * stride;
+                    }
+                    stride *= src;
+                }
+                self.data[source]
+            })
+            .collect();
+        Self::new(data, shape)
+    }
+
+    fn log_sigmoid(&self) -> Result<Self> {
+        let data = self
+            .data
+            .iter()
+            .map(|&value| {
+                if value >= 0. {
+                    -(-value).exp().ln_1p()
+                } else {
+                    value - value.exp().ln_1p()
+                }
+            })
+            .collect();
+        Self::new(data, self.shape.clone())
     }
 
     fn add(&self, other: &Self) -> Result<Self> {
@@ -500,6 +638,73 @@ fn validate_gather(shape: &[usize], indices_shape: &[usize], dim: usize) -> Resu
             operation: "gather".into(),
             left: shape.into(),
             right: indices_shape.into(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_axis(shape: &Shape, dim: usize) -> Result<()> {
+    if dim >= shape.rank() {
+        return Err(TensorError::invalid_argument(
+            "axis",
+            format!("axis {dim} outside {shape:?}"),
+        ));
+    }
+    Ok(())
+}
+
+fn narrow_shape(shape: &Shape, dim: usize, start: usize, length: usize) -> Result<Shape> {
+    validate_axis(shape, dim)?;
+    if start.checked_add(length).is_none_or(|end| end > shape[dim]) {
+        return Err(TensorError::invalid_argument(
+            "narrow",
+            "range exceeds axis length",
+        ));
+    }
+    let mut result = shape.to_vec();
+    result[dim] = length;
+    Ok(result.into())
+}
+
+fn concatenated_shape(shapes: &[Shape], dim: usize) -> Result<Shape> {
+    let first = shapes.first().ok_or_else(|| TensorError::EmptyInput {
+        operation: "concatenate".into(),
+    })?;
+    validate_axis(first, dim)?;
+    let mut result = first.to_vec();
+    result[dim] = 0;
+    for shape in shapes {
+        if shape.rank() != first.rank()
+            || shape
+                .iter()
+                .zip(first.iter())
+                .enumerate()
+                .any(|(axis, (a, b))| axis != dim && a != b)
+        {
+            return Err(TensorError::ShapeMismatch {
+                operation: "concatenate".into(),
+                left: first.clone(),
+                right: shape.clone(),
+            });
+        }
+        result[dim] = result[dim].checked_add(shape[dim]).ok_or_else(|| {
+            TensorError::invalid_argument("concatenate", "axis length overflows usize")
+        })?;
+    }
+    Ok(result.into())
+}
+
+fn validate_broadcast(source: &Shape, target: &Shape) -> Result<()> {
+    if source.rank() != target.rank()
+        || source
+            .iter()
+            .zip(target.iter())
+            .any(|(&a, &b)| a != 1 && a != b)
+    {
+        return Err(TensorError::ShapeMismatch {
+            operation: "broadcast".into(),
+            left: source.clone(),
+            right: target.clone(),
         });
     }
     Ok(())

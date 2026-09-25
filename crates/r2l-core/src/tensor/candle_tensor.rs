@@ -41,6 +41,54 @@ impl R2lTensor for Tensor {
             .map_err(|error| TensorError::operation("construct from vector", error))
     }
 
+    fn from_vec_like(data: Vec<f32>, shape: impl Into<Shape>, like: &Self) -> Result<Self> {
+        let shape = shape.into();
+        validate_shape(data.len(), &shape)?;
+        Tensor::from_vec(data, shape.dims(), like.device())
+            .map_err(|error| TensorError::operation("construct on device", error))
+    }
+
+    fn add_scalar(&self, scalar: f32) -> Result<Self> {
+        self.affine(1., f64::from(scalar))
+            .map_err(|error| TensorError::operation("add scalar", error))
+    }
+
+    fn sum_dim(&self, dim: usize) -> Result<Self> {
+        super::validate_axis(&self.to_shape(), dim)?;
+        self.sum_keepdim(dim)
+            .map_err(|error| TensorError::operation("sum axis", error))
+    }
+
+    fn narrow(&self, dim: usize, start: usize, length: usize) -> Result<Self> {
+        super::narrow_shape(&self.to_shape(), dim, start, length)?;
+        Tensor::narrow(self, dim, start, length)
+            .map_err(|error| TensorError::operation("narrow", error))
+    }
+
+    fn cat(tensors: &[Self], dim: usize) -> Result<Self> {
+        super::concatenated_shape(&tensors.iter().map(Self::to_shape).collect::<Vec<_>>(), dim)?;
+        Tensor::cat(tensors, dim).map_err(|error| TensorError::operation("concatenate", error))
+    }
+
+    fn broadcast_as(&self, shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
+        super::validate_broadcast(&self.to_shape(), &shape)?;
+        Tensor::broadcast_as(self, shape.dims())
+            .map_err(|error| TensorError::operation("broadcast", error))
+    }
+
+    fn log_sigmoid(&self) -> Result<Self> {
+        // log-softmax([0, x]) gives log(sigmoid(x)); its backward pass is stable at zero too.
+        let result = (|| {
+            let zeros = self.zeros_like()?;
+            let stacked = Tensor::stack(&[&zeros, self], self.rank())?;
+            log_softmax(&stacked, self.rank())?
+                .narrow(self.rank(), 1, 1)?
+                .squeeze(self.rank())
+        })();
+        result.map_err(|error| TensorError::operation("log sigmoid", error))
+    }
+
     fn add(&self, other: &Self) -> Result<Self> {
         ensure_same_shape(self, other, "add")?;
         self.add(other)

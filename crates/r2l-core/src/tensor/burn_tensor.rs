@@ -48,6 +48,50 @@ impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
         Ok(Tensor::from_data(data, &Default::default()))
     }
 
+    fn from_vec_like(data: Vec<f32>, shape: impl Into<Shape>, like: &Self) -> Result<Self> {
+        let shape = shape.into();
+        validate_shape(data.len(), &shape)?;
+        if shape.rank() != D {
+            return Err(TensorError::InvalidRank {
+                expected: D,
+                actual: shape.rank(),
+            });
+        }
+        Ok(Tensor::from_data(
+            BurnTensorData::new(data, shape.dims()),
+            &like.device(),
+        ))
+    }
+
+    fn add_scalar(&self, scalar: f32) -> Result<Self> {
+        Ok(self.clone().add_scalar(scalar))
+    }
+
+    fn sum_dim(&self, dim: usize) -> Result<Self> {
+        super::validate_axis(&self.to_shape(), dim)?;
+        Ok(self.clone().sum_dim(dim))
+    }
+
+    fn narrow(&self, dim: usize, start: usize, length: usize) -> Result<Self> {
+        super::narrow_shape(&self.to_shape(), dim, start, length)?;
+        Ok(self.clone().narrow(dim, start, length))
+    }
+
+    fn cat(tensors: &[Self], dim: usize) -> Result<Self> {
+        super::concatenated_shape(&tensors.iter().map(Self::to_shape).collect::<Vec<_>>(), dim)?;
+        Ok(Tensor::cat(tensors.to_vec(), dim))
+    }
+
+    fn broadcast_as(&self, shape: impl Into<Shape>) -> Result<Self> {
+        let shape = shape.into();
+        super::validate_broadcast(&self.to_shape(), &shape)?;
+        Ok(self.clone().expand(burn::tensor::Shape::from(shape.dims())))
+    }
+
+    fn log_sigmoid(&self) -> Result<Self> {
+        Ok(burn::tensor::activation::log_sigmoid(self.clone()))
+    }
+
     fn add(&self, other: &Self) -> Result<Self> {
         ensure_same_shape(self, other, "add")?;
         Ok(self.clone() + other.clone())
