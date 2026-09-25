@@ -51,8 +51,7 @@
 //! - [r2l-core](https://docs.rs/r2l-core) — core traits and data types.
 //! - [r2l-sampler](https://docs.rs/r2l-sampler) — rollout samplers.
 //! - [r2l-gym](https://docs.rs/r2l-gym) — Gymnasium-backed environments.
-//! - [r2l-burn](https://docs.rs/r2l-burn) — Burn-backed policy and learner implementations.
-//! - [r2l-candle](https://docs.rs/r2l-candle) — Candle-backed policy and learner implementations.
+//! - [r2l-distributions](https://docs.rs/r2l-distributions) — Policies, networks and learners for Burn and Candle.
 //! - [r2l-agents](https://docs.rs/r2l-agents) — core RL algorithm implementations.
 
 #![warn(missing_docs)]

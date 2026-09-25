@@ -7,6 +7,7 @@ use crate::Network;
 
 pub mod bernoulli;
 mod burn;
+mod candle;
 pub mod categorical;
 pub mod composite;
 pub mod diagonal;

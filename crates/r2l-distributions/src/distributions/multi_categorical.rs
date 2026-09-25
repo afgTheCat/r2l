@@ -3,13 +3,13 @@ use r2l_core::{
     Shape,
     env::action_ranges,
     error::{Error, Result},
-    models::{Actor, ToSafetensors},
+    models::Actor,
     rng::with_rng,
     tensor::R2lTensor,
 };
 use rand_distr::{Distribution, weighted::WeightedIndex};
 
-use crate::{Network, Policy2};
+use crate::{Network, Policy};
 
 /// Independent categorical actions, using consecutive groups of network logits.
 #[derive(Debug, Clone)]
@@ -82,13 +82,7 @@ impl<N: Network> Actor for MultiCategorical<N> {
     }
 }
 
-impl<N: Network + ToSafetensors> ToSafetensors for MultiCategorical<N> {
-    fn to_safetensors(&self) -> Result<Vec<u8>> {
-        self.logits.to_safetensors()
-    }
-}
-
-impl<N: Network> Policy2 for MultiCategorical<N> {
+impl<N: Network> Policy for MultiCategorical<N> {
     fn action_shape(&self) -> Shape {
         [self.categories.len()].into()
     }

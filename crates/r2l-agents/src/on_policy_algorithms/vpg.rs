@@ -55,11 +55,13 @@ impl<Module: OnPolicyLearner> VPG<Module> {
             let Some(indices) = batch_indices.next_batch() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(batches, &indices, Module::lifter);
+            let (observations, actions) = sample(batches, &indices, Module::lifter)?;
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
             let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
-            let logp = lm.policy().log_probs(&observations, &actions)?;
-            let values_pred = lm.values(&observations)?;
+            let logp = lm
+                .policy()
+                .log_probs(observations.clone(), actions.clone())?;
+            let values_pred = lm.values(observations.clone())?;
             let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
             let losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);

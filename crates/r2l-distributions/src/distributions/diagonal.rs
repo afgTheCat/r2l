@@ -10,11 +10,12 @@ use r2l_core::{
 use rand_distr::{Distribution, StandardNormal};
 
 use super::TensorParameter;
-use crate::{Network, Policy2};
+use crate::{Network, Policy};
 
 /// Independent Gaussian actions with network-predicted means and shared log standard deviations.
 /// Log standard deviations have shape `[1, actions]`. Pass a Burn `Param` for
 /// optimizer-managed parameters, or a tensor when parameters are managed externally.
+/// For Candle, obtain the tensor from the policy's `VarMap`-backed `VarBuilder`.
 #[derive(Debug, Clone)]
 pub struct DiagGaussian<N: Network, P: TensorParameter<N::Tensor> = <N as Network>::Tensor> {
     pub(super) mean: N,
@@ -28,6 +29,7 @@ impl<N: Network, P: TensorParameter<N::Tensor>> DiagGaussian<N, P> {
     /// * `mean` - Network producing a nonempty vector of action means.
     /// * `log_std` - Shared log standard deviations of shape `[1, actions]`. Use
     ///   `burn::module::Param::from_tensor` to include them in Burn optimizer updates.
+    ///   For Candle, use a `VarBuilder` backed by the policy optimizer's `VarMap`.
     ///
     /// # Errors
     /// Returns an error for incompatible network or parameter dimensions.
@@ -65,7 +67,7 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DiagGaussian<N, P> {
     }
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> Policy2 for DiagGaussian<N, P> {
+impl<N: Network, P: TensorParameter<N::Tensor>> Policy for DiagGaussian<N, P> {
     fn action_shape(&self) -> Shape {
         self.mean.output_shape()
     }

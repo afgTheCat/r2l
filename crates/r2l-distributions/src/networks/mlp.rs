@@ -5,6 +5,7 @@ use r2l_core::{
     Shape,
     error::{Error, Result},
     models::ActivationFunction,
+    networks::MlpConfig,
 };
 
 use crate::networks::Network;
@@ -26,8 +27,7 @@ impl<B: Backend> LinearLayer<B> {
         }
     }
 
-    fn activation(activation: ActivationFunction) -> Self {
-        let device = Default::default();
+    pub(super) fn activation(activation: ActivationFunction, device: &B::Device) -> Activation<B> {
         let config = match activation {
             ActivationFunction::Elu => ActivationConfig::Elu(EluConfig::new()),
             ActivationFunction::Gelu => ActivationConfig::Gelu,
@@ -41,13 +41,12 @@ impl<B: Backend> LinearLayer<B> {
             ActivationFunction::Sigmoid => ActivationConfig::Sigmoid,
             ActivationFunction::Tanh => ActivationConfig::Tanh,
         };
-        Self::Activation(config.init::<B>(&device))
+        config.init::<B>(device)
     }
 
-    fn linear(input: usize, output: usize) -> Self {
-        let device = Default::default();
+    fn linear(input: usize, output: usize, device: &B::Device) -> Self {
         let liner_config = LinearConfig::new(input, output).with_bias(true);
-        let linear: Linear<B> = liner_config.init::<B>(&device);
+        let linear: Linear<B> = liner_config.init::<B>(device);
         Self::LinearLayer(linear)
     }
 }
@@ -67,18 +66,30 @@ impl<B: Backend> Mlp<B> {
         t
     }
 
-    /// Builds a dense network from input, hidden, and output widths.
-    ///
-    /// # Arguments
-    ///
-    /// * `layer_sizes` - Positive layer widths, including input and output.
-    /// * `activation` - Activation after hidden layers.
+    /// Builds a dense network from positive input, hidden and output widths.
     ///
     /// # Panics
-    ///
     /// Panics if fewer than two widths are supplied or any width is zero.
     #[must_use]
     pub fn build(layer_sizes: &[usize], activation: ActivationFunction) -> Self {
+        Self::build_on_device(layer_sizes, activation, &Default::default())
+    }
+
+    pub(super) fn from_config(
+        config: &MlpConfig,
+        input_size: usize,
+        output_size: usize,
+        device: &B::Device,
+    ) -> Self {
+        let layers = [&[input_size][..], &config.hidden_layers, &[output_size]].concat();
+        Self::build_on_device(&layers, config.activation, device)
+    }
+
+    fn build_on_device(
+        layer_sizes: &[usize],
+        activation: ActivationFunction,
+        device: &B::Device,
+    ) -> Self {
         assert!(
             layer_sizes.len() >= 2 && !layer_sizes.contains(&0),
             "MLP requires positive input and output widths"
@@ -88,10 +99,12 @@ impl<B: Backend> Mlp<B> {
         let num_layers = layer_sizes.len();
         for (layer_idx, layer_size) in layer_sizes.iter().enumerate().skip(1) {
             if layer_idx == num_layers - 1 {
-                layers.push(LinearLayer::linear(last_dim, *layer_size));
+                layers.push(LinearLayer::linear(last_dim, *layer_size, device));
             } else {
-                layers.push(LinearLayer::linear(last_dim, *layer_size));
-                layers.push(LinearLayer::activation(activation));
+                layers.push(LinearLayer::linear(last_dim, *layer_size, device));
+                layers.push(LinearLayer::Activation(LinearLayer::activation(
+                    activation, device,
+                )));
             }
             last_dim = *layer_size;
         }

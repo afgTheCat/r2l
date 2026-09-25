@@ -5740,9 +5740,8 @@ dependencies = [
  "itertools 0.15.0",
  "r2l",
  "r2l-agents",
- "r2l-burn",
- "r2l-candle",
  "r2l-core",
+ "r2l-distributions",
  "r2l-gym",
  "r2l-sampler",
  "rand 0.10.3",
@@ -5791,35 +5790,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "r2l-burn"
-version = "0.0.3"
-dependencies = [
- "burn",
- "burn-ndarray",
- "burn-store",
- "derive_more",
- "itertools 0.15.0",
- "r2l-core",
- "rand 0.10.3",
- "rand_distr 0.6.0",
-]
-
-[[package]]
-name = "r2l-candle"
-version = "0.0.3"
-dependencies = [
- "candle-core 0.11.0",
- "candle-nn",
- "derive_more",
- "either",
- "itertools 0.15.0",
- "r2l-core",
- "rand 0.10.3",
- "rand_distr 0.6.0",
- "safetensors 0.8.0",
-]
-
-[[package]]
 name = "r2l-core"
 version = "0.0.3"
 dependencies = [
@@ -5842,9 +5812,13 @@ dependencies = [
  "burn",
  "burn-ndarray",
  "burn-store",
+ "candle-core 0.11.0",
+ "candle-nn",
  "itertools 0.15.0",
  "r2l-core",
+ "rand 0.10.3",
  "rand_distr 0.6.0",
+ "safetensors 0.8.0",
  "serde",
 ]
 
@@ -5864,8 +5838,6 @@ dependencies = [
  "egui_table",
  "r2l",
  "r2l-agents",
- "r2l-burn",
- "r2l-candle",
  "r2l-core",
  "r2l-gym",
  "r2l-sampler",

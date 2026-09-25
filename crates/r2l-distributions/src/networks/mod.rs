@@ -2,6 +2,10 @@ use std::fmt::Debug;
 
 use r2l_core::{Shape, error::Result, tensor::R2lTensor};
 
+pub mod candle_mlp;
+mod candle_random;
+pub use candle_random::seeded_var_builder;
+pub mod burn;
 pub mod cnn;
 pub mod mlp;
 

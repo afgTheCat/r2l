@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 use candle_core::{DType, Device, Result, Shape, Tensor, Var};
 use candle_nn::{Init, VarBuilder, VarMap, init::NormalOrUniform, var_builder::SimpleBackend};
 use rand::distr::{Distribution, Uniform};
-use rand_distr::{Normal, StandardNormal};
+use rand_distr::Normal;
 
 struct SeededVarMap(VarMap);
 
@@ -47,11 +47,6 @@ pub fn seeded_var_builder(varmap: &VarMap, dtype: DType, device: &Device) -> Var
         dtype,
         device.clone(),
     )
-}
-
-pub(crate) fn standard_normal(shape: &Shape, device: &Device) -> Result<Tensor> {
-    let values = random_values(shape.elem_count(), StandardNormal);
-    Tensor::from_vec(values, shape.clone(), device)
 }
 
 fn initialized_var(shape: &Shape, init: Init, dtype: DType, device: &Device) -> Result<Var> {

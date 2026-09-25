@@ -8,7 +8,7 @@ use r2l_core::{
 
 use super::TensorParameter;
 use super::policy::DistributionKind;
-use crate::{Network, Policy2};
+use crate::{Network, Policy};
 
 /// Independent child policies evaluated on the same observations.
 /// Actions are concatenated in child order; dictionary callers should use their space's key order.
@@ -72,7 +72,7 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for Composite<N, P> {
     }
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> Policy2 for Composite<N, P> {
+impl<N: Network, P: TensorParameter<N::Tensor>> Policy for Composite<N, P> {
     fn action_shape(&self) -> Shape {
         [self.action_size].into()
     }

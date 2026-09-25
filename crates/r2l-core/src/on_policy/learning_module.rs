@@ -5,7 +5,7 @@ use crate::{
     tensor::R2lTensor,
 };
 
-/// Learner contract required by the built-in on-policy algorithms.
+/// Learner contract using batched policies and value functions.
 ///
 /// This ties together a train-time policy, an inference-time policy, a value
 /// function, tensor conversion helpers, and a loss bundle that can be assembled
@@ -27,7 +27,7 @@ pub trait OnPolicyLearner:
     /// Converts an inference tensor into a learning tensor.
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor;
 
-    /// Creates a learning tensor from flat scalar data.
+    /// Creates a `[batch, 1]` learning tensor from scalar data, such as returns.
     ///
     /// # Errors
     ///

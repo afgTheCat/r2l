@@ -68,6 +68,8 @@ impl FromStr for ActivationFunction {
 ///
 /// Actors are the inference-time surface used by samplers. They must be
 /// sendable so rollout collection can move them into worker threads.
+/// Built-in policies accept one flattened observation row `[1, features]` and
+/// return `[1, actions]`; `ActorWrapper` adapts these rows to environment tensors.
 pub trait Actor: Send + 'static {
     /// Tensor type accepted as observations and returned as actions.
     type Tensor: R2lTensor;
@@ -99,19 +101,22 @@ pub trait ToSafetensors {
 
 /// Trainable action distribution interface used by on-policy algorithms.
 ///
+/// Observations and actions are rank-two batches. Log probabilities have shape
+/// `[batch, 1]`; entropy is the batch mean of the summed action-component entropies.
+/// Actions supplied for training must lie in the policy's support.
+///
 /// A `Policy` extends [`Actor`] with the quantities needed to compute policy
 /// gradient losses and entropy bonuses over a batch.
 pub trait Policy: Actor {
+    /// Shape of one flattened action, without the batch axis.
+    fn action_shape(&self) -> crate::Shape;
+
     /// Computes log probabilities for batched observation/action pairs.
     ///
     /// # Errors
     ///
     /// Returns an error if the policy cannot evaluate the batch.
-    fn log_probs(
-        &self,
-        observations: &[Self::Tensor],
-        actions: &[Self::Tensor],
-    ) -> Result<Self::Tensor>;
+    fn log_probs(&self, observations: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor>;
 
     /// Returns a representative action standard deviation when available.
     ///
@@ -126,7 +131,7 @@ pub trait Policy: Actor {
     /// # Errors
     ///
     /// Returns an error if the entropy cannot be computed.
-    fn entropy(&self, states: &[Self::Tensor]) -> Result<Self::Tensor>;
+    fn entropy(&self, observations: Self::Tensor) -> Result<Self::Tensor>;
 }
 
 /// Component that learns from backend-specific loss values.
@@ -142,15 +147,14 @@ pub trait Learner {
     fn update(&mut self, losses: Self::Losses) -> Result<()>;
 }
 
-/// Batched value-function interface.
+/// Value function over rank-two observation batches.
 pub trait ValueFunction {
-    /// Tensor type used for observations and returned values.
-    type Tensor: Clone;
+    /// Tensor type used for observations and values.
+    type Tensor: R2lTensor;
 
-    /// Estimates values for a batch of observations.
+    /// Returns `[batch, 1]` values for `[batch, features]` observations.
     ///
     /// # Errors
-    ///
-    /// Returns an error if value inference fails.
-    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor>;
+    /// Returns an error for incompatible input dimensions or failed evaluation.
+    fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor>;
 }

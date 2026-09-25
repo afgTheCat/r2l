@@ -109,8 +109,8 @@ fn batch_advantages_and_returns<
     }
     let states = batch.states().iter().map(&lifter).collect::<Vec<_>>();
     let next_states = batch.next_states().iter().map(&lifter).collect::<Vec<_>>();
-    let values: Vec<f32> = value_func.values(&states)?.to_vec()?;
-    let next_values: Vec<f32> = value_func.values(&next_states)?.to_vec()?;
+    let values: Vec<f32> = value_func.values(T2::cat(&states, 0)?)?.to_vec()?;
+    let next_values: Vec<f32> = value_func.values(T2::cat(&next_states, 0)?)?.to_vec()?;
     let total_steps = batch.rewards().len();
     let mut advantages: Vec<f32> = vec![0.; total_steps];
     let mut returns: Vec<f32> = vec![0.; total_steps];
@@ -157,19 +157,22 @@ pub fn batches_advantages_and_returns<
     Ok((Advantages(advantage_vec), Returns(returns_vec)))
 }
 
-/// Samples and converts observations and actions at the supplied batch indices.
+/// Samples and concatenates observation/action rows at the supplied batch indices.
+///
+/// # Errors
+/// Returns an error if rows cannot be concatenated into nonempty batches.
 pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -> T2>(
     batches: &[B],
     indices: &[(usize, usize)],
     lifter: L,
-) -> (Vec<T2>, Vec<T2>) {
+) -> Result<(T2, T2)> {
     let mut observations = vec![];
     let mut actions = vec![];
     for (batch_idx, idx) in indices {
         observations.push(lifter(&batches[*batch_idx].states()[*idx]));
         actions.push(lifter(&batches[*batch_idx].actions()[*idx]));
     }
-    (observations, actions)
+    Ok((T2::cat(&observations, 0)?, T2::cat(&actions, 0)?))
 }
 
 /// Computes action log-probabilities for every transition in each batch.
@@ -184,7 +187,7 @@ pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
     let mut logps = vec![];
     for batch in batches {
         let logp = policy
-            .log_probs(batch.states(), batch.actions())?
+            .log_probs(T::cat(batch.states(), 0)?, T::cat(batch.actions(), 0)?)?
             .to_vec()?;
         logps.push(logp);
     }

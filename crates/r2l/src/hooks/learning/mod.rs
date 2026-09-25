@@ -12,15 +12,15 @@ use r2l_agents::on_policy_algorithms::{
     a2c::{A2CBatchData, A2CHook, A2CParams},
     ppo::{PPOBatchData, PPOHook, PPOParams},
 };
-use r2l_burn::learning_module::{
-    BurnPolicy, PolicyValueLearner as BurnLearner, PolicyValueLosses as BurnLosses,
-};
-use r2l_candle::learning_module::{
-    CandlePolicy, PolicyValueLearner as CandleLearner, PolicyValueLosses as CandleLosses,
-};
 use r2l_core::{
     HookResult, buffers::TrajectoryBatch, error::Result,
     on_policy::learning_module::OnPolicyLearner, tensor::R2lTensor,
+};
+use r2l_distributions::learning_modules::burn_lm::{
+    BurnPolicy, PolicyValueLearner as BurnLearner, PolicyValueLosses as BurnLosses,
+};
+use r2l_distributions::learning_modules::candle_lm::{
+    PolicyValueLearner as CandleLearner, PolicyValueLosses as CandleLosses,
 };
 
 use self::{
@@ -169,11 +169,12 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>, A> LearningHook<BurnLearner<B, P>, A>
         &self,
         module: &mut BurnLearner<B, P>,
         losses: &mut BurnLosses<B>,
-        observations: &[burn::Tensor<B, 1>],
+        observations: &burn::Tensor<B, 2>,
         collect_stats: bool,
     ) -> Result<Option<A2CMinibatchStats>> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy_loss = module.policy().entropy(observations)?.neg() * self.entropy_coeff;
+        let entropy_loss =
+            module.policy().entropy(observations.clone())?.neg() * self.entropy_coeff;
         let stats = if collect_stats {
             Some(A2CMinibatchStats {
                 policy_loss: losses.policy_loss.to_vec()?[0],
@@ -190,22 +191,22 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>, A> LearningHook<BurnLearner<B, P>, A>
     }
 }
 
-impl<P: CandlePolicy, A> LearningHook<CandleLearner<P>, A> {
-    fn prepare(&self, module: &mut CandleLearner<P>, advantages: &mut Advantages) -> f64 {
+impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone, A> LearningHook<CandleLearner<P>, A> {
+    fn prepare(&self, module: &mut CandleLearner<P>, advantages: &mut Advantages) -> Result<f64> {
         let progress = self.prepare_learning(module, advantages);
-        module.set_grad_clipping(self.gradient_clipping);
-        progress
+        module.set_grad_clipping(self.gradient_clipping)?;
+        Ok(progress)
     }
 
     fn process_batch(
         &self,
         module: &mut CandleLearner<P>,
         losses: &mut CandleLosses,
-        observations: &[Tensor],
+        observations: &Tensor,
         collect_stats: bool,
     ) -> Result<Option<A2CMinibatchStats>> {
         losses.set_vf_coeff(self.vf_coeff);
-        let entropy = module.policy().entropy(observations)?;
+        let entropy = module.policy().entropy(observations.clone())?;
         let entropy_loss =
             (Tensor::full(self.entropy_coeff, (), entropy.device())? * entropy.neg()?)?;
         let stats = if collect_stats {
@@ -227,7 +228,7 @@ impl<P: CandlePolicy, A> LearningHook<CandleLearner<P>, A> {
 impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
     for LearningHook<BurnLearner<B, P>, A2CSettings>
 {
-    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 1>>>(
+    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 2>>>(
         &mut self,
         _params: &mut A2CParams,
         module: &mut BurnLearner<B, P>,
@@ -244,7 +245,7 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
         _params: &mut A2CParams,
         module: &mut BurnLearner<B, P>,
         losses: &mut BurnLosses<B>,
-        data: &A2CBatchData<burn::Tensor<B, 1>>,
+        data: &A2CBatchData<burn::Tensor<B, 2>>,
     ) -> Result<HookResult> {
         let stats = self.process_batch(
             module,
@@ -256,7 +257,7 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
         Ok(HookResult::Continue)
     }
 
-    fn after_learning_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 1>>>(
+    fn after_learning_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 2>>>(
         &mut self,
         _params: &mut A2CParams,
         module: &mut BurnLearner<B, P>,
@@ -279,7 +280,9 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
     }
 }
 
-impl<P: CandlePolicy> A2CHook<CandleLearner<P>> for LearningHook<CandleLearner<P>, A2CSettings> {
+impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone> A2CHook<CandleLearner<P>>
+    for LearningHook<CandleLearner<P>, A2CSettings>
+{
     fn before_learning_hook<T: TrajectoryBatch<Tensor>>(
         &mut self,
         _params: &mut A2CParams,
@@ -288,7 +291,7 @@ impl<P: CandlePolicy> A2CHook<CandleLearner<P>> for LearningHook<CandleLearner<P
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> Result<HookResult> {
-        self.prepare(module, advantages);
+        self.prepare(module, advantages)?;
         Ok(HookResult::Continue)
     }
 
@@ -335,7 +338,7 @@ impl<P: CandlePolicy> A2CHook<CandleLearner<P>> for LearningHook<CandleLearner<P
 impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
     for LearningHook<BurnLearner<B, P>, PPOSettings>
 {
-    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 1>>>(
+    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 2>>>(
         &mut self,
         params: &mut PPOParams,
         module: &mut BurnLearner<B, P>,
@@ -348,7 +351,7 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 1>>>(
+    fn rollout_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 2>>>(
         &mut self,
         params: &mut PPOParams,
         module: &mut BurnLearner<B, P>,
@@ -379,7 +382,7 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
         params: &mut PPOParams,
         module: &mut BurnLearner<B, P>,
         losses: &mut BurnLosses<B>,
-        data: &PPOBatchData<burn::Tensor<B, 1>>,
+        data: &PPOBatchData<burn::Tensor<B, 2>>,
     ) -> Result<HookResult> {
         let stats = self.process_batch(
             module,
@@ -411,7 +414,9 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
     }
 }
 
-impl<P: CandlePolicy> PPOHook<CandleLearner<P>> for LearningHook<CandleLearner<P>, PPOSettings> {
+impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone> PPOHook<CandleLearner<P>>
+    for LearningHook<CandleLearner<P>, PPOSettings>
+{
     fn before_learning_hook<T: TrajectoryBatch<Tensor>>(
         &mut self,
         params: &mut PPOParams,
@@ -420,7 +425,7 @@ impl<P: CandlePolicy> PPOHook<CandleLearner<P>> for LearningHook<CandleLearner<P
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> Result<HookResult> {
-        let progress = self.prepare(module, advantages);
+        let progress = self.prepare(module, advantages)?;
         self.algorithm.begin_learning(params, progress);
         Ok(HookResult::Continue)
     }

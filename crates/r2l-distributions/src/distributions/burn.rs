@@ -18,6 +18,62 @@ use super::{
 };
 use crate::Network;
 
+fn actor_bytes<B: Backend, M: Module<B>>(module: &M) -> r2l_core::error::Result<Vec<u8>> {
+    use burn_store::{ModuleStore, SafetensorsStore};
+    use r2l_core::error::Error;
+    let mut store = SafetensorsStore::default();
+    store.collect_from(module).map_err(Error::wrap)?;
+    store.get_bytes().map_err(Error::wrap)
+}
+
+macro_rules! actor_artifact {
+    ($ty:ty) => {
+        impl<B: Backend, N: Network<Tensor = Tensor<B, 2>> + Module<B>>
+            r2l_core::models::ToSafetensors for $ty
+        {
+            fn to_safetensors(&self) -> r2l_core::error::Result<Vec<u8>> {
+                actor_bytes::<B, _>(self)
+            }
+        }
+    };
+}
+
+actor_artifact!(Categorical<N>);
+actor_artifact!(MultiBernoulli<N>);
+actor_artifact!(MultiCategorical<N>);
+actor_artifact!(DistributionKind<N, Param<Tensor<B, 2>>>);
+actor_artifact!(DiagGaussian<N, Param<Tensor<B, 2>>>);
+actor_artifact!(Composite<N, Param<Tensor<B, 2>>>);
+
+impl<B: Backend, N: Network<Tensor = Tensor<B, 2>> + Module<B>>
+    DistributionKind<N, Param<Tensor<B, 2>>>
+{
+    /// Loads actor parameters from a matching safetensors artifact.
+    ///
+    /// # Errors
+    /// Returns an error if parameters are missing, incompatible or undecodable.
+    pub fn load_from_bytes(mut self, bytes: Vec<u8>) -> r2l_core::error::Result<Self> {
+        use burn_store::{ModuleSnapshot, SafetensorsStore};
+        self.load_from(&mut SafetensorsStore::from_bytes(Some(bytes)))
+            .map_err(r2l_core::error::Error::wrap)?;
+        Ok(self)
+    }
+}
+
+macro_rules! network_artifact {
+    ($ty:ty) => {
+        impl<B: Backend> r2l_core::models::ToSafetensors for $ty {
+            fn to_safetensors(&self) -> r2l_core::error::Result<Vec<u8>> {
+                actor_bytes::<B, _>(self)
+            }
+        }
+    };
+}
+
+network_artifact!(crate::networks::mlp::Mlp<B>);
+network_artifact!(crate::networks::cnn::Cnn<B>);
+network_artifact!(crate::networks::burn::NetworkKind<B>);
+
 impl<B: Backend> TensorParameter<Tensor<B, 2>> for Param<Tensor<B, 2>> {
     fn value(&self) -> Tensor<B, 2> {
         self.val()

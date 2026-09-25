@@ -32,43 +32,10 @@ use r2l_core::{
     on_policy::losses::FromPolicyValueLosses,
 };
 
+pub use crate::networks::burn::NetworkKind;
 use crate::{
-    DistributionKind, Network, OnPolicyLearner2, Policy2, ValueFunction2,
-    networks::{cnn::Cnn, mlp::Mlp},
+    DistributionKind, Network, OnPolicyLearner, Policy, ValueFunction, networks::mlp::Mlp,
 };
-
-#[derive(Debug, Module)]
-pub enum NetworkKind<B: Backend> {
-    /// Fully connected network.
-    Mlp(Mlp<B>),
-    /// Convolutional network with a dense output network.
-    Cnn(Cnn<B>),
-}
-
-impl<B: Backend> Network for NetworkKind<B> {
-    type Tensor = Tensor<B, 2>;
-
-    fn input_shape(&self) -> r2l_core::Shape {
-        match self {
-            Self::Mlp(mlp) => mlp.input_shape(),
-            Self::Cnn(cnn) => cnn.input_shape(),
-        }
-    }
-
-    fn output_shape(&self) -> r2l_core::Shape {
-        match self {
-            Self::Mlp(mlp) => mlp.output_shape(),
-            Self::Cnn(cnn) => cnn.output_shape(),
-        }
-    }
-
-    fn forward(&self, t: Tensor<B, 2>) -> Result<Tensor<B, 2>> {
-        match self {
-            Self::Mlp(mlp) => Network::forward(mlp, t),
-            Self::Cnn(cnn) => cnn.forward(t),
-        }
-    }
-}
 
 /// Burn distributions with optimizer-managed Gaussian log standard deviations.
 pub type BurnDistributionKind<B> = DistributionKind<NetworkKind<B>, Param<Tensor<B, 2>>>;
@@ -77,18 +44,18 @@ pub type BurnDistributionKind<B> = DistributionKind<NetworkKind<B>, Param<Tensor
 /// Trait alias-like bound for Burn policies used by on-policy learners.
 ///
 /// This captures the combination of Burn autodiff support and batched
-/// [`Policy2`] behavior required by the Burn learner implementations.
+/// [`Policy`] behavior required by the Burn learner implementations.
 pub trait BurnPolicy<B: AutodiffBackend>:
-    AutodiffModule<B, InnerModule: ModuleDisplay + Policy2<Tensor = Tensor<B::InnerBackend, 2>>>
+    AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 2>>>
     + ModuleDisplay
-    + Policy2<Tensor = Tensor<B, 2>>
+    + Policy<Tensor = Tensor<B, 2>>
 {
 }
 
 impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
-    M: AutodiffModule<B, InnerModule: ModuleDisplay + Policy2<Tensor = Tensor<B::InnerBackend, 2>>>
+    M: AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 2>>>
         + ModuleDisplay
-        + Policy2<Tensor = Tensor<B, 2>>
+        + Policy<Tensor = Tensor<B, 2>>
 {
 }
 
@@ -214,7 +181,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for JointPolicyValueLearner<B
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction2 for JointPolicyValueLearner<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueLearner<B, M> {
     type Tensor = Tensor<B, 2>;
 
     fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
@@ -222,7 +189,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction2 for JointPolicyValueLe
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner2 for JointPolicyValueLearner<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueLearner<B, D> {
     type LearningTensor = Tensor<B, 2>;
     type InferenceTensor = Tensor<B::InnerBackend, 2>;
     type Policy = D;
@@ -329,7 +296,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for SplitPolicyValueLearner<B
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction2 for SplitPolicyValueLearner<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueLearner<B, M> {
     type Tensor = Tensor<B, 2>;
 
     fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
@@ -337,7 +304,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction2 for SplitPolicyValueLe
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner2 for SplitPolicyValueLearner<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for SplitPolicyValueLearner<B, D> {
     type LearningTensor = Tensor<B, 2>;
     type InferenceTensor = Tensor<B::InnerBackend, 2>;
     type Policy = D;
@@ -494,7 +461,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for PolicyValueLearner<B, M> 
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction2 for PolicyValueLearner<B, M> {
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueLearner<B, M> {
     type Tensor = Tensor<B, 2>;
 
     fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
@@ -505,7 +472,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction2 for PolicyValueLearner
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner2 for PolicyValueLearner<B, D> {
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for PolicyValueLearner<B, D> {
     type LearningTensor = Tensor<B, 2>;
     type InferenceTensor = Tensor<B::InnerBackend, 2>;
     type Policy = D;

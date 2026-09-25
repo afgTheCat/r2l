@@ -1,13 +1,13 @@
 use r2l_core::{
     Shape,
     error::{Error, Result},
-    models::{Actor, ToSafetensors},
+    models::Actor,
     rng::with_rng,
     tensor::R2lTensor,
 };
 use rand_distr::{Bernoulli, Distribution};
 
-use crate::{Network, Policy2};
+use crate::{Network, Policy};
 
 /// Independent binary actions, with one network logit per action bit.
 #[derive(Debug, Clone)]
@@ -68,13 +68,7 @@ impl<N: Network> Actor for MultiBernoulli<N> {
     }
 }
 
-impl<N: Network + ToSafetensors> ToSafetensors for MultiBernoulli<N> {
-    fn to_safetensors(&self) -> Result<Vec<u8>> {
-        self.logits.to_safetensors()
-    }
-}
-
-impl<N: Network> Policy2 for MultiBernoulli<N> {
+impl<N: Network> Policy for MultiBernoulli<N> {
     fn action_shape(&self) -> Shape {
         self.logits.output_shape()
     }

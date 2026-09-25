@@ -1,25 +1,53 @@
-use burn::{Tensor, module::Module, tensor::backend::Backend};
+//! Burn networks constructed from shared architecture configurations.
+use burn::{module::Module, prelude::Backend, tensor::Tensor};
 use r2l_core::Shape;
 use r2l_core::{
     error::{Error, Result},
     networks::NetworkConfig,
 };
 
-pub(crate) mod cnn;
-pub(crate) mod mlp;
+use super::{
+    Network,
+    cnn::{self, Cnn},
+    mlp::{self, Mlp},
+};
 
-/// Burn network selected by a backend-independent architecture configuration.
 #[derive(Debug, Module)]
 pub enum NetworkKind<B: Backend> {
     /// Fully connected network.
-    Mlp(mlp::Mlp<B>),
+    Mlp(Mlp<B>),
     /// Convolutional network with a dense output network.
-    Cnn(cnn::Cnn<B>),
+    Cnn(Cnn<B>),
 }
 
-impl<B: Backend> From<mlp::Mlp<B>> for NetworkKind<B> {
-    fn from(network: mlp::Mlp<B>) -> Self {
+impl<B: Backend> From<Mlp<B>> for NetworkKind<B> {
+    fn from(network: Mlp<B>) -> Self {
         Self::Mlp(network)
+    }
+}
+
+impl<B: Backend> Network for NetworkKind<B> {
+    type Tensor = Tensor<B, 2>;
+
+    fn input_shape(&self) -> r2l_core::Shape {
+        match self {
+            Self::Mlp(mlp) => mlp.input_shape(),
+            Self::Cnn(cnn) => cnn.input_shape(),
+        }
+    }
+
+    fn output_shape(&self) -> r2l_core::Shape {
+        match self {
+            Self::Mlp(mlp) => mlp.output_shape(),
+            Self::Cnn(cnn) => cnn.output_shape(),
+        }
+    }
+
+    fn forward(&self, t: Tensor<B, 2>) -> Result<Tensor<B, 2>> {
+        match self {
+            Self::Mlp(mlp) => Network::forward(mlp, t),
+            Self::Cnn(cnn) => cnn.forward(t),
+        }
     }
 }
 
@@ -74,42 +102,4 @@ impl<B: Backend> NetworkKind<B> {
             details,
         )
     }
-}
-
-impl<B: Backend> Network<B> for NetworkKind<B> {
-    fn forward(&self, t: Tensor<B, 1>) -> Tensor<B, 2> {
-        match self {
-            Self::Mlp(network) => Network::forward(network, t),
-            Self::Cnn(network) => network.forward(t),
-        }
-    }
-
-    fn batch_forward(&self, t: &[Tensor<B, 1>]) -> Tensor<B, 2> {
-        match self {
-            Self::Mlp(network) => network.batch_forward(t),
-            Self::Cnn(network) => network.batch_forward(t),
-        }
-    }
-}
-
-/// Maps flat observations to network outputs, handling any spatial reshaping internally.
-pub trait Network<B: Backend>: Module<B> + 'static {
-    /// Processes one observation and returns exactly one row: `[1, output_size]`.
-    ///
-    /// # Arguments
-    ///
-    /// * `t` - A flat observation of shape `[observation_size]`, in the layout
-    ///   expected by the network.
-    fn forward(&self, t: Tensor<B, 1>) -> Tensor<B, 2>;
-
-    /// Processes a batch and returns `[t.len(), output_size]`.
-    ///
-    /// Output row `i` corresponds to observation `t[i]`; input order is preserved.
-    /// The output size is the same as for single-observation forwarding.
-    ///
-    /// # Arguments
-    ///
-    /// * `t` - A non-empty slice of flat observations, each of shape
-    ///   `[observation_size]` and in the layout expected by the network.
-    fn batch_forward(&self, t: &[Tensor<B, 1>]) -> Tensor<B, 2>;
 }

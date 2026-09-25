@@ -1,14 +1,14 @@
 use itertools::Itertools;
 use r2l_core::{
     error::{Error, Result},
-    models::{Actor, ToSafetensors},
+    models::Actor,
     rng::with_rng,
     tensor::R2lTensor,
 };
 use rand_distr::Distribution;
 use rand_distr::weighted::WeightedIndex;
 
-use crate::{Policy2, networks::Network};
+use crate::{Policy, networks::Network};
 
 /// Categorical policy over a network producing a nonempty vector of category logits.
 ///
@@ -49,12 +49,6 @@ impl<N: Network> Categorical<N> {
     }
 }
 
-impl<N: Network + ToSafetensors> ToSafetensors for Categorical<N> {
-    fn to_safetensors(&self) -> Result<Vec<u8>> {
-        self.logits.to_safetensors()
-    }
-}
-
 impl<T: R2lTensor, N: Network<Tensor = T>> Actor for Categorical<N> {
     type Tensor = T;
 
@@ -77,7 +71,7 @@ impl<T: R2lTensor, N: Network<Tensor = T>> Actor for Categorical<N> {
     }
 }
 
-impl<T: R2lTensor, N: Network<Tensor = T>> Policy2 for Categorical<N> {
+impl<T: R2lTensor, N: Network<Tensor = T>> Policy for Categorical<N> {
     fn action_shape(&self) -> r2l_core::Shape {
         [1].into()
     }

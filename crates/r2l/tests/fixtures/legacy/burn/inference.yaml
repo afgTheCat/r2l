@@ -1,0 +1,35 @@
+policy_builder:
+  observation_space: !Box
+    min: null
+    max: null
+    shape:
+    - 1
+    - 2
+    - 2
+  action_space: !Dict
+    a_discrete: !Discrete 2
+    b_nested: !Tuple
+    - !Box
+      min: null
+      max: null
+      shape:
+      - 2
+    - !MultiBinary
+      shape:
+      - 2
+    - !MultiDiscrete
+      nvec:
+        data:
+        - 2.0
+        - 3.0
+        shape:
+        - 2
+      shape:
+      - 2
+  network: !Mlp
+    hidden_layers:
+    - 2
+    activation: Tanh
+  log_std_init: 0.0
+observation_mode: Raw
+backend: !Burn null

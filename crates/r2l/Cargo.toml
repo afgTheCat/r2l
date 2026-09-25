@@ -14,12 +14,12 @@ r2l-sampler = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
 burn = { workspace = true }
-r2l-candle = { workspace = true }
-r2l-burn = { workspace = true }
+r2l-distributions = { workspace = true }
 rand = "0.10.0"
 derive_more = "2.0.1"
 bimodal-array = { workspace = true }
 serde = { workspace = true }
+safetensors = { workspace = true }
 yaml_serde = { workspace = true } 
 itertools = { workspace = true }
 
@@ -27,10 +27,10 @@ itertools = { workspace = true }
 default = []
 gym = ["dep:r2l-gym"]
 test-utils = []
-simd = ["r2l-burn/simd"]
+simd = ["r2l-distributions/simd"]
 cuda = [
   "r2l-core/cuda",
-  "r2l-candle/cuda",
+  "r2l-distributions/cuda",
   "candle-core/cuda",
   "candle-nn/cuda",
 ]
@@ -40,7 +40,6 @@ features = ["gym"]
 
 [dev-dependencies]
 r2l = { path = ".", features = ["test-utils"] }
-safetensors = { workspace = true }
 tempfile = "3.27.0"
 
 [lints]

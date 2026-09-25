@@ -16,7 +16,10 @@ pub trait Agent {
     /// Actor type used by samplers to collect new rollouts.
     type Actor: Actor<Tensor = Self::Tensor> + Clone;
 
-    /// Returns an actor snapshot for rollout collection.
+    /// Returns an actor for rollout collection.
+    ///
+    /// Backends may share live parameter storage. Finish collecting rollouts
+    /// before updating the learner, as the built-in training loop does.
     fn actor(&self) -> Self::Actor;
 
     /// Learns from a batch of trajectory containers.
@@ -98,7 +101,7 @@ impl<A: Agent, S: Sampler> OnPolicyRuntime<A, S> {
         self.agent.learn(&buffers)
     }
 
-    /// Returns the agent-facing actor snapshot.
+    /// Returns the agent-facing actor for the current parameters.
     pub fn actor(&self) -> A::Actor {
         self.agent.actor()
     }

@@ -1,11 +1,14 @@
 //! Construct networks independently of policy and value-function configuration.
 
 use burn::prelude::Backend;
-use candle_nn::{Sequential, VarBuilder};
-pub use r2l_burn::networks::{Network as BurnNetwork, NetworkKind as BurnNetworkKind};
+use candle_nn::VarBuilder;
 use r2l_core::Shape;
 use r2l_core::error::{Error, Result};
 pub use r2l_core::networks::{CnnConfig, CnnLayerConfig, MlpConfig, NetworkConfig};
+use r2l_distributions::networks::candle_mlp::Mlp;
+pub use r2l_distributions::{
+    Network as BurnNetwork, networks::burn::NetworkKind as BurnNetworkKind,
+};
 
 /// Builds a network with observation and output dimensions supplied by its caller.
 #[derive(Debug, Clone)]
@@ -45,34 +48,33 @@ impl NetworkBuilder {
         BurnNetworkKind::build(&self.config, observation_shape, output_size, device)
     }
 
-    /// Reserves the Candle construction path for these configurations.
+    /// Builds a Candle MLP with a linear output layer.
     ///
     /// # Arguments
-    ///
-    /// * `_observation_shape` - Shape of one observation, excluding the batch dimension.
-    /// * `_output_size` - Number of outputs produced per observation.
-    /// * `_var_builder` - Parameter source and device for the network.
+    /// * `observation_shape` - Shape of one observation; MLP inputs are flattened.
+    /// * `output_size` - Number of network outputs.
+    /// * `var_builder` - Parameter source, namespace and device.
     ///
     /// # Errors
-    ///
-    /// MLP construction through this standalone entry point is not implemented.
-    ///
-    /// # Panics
-    ///
-    /// CNN construction is a placeholder and panics.
+    /// Returns an error for invalid dimensions or unsupported CNN configurations.
     pub fn build_candle(
         &self,
-        _observation_shape: &Shape,
-        _output_size: usize,
-        _var_builder: &VarBuilder<'_>,
-    ) -> Result<Sequential> {
-        if matches!(self.config, NetworkConfig::Cnn(_)) {
-            todo!("Candle CNN network construction");
-        }
-        Err(Error::Unsupported {
-            operation: "build Candle network from config".into(),
-            details: "configuration-based Candle network construction is not implemented yet"
-                .into(),
-        })
+        observation_shape: &Shape,
+        output_size: usize,
+        var_builder: &VarBuilder<'_>,
+    ) -> Result<Mlp> {
+        let NetworkConfig::Mlp(config) = &self.config else {
+            return Err(Error::Unsupported {
+                operation: "build Candle CNN".into(),
+                details: "Candle supports MLP networks".into(),
+            });
+        };
+        let widths = [
+            &[observation_shape.num_elements()][..],
+            &config.hidden_layers,
+            &[output_size],
+        ]
+        .concat();
+        Mlp::build(&widths, config.activation, var_builder)
     }
 }

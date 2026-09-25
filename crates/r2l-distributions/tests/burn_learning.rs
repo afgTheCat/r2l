@@ -12,7 +12,7 @@ use r2l_core::{
 };
 use r2l_distributions::{
     Categorical, Composite, DiagGaussian, DistributionKind, MultiBernoulli, MultiCategorical,
-    Network, OnPolicyLearner2, Policy2, ValueFunction2,
+    Network, OnPolicyLearner, Policy, ValueFunction,
     learning_modules::burn_lm::{
         BurnDistributionKind, BurnPolicy, NetworkKind, PolicyValueLearner, PolicyValueLosses,
     },
@@ -301,7 +301,7 @@ fn network_and_value_function_reject_invalid_batches() {
             .is_err()
     );
     let inference = Tensor::<NdArray, 2>::from_data([[1.0, 2.0]], &NdArrayDevice::Cpu);
-    let lifted = <PolicyValueLearner<B> as OnPolicyLearner2>::lifter(&inference);
+    let lifted = <PolicyValueLearner<B> as OnPolicyLearner>::lifter(&inference);
     assert_eq!(lifted.dims(), [1, 2]);
     assert_eq!(lifted.device(), inference.device());
     assert_eq!(lifted.to_vec().unwrap(), vec![1.0, 2.0]);

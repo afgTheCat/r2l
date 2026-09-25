@@ -40,9 +40,9 @@ impl Default for A2CParams {
 /// Per-minibatch data exposed to [`A2CHook::batch_hook`].
 pub struct A2CBatchData<T: R2lTensor> {
     /// Sampled observations in the minibatch.
-    pub observations: Vec<T>,
+    pub observations: T,
     /// Sampled actions in the minibatch.
-    pub actions: Vec<T>,
+    pub actions: T,
     /// Policy log-probabilities for the sampled actions.
     pub logp: T,
     /// Value-function predictions for the sampled observations.
@@ -132,11 +132,13 @@ impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
             let Some(indices) = batch_indices.next_batch() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(batches, &indices, Module::lifter);
+            let (observations, actions) = sample(batches, &indices, Module::lifter)?;
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
             let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
-            let logp = lm.policy().log_probs(&observations, &actions)?;
-            let values_pred = lm.values(&observations)?;
+            let logp = lm
+                .policy()
+                .log_probs(observations.clone(), actions.clone())?;
+            let values_pred = lm.values(observations.clone())?;
             let policy_loss = A2CObjective::policy_loss(&advantages, &logp)?;
             let value_loss = A2CObjective::value_loss(&returns, &values_pred)?;
             let mut losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);

@@ -17,8 +17,6 @@ use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
     ppo::{PPO, PPOHook, PPOParams},
 };
-use r2l_burn::learning_module::PolicyValueLearner as BurnPolicyValueLearner;
-use r2l_candle::learning_module::PolicyValueLearner as CandlePolicyValueLearner;
 use r2l_core::env::EnvDescription;
 use r2l_core::env::normalizer::{ClippedNormalizer, NormalizerMode};
 use r2l_core::{
@@ -30,6 +28,10 @@ use r2l_core::{
         learning_module::OnPolicyLearner,
     },
     rng::set_seed,
+};
+use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner as BurnPolicyValueLearner;
+use r2l_distributions::learning_modules::candle_lm::{
+    PolicyValueLearner as CandlePolicyValueLearner, PolicyValueOptimizer,
 };
 #[cfg(feature = "gym")]
 use r2l_gym::{GymEnv, GymEnvBuilder};
@@ -535,37 +537,44 @@ impl<E: Env> Builder<E> {
         let (policy, policy_varmap) = self
             .policy_config
             .build_candle_with_varmap::<E::Tensor>(device)?;
-        let NetworkConfig::Mlp(value_config) = &self.value_network else {
-            todo!("Candle CNN value network construction")
+        let value_varmap = match self.optimizer_layout {
+            OnPolicyOptimizerLayout::Joint { .. } => policy_varmap.clone(),
+            OnPolicyOptimizerLayout::Split { .. } => candle_nn::VarMap::new(),
         };
-        match &self.optimizer_layout {
+        let vb = r2l_distributions::networks::seeded_var_builder(
+            &value_varmap,
+            candle_core::DType::F32,
+            device,
+        );
+        let value = NetworkBuilder::new(self.value_network.clone()).build_candle(
+            &self.policy_config.observation_space.observation_shape(),
+            1,
+            &vb.pp("value"),
+        )?;
+        let optimizer = match &self.optimizer_layout {
             OnPolicyOptimizerLayout::Joint {
                 max_grad_norm,
                 params,
-            } => CandlePolicyValueLearner::build_joint(
-                policy,
-                &value_config.hidden_layers,
-                policy_varmap,
-                *max_grad_norm,
+            } => PolicyValueOptimizer::joint(
+                &policy_varmap,
                 Self::candle_optimizer_params(params),
-                value_config.activation,
-            ),
+                *max_grad_norm,
+            )?,
             OnPolicyOptimizerLayout::Split {
                 policy_max_grad_norm,
                 policy_params,
                 value_max_grad_norm,
                 value_params,
-            } => CandlePolicyValueLearner::build_split(
-                policy,
-                &value_config.hidden_layers,
-                policy_varmap,
-                *policy_max_grad_norm,
-                *value_max_grad_norm,
+            } => PolicyValueOptimizer::split(
+                &policy_varmap,
+                &value_varmap,
                 Self::candle_optimizer_params(policy_params),
                 Self::candle_optimizer_params(value_params),
-                value_config.activation,
-            ),
-        }
+                *policy_max_grad_norm,
+                *value_max_grad_norm,
+            )?,
+        };
+        CandlePolicyValueLearner::new(policy, value, optimizer, device.clone())
     }
 
     fn build_burn_learner<B: AutodiffBackend>(&self) -> Result<BurnPolicyValueLearner<B>, Error> {

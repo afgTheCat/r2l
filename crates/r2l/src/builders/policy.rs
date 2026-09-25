@@ -1,8 +1,6 @@
 use burn::prelude::Backend;
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_burn::distributions::BurnDistributionKind;
-use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     env::{EnvDescription, Space},
     error::Result,
@@ -10,6 +8,8 @@ use r2l_core::{
     networks::{MlpConfig, NetworkConfig},
     tensor::{R2lTensor, VecTensor},
 };
+use r2l_distributions::learning_modules::burn_lm::BurnDistributionKind;
+use r2l_distributions::learning_modules::candle_lm::CandleDistributionKind;
 use serde::{Deserialize, Serialize};
 
 /// Backend-independent configuration for an inference policy.
@@ -40,9 +40,10 @@ impl PolicyBuilder {
     pub(crate) fn build_candle_with_varmap<T: R2lTensor>(
         &self,
         device: &Device,
-    ) -> Result<(CandlePolicyKind, VarMap)> {
+    ) -> Result<(CandleDistributionKind, VarMap)> {
         let varmap = VarMap::new();
-        let var_builder = r2l_candle::seeded_var_builder(&varmap, DType::F32, device);
+        let var_builder =
+            r2l_distributions::networks::seeded_var_builder(&varmap, DType::F32, device);
         let policy = self.build_candle::<T>(&var_builder)?;
         Ok((policy, varmap))
     }
@@ -50,17 +51,24 @@ impl PolicyBuilder {
     pub(crate) fn build_candle<T: R2lTensor>(
         &self,
         var_builder: &VarBuilder<'_>,
-    ) -> Result<CandlePolicyKind> {
-        let NetworkConfig::Mlp(config) = &self.network else {
-            todo!("Candle CNN policy construction")
-        };
-        CandlePolicyKind::build(
+    ) -> Result<CandleDistributionKind> {
+        let network = super::networks::NetworkBuilder::new(self.network.clone());
+        CandleDistributionKind::from_space(
             self.action_space.convert::<T>()?,
-            var_builder,
-            &config.hidden_layers,
-            self.observation_space.size(),
-            config.activation,
-            self.log_std_init,
+            &mut |prefix, width| {
+                network.build_candle(
+                    &self.observation_space.observation_shape(),
+                    width,
+                    &var_builder.pp(prefix),
+                )
+            },
+            &mut |prefix, width| {
+                Ok(var_builder.pp(prefix).get_with_hints(
+                    (1, width),
+                    "log_std",
+                    candle_nn::Init::Const(f64::from(self.log_std_init)),
+                )?)
+            },
         )
     }
 
@@ -70,11 +78,23 @@ impl PolicyBuilder {
     ///
     /// Returns an error if the policy configuration is invalid or unsupported.
     pub(crate) fn build_burn<B: Backend, T: R2lTensor>(&self) -> Result<BurnDistributionKind<B>> {
-        BurnDistributionKind::build_with_network(
+        let network = super::networks::NetworkBuilder::new(self.network.clone());
+        BurnDistributionKind::from_space(
             self.action_space.convert::<T>()?,
-            &self.observation_space.observation_shape(),
-            &self.network,
-            self.log_std_init,
+            &mut |_, width| {
+                network.build_burn::<B>(
+                    &self.observation_space.observation_shape(),
+                    width,
+                    &Default::default(),
+                )
+            },
+            &mut |_, width| {
+                Ok(burn::module::Param::from_tensor(burn::Tensor::full(
+                    [1, width],
+                    self.log_std_init,
+                    &Default::default(),
+                )))
+            },
         )
     }
 }

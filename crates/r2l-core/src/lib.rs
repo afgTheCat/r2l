@@ -3,7 +3,7 @@
 //! `r2l-core` is the contracts crate. It defines the small set of interfaces
 //! that environments, samplers, policies, agents, learners, and tensor
 //! backends agree on. Backend-specific implementations live in crates such as
-//! `r2l-burn` and `r2l-candle`; concrete algorithms and builders live outside
+//! `r2l-distributions`; concrete algorithms and builders live outside
 //! this crate as well.
 //!
 //! Most downstream code should start with the prelude:

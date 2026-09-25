@@ -45,9 +45,9 @@ impl Default for PPOParams {
 /// Per-minibatch data exposed to [`PPOHook::batch_hook`].
 pub struct PPOBatchData<T: R2lTensor> {
     /// Sampled observations in the minibatch.
-    pub observations: Vec<T>,
+    pub observations: T,
     /// Sampled actions in the minibatch.
-    pub actions: Vec<T>,
+    pub actions: T,
     /// Current policy log-probabilities for the sampled actions.
     pub logp: T,
     /// Value-function predictions for the sampled observations.
@@ -145,12 +145,14 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
             let Some(indices) = batch_indices.next_batch() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(batches, &indices, Module::lifter);
+            let (observations, actions) = sample(batches, &indices, Module::lifter)?;
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
             let logp_old = lm.tensor_from_slice(&logps.sample(&indices))?;
             let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
-            let logp = lm.policy().log_probs(&observations, &actions)?;
-            let values_pred = lm.values(&observations)?;
+            let logp = lm
+                .policy()
+                .log_probs(observations.clone(), actions.clone())?;
+            let values_pred = lm.values(observations.clone())?;
             let value_loss = PPOObjective::value_loss(&returns, &values_pred)?;
             let logp_diff = logp.sub(&logp_old)?;
             let ratio = logp_diff.exp()?;
