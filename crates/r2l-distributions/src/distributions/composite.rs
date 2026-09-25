@@ -6,19 +6,20 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-use super::policy::Policy;
+use super::TensorParameter;
+use super::policy::DistributionKind;
 use crate::{Network, Policy2};
 
 /// Independent child policies evaluated on the same observations.
 /// Actions are concatenated in child order; dictionary callers should use their space's key order.
 #[derive(Debug, Clone)]
-pub struct Composite<N: Network> {
-    policies: Vec<Policy<N>>,
-    action_sizes: Vec<usize>,
-    action_size: usize,
+pub struct Composite<N: Network, P: TensorParameter<N::Tensor> = <N as Network>::Tensor> {
+    pub(super) policies: Vec<DistributionKind<N, P>>,
+    pub(super) action_sizes: Vec<usize>,
+    pub(super) action_size: usize,
 }
 
-impl<N: Network> Composite<N> {
+impl<N: Network, P: TensorParameter<N::Tensor>> Composite<N, P> {
     /// Builds a nonempty ordered collection of policies over the same observations.
     ///
     /// # Arguments
@@ -26,7 +27,7 @@ impl<N: Network> Composite<N> {
     ///
     /// # Errors
     /// Returns an error for an empty collection or an overflowing combined action width.
-    pub fn new(policies: Vec<Policy<N>>) -> Result<Self> {
+    pub fn new(policies: Vec<DistributionKind<N, P>>) -> Result<Self> {
         let action_sizes: Vec<_> = policies
             .iter()
             .map(|policy| policy.action_shape().num_elements())
@@ -49,7 +50,7 @@ impl<N: Network> Composite<N> {
     }
 }
 
-impl<N: Network> Actor for Composite<N> {
+impl<N: Network, P: TensorParameter<N::Tensor>> Actor for Composite<N, P> {
     type Tensor = N::Tensor;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -71,7 +72,7 @@ impl<N: Network> Actor for Composite<N> {
     }
 }
 
-impl<N: Network> Policy2 for Composite<N> {
+impl<N: Network, P: TensorParameter<N::Tensor>> Policy2 for Composite<N, P> {
     fn action_shape(&self) -> Shape {
         [self.action_size].into()
     }

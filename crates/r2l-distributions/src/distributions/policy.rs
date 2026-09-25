@@ -1,5 +1,6 @@
 use r2l_core::{Shape, error::Result, models::Actor};
 
+use super::TensorParameter;
 use super::{
     bernoulli::MultiBernoulli, categorical::Categorical, composite::Composite,
     diagonal::DiagGaussian, multi_categorical::MultiCategorical,
@@ -8,15 +9,15 @@ use crate::{Network, Policy2};
 
 /// Policy variants that can be combined into a tuple or dictionary action.
 #[derive(Debug, Clone)]
-pub enum Policy<N: Network> {
+pub enum DistributionKind<N: Network, P: TensorParameter<N::Tensor> = <N as Network>::Tensor> {
     Categorical(Categorical<N>),
-    DiagGaussian(DiagGaussian<N>),
+    DiagGaussian(DiagGaussian<N, P>),
     MultiBernoulli(MultiBernoulli<N>),
     MultiCategorical(MultiCategorical<N>),
-    Composite(Composite<N>),
+    Composite(Composite<N, P>),
 }
 
-impl<N: Network> Policy<N> {
+impl<N: Network, P: TensorParameter<N::Tensor>> DistributionKind<N, P> {
     fn inner(&self) -> &dyn Policy2<Tensor = N::Tensor> {
         match self {
             Self::Categorical(policy) => policy,
@@ -28,7 +29,7 @@ impl<N: Network> Policy<N> {
     }
 }
 
-impl<N: Network> Actor for Policy<N> {
+impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DistributionKind<N, P> {
     type Tensor = N::Tensor;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -39,7 +40,7 @@ impl<N: Network> Actor for Policy<N> {
     }
 }
 
-impl<N: Network> Policy2 for Policy<N> {
+impl<N: Network, P: TensorParameter<N::Tensor>> Policy2 for DistributionKind<N, P> {
     fn action_shape(&self) -> Shape {
         self.inner().action_shape()
     }

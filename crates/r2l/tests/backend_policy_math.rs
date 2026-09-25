@@ -1,7 +1,7 @@
 use burn::{backend::NdArray, tensor::Tensor as BurnTensor};
 use candle_core::{DType, Device, Tensor as CandleTensor};
 use candle_nn::VarMap;
-use r2l_burn::distributions::BurnPolicyKind;
+use r2l_burn::distributions::BurnDistributionKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     env::Space,
@@ -140,8 +140,8 @@ fn candle_categorical() -> CandlePolicyKind {
     .unwrap()
 }
 
-fn burn_categorical() -> BurnPolicyKind<NdArray> {
-    BurnPolicyKind::build(
+fn burn_categorical() -> BurnDistributionKind<NdArray> {
+    BurnDistributionKind::build(
         Space::<VecTensor>::Discrete(3),
         &[2, 3],
         ActivationFunction::Tanh,
@@ -229,9 +229,13 @@ fn diagonal_gaussian_backends_agree_on_std_and_entropy() {
         log_std,
     )
     .unwrap();
-    let burn =
-        BurnPolicyKind::<NdArray>::build(action_space, &[2, 2], ActivationFunction::Tanh, log_std)
-            .unwrap();
+    let burn = BurnDistributionKind::<NdArray>::build(
+        action_space,
+        &[2, 2],
+        ActivationFunction::Tanh,
+        log_std,
+    )
+    .unwrap();
     let expected_entropy = 2.0 * (log_std + f32::midpoint((2.0 * std::f32::consts::PI).ln(), 1.0));
 
     assert_close(&[candle.std().unwrap().unwrap()], &[log_std.exp()], 1e-6);

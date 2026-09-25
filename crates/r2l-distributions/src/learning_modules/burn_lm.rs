@@ -1,44 +1,94 @@
-//! Burn policy/value learners used by on-policy algorithms.
+//! Burn learners for batched policies and value networks.
 //!
-//! The central public type here is [`crate::learning_module::PolicyValueLearner`],
-//! which combines a Burn policy, a value function, and optimizer state into one
-//! [`OnPolicyLearner`](r2l_core::on_policy::learning_module::OnPolicyLearner)
-//! implementation.
+//! Observations and actions use `[batch, features]`; values, returns and log
+//! probabilities use `[batch, 1]`. Reduced losses use `[1, 1]`.
+//! Gaussian policies use `Param::from_tensor(log_std)` to register trainable
+//! log standard deviations alongside the mean network.
+//!
+//! ```
+//! use burn::{backend::{Autodiff, NdArray}, optim::AdamWConfig};
+//! use r2l_core::models::ActivationFunction;
+//! use r2l_distributions::{Categorical, networks::mlp::Mlp};
+//! use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner;
+//!
+//! type B = Autodiff<NdArray>;
+//! let policy = Categorical::new(Mlp::<B>::build(&[4, 8, 2], ActivationFunction::Tanh))?;
+//! let learner = PolicyValueLearner::joint(
+//!     policy, &[4, 8, 1], ActivationFunction::Tanh, &AdamWConfig::new(), 0.001,
+//! );
+//! # Ok::<(), r2l_core::error::Error>(())
+//! ```
 
 use burn::{
     grad_clipping::GradientClipping,
-    module::{AutodiffModule, Module, ModuleDisplay},
+    module::{AutodiffModule, Module, ModuleDisplay, Param},
     optim::{AdamW, AdamWConfig, GradientsParams, Optimizer, adaptor::OptimizerAdaptor},
     prelude::Backend,
     tensor::{Tensor, backend::AutodiffBackend},
 };
 use r2l_core::{
     error::Result,
-    models::{ActivationFunction, Learner, Policy, ValueFunction},
-    on_policy::{learning_module::OnPolicyLearner, losses::FromPolicyValueLosses},
+    models::{ActivationFunction, Learner},
+    on_policy::losses::FromPolicyValueLosses,
 };
 
 use crate::{
-    distributions::BurnDistributionKind,
-    networks::{Network, NetworkKind, mlp::Mlp},
+    DistributionKind, Network, OnPolicyLearner2, Policy2, ValueFunction2,
+    networks::{cnn::Cnn, mlp::Mlp},
 };
+
+#[derive(Debug, Module)]
+pub enum NetworkKind<B: Backend> {
+    /// Fully connected network.
+    Mlp(Mlp<B>),
+    /// Convolutional network with a dense output network.
+    Cnn(Cnn<B>),
+}
+
+impl<B: Backend> Network for NetworkKind<B> {
+    type Tensor = Tensor<B, 2>;
+
+    fn input_shape(&self) -> r2l_core::Shape {
+        match self {
+            Self::Mlp(mlp) => mlp.input_shape(),
+            Self::Cnn(cnn) => cnn.input_shape(),
+        }
+    }
+
+    fn output_shape(&self) -> r2l_core::Shape {
+        match self {
+            Self::Mlp(mlp) => mlp.output_shape(),
+            Self::Cnn(cnn) => cnn.output_shape(),
+        }
+    }
+
+    fn forward(&self, t: Tensor<B, 2>) -> Result<Tensor<B, 2>> {
+        match self {
+            Self::Mlp(mlp) => Network::forward(mlp, t),
+            Self::Cnn(cnn) => cnn.forward(t),
+        }
+    }
+}
+
+/// Burn distributions with optimizer-managed Gaussian log standard deviations.
+pub type BurnDistributionKind<B> = DistributionKind<NetworkKind<B>, Param<Tensor<B, 2>>>;
 
 // Constraints needed for the policy to work with Adam optimization and decoupled weight decay.
 /// Trait alias-like bound for Burn policies used by on-policy learners.
 ///
-/// This captures the combination of Burn autodiff support and `r2l-core`
-/// [`Policy`] behavior required by the Burn learner implementations.
+/// This captures the combination of Burn autodiff support and batched
+/// [`Policy2`] behavior required by the Burn learner implementations.
 pub trait BurnPolicy<B: AutodiffBackend>:
-    AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
+    AutodiffModule<B, InnerModule: ModuleDisplay + Policy2<Tensor = Tensor<B::InnerBackend, 2>>>
     + ModuleDisplay
-    + Policy<Tensor = Tensor<B, 1>>
+    + Policy2<Tensor = Tensor<B, 2>>
 {
 }
 
 impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
-    M: AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 1>>>
+    M: AutodiffModule<B, InnerModule: ModuleDisplay + Policy2<Tensor = Tensor<B::InnerBackend, 2>>>
         + ModuleDisplay
-        + Policy<Tensor = Tensor<B, 1>>
+        + Policy2<Tensor = Tensor<B, 2>>
 {
 }
 
@@ -48,15 +98,15 @@ impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
 /// to the value loss during optimization.
 pub struct PolicyValueLosses<B: AutodiffBackend> {
     /// Policy loss to optimize.
-    pub policy_loss: Tensor<B, 1>,
+    pub policy_loss: Tensor<B, 2>,
     /// Value-function loss to optimize.
-    pub value_loss: Tensor<B, 1>,
+    pub value_loss: Tensor<B, 2>,
     /// Optional coefficient applied to `value_loss`.
     pub vf_coeff: Option<f32>,
 }
 
-impl<B: AutodiffBackend> FromPolicyValueLosses<Tensor<B, 1>> for PolicyValueLosses<B> {
-    fn from_policy_value_losses(policy_loss: Tensor<B, 1>, value_loss: Tensor<B, 1>) -> Self {
+impl<B: AutodiffBackend> FromPolicyValueLosses<Tensor<B, 2>> for PolicyValueLosses<B> {
+    fn from_policy_value_losses(policy_loss: Tensor<B, 2>, value_loss: Tensor<B, 2>) -> Self {
         Self {
             policy_loss,
             value_loss,
@@ -67,7 +117,7 @@ impl<B: AutodiffBackend> FromPolicyValueLosses<Tensor<B, 1>> for PolicyValueLoss
 
 impl<B: AutodiffBackend> PolicyValueLosses<B> {
     /// Creates a loss container from policy and value losses.
-    pub fn new(policy_loss: Tensor<B, 1>, value_loss: Tensor<B, 1>) -> Self {
+    pub fn new(policy_loss: Tensor<B, 2>, value_loss: Tensor<B, 2>) -> Self {
         Self {
             policy_loss,
             value_loss,
@@ -76,7 +126,7 @@ impl<B: AutodiffBackend> PolicyValueLosses<B> {
     }
 
     /// Adds an entropy term into the policy loss.
-    pub fn add_entropy_loss(&mut self, entropy_loss: Tensor<B, 1>) {
+    pub fn add_entropy_loss(&mut self, entropy_loss: Tensor<B, 2>) {
         self.policy_loss = self.policy_loss.clone() + entropy_loss;
     }
 
@@ -96,11 +146,17 @@ pub struct JointActorModel<B: Backend, M: Module<B>> {
 
 impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
     /// Creates a joint model from a policy and value network.
+    ///
+    /// # Panics
+    /// Panics unless the value network outputs one value per observation.
     pub fn new(policy: M, value_net: impl Into<NetworkKind<B>>) -> Self {
-        Self {
-            policy,
-            value_net: value_net.into(),
-        }
+        let value_net = value_net.into();
+        assert_eq!(
+            value_net.output_shape().dims(),
+            [1],
+            "value network must output one value"
+        );
+        Self { policy, value_net }
     }
 }
 
@@ -158,19 +214,17 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for JointPolicyValueLearner<B
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueLearner<B, M> {
-    type Tensor = Tensor<B, 1>;
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction2 for JointPolicyValueLearner<B, M> {
+    type Tensor = Tensor<B, 2>;
 
-    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
-        debug_assert!(!observations.is_empty());
-        let value = self.model.value_net.batch_forward(observations);
-        Ok(value.squeeze_dim(1))
+    fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
+        self.model.value_net.forward(observations)
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueLearner<B, D> {
-    type LearningTensor = Tensor<B, 1>;
-    type InferenceTensor = Tensor<B::InnerBackend, 1>;
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner2 for JointPolicyValueLearner<B, D> {
+    type LearningTensor = Tensor<B, 2>;
+    type InferenceTensor = Tensor<B::InnerBackend, 2>;
     type Policy = D;
     type InferencePolicy = D::InnerModule;
 
@@ -187,11 +241,14 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueL
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
-        Ok(Tensor::from_data(slice, &Default::default()))
+        Ok(Tensor::from_data(
+            burn::tensor::TensorData::new(slice.to_vec(), [slice.len(), 1]),
+            &self.model.value_net.devices()[0],
+        ))
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        Tensor::from_data(t.to_data(), &Default::default())
+        Tensor::from_inner(t.clone())
     }
 }
 
@@ -214,6 +271,11 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
         value_optimizer: OptimizerAdaptor<AdamW, NetworkKind<B>, B>,
         value_lr: f64,
     ) -> Self {
+        assert_eq!(
+            value_net.output_shape().dims(),
+            [1],
+            "value network must output one value"
+        );
         Self {
             policy,
             value_net,
@@ -267,19 +329,17 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for SplitPolicyValueLearner<B
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueLearner<B, M> {
-    type Tensor = Tensor<B, 1>;
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction2 for SplitPolicyValueLearner<B, M> {
+    type Tensor = Tensor<B, 2>;
 
-    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
-        debug_assert!(!observations.is_empty());
-        let value = self.value_net.batch_forward(observations);
-        Ok(value.squeeze_dim(1))
+    fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
+        self.value_net.forward(observations)
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for SplitPolicyValueLearner<B, D> {
-    type LearningTensor = Tensor<B, 1>;
-    type InferenceTensor = Tensor<B::InnerBackend, 1>;
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner2 for SplitPolicyValueLearner<B, D> {
+    type LearningTensor = Tensor<B, 2>;
+    type InferenceTensor = Tensor<B::InnerBackend, 2>;
     type Policy = D;
     type InferencePolicy = D::InnerModule;
 
@@ -296,11 +356,14 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for SplitPolicyValueL
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
-        Ok(Tensor::from_data(slice, &Default::default()))
+        Ok(Tensor::from_data(
+            burn::tensor::TensorData::new(slice.to_vec(), [slice.len(), 1]),
+            &self.value_net.devices()[0],
+        ))
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        Tensor::from_data(t.to_data(), &Default::default())
+        Tensor::from_inner(t.clone())
     }
 }
 
@@ -314,6 +377,9 @@ pub enum PolicyValueLearner<B: AutodiffBackend, D: BurnPolicy<B> = BurnDistribut
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     /// Builds a policy/value module with a shared optimizer configuration.
+    ///
+    /// # Panics
+    /// Panics for invalid layer widths or a value output width other than one.
     pub fn joint(
         policy: D,
         value_layers: &[usize],
@@ -330,6 +396,9 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     }
 
     /// Builds a joint learner with an independently constructed value network.
+    ///
+    /// # Panics
+    /// Panics unless the value network outputs one value per observation.
     pub fn joint_with_network(
         policy: D,
         value_net: NetworkKind<B>,
@@ -342,6 +411,9 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     }
 
     /// Builds a policy/value module with separate policy and value optimizers.
+    ///
+    /// # Panics
+    /// Panics for invalid layer widths or a value output width other than one.
     pub fn split(
         policy: D,
         value_layers: &[usize],
@@ -362,6 +434,9 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     }
 
     /// Builds a split learner with an independently constructed value network.
+    ///
+    /// # Panics
+    /// Panics unless the value network outputs one value per observation.
     pub fn split_with_network(
         policy: D,
         value_net: NetworkKind<B>,
@@ -419,11 +494,10 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for PolicyValueLearner<B, M> 
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueLearner<B, M> {
-    type Tensor = Tensor<B, 1>;
+impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction2 for PolicyValueLearner<B, M> {
+    type Tensor = Tensor<B, 2>;
 
-    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
-        debug_assert!(!observations.is_empty());
+    fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
         match self {
             Self::Joint(lm) => lm.values(observations),
             Self::Split(lm) => lm.values(observations),
@@ -431,9 +505,9 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueLearner<
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for PolicyValueLearner<B, D> {
-    type LearningTensor = Tensor<B, 1>;
-    type InferenceTensor = Tensor<B::InnerBackend, 1>;
+impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner2 for PolicyValueLearner<B, D> {
+    type LearningTensor = Tensor<B, 2>;
+    type InferenceTensor = Tensor<B::InnerBackend, 2>;
     type Policy = D;
     type InferencePolicy = D::InnerModule;
 
@@ -463,6 +537,6 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for PolicyValueLearne
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        Tensor::from_data(t.to_data(), &Default::default())
+        Tensor::from_inner(t.clone())
     }
 }

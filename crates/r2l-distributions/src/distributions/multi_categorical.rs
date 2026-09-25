@@ -14,8 +14,8 @@ use crate::{Network, Policy2};
 /// Independent categorical actions, using consecutive groups of network logits.
 #[derive(Debug, Clone)]
 pub struct MultiCategorical<N: Network> {
-    logits: N,
-    categories: Vec<usize>,
+    pub(super) logits: N,
+    pub(super) categories: Vec<usize>,
 }
 
 impl<N: Network> MultiCategorical<N> {

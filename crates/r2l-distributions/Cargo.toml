@@ -13,6 +13,7 @@ burn-ndarray = { workspace = true }
 burn-store = { workspace = true }
 itertools = { workspace = true }
 rand_distr = { workspace = true }
+serde = { workspace = true }
 
 [lints]
 workspace = true

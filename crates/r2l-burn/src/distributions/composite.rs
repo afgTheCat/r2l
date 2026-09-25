@@ -11,7 +11,7 @@ use r2l_core::{
 
 use crate::{
     distributions::{
-        BurnPolicyKind, bernoulli::MultiBernoulliDistribution,
+        BurnDistributionKind, bernoulli::MultiBernoulliDistribution,
         categorical::CategoricalDistribution, diagonal::DiagGaussianDistribution,
         multi_categorical::MultiCategoricalDistribution,
     },
@@ -143,24 +143,24 @@ impl<B: Backend> CompositeDistribution<B> {
             Space::Tuple(spaces) => spaces,
             Space::Dict(spaces) => spaces.into_values().collect(),
             space => {
-                let policy = BurnPolicyKind::build_with_network(
+                let policy = BurnDistributionKind::build_with_network(
                     space,
                     observation_shape,
                     config,
                     log_std_init,
                 )?;
                 policies.push(match policy {
-                    BurnPolicyKind::Categorical(policy) => {
+                    BurnDistributionKind::Categorical(policy) => {
                         CompositePolicyChildren::Categorical(policy)
                     }
-                    BurnPolicyKind::Diag(policy) => CompositePolicyChildren::Diag(policy),
-                    BurnPolicyKind::MultiCategorical(policy) => {
+                    BurnDistributionKind::Diag(policy) => CompositePolicyChildren::Diag(policy),
+                    BurnDistributionKind::MultiCategorical(policy) => {
                         CompositePolicyChildren::MultiCategorical(policy)
                     }
-                    BurnPolicyKind::MultiBernoulli(policy) => {
+                    BurnDistributionKind::MultiBernoulli(policy) => {
                         CompositePolicyChildren::MultiBernoulli(policy)
                     }
-                    BurnPolicyKind::Composite(_) => unreachable!(),
+                    BurnDistributionKind::Composite(_) => unreachable!(),
                 });
                 action_sizes.push(action_size);
                 return Ok(());

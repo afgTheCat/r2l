@@ -5845,6 +5845,7 @@ dependencies = [
  "itertools 0.15.0",
  "r2l-core",
  "rand_distr 0.6.0",
+ "serde",
 ]
 
 [[package]]

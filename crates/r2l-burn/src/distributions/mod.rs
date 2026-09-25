@@ -42,7 +42,7 @@ pub mod multi_categorical;
 /// modules. It dispatches to a categorical policy for discrete action spaces
 /// and to a diagonal-Gaussian policy for Box action spaces.
 #[derive(Debug, Module)]
-pub enum BurnPolicyKind<B: Backend> {
+pub enum BurnDistributionKind<B: Backend> {
     /// Policy for discrete action spaces.
     Categorical(CategoricalDistribution<B, NetworkKind<B>>),
     /// Policy for Box action spaces.
@@ -55,7 +55,7 @@ pub enum BurnPolicyKind<B: Backend> {
     Composite(CompositeDistribution<B>),
 }
 
-impl<B: Backend> BurnPolicyKind<B> {
+impl<B: Backend> BurnDistributionKind<B> {
     /// Loads policy parameters from safetensors bytes.
     ///
     /// # Errors
@@ -164,7 +164,7 @@ impl<B: Backend> BurnPolicyKind<B> {
     }
 }
 
-impl<B: Backend> Actor for BurnPolicyKind<B> {
+impl<B: Backend> Actor for BurnDistributionKind<B> {
     type Tensor = Tensor<B, 1>;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -188,7 +188,7 @@ impl<B: Backend> Actor for BurnPolicyKind<B> {
     }
 }
 
-impl<B: Backend> ToSafetensors for BurnPolicyKind<B> {
+impl<B: Backend> ToSafetensors for BurnDistributionKind<B> {
     fn to_safetensors(&self) -> Result<Vec<u8>> {
         match self {
             Self::Categorical(cat) => cat.to_safetensors(),
@@ -200,7 +200,7 @@ impl<B: Backend> ToSafetensors for BurnPolicyKind<B> {
     }
 }
 
-impl<B: Backend> Policy for BurnPolicyKind<B> {
+impl<B: Backend> Policy for BurnDistributionKind<B> {
     fn log_probs(
         &self,
         observations: &[Self::Tensor],

@@ -1,7 +1,7 @@
 use burn::prelude::Backend;
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
-use r2l_burn::distributions::BurnPolicyKind;
+use r2l_burn::distributions::BurnDistributionKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     env::{EnvDescription, Space},
@@ -69,8 +69,8 @@ impl PolicyBuilder {
     /// # Errors
     ///
     /// Returns an error if the policy configuration is invalid or unsupported.
-    pub(crate) fn build_burn<B: Backend, T: R2lTensor>(&self) -> Result<BurnPolicyKind<B>> {
-        BurnPolicyKind::build_with_network(
+    pub(crate) fn build_burn<B: Backend, T: R2lTensor>(&self) -> Result<BurnDistributionKind<B>> {
+        BurnDistributionKind::build_with_network(
             self.action_space.convert::<T>()?,
             &self.observation_space.observation_shape(),
             &self.network,

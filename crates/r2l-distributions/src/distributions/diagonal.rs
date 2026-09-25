@@ -9,40 +9,42 @@ use r2l_core::{
 };
 use rand_distr::{Distribution, StandardNormal};
 
+use super::TensorParameter;
 use crate::{Network, Policy2};
 
 /// Independent Gaussian actions with network-predicted means and shared log standard deviations.
-/// The supplied `[1, actions]` log-standard-deviation tensor remains differentiable.
-/// Its registration with an optimizer and serialization are the caller's responsibility.
+/// Log standard deviations have shape `[1, actions]`. Pass a Burn `Param` for
+/// optimizer-managed parameters, or a tensor when parameters are managed externally.
 #[derive(Debug, Clone)]
-pub struct DiagGaussian<N: Network> {
-    mean: N,
-    log_std: N::Tensor,
+pub struct DiagGaussian<N: Network, P: TensorParameter<N::Tensor> = <N as Network>::Tensor> {
+    pub(super) mean: N,
+    pub(super) log_std: P,
 }
 
-impl<N: Network> DiagGaussian<N> {
-    /// Builds a Gaussian policy using an externally managed log-standard-deviation tensor.
+impl<N: Network, P: TensorParameter<N::Tensor>> DiagGaussian<N, P> {
+    /// Builds a Gaussian policy from a mean network and log-standard-deviation parameter.
     ///
     /// # Arguments
     /// * `mean` - Network producing a nonempty vector of action means.
-    /// * `log_std` - Shared log standard deviations of shape `[1, actions]`.
+    /// * `log_std` - Shared log standard deviations of shape `[1, actions]`. Use
+    ///   `burn::module::Param::from_tensor` to include them in Burn optimizer updates.
     ///
     /// # Errors
     /// Returns an error for incompatible network or parameter dimensions.
-    pub fn new(mean: N, log_std: N::Tensor) -> Result<Self> {
+    pub fn new(mean: N, log_std: P) -> Result<Self> {
         let width = super::output_width(&mean)?;
-        if log_std.to_shape().dims() != [1, width] {
+        if log_std.value().to_shape().dims() != [1, width] {
             return Err(Error::invalid_parameter(
                 "log_std shape",
                 format!("[1, {width}]"),
-                format!("{:?}", log_std.to_shape()),
+                format!("{:?}", log_std.value().to_shape()),
             ));
         }
         Ok(Self { mean, log_std })
     }
 }
 
-impl<N: Network> Actor for DiagGaussian<N> {
+impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DiagGaussian<N, P> {
     type Tensor = N::Tensor;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -54,7 +56,7 @@ impl<N: Network> Actor for DiagGaussian<N> {
                 .collect()
         });
         let noise = Self::Tensor::from_vec_like(noise, mean.to_shape(), &mean)?;
-        Ok(mean.add(&self.log_std.exp()?.mul(&noise)?)?)
+        Ok(mean.add(&self.log_std.value().exp()?.mul(&noise)?)?)
     }
 
     fn mode_action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -63,7 +65,7 @@ impl<N: Network> Actor for DiagGaussian<N> {
     }
 }
 
-impl<N: Network> Policy2 for DiagGaussian<N> {
+impl<N: Network, P: TensorParameter<N::Tensor>> Policy2 for DiagGaussian<N, P> {
     fn action_shape(&self) -> Shape {
         self.mean.output_shape()
     }
@@ -72,7 +74,7 @@ impl<N: Network> Policy2 for DiagGaussian<N> {
         let mean = self.mean.forward(observations)?;
         let shape = mean.to_shape();
         super::action_batch(&actions, shape[0], shape[1])?;
-        let log_std = self.log_std.broadcast_as(&shape)?;
+        let log_std = self.log_std.value().broadcast_as(&shape)?;
         let inverse_variance = log_std.mul_scalar(-2.)?.exp()?;
         Ok(actions
             .sub(&mean)?
@@ -88,12 +90,13 @@ impl<N: Network> Policy2 for DiagGaussian<N> {
         // Independent of observations; sum over action dimensions, with no batch multiplier.
         Ok(self
             .log_std
+            .value()
             .add_scalar(0.5 + 0.5 * (2. * PI).ln())?
             .sum_dim(1)?
             .mean()?)
     }
 
     fn std(&self) -> Result<Option<f32>> {
-        Ok(Some(self.log_std.exp()?.mean()?.to_vec()?[0]))
+        Ok(Some(self.log_std.value().exp()?.mean()?.to_vec()?[0]))
     }
 }

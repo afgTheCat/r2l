@@ -12,7 +12,7 @@ use crate::{Network, Policy2};
 /// Independent binary actions, with one network logit per action bit.
 #[derive(Debug, Clone)]
 pub struct MultiBernoulli<N: Network> {
-    logits: N,
+    pub(super) logits: N,
 }
 
 impl<N: Network> MultiBernoulli<N> {

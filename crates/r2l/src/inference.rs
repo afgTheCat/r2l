@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use burn::backend::NdArray;
 use candle_core::DType;
 use candle_nn::VarBuilder;
-use r2l_burn::distributions::BurnPolicyKind;
+use r2l_burn::distributions::BurnDistributionKind;
 use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     ActorWrapper,
@@ -132,7 +132,7 @@ enum InferenceActor<T: R2lTensor> {
     /// Candle-backed inference actor.
     Candle(ActorWrapper<CandlePolicyKind, T>),
     /// Burn-backed inference actor.
-    Burn(Box<ActorWrapper<BurnPolicyKind<NdArray>, T>>),
+    Burn(Box<ActorWrapper<BurnDistributionKind<NdArray>, T>>),
 }
 
 impl<T: R2lTensor> Actor for InferenceActor<T> {

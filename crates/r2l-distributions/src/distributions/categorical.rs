@@ -16,7 +16,7 @@ use crate::{Policy2, networks::Network};
 /// Networks must honor their declared output shape; violating that contract may panic.
 #[derive(Debug, Clone)]
 pub struct Categorical<N: Network> {
-    logits: N,
+    pub(super) logits: N,
 }
 
 impl<N: Network> Categorical<N> {
