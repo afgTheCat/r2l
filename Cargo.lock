@@ -5775,6 +5775,7 @@ dependencies = [
 name = "r2l-benchmark-task"
 version = "0.0.3"
 dependencies = [
+ "r2l",
  "serde",
  "yaml_serde",
 ]

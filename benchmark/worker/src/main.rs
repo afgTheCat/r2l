@@ -3,11 +3,8 @@
 use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
-use r2l::{
-    ClipRangeSchedule, LearningRateSchedule, ObsNormalizerConfig, PPOBuilder,
-    TrainingArtifactsConfig, TrainingLimit,
-};
-use r2l_benchmark_task::{Backend, BenchmarkTask, RlZooSchedule};
+use r2l::{PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
+use r2l_benchmark_task::{Backend, BenchmarkTask};
 
 const SB3_SCRIPT_PATH: &str = "/opt/r2l/sb3/ppo.py";
 const TASK_ENV_VAR: &str = "R2L_TASK";
@@ -21,11 +18,10 @@ fn run(task: &BenchmarkTask) -> anyhow::Result<()> {
 
 fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
     let config = &task.rl_zoo_env_config;
-    let normalizer_config = if config.normalize.norm_obs() {
-        ObsNormalizerConfig::Enabled { clip: Some(10.0) }
-    } else {
-        ObsNormalizerConfig::Disabled
-    };
+    let normalizer_config = config
+        .normalize
+        .to_normalizer_config()
+        .with_clip(Some(10.0));
     let artifacts_config = TrainingArtifactsConfig::new(&task.output_dir);
     let mut builder = PPOBuilder::gym(task.env_name.clone(), config.n_envs)?
         .with_rollout_steps(config.n_steps)
@@ -37,8 +33,8 @@ fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
         .with_total_epochs(config.n_epochs)
         .with_entropy_coefficient(config.ent_coef)
         .with_sample_size(config.batch_size)
-        .with_learning_rate_schedule(learning_rate_schedule(config.learning_rate))
-        .with_clip_range_schedule(clip_range_schedule(config.clip_range))
+        .with_learning_rate_schedule(config.learning_rate.into_learning_rate_schedule())
+        .with_clip_range_schedule(config.clip_range.into_clip_range_schedule())
         .with_log_std_init(config.log_std_init)
         .with_value_loss_coefficient(Some(config.vf_coef))
         .with_seed(0) // TODO: should we keep this?
@@ -64,20 +60,6 @@ fn train_sb3(task: &BenchmarkTask) -> anyhow::Result<()> {
         bail!("SB3 evaluation for {} exited with {status}", task.env_name);
     }
     Ok(())
-}
-
-fn learning_rate_schedule(schedule: RlZooSchedule) -> LearningRateSchedule {
-    match schedule {
-        RlZooSchedule::Constant(value) => LearningRateSchedule::Constant(value),
-        RlZooSchedule::Linear(value) => LearningRateSchedule::Linear(value),
-    }
-}
-
-fn clip_range_schedule(schedule: RlZooSchedule) -> ClipRangeSchedule {
-    match schedule {
-        RlZooSchedule::Constant(value) => ClipRangeSchedule::Constant(value as f32),
-        RlZooSchedule::Linear(value) => ClipRangeSchedule::Linear(value as f32),
-    }
 }
 
 fn main() -> anyhow::Result<()> {
