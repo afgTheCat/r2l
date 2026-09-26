@@ -3,7 +3,10 @@
 use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
-use r2l::{GradientClippingConfig, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
+use r2l::{
+    AdamWConfig, GradientClippingConfig, OptimizerConfig, PPOBuilder, TrainingArtifactsConfig,
+    TrainingLimit,
+};
 use r2l_benchmark_task::{Backend, BenchmarkTask};
 
 const SB3_SCRIPT_PATH: &str = "/opt/r2l/sb3/ppo.py";
@@ -26,12 +29,15 @@ fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
         .with_total_epochs(config.n_epochs)
         .with_entropy_coefficient(config.ent_coef)
         .with_sample_size(config.batch_size)
-        .with_learning_rate_schedule(config.learning_rate.into_learning_rate_schedule())
+        .with_optimizer(OptimizerConfig::Joint(AdamWConfig {
+            learning_rate: config.learning_rate.into_learning_rate_schedule(),
+            gradient_clipping: GradientClippingConfig::Norm(config.max_grad_norm),
+            ..Default::default()
+        }))
         .with_clip_range_schedule(config.clip_range.into_clip_range_schedule())
         .with_log_std_init(config.log_std_init)
         .with_value_loss_coefficient(config.vf_coef)
-        .with_seed(0) // TODO: should we keep this?
-        .with_gradient_clipping(GradientClippingConfig::Norm(config.max_grad_norm));
+        .with_seed(0); // TODO: should we keep this?
     if config.normalize.norm_reward() {
         builder = builder.with_reward_normalizer(config.gamma, 10.0);
     }

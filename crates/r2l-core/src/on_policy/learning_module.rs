@@ -40,6 +40,12 @@ pub trait OnPolicyLearner:
     /// Returns the train-time policy.
     fn policy(&self) -> &Self::Policy;
 
-    /// Sets the learning rate used by future updates.
-    fn set_learning_rate(&mut self, learning_rate: f64);
+    /// Sets the same learning rate for policy and value updates.
+    fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.set_learning_rates(learning_rate, learning_rate);
+    }
+
+    /// Sets learning rates independently for policy and value updates.
+    /// Joint optimizers use `policy_learning_rate` for both networks.
+    fn set_learning_rates(&mut self, policy_learning_rate: f64, value_learning_rate: f64);
 }

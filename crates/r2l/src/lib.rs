@@ -71,15 +71,15 @@ use burn::backend::{Autodiff, NdArray};
 pub type BurnBackend = Autodiff<NdArray>;
 
 pub use builders::{
-    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, ObsNormalizerConfig, OnPolicyBuilder, PPOBuilder,
-    PPOBurn, PPOCandle, TrainingArtifactsConfig,
+    A2CBuilder, A2CBurn, A2CCandle, AdamWConfig, GradientClippingConfig, LearningRateSchedule,
+    ObsNormalizerConfig, OnPolicyBuilder, OptimizerConfig, PPOBuilder, PPOBurn, PPOCandle,
+    TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
 pub use hooks::learning::stats::{A2CMinibatchStats, A2CRolloutStats};
 pub use hooks::learning::stats::{PPOMinibatchStats, PPORolloutStats};
 pub use hooks::learning::{
-    A2CLearningHook, A2CSettings, ClipRangeSchedule, GradientClippingConfig, LearningHook,
-    LearningRateSchedule, PPOLearningHook, PPOSettings,
+    A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, PPOLearningHook, PPOSettings,
 };
 pub use hooks::on_policy::{OnPolicyTrainingHooks, commands::OnPolicyControlHandle};
 pub use hooks::progress::TrainingLimit;

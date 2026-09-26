@@ -1,9 +1,10 @@
 use std::{collections::BTreeMap, path::Path};
 
 use r2l::{
-    A2CBuilder, ActivationFunction, AdamWParams, Env, EnvDescription, EvaluationSettings,
-    InferencePolicy, OnPolicyAlgorithm, PPOBuilder, SamplerExecutionMode, Snapshot, Space,
-    TrainingArtifactsConfig, TrainingLimit, VecTensor,
+    A2CBuilder, ActivationFunction, AdamWConfig, Env, EnvDescription, EvaluationSettings,
+    GradientClippingConfig, InferencePolicy, LearningRateSchedule, OnPolicyAlgorithm,
+    OptimizerConfig, PPOBuilder, SamplerExecutionMode, Snapshot, Space, TrainingArtifactsConfig,
+    TrainingLimit, VecTensor,
     builders::networks::{CnnConfig, CnnLayerConfig, MlpConfig, NetworkConfig},
 };
 use r2l_core::{
@@ -74,9 +75,10 @@ impl Env for CompositeEnv {
     }
 }
 
-fn optimizer() -> AdamWParams {
-    AdamWParams {
-        lr: 0.01,
+fn optimizer() -> AdamWConfig {
+    AdamWConfig {
+        learning_rate: LearningRateSchedule::Constant(0.01),
+        gradient_clipping: GradientClippingConfig::Norm(0.5),
         beta1: 0.9,
         beta2: 0.999,
         eps: 1e-8,
@@ -150,16 +152,19 @@ fn ppo_and_a2c_train_and_reload_all_distributions_with_joint_and_split_optimizer
                         .with_policy_hidden_layers(vec![4])
                         .with_value_hidden_layers(vec![4])
                         .with_sample_size(4)
-                        .with_learning_rate(0.01)
                         .with_entropy_coefficient(0.01)
                         .with_value_loss_coefficient(0.5)
                         .with_log_progress(false)
                         .with_training_artifacts(artifacts(output.path()));
-                    let builder = if split {
-                        builder.with_split(Some(0.5), optimizer(), Some(0.5), optimizer())
+                    let config = if split {
+                        OptimizerConfig::Split {
+                            policy: optimizer(),
+                            value: optimizer(),
+                        }
                     } else {
-                        builder.with_joint(Some(0.5), optimizer())
+                        OptimizerConfig::Joint(optimizer())
                     };
+                    let builder = builder.with_optimizer(config);
                     if burn {
                         train_and_reload(builder.with_burn().build().unwrap(), output.path());
                     } else {

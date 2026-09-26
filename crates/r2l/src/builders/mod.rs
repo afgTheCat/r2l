@@ -1,18 +1,16 @@
 /// Backend-independent network configuration and construction.
 pub mod networks;
 pub(crate) mod normalizer;
+/// Adam optimizer settings, learning-rate schedules, and clipping.
+pub mod optimizer;
 pub(crate) mod policy;
 
 use std::{marker::PhantomData, path::PathBuf, sync::mpsc::Sender};
 
-use burn::{
-    backend::ndarray::NdArrayDevice,
-    grad_clipping::GradientClippingConfig as BurnGradientClippingConfig, optim::AdamWConfig,
-    prelude::Backend, tensor::backend::AutodiffBackend,
-};
+use burn::{backend::ndarray::NdArrayDevice, prelude::Backend};
 use candle_core::{Device, DeviceLocation};
-use candle_nn::ParamsAdamW;
 use networks::{MlpConfig, NetworkBuilder, NetworkConfig};
+pub use optimizer::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
 use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
@@ -44,13 +42,13 @@ use serde::{Deserialize, Serialize, de::Error as _};
 
 use crate::inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
 use crate::{
-    A2CRolloutStats, BurnBackend, EpisodeBoundHook, LearningRateSchedule, OnPolicyControlHandle,
-    PPORolloutStats, StepBoundHook, TrainingLimit,
+    A2CRolloutStats, BurnBackend, EpisodeBoundHook, OnPolicyControlHandle, PPORolloutStats,
+    StepBoundHook, TrainingLimit,
     evaluator::{BestPolicyEvaluator, EvaluationSampler, EvaluationSettings},
     hooks::{
         learning::{
-            A2CLearningHook, A2CSettings, ClipRangeSchedule, GradientClippingConfig, LearningHook,
-            PPOLearningHook, PPOSettings, TargetKl, reporter::RolloutReporter,
+            A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, PPOLearningHook,
+            PPOSettings, TargetKl, reporter::RolloutReporter,
         },
         on_policy::{
             OnPolicyTrainingHooks,
@@ -100,21 +98,6 @@ pub type PPOBurn<B> = PPO<BurnPolicyValueLearner<B>, PPOLearningHook<BurnPolicyV
 pub type A2CCandle = A2C<CandlePolicyValueLearner, A2CLearningHook<CandlePolicyValueLearner>>;
 /// A2C agent produced by a Burn-backed algorithm builder.
 pub type A2CBurn<B> = A2C<BurnPolicyValueLearner<B>, A2CLearningHook<BurnPolicyValueLearner<B>>>;
-
-/// Hyperparameters for Adam optimization with decoupled weight decay.
-#[derive(Clone, Debug)]
-pub struct AdamWParams {
-    /// Learning rate.
-    pub lr: f64,
-    /// First-moment decay coefficient.
-    pub beta1: f64,
-    /// Second-moment decay coefficient.
-    pub beta2: f64,
-    /// Numerical-stability term.
-    pub eps: f64,
-    /// Weight-decay coefficient.
-    pub weight_decay: f64,
-}
 
 /// Selects the artifacts produced during training and where they are written.
 pub struct TrainingArtifactsConfig {
@@ -202,76 +185,6 @@ fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
     };
     assert!(!path.is_file());
     path
-}
-
-/// Optimizer arrangement for the policy and value networks.
-#[derive(Clone, Debug)]
-pub(crate) enum OnPolicyOptimizerLayout {
-    /// One optimizer updates both networks.
-    Joint {
-        /// Optional maximum gradient norm.
-        max_grad_norm: Option<f32>,
-        /// Shared Adam optimizer parameters with decoupled weight decay.
-        params: AdamWParams,
-    },
-    /// Policy and value networks use independent optimizers.
-    Split {
-        /// Optional maximum policy gradient norm.
-        policy_max_grad_norm: Option<f32>,
-        /// Policy optimizer parameters.
-        policy_params: AdamWParams,
-        /// Optional maximum value gradient norm.
-        value_max_grad_norm: Option<f32>,
-        /// Value optimizer parameters.
-        value_params: AdamWParams,
-    },
-}
-
-impl OnPolicyOptimizerLayout {
-    fn map_params(mut self, mut update: impl FnMut(&mut AdamWParams)) -> Self {
-        match &mut self {
-            Self::Joint { params, .. } => update(params),
-            Self::Split {
-                policy_params,
-                value_params,
-                ..
-            } => {
-                update(policy_params);
-                update(value_params);
-            }
-        }
-        self
-    }
-
-    /// Sets the learning rate of every optimizer in the layout.
-    #[must_use]
-    fn with_lr(self, lr: f64) -> Self {
-        self.map_params(|params| params.lr = lr)
-    }
-
-    /// Sets the first-moment decay of every optimizer in the layout.
-    #[must_use]
-    fn with_beta1(self, beta1: f64) -> Self {
-        self.map_params(|params| params.beta1 = beta1)
-    }
-
-    /// Sets the second-moment decay of every optimizer in the layout.
-    #[must_use]
-    fn with_beta2(self, beta2: f64) -> Self {
-        self.map_params(|params| params.beta2 = beta2)
-    }
-
-    /// Sets the numerical-stability term of every optimizer in the layout.
-    #[must_use]
-    fn with_epsilon(self, epsilon: f64) -> Self {
-        self.map_params(|params| params.eps = epsilon)
-    }
-
-    /// Sets the weight decay of every optimizer in the layout.
-    #[must_use]
-    fn with_weight_decay(self, weight_decay: f64) -> Self {
-        self.map_params(|params| params.weight_decay = weight_decay)
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -453,18 +366,16 @@ struct Builder<E: Env> {
 
     // for the hooks
     training_limit: TrainingLimit,
-    learning_rate_schedule: LearningRateSchedule,
     training_artifacts: Option<TrainingArtifactsConfig>,
     control_endpoint: Option<OnPolicyControlEndpoint>,
 
     // for the agent
     policy_config: PolicyBuilder,
     value_network: NetworkConfig,
-    optimizer_layout: OnPolicyOptimizerLayout,
+    optimizer: OptimizerConfig,
     log_progress: bool,
     entropy_coeff: f32,
     vf_coeff: f32,
-    gradient_clipping: GradientClippingConfig,
     gamma: f32,
     lambda: f32,
     sample_size: usize,
@@ -494,7 +405,6 @@ impl<E: Env> Builder<E> {
             backend_configuration,
             algorithm_configuration,
             training_limit: TrainingLimit::rollouts(50),
-            learning_rate_schedule: LearningRateSchedule::Constant(3e-4),
             training_artifacts: None,
             control_endpoint: None,
             policy_config,
@@ -502,33 +412,16 @@ impl<E: Env> Builder<E> {
                 hidden_layers: vec![64, 64],
                 activation: ActivationFunction::default(),
             }),
-            optimizer_layout: OnPolicyOptimizerLayout::Joint {
-                params: AdamWParams {
-                    lr: 3e-4,
-                    beta1: 0.9,
-                    beta2: 0.999,
-                    eps: 1e-5,
-                    weight_decay: 1e-4,
-                },
-                max_grad_norm: None,
-            },
+            optimizer: OptimizerConfig::default(),
             log_progress: true,
             entropy_coeff: 0.0,
             vf_coeff: 1.0,
-            gradient_clipping: GradientClippingConfig::Disabled,
             gamma: 0.98,
             lambda: 0.8,
             sample_size: 64,
             seed: None,
             sampler_execution_mode: SamplerExecutionMode::MultiThreaded,
         })
-    }
-
-    fn update_optimizer_layout(
-        &mut self,
-        update: impl FnOnce(OnPolicyOptimizerLayout) -> OnPolicyOptimizerLayout,
-    ) {
-        self.optimizer_layout = update(self.optimizer_layout.clone());
     }
 
     fn validate_evaluation_schedule(&self) -> Result<(), Error> {
@@ -561,13 +454,21 @@ impl<E: Env> Builder<E> {
         }
     }
 
-    fn build_candle_learner(&self, device: &Device) -> Result<CandlePolicyValueLearner, Error> {
+    fn build_candle_learner(&self) -> Result<CandlePolicyValueLearner, Error> {
+        let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
+            unreachable!("Candle agent type must use Candle backend configuration")
+        };
+        self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
+        if let Some(seed) = self.seed {
+            backend.seed(seed)?;
+        }
+        let device = &backend.device;
         let (policy, policy_varmap) = self
             .policy_config
             .build_candle_with_varmap::<E::Tensor>(device)?;
-        let value_varmap = match self.optimizer_layout {
-            OnPolicyOptimizerLayout::Joint { .. } => policy_varmap.clone(),
-            OnPolicyOptimizerLayout::Split { .. } => candle_nn::VarMap::new(),
+        let value_varmap = match self.optimizer {
+            OptimizerConfig::Joint(_) => policy_varmap.clone(),
+            OptimizerConfig::Split { .. } => candle_nn::VarMap::new(),
         };
         let vb = r2l_distributions::networks::seeded_var_builder(
             &value_varmap,
@@ -579,95 +480,57 @@ impl<E: Env> Builder<E> {
             1,
             &vb.pp("value"),
         )?;
-        let optimizer = match &self.optimizer_layout {
-            OnPolicyOptimizerLayout::Joint {
-                max_grad_norm,
-                params,
-            } => PolicyValueOptimizer::joint(
+        let optimizer = match &self.optimizer {
+            OptimizerConfig::Joint(config) => PolicyValueOptimizer::joint(
                 &policy_varmap,
-                Self::candle_optimizer_params(params),
-                *max_grad_norm,
+                config.candle_params(),
+                config.gradient_clipping.max_norm(),
             )?,
-            OnPolicyOptimizerLayout::Split {
-                policy_max_grad_norm,
-                policy_params,
-                value_max_grad_norm,
-                value_params,
-            } => PolicyValueOptimizer::split(
+            OptimizerConfig::Split { policy, value } => PolicyValueOptimizer::split(
                 &policy_varmap,
                 &value_varmap,
-                Self::candle_optimizer_params(policy_params),
-                Self::candle_optimizer_params(value_params),
-                *policy_max_grad_norm,
-                *value_max_grad_norm,
+                policy.candle_params(),
+                value.candle_params(),
+                policy.gradient_clipping.max_norm(),
+                value.gradient_clipping.max_norm(),
             )?,
         };
         CandlePolicyValueLearner::new(policy, value, optimizer, device.clone())
     }
 
-    fn build_burn_learner<B: AutodiffBackend>(&self) -> Result<BurnPolicyValueLearner<B>, Error> {
-        let policy = self.policy_config.build_burn::<B, E::Tensor>()?;
-        let value_net = NetworkBuilder::new(self.value_network.clone()).build_burn::<B>(
+    fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner<BurnBackend>, Error> {
+        let BackendConfiguration::Burn(backend) = self.backend_configuration else {
+            unreachable!("Burn agent type must use Burn backend configuration")
+        };
+        self.write_inference_config(InferenceBackend::Burn(backend))?;
+        if let Some(seed) = self.seed {
+            BurnBackend::seed(&NdArrayDevice::default(), seed);
+        }
+        let policy = self.policy_config.build_burn::<BurnBackend, E::Tensor>()?;
+        let value_net = NetworkBuilder::new(self.value_network.clone()).build_burn::<BurnBackend>(
             &self.policy_config.observation_space.observation_shape(),
             1,
-            &Default::default(),
+            &NdArrayDevice::default(),
         )?;
-        Ok(match &self.optimizer_layout {
-            OnPolicyOptimizerLayout::Joint {
-                max_grad_norm,
-                params,
-            } => {
-                let optimizer_config = Self::burn_optimizer_config(params, *max_grad_norm);
-                BurnPolicyValueLearner::joint_with_network(
-                    policy,
-                    value_net,
-                    &optimizer_config,
-                    params.lr,
-                )
-            }
-            OnPolicyOptimizerLayout::Split {
-                policy_max_grad_norm,
-                policy_params,
-                value_max_grad_norm,
-                value_params,
-            } => {
-                let optimizer_config =
-                    Self::burn_optimizer_config(policy_params, *policy_max_grad_norm);
-                let value_optimizer_config =
-                    Self::burn_optimizer_config(value_params, *value_max_grad_norm);
-                BurnPolicyValueLearner::split_with_network(
-                    policy,
-                    value_net,
-                    &optimizer_config,
-                    policy_params.lr,
-                    &value_optimizer_config,
-                    value_params.lr,
-                )
-            }
+        Ok(match &self.optimizer {
+            OptimizerConfig::Joint(config) => BurnPolicyValueLearner::joint_with_network(
+                policy,
+                value_net,
+                &config.burn_config(),
+                config.learning_rate.value(1.0),
+            ),
+            OptimizerConfig::Split {
+                policy: policy_config,
+                value,
+            } => BurnPolicyValueLearner::split_with_network(
+                policy,
+                value_net,
+                &policy_config.burn_config(),
+                policy_config.learning_rate.value(1.0),
+                &value.burn_config(),
+                value.learning_rate.value(1.0),
+            ),
         })
-    }
-
-    fn candle_optimizer_params(params: &AdamWParams) -> ParamsAdamW {
-        ParamsAdamW {
-            lr: params.lr,
-            beta1: params.beta1,
-            beta2: params.beta2,
-            eps: params.eps,
-            weight_decay: params.weight_decay,
-        }
-    }
-
-    fn burn_optimizer_config(params: &AdamWParams, max_grad_norm: Option<f32>) -> AdamWConfig {
-        let optimizer_config = AdamWConfig::new()
-            .with_beta_1(params.beta1 as f32)
-            .with_beta_2(params.beta2 as f32)
-            .with_epsilon(params.eps as f32)
-            .with_weight_decay(params.weight_decay as f32);
-        match max_grad_norm {
-            Some(max_grad_norm) => optimizer_config
-                .with_grad_clipping(Some(BurnGradientClippingConfig::Norm(max_grad_norm))),
-            None => optimizer_config,
-        }
     }
 
     fn default_on_policy_hook<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>>(
@@ -812,13 +675,15 @@ impl<E: Env> Builder<E> {
         else {
             unreachable!("PPO agent type must use PPO configuration")
         };
+        let (policy_learning_rate_schedule, value_learning_rate_schedule) =
+            self.optimizer.learning_rate_schedules();
         LearningHook {
             normalize_advantage: normalize_advantage.unwrap_or(true),
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
-            gradient_clipping: self.gradient_clipping,
             progress,
-            learning_rate_schedule: self.learning_rate_schedule,
+            policy_learning_rate_schedule,
+            value_learning_rate_schedule,
             algorithm: PPOSettings {
                 total_epochs: *total_epochs,
                 current_epoch: 0,
@@ -841,13 +706,15 @@ impl<E: Env> Builder<E> {
         else {
             unreachable!("A2C agent type must use A2C configuration")
         };
+        let (policy_learning_rate_schedule, value_learning_rate_schedule) =
+            self.optimizer.learning_rate_schedules();
         LearningHook {
             normalize_advantage: normalize_advantage.unwrap_or(false),
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
-            gradient_clipping: self.gradient_clipping,
             progress,
-            learning_rate_schedule: self.learning_rate_schedule,
+            policy_learning_rate_schedule,
+            value_learning_rate_schedule,
             algorithm: A2CSettings {
                 reporter: RolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
             },
@@ -880,15 +747,7 @@ impl<E: Env> Builder<E> {
     }
 
     fn ppo_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<PPOCandle, Error> {
-        let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
-            unreachable!("Candle agent type must use Candle backend configuration")
-        };
-        let backend = backend.clone();
-        self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
-        if let Some(seed) = self.seed {
-            backend.seed(seed)?;
-        }
-        let learner = self.build_candle_learner(&backend.device)?;
+        let learner = self.build_candle_learner()?;
         let hooks = self.ppo_hook(progress);
         Ok(PPO {
             lm: learner,
@@ -901,14 +760,7 @@ impl<E: Env> Builder<E> {
         &mut self,
         progress: SharedTrainingProgress,
     ) -> Result<PPOBurn<BurnBackend>, Error> {
-        let BackendConfiguration::Burn(backend) = self.backend_configuration else {
-            unreachable!("Burn agent type must use Burn backend configuration")
-        };
-        self.write_inference_config(InferenceBackend::Burn(backend))?;
-        if let Some(seed) = self.seed {
-            BurnBackend::seed(&NdArrayDevice::default(), seed);
-        }
-        let learner = self.build_burn_learner::<BurnBackend>()?;
+        let learner = self.build_burn_learner()?;
         let hooks = self.ppo_hook(progress);
         Ok(PPO {
             lm: learner,
@@ -918,15 +770,7 @@ impl<E: Env> Builder<E> {
     }
 
     fn a2c_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<A2CCandle, Error> {
-        let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
-            unreachable!("Candle agent type must use Candle backend configuration")
-        };
-        let backend = backend.clone();
-        self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
-        if let Some(seed) = self.seed {
-            backend.seed(seed)?;
-        }
-        let learner = self.build_candle_learner(&backend.device)?;
+        let learner = self.build_candle_learner()?;
         let hooks = self.a2c_hook(progress);
         Ok(A2C {
             lm: learner,
@@ -939,14 +783,7 @@ impl<E: Env> Builder<E> {
         &mut self,
         progress: SharedTrainingProgress,
     ) -> Result<A2CBurn<BurnBackend>, Error> {
-        let BackendConfiguration::Burn(backend) = self.backend_configuration else {
-            unreachable!("Burn agent type must use Burn backend configuration")
-        };
-        self.write_inference_config(InferenceBackend::Burn(backend))?;
-        if let Some(seed) = self.seed {
-            BurnBackend::seed(&NdArrayDevice::default(), seed);
-        }
-        let learner = self.build_burn_learner::<BurnBackend>()?;
+        let learner = self.build_burn_learner()?;
         let hooks = self.a2c_hook(progress);
         Ok(A2C {
             lm: learner,
@@ -1061,8 +898,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     /// Sets the learning-rate schedule applied as training progresses.
     ///
-    /// Defaults to `Constant(3e-4)`. Before each learning pass, the schedule sets the
-    /// same rate for policy and value optimizers, overriding their initial parameters.
+    /// Defaults to `Constant(3e-4)`. Updates every optimizer configuration, including
+    /// both policy and value configurations in split mode.
     ///
     /// # Arguments
     ///
@@ -1071,7 +908,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         mut self,
         learning_rate_schedule: LearningRateSchedule,
     ) -> Self {
-        self.builder.learning_rate_schedule = learning_rate_schedule;
+        self.builder.optimizer.for_each_mut(|config| {
+            config.learning_rate = learning_rate_schedule;
+        });
         self
     }
 
@@ -1162,11 +1001,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Arguments
     ///
     /// * `learning_rate` - Constant learning rate applied to every optimizer.
-    pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
-        self.builder
-            .update_optimizer_layout(|layout| layout.with_lr(learning_rate));
-        self.builder.learning_rate_schedule = LearningRateSchedule::Constant(learning_rate);
-        self
+    pub fn with_learning_rate(self, learning_rate: f64) -> Self {
+        self.with_learning_rate_schedule(LearningRateSchedule::Constant(learning_rate))
     }
 
     /// Sets the Adam first-moment decay for every optimizer.
@@ -1176,7 +1012,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `beta1` - First-moment exponential decay coefficient.
     pub fn with_beta1(mut self, beta1: f64) -> Self {
         self.builder
-            .update_optimizer_layout(|layout| layout.with_beta1(beta1));
+            .optimizer
+            .for_each_mut(|config| config.beta1 = beta1);
         self
     }
 
@@ -1187,7 +1024,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `beta2` - Second-moment exponential decay coefficient.
     pub fn with_beta2(mut self, beta2: f64) -> Self {
         self.builder
-            .update_optimizer_layout(|layout| layout.with_beta2(beta2));
+            .optimizer
+            .for_each_mut(|config| config.beta2 = beta2);
         self
     }
 
@@ -1198,7 +1036,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `epsilon` - Small value added to the optimizer denominator for numerical stability.
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
         self.builder
-            .update_optimizer_layout(|layout| layout.with_epsilon(epsilon));
+            .optimizer
+            .for_each_mut(|config| config.eps = epsilon);
         self
     }
 
@@ -1209,58 +1048,21 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `weight_decay` - Decoupled weight-decay coefficient.
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
         self.builder
-            .update_optimizer_layout(|layout| layout.with_weight_decay(weight_decay));
+            .optimizer
+            .for_each_mut(|config| config.weight_decay = weight_decay);
         self
     }
 
-    /// Uses one optimizer for the policy and value networks.
+    /// Replaces the complete optimizer configuration.
     ///
-    /// The learning-rate schedule overrides `params.lr` before each learning pass.
-    /// The learning hook's gradient-clipping setting also overrides `max_grad_norm`.
-    ///
-    /// # Arguments
-    ///
-    /// * `max_grad_norm` - Optional maximum gradient norm applied before each update.
-    /// * `params` - Adam optimizer parameters with decoupled weight decay shared by the policy
-    ///   and value networks.
-    pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: AdamWParams) -> Self {
-        self.builder
-            .update_optimizer_layout(|_| OnPolicyOptimizerLayout::Joint {
-                max_grad_norm,
-                params,
-            });
-        self
-    }
-
-    /// Uses independent optimizers for the policy and value networks.
-    ///
-    /// The learning-rate schedule overrides both optimizers' initial rates with the
-    /// same rate before each learning pass.
-    /// The learning hook's gradient-clipping setting overrides `policy_max_grad_norm`;
-    /// `value_max_grad_norm` remains independent.
+    /// Later optimizer setters update this configuration. In split mode, shared
+    /// setters update both optimizers; use `OptimizerConfig::Split` for independent settings.
     ///
     /// # Arguments
     ///
-    /// * `policy_max_grad_norm` - Optional maximum norm for policy gradients.
-    /// * `policy_params` - Adam optimizer parameters with decoupled weight decay for the policy
-    ///   network.
-    /// * `value_max_grad_norm` - Optional maximum norm for value-network gradients.
-    /// * `value_params` - Adam optimizer parameters with decoupled weight decay for the value
-    ///   network.
-    pub fn with_split(
-        mut self,
-        policy_max_grad_norm: Option<f32>,
-        policy_params: AdamWParams,
-        value_max_grad_norm: Option<f32>,
-        value_params: AdamWParams,
-    ) -> Self {
-        self.builder
-            .update_optimizer_layout(|_| OnPolicyOptimizerLayout::Split {
-                policy_max_grad_norm,
-                policy_params,
-                value_max_grad_norm,
-                value_params,
-            });
+    /// * `config` - Joint or split Adam optimizers, including schedules and gradient clipping.
+    pub fn with_optimizer(mut self, config: OptimizerConfig) -> Self {
+        self.builder.optimizer = config;
         self
     }
 
@@ -1313,16 +1115,19 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
-    /// Sets gradient clipping applied before each learning pass.
+    /// Sets gradient clipping for every optimizer.
     ///
-    /// This overrides the joint optimizer's clipping, or only the policy optimizer's
-    /// clipping in split mode. The default is [`GradientClippingConfig::Disabled`].
+    /// Clipping is configured at build time and applied to gradients during updates.
+    /// In split mode, both optimizers receive this setting and clip independently.
+    /// The default is [`GradientClippingConfig::Disabled`].
     ///
     /// # Arguments
     ///
     /// * `gradient_clipping` - Clipping mode; `Disabled` clears the optimizer's clipping.
     pub fn with_gradient_clipping(mut self, gradient_clipping: GradientClippingConfig) -> Self {
-        self.builder.gradient_clipping = gradient_clipping;
+        self.builder.optimizer.for_each_mut(|config| {
+            config.gradient_clipping = gradient_clipping;
+        });
         self
     }
 

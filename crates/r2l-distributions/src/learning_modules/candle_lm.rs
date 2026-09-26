@@ -243,30 +243,20 @@ impl PolicyValueOptimizer {
 
     /// Sets the learning rate for both policy and value updates.
     pub fn set_learning_rate(&mut self, learning_rate: f64) {
-        match &mut self.inner {
-            OptimizerKind::Joint(optimizer) => optimizer.optimizer.set_learning_rate(learning_rate),
-            OptimizerKind::Split { policy, value } => {
-                policy.optimizer.set_learning_rate(learning_rate);
-                value.optimizer.set_learning_rate(learning_rate);
-            }
-        }
+        self.set_learning_rates(learning_rate, learning_rate);
     }
 
-    /// Sets the joint optimizer's clipping norm, or only the policy norm in split mode.
-    ///
-    /// # Errors
-    /// Returns an error unless the norm is finite and nonnegative.
-    pub fn set_grad_clipping(&mut self, max_grad_norm: Option<f32>) -> Result<()> {
-        validate_max_norm(max_grad_norm)?;
+    /// Sets policy and value rates independently; joint optimizers use the policy rate.
+    pub fn set_learning_rates(&mut self, policy_learning_rate: f64, value_learning_rate: f64) {
         match &mut self.inner {
-            OptimizerKind::Joint(optimizer)
-            | OptimizerKind::Split {
-                policy: optimizer, ..
-            } => {
-                optimizer.max_grad_norm = max_grad_norm;
+            OptimizerKind::Joint(optimizer) => {
+                optimizer.optimizer.set_learning_rate(policy_learning_rate);
+            }
+            OptimizerKind::Split { policy, value } => {
+                policy.optimizer.set_learning_rate(policy_learning_rate);
+                value.optimizer.set_learning_rate(value_learning_rate);
             }
         }
-        Ok(())
     }
 }
 
@@ -381,14 +371,6 @@ impl<P: Policy<Tensor = Tensor> + Clone, N: Network<Tensor = Tensor>> PolicyValu
     pub fn policy_learning_rate(&self) -> f64 {
         self.optimizer.policy_learning_rate()
     }
-
-    /// Sets joint clipping, or policy-only clipping for a split optimizer.
-    ///
-    /// # Errors
-    /// Returns an error unless the norm is finite and nonnegative.
-    pub fn set_grad_clipping(&mut self, max_grad_norm: Option<f32>) -> Result<()> {
-        self.optimizer.set_grad_clipping(max_grad_norm)
-    }
 }
 
 impl<P, N: Network<Tensor = Tensor>> ValueFunction for PolicyValueLearner<P, N> {
@@ -431,7 +413,8 @@ impl<P: Policy<Tensor = Tensor> + Clone, N: Network<Tensor = Tensor>> OnPolicyLe
         &self.policy
     }
 
-    fn set_learning_rate(&mut self, learning_rate: f64) {
-        self.optimizer.set_learning_rate(learning_rate);
+    fn set_learning_rates(&mut self, policy_learning_rate: f64, value_learning_rate: f64) {
+        self.optimizer
+            .set_learning_rates(policy_learning_rate, value_learning_rate);
     }
 }

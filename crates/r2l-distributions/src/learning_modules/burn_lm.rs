@@ -20,7 +20,6 @@
 //! ```
 
 use burn::{
-    grad_clipping::GradientClipping,
     module::{AutodiffModule, Module, ModuleDisplay, Param},
     optim::{AdamW, AdamWConfig, GradientsParams, Optimizer, adaptor::OptimizerAdaptor},
     prelude::Backend,
@@ -148,17 +147,6 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
         }
     }
 
-    /// Sets gradient clipping for the shared optimizer, or clears it with `None`.
-    pub fn set_grad_clipping(&mut self, grad_clipping: Option<GradientClipping>) {
-        self.optimizer = match grad_clipping {
-            Some(clipping) => self.optimizer.clone().with_grad_clipping(clipping),
-            None if !self.optimizer.has_gradient_clipping() => return,
-            // Burn has no clipping reset; preserve Adam's configuration and moment estimates.
-            None => OptimizerAdaptor::from(self.optimizer.optim().clone())
-                .load_record(self.optimizer.to_record()),
-        };
-    }
-
     /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         self.lr
@@ -205,8 +193,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueL
         &self.model.policy
     }
 
-    fn set_learning_rate(&mut self, learning_rate: f64) {
-        self.set_learning_rate(learning_rate);
+    fn set_learning_rates(&mut self, policy_learning_rate: f64, _value_learning_rate: f64) {
+        self.lr = policy_learning_rate;
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
@@ -253,16 +241,6 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
             value_optimizer,
             value_lr,
         }
-    }
-
-    /// Sets gradient clipping for the policy optimizer, or clears it with `None`.
-    pub fn set_grad_clipping(&mut self, grad_clipping: Option<GradientClipping>) {
-        self.policy_optimizer = match grad_clipping {
-            Some(clipping) => self.policy_optimizer.clone().with_grad_clipping(clipping),
-            None if !self.policy_optimizer.has_gradient_clipping() => return,
-            None => OptimizerAdaptor::from(self.policy_optimizer.optim().clone())
-                .load_record(self.policy_optimizer.to_record()),
-        };
     }
 
     /// Returns the current policy optimizer learning rate.
@@ -318,8 +296,9 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for SplitPolicyValueL
         &self.policy
     }
 
-    fn set_learning_rate(&mut self, learning_rate: f64) {
-        self.set_learning_rate(learning_rate);
+    fn set_learning_rates(&mut self, policy_learning_rate: f64, value_learning_rate: f64) {
+        self.policy_lr = policy_learning_rate;
+        self.value_lr = value_learning_rate;
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
@@ -425,14 +404,6 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
-    /// Sets policy-side gradient clipping, or clears it with `None`.
-    pub fn set_grad_clipping(&mut self, grad_clipping: Option<GradientClipping>) {
-        match self {
-            Self::Joint(lm) => lm.set_grad_clipping(grad_clipping),
-            Self::Split(lm) => lm.set_grad_clipping(grad_clipping),
-        }
-    }
-
     /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         match self {
@@ -492,8 +463,11 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for PolicyValueLearne
         }
     }
 
-    fn set_learning_rate(&mut self, learning_rate: f64) {
-        self.set_learning_rate(learning_rate);
+    fn set_learning_rates(&mut self, policy_learning_rate: f64, value_learning_rate: f64) {
+        match self {
+            Self::Joint(lm) => lm.set_learning_rates(policy_learning_rate, value_learning_rate),
+            Self::Split(lm) => lm.set_learning_rates(policy_learning_rate, value_learning_rate),
+        }
     }
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {

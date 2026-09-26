@@ -5,7 +5,7 @@ pub(crate) mod stats;
 
 use std::marker::PhantomData;
 
-use burn::{grad_clipping::GradientClipping, tensor::backend::AutodiffBackend};
+use burn::tensor::backend::AutodiffBackend;
 use candle_core::Tensor;
 use r2l_agents::on_policy_algorithms::{
     Advantages, Returns,
@@ -28,42 +28,7 @@ use self::{
     stats::{A2CMinibatchStats, A2CRolloutStats, PPORolloutStats},
 };
 use super::progress::SharedTrainingProgress;
-
-/// Gradient clipping applied to the joint optimizer, or the policy optimizer in split mode.
-#[derive(Debug, Clone, Copy, Default)]
-pub enum GradientClippingConfig {
-    /// Disable clipping, including any clipping configured on that optimizer.
-    #[default]
-    Disabled,
-    /// Clip gradients using the given maximum norm.
-    Norm(f32),
-}
-
-/// Learning-rate policy applied to shared collection progress.
-#[derive(Debug, Clone, Copy)]
-pub enum LearningRateSchedule {
-    /// Keep the learning rate fixed throughout training.
-    Constant(f64),
-    /// Decay the initial learning rate to zero, including the current collection in progress.
-    /// The final learning pass uses zero learning rate, including a one-rollout run.
-    Linear(f64),
-}
-
-impl LearningRateSchedule {
-    /// Returns the learning rate for the remaining training fraction.
-    ///
-    /// # Arguments
-    ///
-    /// * `progress_remaining` - Remaining fraction, clamped to `[0, 1]` for linear decay.
-    pub(crate) fn value(self, progress_remaining: f64) -> f64 {
-        match self {
-            Self::Constant(learning_rate) => learning_rate,
-            Self::Linear(initial_learning_rate) => {
-                initial_learning_rate * progress_remaining.clamp(0.0, 1.0)
-            }
-        }
-    }
-}
+use crate::LearningRateSchedule;
 
 /// Policy-ratio clipping range applied over the progress of PPO training.
 #[derive(Debug, Clone, Copy)]
@@ -142,9 +107,9 @@ pub struct LearningHook<M, A> {
     pub(crate) normalize_advantage: bool,
     pub(crate) entropy_coeff: f32,
     pub(crate) vf_coeff: f32,
-    pub(crate) gradient_clipping: GradientClippingConfig,
     pub(crate) progress: SharedTrainingProgress,
-    pub(crate) learning_rate_schedule: LearningRateSchedule,
+    pub(crate) policy_learning_rate_schedule: LearningRateSchedule,
+    pub(crate) value_learning_rate_schedule: LearningRateSchedule,
     pub(crate) algorithm: A,
     pub(crate) _lm: PhantomData<M>,
 }
@@ -157,7 +122,10 @@ pub type A2CLearningHook<M = ()> = LearningHook<M, A2CSettings>;
 impl<M: OnPolicyLearner, A> LearningHook<M, A> {
     fn prepare_learning(&self, module: &mut M, advantages: &mut Advantages) -> f64 {
         let progress = self.progress.borrow().progress_remaining();
-        module.set_learning_rate(self.learning_rate_schedule.value(progress));
+        module.set_learning_rates(
+            self.policy_learning_rate_schedule.value(progress),
+            self.value_learning_rate_schedule.value(progress),
+        );
         if self.normalize_advantage {
             advantages.normalize();
         }
@@ -167,16 +135,6 @@ impl<M: OnPolicyLearner, A> LearningHook<M, A> {
 
 // Backend-specific operations are shared by both algorithm adapters below.
 impl<B: AutodiffBackend, P: BurnPolicy<B>, A> LearningHook<BurnLearner<B, P>, A> {
-    fn prepare(&self, module: &mut BurnLearner<B, P>, advantages: &mut Advantages) -> f64 {
-        let progress = self.prepare_learning(module, advantages);
-        let clipping = match self.gradient_clipping {
-            GradientClippingConfig::Disabled => None,
-            GradientClippingConfig::Norm(max_norm) => Some(GradientClipping::Norm(max_norm)),
-        };
-        module.set_grad_clipping(clipping);
-        progress
-    }
-
     fn process_batch(
         &self,
         module: &mut BurnLearner<B, P>,
@@ -204,16 +162,6 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>, A> LearningHook<BurnLearner<B, P>, A>
 }
 
 impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone, A> LearningHook<CandleLearner<P>, A> {
-    fn prepare(&self, module: &mut CandleLearner<P>, advantages: &mut Advantages) -> Result<f64> {
-        let progress = self.prepare_learning(module, advantages);
-        let clipping = match self.gradient_clipping {
-            GradientClippingConfig::Disabled => None,
-            GradientClippingConfig::Norm(max_norm) => Some(max_norm),
-        };
-        module.set_grad_clipping(clipping)?;
-        Ok(progress)
-    }
-
     fn process_batch(
         &self,
         module: &mut CandleLearner<P>,
@@ -252,7 +200,7 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> Result<HookResult> {
-        self.prepare(module, advantages);
+        self.prepare_learning(module, advantages);
         Ok(HookResult::Continue)
     }
 
@@ -307,7 +255,7 @@ impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone> A2CHook<CandleLearner
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> Result<HookResult> {
-        self.prepare(module, advantages)?;
+        self.prepare_learning(module, advantages);
         Ok(HookResult::Continue)
     }
 
@@ -362,7 +310,7 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> Result<HookResult> {
-        let progress = self.prepare(module, advantages);
+        let progress = self.prepare_learning(module, advantages);
         self.algorithm.begin_learning(params, progress);
         Ok(HookResult::Continue)
     }
@@ -441,7 +389,7 @@ impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone> PPOHook<CandleLearner
         advantages: &mut Advantages,
         _returns: &mut Returns,
     ) -> Result<HookResult> {
-        let progress = self.prepare(module, advantages)?;
+        let progress = self.prepare_learning(module, advantages);
         self.algorithm.begin_learning(params, progress);
         Ok(HookResult::Continue)
     }

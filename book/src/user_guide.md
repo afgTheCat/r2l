@@ -192,17 +192,44 @@ across all workers.
 
 `LearningRateSchedule::Constant(rate)` keeps the configured rate fixed.
 `LearningRateSchedule::Linear(rate)` decays it from `rate` to zero over the
-configured training schedule. Pass the schedule directly to
-`with_learning_rate_schedule`; the default is `LearningRateSchedule::Constant(3e-4)`.
-Before each learning pass, the schedule sets the same rate for policy and value
-optimizers, overriding the initial rates supplied through joint or split optimizer
-parameters.
+configured training schedule. Each optimizer owns its schedule; the default is
+`LearningRateSchedule::Constant(3e-4)`. Schedules are evaluated after collecting
+rollouts, before each learning pass. Linear decay reaches zero on the final pass,
+including when training consists of a single rollout.
+
+`with_optimizer` replaces the complete optimizer configuration. Use
+`OptimizerConfig::Joint(AdamWConfig { .. })` for one optimizer, or
+`OptimizerConfig::Split { policy, value }` for independent optimizers:
+
+```rust
+use r2l::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
+
+let optimizer = OptimizerConfig::Split {
+    policy: AdamWConfig {
+        learning_rate: LearningRateSchedule::Linear(3e-4),
+        gradient_clipping: GradientClippingConfig::Norm(0.5),
+        ..Default::default()
+    },
+    value: AdamWConfig {
+        learning_rate: LearningRateSchedule::Constant(1e-3),
+        ..Default::default()
+    },
+};
+// Pass this to builder.with_optimizer(optimizer).
+```
+
+`with_learning_rate(rate)` selects a constant schedule, and
+`with_learning_rate_schedule(schedule)` selects the supplied schedule. These and
+the Adam parameter setters update every optimizer in the current configuration.
+Later setters take precedence; no separate hook configuration overrides them.
 
 `with_value_loss_coefficient(coefficient)` sets the value-loss multiplier, defaulting
 to `1.0`. Use `with_gradient_clipping(GradientClippingConfig::Norm(max_norm))` to enable
-clipping, or `GradientClippingConfig::Disabled` to clear it. Before each learning pass,
-this setting overrides clipping on the joint optimizer, or the policy optimizer in
-split mode; the split value optimizer retains its own clipping setting.
+clipping, or `GradientClippingConfig::Disabled` to disable it. This setter updates
+every optimizer, including both configurations in split mode. Clipping is configured
+once at build time and applied during parameter updates. Candle clips the norm across
+each optimizer's parameters, combining policy and value gradients in joint mode.
+Burn's native norm clipping operates independently on each parameter tensor.
 
 For the underlying traits and hook points, continue with
 [On-policy algorithms](./on_policy_algorithms.md). For exact builder methods,
