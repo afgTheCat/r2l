@@ -8,7 +8,7 @@ use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
     env::{
         Env, EnvBuilder, EnvBuilderType,
-        normalizer::{ClippedNormalizer, NormalizerMode},
+        normalizer::{Normalizer, NormalizerMode},
     },
     error::Result,
     models::Actor,
@@ -40,7 +40,7 @@ pub trait StagedSamplerHook {
 /// Mutable staged-sampler state exposed to hook implementations.
 pub struct StagedSamplerCore<E: Env> {
     pool: WorkerPool<E>,
-    obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    obs_normalizer: Option<Normalizer<E::Tensor>>,
     last_states: ArrayHandle<E::Tensor>,
     buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
@@ -63,7 +63,7 @@ impl<E: Env> StagedSamplerCore<E> {
     pub fn build<EB: EnvBuilder<Env = E>>(
         env_builder: &EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
         let num_envs = env_builder.num_envs();
         let buffers = vec![TrajectoryBuffer::default(); num_envs];
@@ -237,7 +237,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     }
 
     /// Returns the shared observation normalizer, when configured.
-    pub fn obs_normalizer(&self) -> Option<&ClippedNormalizer<E::Tensor>> {
+    pub fn obs_normalizer(&self) -> Option<&Normalizer<E::Tensor>> {
         self.core.obs_normalizer.as_ref()
     }
 
@@ -250,7 +250,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
         env_builder: &EnvBuilderType<EB>,
         hook: H,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
         Ok(Self {
             core: StagedSamplerCore::build(env_builder, execution_mode, obs_normalizer)?,
@@ -268,7 +268,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self>
     where
         E: 'static,

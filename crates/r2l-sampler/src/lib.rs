@@ -38,3 +38,13 @@ pub enum RolloutMode {
         n_steps: usize,
     },
 }
+
+impl RolloutMode {
+    pub fn is_step_bound(&self) -> bool {
+        matches!(self, Self::StepBound { .. })
+    }
+
+    pub fn is_episode_bound(&self) -> bool {
+        matches!(self, Self::EpisodeBound { .. })
+    }
+}

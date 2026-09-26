@@ -3,25 +3,24 @@ use std::path::{Path, PathBuf};
 use burn::backend::NdArray;
 use candle_core::DType;
 use candle_nn::VarBuilder;
-use r2l_burn::distributions::BurnPolicyKind;
-use r2l_candle::distributions::CandlePolicyKind;
 use r2l_core::{
     ActorWrapper,
-    env::{Env, normalizer::ClippedNormalizer},
+    env::{Env, normalizer::Normalizer},
     error::{BoxedError, BrokenArtifact, Error},
     models::Actor,
     rng::sample_u64,
     tensor::R2lTensor,
 };
+use r2l_distributions::learning_modules::burn_lm::BurnDistributionKind;
+use r2l_distributions::learning_modules::candle_lm::CandleDistributionKind;
 use serde::{Deserialize, Serialize};
 
-use crate::builders::{
-    BurnBackendConfig, CandleBackend, normalizer::NormalizerBuilder, policy::PolicyBuilder,
+use crate::{
+    builders::{
+        BurnBackendConfig, CandleBackend, normalizer::NormalizerBuilder, policy::PolicyBuilder,
+    },
+    constants::{ACTOR_FILE, INFERENCE_CONFIG_FILE, NORMALIZER_FILE},
 };
-
-pub(crate) const INFERENCE_CONFIG_FILE: &str = "inference.yaml";
-pub(crate) const ACTOR_FILE: &str = "actor.safetensors";
-pub(crate) const NORMALIZER_FILE: &str = "normalizer.yaml";
 
 struct ArtifactFile {
     path: PathBuf,
@@ -131,9 +130,9 @@ impl InferenceConfig {
 #[derive(Debug, Clone)]
 enum InferenceActor<T: R2lTensor> {
     /// Candle-backed inference actor.
-    Candle(ActorWrapper<CandlePolicyKind, T>),
+    Candle(ActorWrapper<CandleDistributionKind, T>),
     /// Burn-backed inference actor.
-    Burn(Box<ActorWrapper<BurnPolicyKind<NdArray>, T>>),
+    Burn(Box<ActorWrapper<BurnDistributionKind<NdArray>, T>>),
 }
 
 impl<T: R2lTensor> Actor for InferenceActor<T> {
@@ -156,7 +155,7 @@ impl<T: R2lTensor> Actor for InferenceActor<T> {
 
 /// A loaded policy that applies its saved observation preprocessing before inference.
 pub struct InferencePolicy<T: R2lTensor> {
-    obs_normalizer: Option<ClippedNormalizer<T>>,
+    obs_normalizer: Option<Normalizer<T>>,
     actor: InferenceActor<T>,
 }
 
@@ -192,15 +191,10 @@ impl<T: R2lTensor> InferencePolicy<T> {
                 let var_builder =
                     VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &backend.device)
                         .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
-                let actor = CandlePolicyKind::build(
-                    config.policy_builder.action_space.convert::<T>()?,
-                    &var_builder,
-                    &config.policy_builder.hidden_layers,
-                    config.policy_builder.observation_size,
-                    config.policy_builder.activation_function,
-                    config.policy_builder.log_std_init,
-                )
-                .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
+                let actor = config
+                    .policy_builder
+                    .build_candle::<T>(&var_builder)
+                    .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
             InferenceBackend::Burn(_) => {

@@ -1,4 +1,5 @@
-use crate::{error::TensorError, tensor::R2lTensor};
+use crate::Shape;
+use crate::{error::TensorError, tensor::R2lTensor, utils::slice_mean};
 
 type Result<T> = std::result::Result<T, TensorError>;
 
@@ -16,17 +17,18 @@ pub struct RunningMeanStd<T: R2lTensor> {
 impl<T: R2lTensor> RunningMeanStd<T> {
     /// Creates zero-count statistics for tensors with `shape`.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an error if the tensor backend cannot create tensors with `shape`.
-    pub fn new(shape: Vec<usize>) -> Result<Self> {
-        let mean = T::zeros(shape.clone())?;
-        let var = T::zeros(shape)?;
-        Ok(Self {
+    /// Panics if [`R2lTensor::zeros`] cannot create tensors with `shape`.
+    pub fn new(shape: impl Into<Shape>) -> Self {
+        let shape = shape.into();
+        let mean = T::zeros(shape.clone());
+        let var = T::zeros(shape);
+        Self {
             mean,
             var,
             count: 0.,
-        })
+        }
     }
 
     pub fn build(mean: T, var: T, count: f32) -> Self {
@@ -140,7 +142,7 @@ impl RunningMeanStdF32 {
             return;
         }
         let batch_count = samples.len() as f32;
-        let batch_mean = samples.iter().sum::<f32>() / batch_count;
+        let batch_mean = slice_mean(samples);
         let batch_var = samples
             .iter()
             .map(|sample| (*sample - batch_mean).powi(2))

@@ -4,40 +4,40 @@ use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
 use r2l::{
-    ClipRangeSchedule, LearningRateSchedule, PPOBuilder, TrainingArtifactsConfig, TrainingLimit,
+    AdamWConfig, GradientClippingConfig, OptimizerConfig, PPOBuilder, TrainingArtifactsConfig,
+    TrainingLimit,
 };
-use r2l_benchmark_task::{Backend, BenchmarkTask, RlZooSchedule};
+use r2l_benchmark_task::{Backend, BenchmarkTask};
 
 const SB3_SCRIPT_PATH: &str = "/opt/r2l/sb3/ppo.py";
 const TASK_ENV_VAR: &str = "R2L_TASK";
 
-fn run(task: &BenchmarkTask) -> anyhow::Result<()> {
-    match task.backend {
-        Backend::Burn | Backend::Candle => train_r2l(task),
-        Backend::Sb3 => train_sb3(task),
-    }
-}
-
 fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
     let config = &task.rl_zoo_env_config;
-    let obs_clip = config.normalize.norm_obs().then_some(10.0);
+    let normalizer_config = config
+        .normalize
+        .to_normalizer_config()
+        .with_clip(Some(10.0));
     let artifacts_config = TrainingArtifactsConfig::new(&task.output_dir);
     let mut builder = PPOBuilder::gym(task.env_name.clone(), config.n_envs)?
         .with_rollout_steps(config.n_steps)
         .with_training_limit(TrainingLimit::steps(config.n_timesteps))
         .with_training_artifacts(artifacts_config)
-        .with_observation_normalizer(obs_clip)?
+        .with_observation_normalizer(normalizer_config)
         .with_lambda(config.gae_lambda)
         .with_gamma(config.gamma)
         .with_total_epochs(config.n_epochs)
         .with_entropy_coefficient(config.ent_coef)
         .with_sample_size(config.batch_size)
-        .with_learning_rate_schedule(Some(learning_rate_schedule(config.learning_rate)))
-        .with_clip_range_schedule(clip_range_schedule(config.clip_range))
+        .with_optimizer(OptimizerConfig::Joint(AdamWConfig {
+            learning_rate: config.learning_rate.into_learning_rate_schedule(),
+            gradient_clipping: GradientClippingConfig::Norm(config.max_grad_norm),
+            ..Default::default()
+        }))
+        .with_clip_range_schedule(config.clip_range.into_clip_range_schedule())
         .with_log_std_init(config.log_std_init)
-        .with_value_loss_coefficient(Some(config.vf_coef))
-        .with_seed(0) // TODO: should we keep this?
-        .with_gradient_clipping(Some(config.max_grad_norm));
+        .with_value_loss_coefficient(config.vf_coef)
+        .with_seed(0); // TODO: should we keep this?
     if config.normalize.norm_reward() {
         builder = builder.with_reward_normalizer(config.gamma, 10.0);
     }
@@ -61,17 +61,10 @@ fn train_sb3(task: &BenchmarkTask) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn learning_rate_schedule(schedule: RlZooSchedule) -> LearningRateSchedule {
-    match schedule {
-        RlZooSchedule::Constant(value) => LearningRateSchedule::Constant(value),
-        RlZooSchedule::Linear(value) => LearningRateSchedule::Linear(value),
-    }
-}
-
-fn clip_range_schedule(schedule: RlZooSchedule) -> ClipRangeSchedule {
-    match schedule {
-        RlZooSchedule::Constant(value) => ClipRangeSchedule::Constant(value as f32),
-        RlZooSchedule::Linear(value) => ClipRangeSchedule::Linear(value as f32),
+fn run(task: &BenchmarkTask) -> anyhow::Result<()> {
+    match task.backend {
+        Backend::Burn | Backend::Candle => train_r2l(task),
+        Backend::Sb3 => train_sb3(task),
     }
 }
 

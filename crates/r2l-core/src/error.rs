@@ -1,5 +1,7 @@
 use std::{error::Error as StdError, fmt, path::PathBuf};
 
+use crate::Shape;
+
 /// A thread-safe, type-erased error used for failures originating outside
 /// `r2l-core`.
 pub type BoxedError = Box<dyn StdError + Send + Sync + 'static>;
@@ -147,21 +149,37 @@ pub struct EnvironmentError {
 /// Reason a tensor operation failed.
 #[derive(Debug, thiserror::Error)]
 pub enum TensorError {
+    /// An operation received an invalid axis, range, or dimension.
+    #[error("invalid argument for tensor operation `{operation}`: {details}")]
+    InvalidArgument {
+        /// Operation being attempted.
+        operation: String,
+        /// Reason the argument is invalid.
+        details: String,
+    },
+    /// The backend requires a different tensor rank.
+    #[error("expected tensor rank {expected}, got {actual}")]
+    InvalidRank {
+        /// Required number of axes.
+        expected: usize,
+        /// Supplied number of axes.
+        actual: usize,
+    },
     /// Two operands do not have compatible shapes.
     #[error("shape mismatch for tensor operation `{operation}`: left {left:?}, right {right:?}")]
     ShapeMismatch {
         /// Operation requiring compatible shapes.
         operation: String,
         /// Left-hand tensor shape.
-        left: Vec<usize>,
+        left: Shape,
         /// Right-hand tensor shape.
-        right: Vec<usize>,
+        right: Shape,
     },
     /// Flat data does not contain the number of elements required by its shape.
     #[error("invalid tensor shape {shape:?}: expected {expected} values, got {actual}")]
     InvalidShape {
         /// Requested tensor shape.
-        shape: Vec<usize>,
+        shape: Shape,
         /// Number of values required by the shape.
         expected: usize,
         /// Number of supplied values.
@@ -185,6 +203,14 @@ pub enum TensorError {
 }
 
 impl TensorError {
+    /// Describes an invalid tensor-operation argument.
+    pub fn invalid_argument(operation: impl Into<String>, details: impl Into<String>) -> Self {
+        Self::InvalidArgument {
+            operation: operation.into(),
+            details: details.into(),
+        }
+    }
+
     /// Wraps a backend failure with the operation being attempted.
     pub fn operation(
         operation: impl Into<String>,
@@ -258,6 +284,26 @@ pub enum Error {
 }
 
 impl Error {
+    /// Describes a parameter value that does not satisfy its requirements.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Name of the invalid parameter.
+    /// * `expected` - Description of the accepted values.
+    /// * `value` - Description of the supplied value.
+    #[must_use]
+    pub fn invalid_parameter(
+        name: impl Into<String>,
+        expected: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
+        Self::InvalidParameter(Box::new(InvalidParameterError::InvalidValue {
+            name: name.into(),
+            expected: expected.into(),
+            value: value.into(),
+        }))
+    }
+
     /// Wraps a lower-level error without discarding its source chain.
     pub fn wrap(error: impl StdError + Send + Sync + 'static) -> Self {
         Self::Wrapped(Box::new(error))

@@ -1,16 +1,23 @@
-use burn::{backend::NdArray, tensor::Tensor as BurnTensor};
+use burn::{
+    backend::{NdArray, ndarray::NdArrayDevice},
+    tensor::Tensor as BurnTensor,
+};
 use candle_core::{DType, Device, Tensor as CandleTensor};
 use candle_nn::VarMap;
-use r2l_burn::distributions::BurnPolicyKind;
-use r2l_candle::distributions::CandlePolicyKind;
+use r2l_core::networks::{MlpConfig, NetworkConfig};
 use r2l_core::{
     env::Space,
     models::{ActivationFunction, Policy, ToSafetensors},
     tensor::{R2lTensor, VecTensor},
 };
+use r2l_distributions::learning_modules::burn_lm::BurnDistributionKind;
+use r2l_distributions::{
+    learning_modules::candle_lm::CandleDistributionKind,
+    networks::{burn::NetworkKind, candle_mlp::Mlp, seeded_var_builder},
+};
 use safetensors::SafeTensors;
 
-type BurnVector = BurnTensor<NdArray, 1>;
+type BurnBatch = BurnTensor<NdArray, 2>;
 
 fn assert_close(actual: &[f32], expected: &[f32], tolerance: f32) {
     assert_eq!(actual.len(), expected.len());
@@ -126,26 +133,38 @@ fn reference_log_probs_and_entropy(
     (log_probs, entropy / states.len() as f32)
 }
 
-fn candle_categorical() -> CandlePolicyKind {
+fn candle_distribution(space: Space<VecTensor>, log_std: f32) -> CandleDistributionKind {
     let varmap = VarMap::new();
-    let vb = r2l_candle::seeded_var_builder(&varmap, DType::F32, &Device::Cpu);
-    CandlePolicyKind::build(
-        Space::<VecTensor>::Discrete(3),
-        &vb,
-        &[],
-        2,
-        ActivationFunction::Tanh,
-        0.0,
+    let vb = seeded_var_builder(&varmap, DType::F32, &Device::Cpu);
+    CandleDistributionKind::from_space(
+        space,
+        &mut |prefix, width| Mlp::build(&[2, width], ActivationFunction::Tanh, &vb.pp(prefix)),
+        &mut |prefix, width| {
+            Ok(vb.pp(prefix).get_with_hints(
+                (1, width),
+                "log_std",
+                candle_nn::Init::Const(f64::from(log_std)),
+            )?)
+        },
     )
     .unwrap()
 }
 
-fn burn_categorical() -> BurnPolicyKind<NdArray> {
-    BurnPolicyKind::build(
-        Space::<VecTensor>::Discrete(3),
-        &[2, 3],
-        ActivationFunction::Tanh,
-        0.0,
+fn burn_distribution(space: Space<VecTensor>, log_std: f32) -> BurnDistributionKind<NdArray> {
+    let config = NetworkConfig::Mlp(MlpConfig {
+        hidden_layers: vec![],
+        activation: ActivationFunction::Tanh,
+    });
+    BurnDistributionKind::from_space(
+        space,
+        &mut |_, width| NetworkKind::build(&config, &[2].into(), width, &NdArrayDevice::Cpu),
+        &mut |_, width| {
+            Ok(burn::module::Param::from_tensor(BurnTensor::full(
+                [1, width],
+                log_std,
+                &NdArrayDevice::Cpu,
+            )))
+        },
     )
     .unwrap()
 }
@@ -155,21 +174,24 @@ fn categorical_backends_match_independent_probability_calculations() {
     let states = vec![vec![1.0, -0.5], vec![-2.0, 0.25]];
     let actions = vec![0, 2];
 
-    let candle = candle_categorical();
+    let candle = candle_distribution(Space::Discrete(3), 0.0);
     let candle_bytes = candle.to_safetensors().unwrap();
     let (expected_log_probs, expected_entropy) =
         reference_log_probs_and_entropy(&candle_bytes, &states, &actions);
     let candle_states = states
         .iter()
-        .map(|state| CandleTensor::from_slice(state, state.len(), &Device::Cpu).unwrap())
+        .map(|state| CandleTensor::from_slice(state, (1, state.len()), &Device::Cpu).unwrap())
         .collect::<Vec<_>>();
     let candle_actions = actions
         .iter()
-        .map(|action| CandleTensor::from_slice(&[*action as f32], 1, &Device::Cpu).unwrap())
+        .map(|action| CandleTensor::from_slice(&[*action as f32], (1, 1), &Device::Cpu).unwrap())
         .collect::<Vec<_>>();
     assert_close(
         &candle
-            .log_probs(&candle_states, &candle_actions)
+            .log_probs(
+                CandleTensor::cat(&candle_states, 0).unwrap(),
+                CandleTensor::cat(&candle_actions, 0).unwrap(),
+            )
             .unwrap()
             .to_vec()
             .unwrap(),
@@ -177,26 +199,33 @@ fn categorical_backends_match_independent_probability_calculations() {
         1e-5,
     );
     assert_close(
-        &candle.entropy(&candle_states).unwrap().to_vec().unwrap(),
+        &candle
+            .entropy(CandleTensor::cat(&candle_states, 0).unwrap())
+            .unwrap()
+            .to_vec()
+            .unwrap(),
         &[expected_entropy],
         1e-5,
     );
 
-    let burn = burn_categorical();
+    let burn = burn_distribution(Space::Discrete(3), 0.0);
     let burn_bytes = burn.to_safetensors().unwrap();
     let (expected_log_probs, expected_entropy) =
         reference_log_probs_and_entropy(&burn_bytes, &states, &actions);
     let burn_states = states
         .iter()
-        .map(|state| BurnVector::from_slice_and_shape(state, vec![state.len()]).unwrap())
+        .map(|state| BurnBatch::from_slice_and_shape(state, vec![1, state.len()]).unwrap())
         .collect::<Vec<_>>();
     let burn_actions = actions
         .iter()
-        .map(|action| BurnVector::from_slice_and_shape(&[*action as f32], vec![1]).unwrap())
+        .map(|action| BurnBatch::from_slice_and_shape(&[*action as f32], vec![1, 1]).unwrap())
         .collect::<Vec<_>>();
     assert_close(
         &burn
-            .log_probs(&burn_states, &burn_actions)
+            .log_probs(
+                BurnTensor::cat(burn_states.clone(), 0),
+                BurnTensor::cat(burn_actions, 0),
+            )
             .unwrap()
             .to_vec()
             .unwrap(),
@@ -204,7 +233,11 @@ fn categorical_backends_match_independent_probability_calculations() {
         1e-5,
     );
     assert_close(
-        &burn.entropy(&burn_states).unwrap().to_vec().unwrap(),
+        &burn
+            .entropy(BurnTensor::cat(burn_states, 0))
+            .unwrap()
+            .to_vec()
+            .unwrap(),
         &[expected_entropy],
         1e-5,
     );
@@ -215,34 +248,30 @@ fn diagonal_gaussian_backends_agree_on_std_and_entropy() {
     let action_space = Space::<VecTensor>::Box {
         min: None,
         max: None,
-        shape: vec![2],
+        shape: vec![2].into(),
     };
     let log_std = -0.7;
-    let varmap = VarMap::new();
-    let vb = r2l_candle::seeded_var_builder(&varmap, DType::F32, &Device::Cpu);
-    let candle = CandlePolicyKind::build(
-        action_space.clone(),
-        &vb,
-        &[],
-        2,
-        ActivationFunction::Tanh,
-        log_std,
-    )
-    .unwrap();
-    let burn =
-        BurnPolicyKind::<NdArray>::build(action_space, &[2, 2], ActivationFunction::Tanh, log_std)
-            .unwrap();
+    let candle = candle_distribution(action_space.clone(), log_std);
+    let burn = burn_distribution(action_space, log_std);
     let expected_entropy = 2.0 * (log_std + f32::midpoint((2.0 * std::f32::consts::PI).ln(), 1.0));
 
     assert_close(&[candle.std().unwrap().unwrap()], &[log_std.exp()], 1e-6);
     assert_close(&[burn.std().unwrap().unwrap()], &[log_std.exp()], 1e-6);
     assert_close(
-        &candle.entropy(&[]).unwrap().to_vec().unwrap(),
+        &candle
+            .entropy(CandleTensor::zeros((1, 2), DType::F32, &Device::Cpu).unwrap())
+            .unwrap()
+            .to_vec()
+            .unwrap(),
         &[expected_entropy],
         1e-5,
     );
     assert_close(
-        &burn.entropy(&[]).unwrap().to_vec().unwrap(),
+        &burn
+            .entropy(BurnTensor::zeros([1, 2], &NdArrayDevice::Cpu))
+            .unwrap()
+            .to_vec()
+            .unwrap(),
         &[expected_entropy],
         1e-5,
     );

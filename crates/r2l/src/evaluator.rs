@@ -3,21 +3,22 @@ use std::{fs::File, io::Write as _, marker::PhantomData, path::PathBuf};
 use r2l_core::{
     ActorWrapper,
     buffers::TrajectoryBatch,
-    env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
+    env::{Env, EnvBuilder, EnvBuilderType, normalizer::Normalizer},
     error::Error,
     models::{Actor, ToSafetensors},
     on_policy::algorithm::{Agent, OnPolicyRuntime, Sampler},
     tensor::R2lTensor,
 };
-use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
+use r2l_sampler::{DirectSampler, RolloutMode, SamplerExecutionMode, StagedSampler};
 
 use crate::{
     builders::normalizer::NormalizerBuilder,
-    hooks::sampler::EpisodeBoundHook,
-    inference::{ACTOR_FILE, NORMALIZER_FILE},
+    constants::{ACTOR_FILE, EVALUATIONS_FILE, NORMALIZER_FILE},
+    hooks::{
+        progress::{TrainingLimit, TrainingProgress},
+        sampler::EpisodeBoundHook,
+    },
 };
-
-const EVALUATIONS_FILE: &str = "evaluations.csv";
 
 pub(crate) enum EvaluationSampler<E: Env> {
     Direct(DirectSampler<E, EpisodeBoundHook<E>>),
@@ -29,9 +30,14 @@ impl<E: Env> EvaluationSampler<E> {
         env_builder: EnvBuilderType<EB>,
         n_episodes: usize,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self, Error> {
-        let hook = EpisodeBoundHook::new(n_episodes);
+        let progress = TrainingProgress::shared(
+            TrainingLimit::rollouts(1),
+            RolloutMode::EpisodeBound { n_episodes },
+            env_builder.num_envs(),
+        );
+        let hook = EpisodeBoundHook::new(progress, None);
         if let Some(obs_normalizer) = obs_normalizer {
             Ok(Self::Staged(StagedSampler::build_with_obs_normalizer(
                 &env_builder,

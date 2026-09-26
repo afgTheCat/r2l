@@ -51,14 +51,15 @@
 //! - [r2l-core](https://docs.rs/r2l-core) — core traits and data types.
 //! - [r2l-sampler](https://docs.rs/r2l-sampler) — rollout samplers.
 //! - [r2l-gym](https://docs.rs/r2l-gym) — Gymnasium-backed environments.
-//! - [r2l-burn](https://docs.rs/r2l-burn) — Burn-backed policy and learner implementations.
-//! - [r2l-candle](https://docs.rs/r2l-candle) — Candle-backed policy and learner implementations.
+//! - [r2l-distributions](https://docs.rs/r2l-distributions) — Policies, networks and learners for Burn and Candle.
 //! - [r2l-agents](https://docs.rs/r2l-agents) — core RL algorithm implementations.
 
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
 
-mod builders;
+/// Algorithm and network builders.
+pub mod builders;
+mod constants;
 mod evaluator;
 mod hooks;
 mod inference;
@@ -70,19 +71,23 @@ use burn::backend::{Autodiff, NdArray};
 pub type BurnBackend = Autodiff<NdArray>;
 
 pub use builders::{
-    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, OnPolicyBuilder, PPOBuilder, PPOBurn, PPOCandle,
+    A2CBuilder, A2CBurn, A2CCandle, AdamWConfig, GradientClippingConfig, LearningRateSchedule,
+    ObsNormalizerConfig, OnPolicyBuilder, OptimizerConfig, PPOBuilder, PPOBurn, PPOCandle,
     TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
-pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
-pub use hooks::on_policy::{
-    LearningRateSchedule, OnPolicyControlHandle, OnPolicyTrainingHooks, TrainingLimit,
+pub use hooks::learning::stats::{A2CMinibatchStats, A2CRolloutStats};
+pub use hooks::learning::stats::{PPOMinibatchStats, PPORolloutStats};
+pub use hooks::learning::{
+    A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, PPOLearningHook, PPOSettings,
 };
-pub use hooks::ppo::{ClipRangeSchedule, PPOMinibatchStats, PPORolloutStats};
-pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
+pub use hooks::on_policy::{OnPolicyTrainingHooks, commands::OnPolicyControlHandle};
+pub use hooks::progress::TrainingLimit;
+pub use hooks::sampler::{EpisodeBoundHook, Episodes, SamplerHook, StepBoundHook, Steps};
 pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};
 pub use r2l_core::error::{self, Error};
 pub use r2l_core::{
+    Shape,
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
     models::ActivationFunction,
     on_policy::algorithm::OnPolicyAlgorithm,

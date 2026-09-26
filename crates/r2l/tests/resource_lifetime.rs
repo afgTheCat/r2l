@@ -37,7 +37,7 @@ impl Env for DropTrackedEnv {
             Space::Box {
                 min: None,
                 max: None,
-                shape: vec![1],
+                shape: vec![1].into(),
             },
             Space::Discrete(1),
         )
@@ -94,16 +94,14 @@ fn stop_training_command_breaks_the_loop_without_destroying_the_algorithm() {
         .with_total_epochs(1)
         .with_seed(5);
     let (builder, control) = builder.with_control();
-    let mut algorithm = builder.build().unwrap();
-    let drops_after_build = drops.load(Ordering::SeqCst);
-
     let training = std::thread::spawn(move || {
+        let mut algorithm = builder.build().unwrap();
+        let drops_after_build = drops.load(Ordering::SeqCst);
         algorithm.train().unwrap();
         assert_eq!(drops.load(Ordering::SeqCst), drops_after_build);
-        algorithm
+        drop(algorithm);
+        assert_eq!(drops.load(Ordering::SeqCst), drops_after_build + 1);
     });
     control.stop_training().unwrap();
-    let algorithm = training.join().unwrap();
-
-    drop(algorithm);
+    training.join().unwrap();
 }

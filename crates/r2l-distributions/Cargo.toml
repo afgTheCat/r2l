@@ -1,0 +1,27 @@
+[package]
+name = "r2l-distributions"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[features]
+cuda = ["r2l-core/cuda", "candle-core/cuda", "candle-nn/cuda"]
+simd = ["burn/simd"]
+
+[dependencies]
+r2l-core = { workspace = true }
+burn = { workspace = true }
+burn-ndarray = { workspace = true }
+burn-store = { workspace = true }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+itertools = { workspace = true }
+rand = { workspace = true }
+safetensors = { workspace = true }
+rand_distr = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

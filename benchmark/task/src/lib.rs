@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use r2l::{ClipRangeSchedule, LearningRateSchedule, ObsNormalizerConfig};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use yaml_serde::Value;
 
@@ -54,6 +55,24 @@ impl RlZooSchedule {
     pub fn initial_value(self) -> f64 {
         match self {
             Self::Constant(value) | Self::Linear(value) => value,
+        }
+    }
+
+    /// Converts this schedule into a learning-rate schedule.
+    #[must_use]
+    pub fn into_learning_rate_schedule(self) -> LearningRateSchedule {
+        match self {
+            Self::Constant(value) => LearningRateSchedule::Constant(value),
+            Self::Linear(value) => LearningRateSchedule::Linear(value),
+        }
+    }
+
+    /// Converts this schedule into a PPO clipping-range schedule.
+    #[must_use]
+    pub fn into_clip_range_schedule(self) -> ClipRangeSchedule {
+        match self {
+            Self::Constant(value) => ClipRangeSchedule::Constant(value as f32),
+            Self::Linear(value) => ClipRangeSchedule::Linear(value as f32),
         }
     }
 }
@@ -120,6 +139,16 @@ impl RlZooNormalize {
         match self {
             Self::Enabled(enabled) => *enabled,
             Self::Options { norm_reward, .. } => *norm_reward,
+        }
+    }
+
+    /// Builds observation normalization settings with clipping disabled.
+    #[must_use]
+    pub fn to_normalizer_config(&self) -> ObsNormalizerConfig {
+        if self.norm_obs() {
+            ObsNormalizerConfig::Enabled { clip: None }
+        } else {
+            ObsNormalizerConfig::Disabled
         }
     }
 }
