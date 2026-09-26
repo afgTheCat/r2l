@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
 
-mod legacy;
-
 use burn::backend::NdArray;
 use candle_core::DType;
 use candle_nn::VarBuilder;
@@ -88,8 +86,6 @@ pub(crate) enum InferenceBackend {
 /// Serializable recipe for reconstructing an inference runtime.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct InferenceConfig {
-    #[serde(default)]
-    actor_format_version: u32,
     policy_builder: PolicyBuilder,
     observation_mode: InferenceObservationMode,
     backend: InferenceBackend,
@@ -103,7 +99,6 @@ impl InferenceConfig {
         backend: InferenceBackend,
     ) -> Self {
         Self {
-            actor_format_version: 1,
             policy_builder,
             observation_mode,
             backend,
@@ -191,17 +186,6 @@ impl<T: R2lTensor> InferencePolicy<T> {
         };
         let actor_artifact = ArtifactFile::new(directory.join(ACTOR_FILE), "actor");
         let actor_bytes = actor_artifact.read()?;
-        let actor_bytes = match config.actor_format_version {
-            0 => legacy::upgrade_actor(&actor_bytes, &config)
-                .map_err(|error| actor_artifact.decode_error(Box::new(error)))?,
-            1 => actor_bytes,
-            version => {
-                return Err(Error::Unsupported {
-                    operation: "load actor artifact".into(),
-                    details: format!("unsupported actor format version {version}"),
-                });
-            }
-        };
         let actor = match config.backend {
             InferenceBackend::Candle(backend) => {
                 let var_builder =

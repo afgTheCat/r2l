@@ -218,29 +218,3 @@ fn missing_actor_is_reported_after_valid_configuration_is_loaded() {
         .expect("corrupt actor should fail");
     assert!(error.to_string().contains("failed to decode actor"));
 }
-
-#[test]
-fn legacy_backend_artifacts_preserve_the_original_modal_actions() {
-    for backend in ["candle", "burn"] {
-        let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/legacy")
-            .join(backend);
-        let expected: Vec<f32> = yaml_serde::from_str(
-            &std::fs::read_to_string(directory.join("expected.yaml")).unwrap(),
-        )
-        .unwrap();
-        let actor = InferencePolicy::load(directory).unwrap();
-        let actual = actor
-            .mode_action(VecTensor::from_vec(vec![0.25, -0.5, 0.75, 1.0]))
-            .unwrap()
-            .to_vec()
-            .unwrap();
-        assert_eq!(actual.len(), expected.len());
-        for (actual, expected) in actual.into_iter().zip(expected) {
-            assert!(
-                (actual - expected).abs() < 1e-6,
-                "{backend}: expected {expected}, got {actual}"
-            );
-        }
-    }
-}

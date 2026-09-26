@@ -152,7 +152,7 @@ fn ppo_and_a2c_train_and_reload_all_distributions_with_joint_and_split_optimizer
                         .with_sample_size(4)
                         .with_learning_rate(0.01)
                         .with_entropy_coefficient(0.01)
-                        .with_value_loss_coefficient(Some(0.5))
+                        .with_value_loss_coefficient(0.5)
                         .with_log_progress(false)
                         .with_training_artifacts(artifacts(output.path()));
                     let builder = if split {

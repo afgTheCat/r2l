@@ -78,8 +78,8 @@ pub use evaluator::EvaluationSettings;
 pub use hooks::learning::stats::{A2CMinibatchStats, A2CRolloutStats};
 pub use hooks::learning::stats::{PPOMinibatchStats, PPORolloutStats};
 pub use hooks::learning::{
-    A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, LearningRateSchedule,
-    PPOLearningHook, PPOSettings,
+    A2CLearningHook, A2CSettings, ClipRangeSchedule, GradientClippingConfig, LearningHook,
+    LearningRateSchedule, PPOLearningHook, PPOSettings,
 };
 pub use hooks::on_policy::{OnPolicyTrainingHooks, commands::OnPolicyControlHandle};
 pub use hooks::progress::TrainingLimit;

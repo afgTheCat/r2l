@@ -3,18 +3,11 @@
 use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
-use r2l::{PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
+use r2l::{GradientClippingConfig, PPOBuilder, TrainingArtifactsConfig, TrainingLimit};
 use r2l_benchmark_task::{Backend, BenchmarkTask};
 
 const SB3_SCRIPT_PATH: &str = "/opt/r2l/sb3/ppo.py";
 const TASK_ENV_VAR: &str = "R2L_TASK";
-
-fn run(task: &BenchmarkTask) -> anyhow::Result<()> {
-    match task.backend {
-        Backend::Burn | Backend::Candle => train_r2l(task),
-        Backend::Sb3 => train_sb3(task),
-    }
-}
 
 fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
     let config = &task.rl_zoo_env_config;
@@ -36,9 +29,9 @@ fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
         .with_learning_rate_schedule(config.learning_rate.into_learning_rate_schedule())
         .with_clip_range_schedule(config.clip_range.into_clip_range_schedule())
         .with_log_std_init(config.log_std_init)
-        .with_value_loss_coefficient(Some(config.vf_coef))
+        .with_value_loss_coefficient(config.vf_coef)
         .with_seed(0) // TODO: should we keep this?
-        .with_gradient_clipping(Some(config.max_grad_norm));
+        .with_gradient_clipping(GradientClippingConfig::Norm(config.max_grad_norm));
     if config.normalize.norm_reward() {
         builder = builder.with_reward_normalizer(config.gamma, 10.0);
     }
@@ -60,6 +53,13 @@ fn train_sb3(task: &BenchmarkTask) -> anyhow::Result<()> {
         bail!("SB3 evaluation for {} exited with {status}", task.env_name);
     }
     Ok(())
+}
+
+fn run(task: &BenchmarkTask) -> anyhow::Result<()> {
+    match task.backend {
+        Backend::Burn | Backend::Candle => train_r2l(task),
+        Backend::Sb3 => train_sb3(task),
+    }
 }
 
 fn main() -> anyhow::Result<()> {

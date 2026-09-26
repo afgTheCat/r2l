@@ -29,6 +29,16 @@ use self::{
 };
 use super::progress::SharedTrainingProgress;
 
+/// Gradient clipping applied to the joint optimizer, or the policy optimizer in split mode.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum GradientClippingConfig {
+    /// Disable clipping, including any clipping configured on that optimizer.
+    #[default]
+    Disabled,
+    /// Clip gradients using the given maximum norm.
+    Norm(f32),
+}
+
 /// Learning-rate policy applied to shared collection progress.
 #[derive(Debug, Clone, Copy)]
 pub enum LearningRateSchedule {
@@ -131,8 +141,8 @@ impl PPOSettings {
 pub struct LearningHook<M, A> {
     pub(crate) normalize_advantage: bool,
     pub(crate) entropy_coeff: f32,
-    pub(crate) vf_coeff: Option<f32>,
-    pub(crate) gradient_clipping: Option<f32>,
+    pub(crate) vf_coeff: f32,
+    pub(crate) gradient_clipping: GradientClippingConfig,
     pub(crate) progress: SharedTrainingProgress,
     pub(crate) learning_rate_schedule: LearningRateSchedule,
     pub(crate) algorithm: A,
@@ -159,9 +169,11 @@ impl<M: OnPolicyLearner, A> LearningHook<M, A> {
 impl<B: AutodiffBackend, P: BurnPolicy<B>, A> LearningHook<BurnLearner<B, P>, A> {
     fn prepare(&self, module: &mut BurnLearner<B, P>, advantages: &mut Advantages) -> f64 {
         let progress = self.prepare_learning(module, advantages);
-        if let Some(max_grad_norm) = self.gradient_clipping {
-            module.set_grad_clipping(GradientClipping::Norm(max_grad_norm));
-        }
+        let clipping = match self.gradient_clipping {
+            GradientClippingConfig::Disabled => None,
+            GradientClippingConfig::Norm(max_norm) => Some(GradientClipping::Norm(max_norm)),
+        };
+        module.set_grad_clipping(clipping);
         progress
     }
 
@@ -194,7 +206,11 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>, A> LearningHook<BurnLearner<B, P>, A>
 impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone, A> LearningHook<CandleLearner<P>, A> {
     fn prepare(&self, module: &mut CandleLearner<P>, advantages: &mut Advantages) -> Result<f64> {
         let progress = self.prepare_learning(module, advantages);
-        module.set_grad_clipping(self.gradient_clipping)?;
+        let clipping = match self.gradient_clipping {
+            GradientClippingConfig::Disabled => None,
+            GradientClippingConfig::Norm(max_norm) => Some(max_norm),
+        };
+        module.set_grad_clipping(clipping)?;
         Ok(progress)
     }
 

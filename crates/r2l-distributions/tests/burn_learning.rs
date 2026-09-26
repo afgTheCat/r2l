@@ -65,7 +65,7 @@ fn update<P: BurnPolicy<B>>(learner: &mut PolicyValueLearner<B, P>, actions: Ten
     let value_loss = R2lTensor::mean(&(values - returns).powf_scalar(2.0)).unwrap();
     let mut losses = PolicyValueLosses::new(policy_loss, value_loss);
     losses.add_entropy_loss(entropy_loss);
-    losses.set_vf_coeff(Some(0.5));
+    losses.set_vf_coeff(0.5);
     learner.update(losses).unwrap();
 }
 

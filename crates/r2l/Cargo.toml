@@ -19,7 +19,6 @@ rand = "0.10.0"
 derive_more = "2.0.1"
 bimodal-array = { workspace = true }
 serde = { workspace = true }
-safetensors = { workspace = true }
 yaml_serde = { workspace = true } 
 itertools = { workspace = true }
 
@@ -40,6 +39,7 @@ features = ["gym"]
 
 [dev-dependencies]
 r2l = { path = ".", features = ["test-utils"] }
+safetensors = { workspace = true }
 tempfile = "3.27.0"
 
 [lints]

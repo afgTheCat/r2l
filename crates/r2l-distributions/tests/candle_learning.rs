@@ -76,7 +76,7 @@ fn update<P: Policy<Tensor = Tensor> + Clone>(
         .unwrap();
     let mut losses = PolicyValueLosses::new(policy_loss, value_loss);
     losses.add_entropy_loss(&entropy_loss).unwrap();
-    losses.set_vf_coeff(Some(0.5));
+    losses.set_vf_coeff(0.5);
     learner.update(losses).unwrap();
 }
 
@@ -315,7 +315,7 @@ fn optimizer_respects_loss_coefficients_clipping_and_learning_rates() {
         .unwrap();
         let mut losses = PolicyValueLosses::new((&policy * 2.0).unwrap(), (&value * 8.0).unwrap());
         losses.add_entropy_loss(&policy).unwrap(); // policy gradient = 3
-        losses.set_vf_coeff(Some(0.5)); // value gradient = 4
+        losses.set_vf_coeff(0.5); // value gradient = 4
         optimizer.update(losses).unwrap();
         let (policy_grad, value_grad) = if split { (1.0, 1.0) } else { (0.6, 0.8) };
         assert!((data(&policy)[0] - (1.0 - policy_grad / (policy_grad + 1.0))).abs() < 1e-6);

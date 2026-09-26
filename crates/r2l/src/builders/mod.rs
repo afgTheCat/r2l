@@ -6,7 +6,8 @@ pub(crate) mod policy;
 use std::{marker::PhantomData, path::PathBuf, sync::mpsc::Sender};
 
 use burn::{
-    backend::ndarray::NdArrayDevice, grad_clipping::GradientClippingConfig, optim::AdamWConfig,
+    backend::ndarray::NdArrayDevice,
+    grad_clipping::GradientClippingConfig as BurnGradientClippingConfig, optim::AdamWConfig,
     prelude::Backend, tensor::backend::AutodiffBackend,
 };
 use candle_core::{Device, DeviceLocation};
@@ -48,8 +49,8 @@ use crate::{
     evaluator::{BestPolicyEvaluator, EvaluationSampler, EvaluationSettings},
     hooks::{
         learning::{
-            A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, PPOLearningHook,
-            PPOSettings, TargetKl, reporter::RolloutReporter,
+            A2CLearningHook, A2CSettings, ClipRangeSchedule, GradientClippingConfig, LearningHook,
+            PPOLearningHook, PPOSettings, TargetKl, reporter::RolloutReporter,
         },
         on_policy::{
             OnPolicyTrainingHooks,
@@ -462,8 +463,8 @@ struct Builder<E: Env> {
     optimizer_layout: OnPolicyOptimizerLayout,
     log_progress: bool,
     entropy_coeff: f32,
-    vf_coeff: Option<f32>,
-    gradient_clipping: Option<f32>,
+    vf_coeff: f32,
+    gradient_clipping: GradientClippingConfig,
     gamma: f32,
     lambda: f32,
     sample_size: usize,
@@ -513,8 +514,8 @@ impl<E: Env> Builder<E> {
             },
             log_progress: true,
             entropy_coeff: 0.0,
-            vf_coeff: None,
-            gradient_clipping: None,
+            vf_coeff: 1.0,
+            gradient_clipping: GradientClippingConfig::Disabled,
             gamma: 0.98,
             lambda: 0.8,
             sample_size: 64,
@@ -664,7 +665,7 @@ impl<E: Env> Builder<E> {
             .with_weight_decay(params.weight_decay as f32);
         match max_grad_norm {
             Some(max_grad_norm) => optimizer_config
-                .with_grad_clipping(Some(GradientClippingConfig::Norm(max_grad_norm))),
+                .with_grad_clipping(Some(BurnGradientClippingConfig::Norm(max_grad_norm))),
             None => optimizer_config,
         }
     }
@@ -1215,6 +1216,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// Uses one optimizer for the policy and value networks.
     ///
     /// The learning-rate schedule overrides `params.lr` before each learning pass.
+    /// The learning hook's gradient-clipping setting also overrides `max_grad_norm`.
     ///
     /// # Arguments
     ///
@@ -1234,6 +1236,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// The learning-rate schedule overrides both optimizers' initial rates with the
     /// same rate before each learning pass.
+    /// The learning hook's gradient-clipping setting overrides `policy_max_grad_norm`;
+    /// `value_max_grad_norm` remains independent.
     ///
     /// # Arguments
     ///
@@ -1299,22 +1303,25 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
-    /// Sets the optional value-function loss coefficient.
+    /// Sets the value-function loss coefficient, which defaults to `1.0`.
     ///
     /// # Arguments
     ///
-    /// * `vf_coeff` - Value-loss multiplier, or `None` to use the unscaled loss.
-    pub fn with_value_loss_coefficient(mut self, vf_coeff: Option<f32>) -> Self {
+    /// * `vf_coeff` - Value-loss multiplier; `1.0` uses the unscaled loss.
+    pub fn with_value_loss_coefficient(mut self, vf_coeff: f32) -> Self {
         self.builder.vf_coeff = vf_coeff;
         self
     }
 
-    /// Sets optional gradient-norm clipping in the algorithm hook.
+    /// Sets gradient clipping applied before each learning pass.
+    ///
+    /// This overrides the joint optimizer's clipping, or only the policy optimizer's
+    /// clipping in split mode. The default is [`GradientClippingConfig::Disabled`].
     ///
     /// # Arguments
     ///
-    /// * `gradient_clipping` - Maximum gradient norm, or `None` to disable clipping.
-    pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
+    /// * `gradient_clipping` - Clipping mode; `Disabled` clears the optimizer's clipping.
+    pub fn with_gradient_clipping(mut self, gradient_clipping: GradientClippingConfig) -> Self {
         self.builder.gradient_clipping = gradient_clipping;
         self
     }

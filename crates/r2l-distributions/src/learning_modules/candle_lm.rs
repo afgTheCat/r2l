@@ -51,14 +51,14 @@ use crate::{
 /// Candle distributions backed by a dense network and native variable tensors.
 pub type CandleDistributionKind = DistributionKind<Mlp>;
 
-/// Reduced policy/value losses and an optional value-loss multiplier.
+/// Reduced policy/value losses and a value-loss multiplier.
 pub struct PolicyValueLosses {
     /// Policy loss, including any entropy term.
     pub policy_loss: Tensor,
     /// Value-function loss.
     pub value_loss: Tensor,
-    /// Multiplier applied to the value loss; `None` means one.
-    pub vf_coeff: Option<f32>,
+    /// Multiplier applied to the value loss, defaulting to `1.0`.
+    pub vf_coeff: f32,
 }
 
 impl PolicyValueLosses {
@@ -68,7 +68,7 @@ impl PolicyValueLosses {
         Self {
             policy_loss,
             value_loss,
-            vf_coeff: None,
+            vf_coeff: 1.0,
         }
     }
 
@@ -82,7 +82,7 @@ impl PolicyValueLosses {
     }
 
     /// Sets the value-loss multiplier applied when this bundle is optimized.
-    pub fn set_vf_coeff(&mut self, vf_coeff: Option<f32>) {
+    pub fn set_vf_coeff(&mut self, vf_coeff: f32) {
         self.vf_coeff = vf_coeff;
     }
 }
@@ -275,8 +275,7 @@ impl Learner for PolicyValueOptimizer {
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         let policy_loss = losses.policy_loss.reshape(())?;
-        let value_loss =
-            (losses.value_loss.reshape(())? * f64::from(losses.vf_coeff.unwrap_or(1.0)))?;
+        let value_loss = (losses.value_loss.reshape(())? * f64::from(losses.vf_coeff))?;
         match &mut self.inner {
             OptimizerKind::Joint(optimizer) => {
                 let grads = optimizer.gradients(&(policy_loss + value_loss)?)?;

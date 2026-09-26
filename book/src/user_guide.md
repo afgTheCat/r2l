@@ -198,6 +198,12 @@ Before each learning pass, the schedule sets the same rate for policy and value
 optimizers, overriding the initial rates supplied through joint or split optimizer
 parameters.
 
+`with_value_loss_coefficient(coefficient)` sets the value-loss multiplier, defaulting
+to `1.0`. Use `with_gradient_clipping(GradientClippingConfig::Norm(max_norm))` to enable
+clipping, or `GradientClippingConfig::Disabled` to clear it. Before each learning pass,
+this setting overrides clipping on the joint optimizer, or the policy optimizer in
+split mode; the split value optimizer retains its own clipping setting.
+
 For the underlying traits and hook points, continue with
 [On-policy algorithms](./on_policy_algorithms.md). For exact builder methods,
 use the [`r2l` reference](https://docs.rs/r2l/0.0.3/r2l/).

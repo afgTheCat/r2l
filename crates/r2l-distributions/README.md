@@ -28,8 +28,7 @@ Complete rollout collection before optimizer updates, as the built-in loop does.
 ## Networks, artifacts and features
 
 Burn supports MLP and CNN configurations; Candle supports MLP configurations.
-Built-in policies implement `ToSafetensors`. The `r2l` inference loader also imports
-unversioned artifacts from the former backend crates.
+Built-in policies implement `ToSafetensors`.
 
 The `simd` feature enables Burn SIMD support. The `cuda` feature enables Candle
 CUDA support. These features are forwarded by the corresponding `r2l` features.

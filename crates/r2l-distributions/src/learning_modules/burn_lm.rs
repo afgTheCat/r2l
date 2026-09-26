@@ -61,15 +61,15 @@ impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
 
 /// Loss container used by Burn on-policy learners.
 ///
-/// This stores the policy loss, value loss, and an optional multiplier applied
+/// This stores the policy loss, value loss, and a multiplier applied
 /// to the value loss during optimization.
 pub struct PolicyValueLosses<B: AutodiffBackend> {
     /// Policy loss to optimize.
     pub policy_loss: Tensor<B, 2>,
     /// Value-function loss to optimize.
     pub value_loss: Tensor<B, 2>,
-    /// Optional coefficient applied to `value_loss`.
-    pub vf_coeff: Option<f32>,
+    /// Coefficient applied to `value_loss`, defaulting to `1.0`.
+    pub vf_coeff: f32,
 }
 
 impl<B: AutodiffBackend> FromPolicyValueLosses<Tensor<B, 2>> for PolicyValueLosses<B> {
@@ -77,7 +77,7 @@ impl<B: AutodiffBackend> FromPolicyValueLosses<Tensor<B, 2>> for PolicyValueLoss
         Self {
             policy_loss,
             value_loss,
-            vf_coeff: None,
+            vf_coeff: 1.0,
         }
     }
 }
@@ -88,7 +88,7 @@ impl<B: AutodiffBackend> PolicyValueLosses<B> {
         Self {
             policy_loss,
             value_loss,
-            vf_coeff: None,
+            vf_coeff: 1.0,
         }
     }
 
@@ -97,8 +97,8 @@ impl<B: AutodiffBackend> PolicyValueLosses<B> {
         self.policy_loss = self.policy_loss.clone() + entropy_loss;
     }
 
-    /// Sets the optional value-loss coefficient used during optimization.
-    pub fn set_vf_coeff(&mut self, vf_coeff: Option<f32>) {
+    /// Sets the value-loss coefficient used during optimization.
+    pub fn set_vf_coeff(&mut self, vf_coeff: f32) {
         self.vf_coeff = vf_coeff;
     }
 }
@@ -148,9 +148,15 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
         }
     }
 
-    /// Sets gradient clipping for the shared optimizer.
-    pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
-        self.optimizer = self.optimizer.clone().with_grad_clipping(grad_clipping);
+    /// Sets gradient clipping for the shared optimizer, or clears it with `None`.
+    pub fn set_grad_clipping(&mut self, grad_clipping: Option<GradientClipping>) {
+        self.optimizer = match grad_clipping {
+            Some(clipping) => self.optimizer.clone().with_grad_clipping(clipping),
+            None if !self.optimizer.has_gradient_clipping() => return,
+            // Burn has no clipping reset; preserve Adam's configuration and moment estimates.
+            None => OptimizerAdaptor::from(self.optimizer.optim().clone())
+                .load_record(self.optimizer.to_record()),
+        };
     }
 
     /// Returns the current policy optimizer learning rate.
@@ -168,11 +174,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for JointPolicyValueLearner<B
     type Losses = PolicyValueLosses<B>;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
-        let loss = if let Some(vf_coeff) = losses.vf_coeff {
-            losses.policy_loss + losses.value_loss.mul_scalar(vf_coeff)
-        } else {
-            losses.policy_loss + losses.value_loss
-        };
+        let loss = losses.policy_loss + losses.value_loss.mul_scalar(losses.vf_coeff);
         let grads = loss.backward();
         let grads = GradientsParams::from_grads(grads, &self.model);
         let new_model = self.optimizer.step(self.lr, self.model.clone(), grads);
@@ -253,12 +255,14 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
         }
     }
 
-    /// Sets gradient clipping for the policy optimizer.
-    pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
-        self.policy_optimizer = self
-            .policy_optimizer
-            .clone()
-            .with_grad_clipping(grad_clipping);
+    /// Sets gradient clipping for the policy optimizer, or clears it with `None`.
+    pub fn set_grad_clipping(&mut self, grad_clipping: Option<GradientClipping>) {
+        self.policy_optimizer = match grad_clipping {
+            Some(clipping) => self.policy_optimizer.clone().with_grad_clipping(clipping),
+            None if !self.policy_optimizer.has_gradient_clipping() => return,
+            None => OptimizerAdaptor::from(self.policy_optimizer.optim().clone())
+                .load_record(self.policy_optimizer.to_record()),
+        };
     }
 
     /// Returns the current policy optimizer learning rate.
@@ -282,11 +286,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for SplitPolicyValueLearner<B
         self.policy = self
             .policy_optimizer
             .step(self.policy_lr, self.policy.clone(), policy_grads);
-        let value_loss = if let Some(vf_coeff) = losses.vf_coeff {
-            losses.value_loss * vf_coeff
-        } else {
-            losses.value_loss
-        };
+        let value_loss = losses.value_loss * losses.vf_coeff;
         let value_grads = value_loss.backward();
         let value_grads = GradientsParams::from_grads(value_grads, &self.value_net);
         self.value_net =
@@ -425,8 +425,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
 }
 
 impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
-    /// Sets policy-side gradient clipping on the contained optimizer state.
-    pub fn set_grad_clipping(&mut self, grad_clipping: GradientClipping) {
+    /// Sets policy-side gradient clipping, or clears it with `None`.
+    pub fn set_grad_clipping(&mut self, grad_clipping: Option<GradientClipping>) {
         match self {
             Self::Joint(lm) => lm.set_grad_clipping(grad_clipping),
             Self::Split(lm) => lm.set_grad_clipping(grad_clipping),

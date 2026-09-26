@@ -5,7 +5,9 @@ use std::{
 };
 
 use candle_core::Device;
-use r2l::{A2CBuilder, A2CRolloutStats, SamplerExecutionMode, TrainingLimit};
+use r2l::{
+    A2CBuilder, A2CRolloutStats, GradientClippingConfig, SamplerExecutionMode, TrainingLimit,
+};
 
 fn main() -> anyhow::Result<()> {
     let (update_tx, update_rx): (Sender<A2CRolloutStats>, Receiver<A2CRolloutStats>) =
@@ -15,7 +17,7 @@ fn main() -> anyhow::Result<()> {
         .with_candle(Device::Cpu)
         .with_seed(0)
         .with_entropy_coefficient(0.2)
-        .with_gradient_clipping(Some(0.5))
+        .with_gradient_clipping(GradientClippingConfig::Norm(0.5))
         .with_rollout_steps(2048)
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_training_limit(TrainingLimit::rollouts(300))
