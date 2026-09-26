@@ -265,38 +265,23 @@ impl<T: R2lTensor> ThreadWorkers<T> {
     }
 
     fn step(&self) -> Result<MultiMemory<T>> {
-        for worker_handle in &self.worker_handles {
-            let _ = worker_handle.send(WorkerCommand::Step);
-        }
-        let mut multi_memory = MultiMemory::with_capacity(self.worker_handles.len());
-        let mut error = None;
-        for worker_handle in &self.worker_handles {
-            let result = match worker_handle.recv() {
-                Some(WorkerResult::Stepped(result)) => result,
-                Some(_) => return Err(worker_interrupted("received an unexpected response")),
-                None => return Err(worker_interrupted("result channel disconnected")),
-            };
-            match result {
-                Ok(memory) => multi_memory.push_memory(memory),
-                Err(worker_error) => {
-                    error.get_or_insert(worker_error);
-                }
-            }
-        }
-        match error {
-            Some(error) => Err(error),
-            None => Ok(multi_memory),
-        }
+        Self::step_workers(self.worker_handles.iter())
     }
 
     fn step_indexed(&self, indices: &[usize]) -> Result<MultiMemory<T>> {
-        for idx in indices {
-            let _ = self.worker_handles[*idx].send(WorkerCommand::Step);
+        Self::step_workers(indices.iter().map(|idx| &self.worker_handles[*idx]))
+    }
+
+    fn step_workers<'a>(
+        workers: impl ExactSizeIterator<Item = &'a ThreadHandle<T>> + Clone,
+    ) -> Result<MultiMemory<T>> {
+        for worker_handle in workers.clone() {
+            let _ = worker_handle.send(WorkerCommand::Step);
         }
-        let mut multi_memory = MultiMemory::with_capacity(indices.len());
+        let mut multi_memory = MultiMemory::with_capacity(workers.len());
         let mut error = None;
-        for idx in indices {
-            let result = match self.worker_handles[*idx].recv() {
+        for worker_handle in workers {
+            let result = match worker_handle.recv() {
                 Some(WorkerResult::Stepped(result)) => result,
                 Some(_) => return Err(worker_interrupted("received an unexpected response")),
                 None => return Err(worker_interrupted("result channel disconnected")),

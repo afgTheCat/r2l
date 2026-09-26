@@ -1,5 +1,29 @@
 use crate::utils::{fmt_stat, mean};
 
+fn fmt_rollout_stats(
+    f: &mut std::fmt::Formatter<'_>,
+    algorithm: &str,
+    rollout_idx: usize,
+    total_rollouts: Option<usize>,
+    rows: &[(&str, String)],
+) -> std::fmt::Result {
+    let key_width = rows.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
+    match total_rollouts {
+        Some(total_rollouts) => {
+            writeln!(
+                f,
+                "{algorithm} stats (rollout {rollout_idx}/{total_rollouts})"
+            )?;
+        }
+        None => writeln!(f, "{algorithm} stats (rollout {rollout_idx}/?)")?,
+    }
+    writeln!(f, "{:-<1$}", "", key_width + 15)?;
+    for (key, value) in rows {
+        writeln!(f, "{key:<key_width$} | {value}")?;
+    }
+    Ok(())
+}
+
 /// Training statistics for a single A2C optimization minibatch.
 ///
 /// These statistics are collected during one A2C learning pass and reported by
@@ -68,25 +92,7 @@ impl std::fmt::Display for A2CRolloutStats {
             ),
         ];
 
-        let key_width = rows.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
-
-        match self.total_rollouts {
-            Some(total_rollouts) => {
-                writeln!(
-                    f,
-                    "A2C stats (rollout {}/{total_rollouts})",
-                    self.rollout_idx
-                )?;
-            }
-            None => writeln!(f, "A2C stats (rollout {}/?)", self.rollout_idx)?,
-        }
-        writeln!(f, "{:-<1$}", "", key_width + 15)?;
-
-        for (key, value) in rows {
-            writeln!(f, "{key:<key_width$} | {value}")?;
-        }
-
-        Ok(())
+        fmt_rollout_stats(f, "A2C", self.rollout_idx, self.total_rollouts, &rows)
     }
 }
 
@@ -172,24 +178,6 @@ impl std::fmt::Display for PPORolloutStats {
             ),
         ];
 
-        let key_width = rows.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
-
-        match self.total_rollouts {
-            Some(total_rollouts) => {
-                writeln!(
-                    f,
-                    "PPO stats (rollout {}/{total_rollouts})",
-                    self.rollout_idx
-                )?;
-            }
-            None => writeln!(f, "PPO stats (rollout {}/?)", self.rollout_idx)?,
-        }
-        writeln!(f, "{:-<1$}", "", key_width + 15)?;
-
-        for (key, value) in rows {
-            writeln!(f, "{key:<key_width$} | {value}")?;
-        }
-
-        Ok(())
+        fmt_rollout_stats(f, "PPO", self.rollout_idx, self.total_rollouts, &rows)
     }
 }

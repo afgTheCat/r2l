@@ -288,14 +288,16 @@ enum BackendConfiguration {
     Burn(BurnBackendConfig),
 }
 
+struct PPOConfig {
+    normalize_advantage: Option<bool>,
+    total_epochs: usize,
+    target_kl: Option<f32>,
+    clip_range_schedule: ClipRangeSchedule,
+    reporter: Option<Sender<PPORolloutStats>>,
+}
+
 enum AlgorithmConfiguration {
-    Ppo {
-        normalize_advantage: Option<bool>,
-        total_epochs: usize,
-        target_kl: Option<f32>,
-        clip_range_schedule: ClipRangeSchedule,
-        reporter: Option<Sender<PPORolloutStats>>,
-    },
+    Ppo(PPOConfig),
     A2C {
         normalize_advantage: Option<bool>,
         reporter: Option<Sender<A2CRolloutStats>>,
@@ -663,39 +665,54 @@ impl<E: Env> Builder<E> {
         self.progress().borrow().total_rollouts()
     }
 
-    fn ppo_hook<M>(&mut self, progress: SharedTrainingProgress) -> PPOLearningHook<M> {
-        let AlgorithmConfiguration::Ppo {
-            normalize_advantage,
-            total_epochs,
-            target_kl,
-            reporter,
-            clip_range_schedule,
-            ..
-        } = &mut self.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
+    fn learning_hook<M, A>(
+        &self,
+        progress: SharedTrainingProgress,
+        normalize_advantage: bool,
+        algorithm: A,
+    ) -> LearningHook<M, A> {
         let (policy_learning_rate_schedule, value_learning_rate_schedule) =
             self.optimizer.learning_rate_schedules();
         LearningHook {
-            normalize_advantage: normalize_advantage.unwrap_or(true),
+            normalize_advantage,
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
             progress,
             policy_learning_rate_schedule,
             value_learning_rate_schedule,
-            algorithm: PPOSettings {
-                total_epochs: *total_epochs,
-                current_epoch: 0,
-                clip_range_schedule: *clip_range_schedule,
-                target_kl: target_kl.map(|target| TargetKl {
-                    target,
-                    target_exceeded: false,
-                }),
-                reporter: RolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
-            },
+            algorithm,
             _lm: PhantomData,
         }
+    }
+
+    fn ppo_config(&self) -> &PPOConfig {
+        let AlgorithmConfiguration::Ppo(config) = &self.algorithm_configuration else {
+            unreachable!("PPO agent type must use PPO configuration")
+        };
+        config
+    }
+
+    fn ppo_config_mut(&mut self) -> &mut PPOConfig {
+        let AlgorithmConfiguration::Ppo(config) = &mut self.algorithm_configuration else {
+            unreachable!("PPO agent type must use PPO configuration")
+        };
+        config
+    }
+
+    fn ppo_hook<M>(&mut self, progress: SharedTrainingProgress) -> PPOLearningHook<M> {
+        let config = self.ppo_config_mut();
+        let normalize_advantage = config.normalize_advantage.unwrap_or(true);
+        let algorithm = PPOSettings {
+            total_epochs: config.total_epochs,
+            current_epoch: 0,
+            clip_range_schedule: config.clip_range_schedule,
+            target_kl: config.target_kl.map(|target| TargetKl {
+                target,
+                target_exceeded: false,
+            }),
+            reporter: RolloutReporter::new(config.reporter.take(), self.log_progress, self.n_envs),
+        };
+        self.learning_hook(progress, normalize_advantage, algorithm)
     }
 
     fn a2c_hook<M>(&mut self, progress: SharedTrainingProgress) -> A2CLearningHook<M> {
@@ -706,32 +723,16 @@ impl<E: Env> Builder<E> {
         else {
             unreachable!("A2C agent type must use A2C configuration")
         };
-        let (policy_learning_rate_schedule, value_learning_rate_schedule) =
-            self.optimizer.learning_rate_schedules();
-        LearningHook {
-            normalize_advantage: normalize_advantage.unwrap_or(false),
-            entropy_coeff: self.entropy_coeff,
-            vf_coeff: self.vf_coeff,
-            progress,
-            policy_learning_rate_schedule,
-            value_learning_rate_schedule,
-            algorithm: A2CSettings {
-                reporter: RolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
-            },
-            _lm: PhantomData,
-        }
+        let normalize_advantage = normalize_advantage.unwrap_or(false);
+        let algorithm = A2CSettings {
+            reporter: RolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
+        };
+        self.learning_hook(progress, normalize_advantage, algorithm)
     }
 
     fn ppo_params(&self) -> PPOParams {
-        let AlgorithmConfiguration::Ppo {
-            clip_range_schedule,
-            ..
-        } = &self.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
         PPOParams {
-            clip_range: clip_range_schedule.initial_value(),
+            clip_range: self.ppo_config().clip_range_schedule.initial_value(),
             gamma: self.gamma,
             lambda: self.lambda,
             sample_size: self.sample_size,
@@ -1083,10 +1084,10 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `normalize_advantage` - Whether to normalize advantages before optimizer updates.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
         match &mut self.builder.algorithm_configuration {
-            AlgorithmConfiguration::Ppo {
+            AlgorithmConfiguration::Ppo(PPOConfig {
                 normalize_advantage: configured,
                 ..
-            }
+            })
             | AlgorithmConfiguration::A2C {
                 normalize_advantage: configured,
                 ..
@@ -1272,12 +1273,7 @@ where
     ///
     /// * `tx` - Channel sender that receives rollout statistics, or `None` to disable reporting.
     pub fn with_rollout_reporter(mut self, tx: Option<Sender<PPORolloutStats>>) -> Self {
-        let AlgorithmConfiguration::Ppo { reporter, .. } =
-            &mut self.builder.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        *reporter = tx;
+        self.builder.ppo_config_mut().reporter = tx;
         self
     }
 
@@ -1287,14 +1283,7 @@ where
     ///
     /// * `total_epochs` - Maximum optimization epochs performed over each rollout.
     pub fn with_total_epochs(mut self, total_epochs: usize) -> Self {
-        let AlgorithmConfiguration::Ppo {
-            total_epochs: configured,
-            ..
-        } = &mut self.builder.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        *configured = total_epochs;
+        self.builder.ppo_config_mut().total_epochs = total_epochs;
         self
     }
 
@@ -1304,14 +1293,7 @@ where
     ///
     /// * `target_kl` - KL-divergence threshold, or `None` to disable early stopping.
     pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
-        let AlgorithmConfiguration::Ppo {
-            target_kl: configured,
-            ..
-        } = &mut self.builder.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        *configured = target_kl;
+        self.builder.ppo_config_mut().target_kl = target_kl;
         self
     }
 
@@ -1321,14 +1303,7 @@ where
     ///
     /// * `clip_range` - Maximum allowed deviation of the policy ratio from `1.0`.
     pub fn with_clip_range(mut self, clip_range: f32) -> Self {
-        let AlgorithmConfiguration::Ppo {
-            clip_range_schedule,
-            ..
-        } = &mut self.builder.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        *clip_range_schedule = ClipRangeSchedule::Constant(clip_range);
+        self.builder.ppo_config_mut().clip_range_schedule = ClipRangeSchedule::Constant(clip_range);
         self
     }
 
@@ -1338,14 +1313,7 @@ where
     ///
     /// * `clip_range_schedule` - Schedule applied to the clipping range as training progresses.
     pub fn with_clip_range_schedule(mut self, clip_range_schedule: ClipRangeSchedule) -> Self {
-        let AlgorithmConfiguration::Ppo {
-            clip_range_schedule: configured,
-            ..
-        } = &mut self.builder.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        *configured = clip_range_schedule;
+        self.builder.ppo_config_mut().clip_range_schedule = clip_range_schedule;
         self
     }
 }
@@ -1594,13 +1562,13 @@ impl<E: Env> PPOBuilder<E> {
         Self::configured(
             env_builder,
             num_envs,
-            AlgorithmConfiguration::Ppo {
+            AlgorithmConfiguration::Ppo(PPOConfig {
                 normalize_advantage: None,
                 total_epochs: 10,
                 target_kl: None,
                 clip_range_schedule: ClipRangeSchedule::Constant(0.2),
                 reporter: None,
-            },
+            }),
             BackendConfiguration::Candle(CandleBackend {
                 device: Device::Cpu,
             }),

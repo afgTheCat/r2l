@@ -143,6 +143,9 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>, A> LearningHook<BurnLearner<B, P>, A>
         collect_stats: bool,
     ) -> Result<Option<A2CMinibatchStats>> {
         losses.set_vf_coeff(self.vf_coeff);
+        if self.entropy_coeff == 0. && !collect_stats {
+            return Ok(None);
+        }
         let entropy_loss =
             module.policy().entropy(observations.clone())?.neg() * self.entropy_coeff;
         let stats = if collect_stats {
@@ -170,6 +173,9 @@ impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone, A> LearningHook<Candl
         collect_stats: bool,
     ) -> Result<Option<A2CMinibatchStats>> {
         losses.set_vf_coeff(self.vf_coeff);
+        if self.entropy_coeff == 0. && !collect_stats {
+            return Ok(None);
+        }
         let entropy = module.policy().entropy(observations.clone())?;
         let entropy_loss =
             (Tensor::full(self.entropy_coeff, (), entropy.device())? * entropy.neg()?)?;
@@ -354,6 +360,9 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
             &data.observations,
             self.algorithm.reporter.is_enabled(),
         )?;
+        if stats.is_none() && self.algorithm.target_kl.is_none() {
+            return Ok(HookResult::Continue);
+        }
         let ratio = data.ratio.to_vec()?;
         let log_ratio = data.logp_diff.to_vec()?;
         let approx_kl = ratio
@@ -433,6 +442,9 @@ impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone> PPOHook<CandleLearner
             &data.observations,
             self.algorithm.reporter.is_enabled(),
         )?;
+        if stats.is_none() && self.algorithm.target_kl.is_none() {
+            return Ok(HookResult::Continue);
+        }
         let ratio = data.ratio.detach();
         let log_ratio = data.logp_diff.detach();
         let approx_kl = ratio
