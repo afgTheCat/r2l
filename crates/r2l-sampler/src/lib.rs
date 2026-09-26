@@ -40,10 +40,12 @@ pub enum RolloutMode {
 }
 
 impl RolloutMode {
+    #[must_use]
     pub fn is_step_bound(&self) -> bool {
         matches!(self, Self::StepBound { .. })
     }
 
+    #[must_use]
     pub fn is_episode_bound(&self) -> bool {
         matches!(self, Self::EpisodeBound { .. })
     }
