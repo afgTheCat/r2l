@@ -4,7 +4,8 @@ use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
 use r2l::{
-    ClipRangeSchedule, LearningRateSchedule, PPOBuilder, TrainingArtifactsConfig, TrainingLimit,
+    ClipRangeSchedule, LearningRateSchedule, ObsNormalizerConfig, PPOBuilder,
+    TrainingArtifactsConfig, TrainingLimit,
 };
 use r2l_benchmark_task::{Backend, BenchmarkTask, RlZooSchedule};
 
@@ -20,13 +21,17 @@ fn run(task: &BenchmarkTask) -> anyhow::Result<()> {
 
 fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
     let config = &task.rl_zoo_env_config;
-    let obs_clip = config.normalize.norm_obs().then_some(10.0);
+    let normalizer_config = if config.normalize.norm_obs() {
+        ObsNormalizerConfig::Enabled { clip: Some(10.0) }
+    } else {
+        ObsNormalizerConfig::Disabled
+    };
     let artifacts_config = TrainingArtifactsConfig::new(&task.output_dir);
     let mut builder = PPOBuilder::gym(task.env_name.clone(), config.n_envs)?
         .with_rollout_steps(config.n_steps)
         .with_training_limit(TrainingLimit::steps(config.n_timesteps))
         .with_training_artifacts(artifacts_config)
-        .with_observation_normalizer(obs_clip)?
+        .with_observation_normalizer(normalizer_config)
         .with_lambda(config.gae_lambda)
         .with_gamma(config.gamma)
         .with_total_epochs(config.n_epochs)

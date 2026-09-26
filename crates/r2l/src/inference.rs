@@ -7,7 +7,7 @@ use candle_core::DType;
 use candle_nn::VarBuilder;
 use r2l_core::{
     ActorWrapper,
-    env::{Env, normalizer::ClippedNormalizer},
+    env::{Env, normalizer::Normalizer},
     error::{BoxedError, BrokenArtifact, Error},
     models::Actor,
     rng::sample_u64,
@@ -160,7 +160,7 @@ impl<T: R2lTensor> Actor for InferenceActor<T> {
 
 /// A loaded policy that applies its saved observation preprocessing before inference.
 pub struct InferencePolicy<T: R2lTensor> {
-    obs_normalizer: Option<ClippedNormalizer<T>>,
+    obs_normalizer: Option<Normalizer<T>>,
     actor: InferenceActor<T>,
 }
 

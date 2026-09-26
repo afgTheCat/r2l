@@ -25,7 +25,7 @@ fn vector_running_statistics_match_direct_population_statistics() {
         VecTensor::from_vec(vec![3.0, 4.0]),
         VecTensor::from_vec(vec![5.0, 6.0]),
     ];
-    let mut stats = RunningMeanStd::<VecTensor>::new(vec![2]).unwrap();
+    let mut stats = RunningMeanStd::<VecTensor>::new(vec![2]);
     stats.update(&samples).unwrap();
 
     assert_close(&stats.mean.to_vec().unwrap(), &[3.0, 4.0]);
@@ -41,10 +41,10 @@ fn incremental_updates_match_one_combined_batch() {
         VecTensor::from_vec(vec![8.0, 3.0]),
         VecTensor::from_vec(vec![9.0, 1.0]),
     ];
-    let mut incremental = RunningMeanStd::<VecTensor>::new(vec![2]).unwrap();
+    let mut incremental = RunningMeanStd::<VecTensor>::new(vec![2]);
     incremental.update(&samples[..2]).unwrap();
     incremental.update(&samples[2..]).unwrap();
-    let mut combined = RunningMeanStd::<VecTensor>::new(vec![2]).unwrap();
+    let mut combined = RunningMeanStd::<VecTensor>::new(vec![2]);
     combined.update(&samples).unwrap();
 
     assert_close(

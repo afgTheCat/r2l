@@ -71,8 +71,8 @@ use burn::backend::{Autodiff, NdArray};
 pub type BurnBackend = Autodiff<NdArray>;
 
 pub use builders::{
-    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, OnPolicyBuilder, PPOBuilder, PPOBurn, PPOCandle,
-    TrainingArtifactsConfig,
+    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, ObsNormalizerConfig, OnPolicyBuilder, PPOBuilder,
+    PPOBurn, PPOCandle, TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
 pub use hooks::learning::stats::{A2CMinibatchStats, A2CRolloutStats};

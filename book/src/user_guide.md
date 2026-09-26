@@ -177,9 +177,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Gymnasium calls still execute under Python's interpreter lock, so threaded
 execution should not be assumed to improve Python-environment throughput.
 
-`with_observation_normalizer(Some(clip))` switches to staged sampling and enables
-observation normalization. Passing `None` switches to staged sampling without a
-normalizer. Step-bounded rollouts can also normalize discounted rewards with
+`with_observation_normalizer(ObsNormalizerConfig::Enabled { clip: Some(10.0) })`
+switches to staged sampling and normalizes observations before clipping them to
+±10. Use `ObsNormalizerConfig::Enabled { clip: None }` to normalize without clipping,
+or `ObsNormalizerConfig::Disabled` to use staged sampling without normalization.
+Step-bounded rollouts can also normalize discounted rewards with
 `with_reward_normalizer(gamma, clip_reward)`.
 
 ## Training schedules

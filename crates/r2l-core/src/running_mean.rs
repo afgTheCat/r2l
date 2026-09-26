@@ -17,18 +17,18 @@ pub struct RunningMeanStd<T: R2lTensor> {
 impl<T: R2lTensor> RunningMeanStd<T> {
     /// Creates zero-count statistics for tensors with `shape`.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an error if the tensor backend cannot create tensors with `shape`.
-    pub fn new(shape: impl Into<Shape>) -> Result<Self> {
+    /// Panics if [`R2lTensor::zeros`] cannot create tensors with `shape`.
+    pub fn new(shape: impl Into<Shape>) -> Self {
         let shape = shape.into();
-        let mean = T::zeros(shape.clone())?;
-        let var = T::zeros(shape)?;
-        Ok(Self {
+        let mean = T::zeros(shape.clone());
+        let var = T::zeros(shape);
+        Self {
             mean,
             var,
             count: 0.,
-        })
+        }
     }
 
     pub fn build(mean: T, var: T, count: f32) -> Self {

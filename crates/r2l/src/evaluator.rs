@@ -3,7 +3,7 @@ use std::{fs::File, io::Write as _, marker::PhantomData, path::PathBuf};
 use r2l_core::{
     ActorWrapper,
     buffers::TrajectoryBatch,
-    env::{Env, EnvBuilder, EnvBuilderType, normalizer::ClippedNormalizer},
+    env::{Env, EnvBuilder, EnvBuilderType, normalizer::Normalizer},
     error::Error,
     models::{Actor, ToSafetensors},
     on_policy::algorithm::{Agent, OnPolicyRuntime, Sampler},
@@ -30,7 +30,7 @@ impl<E: Env> EvaluationSampler<E> {
         env_builder: EnvBuilderType<EB>,
         n_episodes: usize,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self, Error> {
         let progress = TrainingProgress::shared(
             TrainingLimit::rollouts(1),

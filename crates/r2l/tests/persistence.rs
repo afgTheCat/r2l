@@ -2,8 +2,8 @@ use std::path::Path;
 
 use r2l::{
     Env, EnvDescription, EvaluationSettings, InferenceEnv, InferencePolicy, InferenceRunner,
-    PPOBuilder, SamplerExecutionMode, Snapshot, Space, TrainingArtifactsConfig, TrainingLimit,
-    VecTensor,
+    ObsNormalizerConfig, PPOBuilder, SamplerExecutionMode, Snapshot, Space,
+    TrainingArtifactsConfig, TrainingLimit, VecTensor,
 };
 use r2l_core::{error::Error, tensor::R2lTensor};
 use tempfile::TempDir;
@@ -146,8 +146,7 @@ fn observation_normalizer_round_trips_with_policy() {
         .unwrap()
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_rollout_steps(4)
-        .with_observation_normalizer(Some(10.0))
-        .unwrap()
+        .with_observation_normalizer(ObsNormalizerConfig::Enabled { clip: Some(10.0) })
         .with_training_limit(TrainingLimit::rollouts(1))
         .with_policy_hidden_layers(vec![4])
         .with_sample_size(4)

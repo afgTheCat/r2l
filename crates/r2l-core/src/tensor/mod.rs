@@ -180,14 +180,15 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
 
     /// Creates a zero-filled tensor with `shape`.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an error if the backend cannot create a tensor with `shape`.
-    fn zeros(shape: impl Into<Shape>) -> Result<Self> {
+    /// Panics if `shape` is invalid, its rank is incompatible with the backend
+    /// tensor type, or the backend cannot construct the tensor.
+    fn zeros(shape: impl Into<Shape>) -> Self {
         let shape = shape.into();
         let len = shape.num_elements();
         let data = vec![0f32; len];
-        Self::from_vec_and_shape(data, shape)
+        Self::from_vec_and_shape(data, shape).expect("failed to create zero-filled tensor")
     }
 
     /// Multiplies every element by `scalar`.
@@ -601,12 +602,6 @@ impl R2lTensor for VecTensor {
             self.data.iter().map(|value| value * value).collect(),
             self.shape.clone(),
         )
-    }
-
-    fn zeros(shape: impl Into<Shape>) -> Result<Self> {
-        let shape = shape.into();
-        let len = shape.num_elements();
-        Self::new(vec![0.0; len], shape)
     }
 
     fn mul_scalar(&self, scalar: f32) -> Result<Self> {

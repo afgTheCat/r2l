@@ -18,7 +18,7 @@ use r2l_agents::on_policy_algorithms::{
     ppo::{PPO, PPOHook, PPOParams},
 };
 use r2l_core::env::EnvDescription;
-use r2l_core::env::normalizer::{ClippedNormalizer, NormalizerMode};
+use r2l_core::env::normalizer::{Normalizer, NormalizerMode};
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     error::Error,
@@ -63,6 +63,33 @@ use crate::{
     },
     utils::RewardNormalizer,
 };
+
+/// Controls observation normalization and optional clipping after normalization.
+#[derive(Clone, Copy, Debug)]
+pub enum ObsNormalizerConfig {
+    /// Normalize observations using running mean and variance.
+    Enabled {
+        /// Absolute limit on normalized values, or `None` to disable clipping.
+        clip: Option<f32>,
+    },
+    /// Leave observations unnormalized.
+    Disabled,
+}
+
+impl ObsNormalizerConfig {
+    /// Sets clipping for enabled normalization; leaves disabled normalization disabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `clip` - Absolute limit on normalized observations, or `None` for no clipping.
+    #[must_use]
+    pub fn with_clip(self, clip: Option<f32>) -> Self {
+        match self {
+            Self::Disabled => Self::Disabled,
+            Self::Enabled { .. } => Self::Enabled { clip },
+        }
+    }
+}
 
 /// PPO agent produced by a Candle-backed algorithm builder.
 pub type PPOCandle = PPO<CandlePolicyValueLearner, PPOLearningHook<CandlePolicyValueLearner>>;
@@ -313,7 +340,7 @@ enum SamplerConfiguration<E: Env> {
     StagedStep {
         rollout_steps: usize,
         reward_normalizer: Option<RewardNormalizer>,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     },
 }
 
@@ -331,7 +358,7 @@ impl<E: Env> SamplerConfiguration<E> {
         }
     }
 
-    fn obs_normalizer(&self) -> Option<ClippedNormalizer<E::Tensor>> {
+    fn obs_normalizer(&self) -> Option<Normalizer<E::Tensor>> {
         match self {
             Self::StagedStep {
                 obs_normalizer: Some(obs_normalizer),
@@ -366,7 +393,7 @@ trait EnvBuildPlan<E: Env>: Send {
         &self,
         episodes_per_evaluation: usize,
         evaluation_execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<EvaluationSampler<E>, Error>;
 
     fn build_direct_sampler_core(
@@ -377,7 +404,7 @@ trait EnvBuildPlan<E: Env>: Send {
     fn build_staged_sampler_core(
         &self,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<StagedSamplerCore<E>, Error>;
 }
 
@@ -390,7 +417,7 @@ impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
         &self,
         episodes_per_evaluation: usize,
         evaluation_execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
+        obs_normalizer: Option<Normalizer<<EB::Env as Env>::Tensor>>,
     ) -> Result<EvaluationSampler<EB::Env>, Error> {
         EvaluationSampler::build(
             self.env_builder.clone(),
@@ -410,7 +437,7 @@ impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
     fn build_staged_sampler_core(
         &self,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
+        obs_normalizer: Option<Normalizer<<EB::Env as Env>::Tensor>>,
     ) -> Result<StagedSamplerCore<EB::Env>, Error> {
         StagedSamplerCore::build(&self.env_builder, execution_mode, obs_normalizer)
     }
@@ -1623,32 +1650,23 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
         self
     }
 
-    /// Selects staged sampling and optionally enables clipped observation normalization.
+    /// Selects staged sampling and configures observation normalization.
     ///
-    /// `Some(clip)` enables normalization with that clipping limit. `None`
-    /// retains staged sampling without applying an observation normalizer.
+    /// Enabled normalization can optionally clip the normalized values. Disabled
+    /// normalization retains staged sampling without applying a normalizer.
     ///
     /// # Arguments
     ///
-    /// * `obs_clip` - Absolute clipping limit, or `None` to keep observations unnormalized.
+    /// * `config` - Whether to normalize observations and the optional absolute clipping limit.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an error if an observation normalizer cannot be constructed.
+    /// Panics if the tensor backend cannot create the normalization statistics.
     #[allow(clippy::type_complexity)]
     pub fn with_observation_normalizer(
         mut self,
-        obs_clip: Option<f32>,
-    ) -> Result<OnPolicyBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>, Error> {
-        let obs_normalizer = obs_clip
-            .map(|clip| {
-                ClippedNormalizer::build(
-                    NormalizerMode::Update,
-                    clip,
-                    vec![self.builder.env_desription.observation_space.size()],
-                )
-            })
-            .transpose()?;
+        config: ObsNormalizerConfig,
+    ) -> OnPolicyBuilder<A, StagedSampler<E, StepBoundHook<E>>, E> {
         let SamplerConfiguration::DirectStep {
             rollout_steps,
             reward_normalizer,
@@ -1656,12 +1674,28 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
         else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
-        self.builder.sampler_configuration = SamplerConfiguration::StagedStep {
-            rollout_steps,
-            reward_normalizer,
-            obs_normalizer,
-        };
-        Ok(self.with_sampler(Builder::staged_sampler_step_bound))
+        match config {
+            ObsNormalizerConfig::Disabled => {
+                self.builder.sampler_configuration = SamplerConfiguration::StagedStep {
+                    rollout_steps,
+                    reward_normalizer,
+                    obs_normalizer: None,
+                };
+            }
+            ObsNormalizerConfig::Enabled { clip } => {
+                let obs_normalizer = Normalizer::build(
+                    NormalizerMode::Update,
+                    clip,
+                    vec![self.builder.env_desription.observation_space.size()],
+                );
+                self.builder.sampler_configuration = SamplerConfiguration::StagedStep {
+                    rollout_steps,
+                    reward_normalizer,
+                    obs_normalizer: Some(obs_normalizer),
+                };
+            }
+        }
+        self.with_sampler(Builder::staged_sampler_step_bound)
     }
 
     /// Selects direct sampling bounded by completed episodes per environment.

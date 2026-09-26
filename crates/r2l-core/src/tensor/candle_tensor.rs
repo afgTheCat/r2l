@@ -150,10 +150,10 @@ impl R2lTensor for Tensor {
             .map_err(|error| TensorError::operation("square", error))
     }
 
-    fn zeros(shape: impl Into<Shape>) -> Result<Self> {
+    fn zeros(shape: impl Into<Shape>) -> Self {
         let shape = shape.into();
         Tensor::zeros(shape.dims(), candle_core::DType::F32, &Device::Cpu)
-            .map_err(|error| TensorError::operation("create zeros", error))
+            .expect("failed to create zero-filled Candle tensor")
     }
 
     fn mul_scalar(&self, scalar: f32) -> Result<Self> {
