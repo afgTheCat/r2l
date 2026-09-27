@@ -10,16 +10,19 @@ use r2l_core::{
 use rand_distr::{Distribution, StandardNormal};
 
 use super::TensorParameter;
+use super::sde::{SdeConfig, StateDependentNoise};
 use crate::{Network, Policy};
 
-/// Independent Gaussian actions with network-predicted means and shared log standard deviations.
-/// Log standard deviations have shape `[1, actions]`. Pass a Burn `Param` for
+/// Gaussian actions with network-predicted means and learned exploration scales.
+/// Log standard deviations have shape `[1, actions]`, or `[features, actions]`
+/// with state-dependent exploration. Pass a Burn `Param` for
 /// optimizer-managed parameters, or a tensor when parameters are managed externally.
 /// For Candle, obtain the tensor from the policy's `VarMap`-backed `VarBuilder`.
 #[derive(Debug, Clone)]
 pub struct DiagGaussian<N: Network, P: TensorParameter<N::Tensor> = <N as Network>::Tensor> {
     pub(super) mean: N,
     pub(super) log_std: P,
+    pub(super) sde: Option<StateDependentNoise<N::Tensor>>,
 }
 
 impl<N: Network, P: TensorParameter<N::Tensor>> DiagGaussian<N, P> {
@@ -42,7 +45,48 @@ impl<N: Network, P: TensorParameter<N::Tensor>> DiagGaussian<N, P> {
                 format!("{:?}", log_std.value().to_shape()),
             ));
         }
-        Ok(Self { mean, log_std })
+        Ok(Self {
+            mean,
+            log_std,
+            sde: None,
+        })
+    }
+
+    /// Builds a Gaussian with state-dependent exploration from the network's hidden features.
+    ///
+    /// `log_std` must have shape `[features, actions]`. Features are detached in
+    /// the variance calculation, matching SB3's default `learn_features=false`.
+    ///
+    /// # Errors
+    /// Returns an error if features are unavailable or parameter dimensions do not match.
+    pub fn with_sde(mean: N, log_std: P, config: SdeConfig) -> Result<Self> {
+        let width = super::output_width(&mean)?;
+        let features = mean
+            .feature_size()
+            .filter(|size| *size > 0)
+            .ok_or_else(|| {
+                Error::invalid_parameter("gSDE network", "exposed hidden features", "unavailable")
+            })?;
+        if log_std.value().to_shape().dims() != [features, width] {
+            return Err(Error::invalid_parameter(
+                "log_std shape",
+                format!("[{features}, {width}]"),
+                format!("{:?}", log_std.value().to_shape()),
+            ));
+        }
+        Ok(Self {
+            mean,
+            log_std,
+            sde: Some(StateDependentNoise::new(config)),
+        })
+    }
+
+    fn sde_variance(&self, features: &N::Tensor) -> Result<N::Tensor> {
+        Ok(features
+            .detach()
+            .sqr()?
+            .matmul(&self.log_std.value().mul_scalar(2.)?.exp()?)?
+            .add_scalar(1e-6)?)
     }
 }
 
@@ -51,6 +95,10 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DiagGaussian<N, P> {
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
         super::single_observation(&observation)?;
+        if let Some(sde) = &self.sde {
+            let (mean, features) = self.mean.forward_with_features(observation)?;
+            return Ok(mean.add(&sde.sample(&features.detach(), &self.log_std.value())?)?);
+        }
         let mean = self.mean.forward(observation)?;
         let noise: Vec<f32> = with_rng(|rng| {
             (0..mean.size())
@@ -73,6 +121,20 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Policy for DiagGaussian<N, P> {
     }
 
     fn log_probs(&self, observations: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
+        if self.sde.is_some() {
+            let (mean, features) = self.mean.forward_with_features(observations)?;
+            let shape = mean.to_shape();
+            super::action_batch(&actions, shape[0], shape[1])?;
+            let log_variance = self.sde_variance(&features)?.log()?;
+            return Ok(actions
+                .sub(&mean)?
+                .sqr()?
+                .mul(&log_variance.neg()?.exp()?)?
+                .add(&log_variance)?
+                .add_scalar((2. * PI).ln())?
+                .mul_scalar(-0.5)?
+                .sum_dim(1)?);
+        }
         let mean = self.mean.forward(observations)?;
         let shape = mean.to_shape();
         super::action_batch(&actions, shape[0], shape[1])?;
@@ -88,7 +150,17 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Policy for DiagGaussian<N, P> {
             .sum_dim(1)?)
     }
 
-    fn entropy(&self, _observations: Self::Tensor) -> Result<Self::Tensor> {
+    fn entropy(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
+        if self.sde.is_some() {
+            let (_, features) = self.mean.forward_with_features(observations)?;
+            return Ok(self
+                .sde_variance(&features)?
+                .log()?
+                .add_scalar(1. + (2. * PI).ln())?
+                .mul_scalar(0.5)?
+                .sum_dim(1)?
+                .mean()?);
+        }
         // Independent of observations; sum over action dimensions, with no batch multiplier.
         Ok(self
             .log_std

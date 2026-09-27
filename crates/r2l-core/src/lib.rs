@@ -59,7 +59,7 @@ pub mod tensor;
 pub mod utils;
 
 pub use shape::Shape;
-pub use utils::actor_wrapper::ActorWrapper;
+pub use utils::actor_wrapper::{ActorWrapper, ModeActorWrapper};
 
 /// Control-flow result returned by training hooks.
 ///

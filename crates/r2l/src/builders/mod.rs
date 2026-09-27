@@ -997,6 +997,20 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
+    /// Enables generalized state-dependent exploration for continuous Box actions.
+    ///
+    /// Each environment gets independent noise at each rollout boundary. Evaluation
+    /// uses the policy mean. With gSDE, `log_std_init` initializes the noise weights
+    /// for each hidden feature and action, rather than the action's marginal scale.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Controls additional noise refreshes within a rollout.
+    pub fn with_sde(mut self, config: crate::SdeConfig) -> Self {
+        self.builder.policy_config.sde = Some(config);
+        self
+    }
+
     /// Sets every optimizer's learning rate and selects a constant schedule.
     ///
     /// # Arguments

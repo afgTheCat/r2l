@@ -10,6 +10,7 @@ use r2l_core::{
 };
 use r2l_distributions::learning_modules::burn_lm::BurnDistributionKind;
 use r2l_distributions::learning_modules::candle_lm::CandleDistributionKind;
+use r2l_distributions::{DiagGaussian, Network, distributions::sde::SdeConfig};
 use serde::{Deserialize, Serialize};
 
 /// Backend-independent configuration for an inference policy.
@@ -22,6 +23,7 @@ pub(crate) struct PolicyBuilder {
     pub(crate) action_space: Space<VecTensor>,
     pub(crate) network: NetworkConfig,
     pub(crate) log_std_init: f32,
+    pub(crate) sde: Option<SdeConfig>,
 }
 
 impl PolicyBuilder {
@@ -34,6 +36,7 @@ impl PolicyBuilder {
                 activation: ActivationFunction::default(),
             }),
             log_std_init: 0.0,
+            sde: None,
         })
     }
 
@@ -53,6 +56,25 @@ impl PolicyBuilder {
         var_builder: &VarBuilder<'_>,
     ) -> Result<CandleDistributionKind> {
         let network = super::networks::NetworkBuilder::new(self.network.clone());
+        if let Some(config) = self.sde {
+            let width = self.sde_action_size()?;
+            let mean = network.build_candle(
+                &self.observation_space.observation_shape(),
+                width,
+                &var_builder.pp("policy"),
+            )?;
+            let features = mean
+                .feature_size()
+                .expect("built-in networks expose features");
+            let log_std = var_builder.pp("policy").get_with_hints(
+                (features, width),
+                "log_std",
+                candle_nn::Init::Const(f64::from(self.log_std_init)),
+            )?;
+            return Ok(CandleDistributionKind::DiagGaussian(
+                DiagGaussian::with_sde(mean, log_std, config)?,
+            ));
+        }
         CandleDistributionKind::from_space(
             self.action_space.convert::<T>()?,
             &mut |prefix, width| {
@@ -79,6 +101,25 @@ impl PolicyBuilder {
     /// Returns an error if the policy configuration is invalid or unsupported.
     pub(crate) fn build_burn<B: Backend, T: R2lTensor>(&self) -> Result<BurnDistributionKind<B>> {
         let network = super::networks::NetworkBuilder::new(self.network.clone());
+        if let Some(config) = self.sde {
+            let width = self.sde_action_size()?;
+            let mean = network.build_burn::<B>(
+                &self.observation_space.observation_shape(),
+                width,
+                &Default::default(),
+            )?;
+            let features = mean
+                .feature_size()
+                .expect("built-in networks expose features");
+            let log_std = burn::module::Param::from_tensor(burn::Tensor::full(
+                [features, width],
+                self.log_std_init,
+                &Default::default(),
+            ));
+            return Ok(BurnDistributionKind::DiagGaussian(DiagGaussian::with_sde(
+                mean, log_std, config,
+            )?));
+        }
         BurnDistributionKind::from_space(
             self.action_space.convert::<T>()?,
             &mut |_, width| {
@@ -96,6 +137,17 @@ impl PolicyBuilder {
                 )))
             },
         )
+    }
+
+    fn sde_action_size(&self) -> Result<usize> {
+        match &self.action_space {
+            Space::Box { shape, .. } => Ok(shape.num_elements()),
+            _ => Err(r2l_core::error::Error::invalid_parameter(
+                "gSDE action space",
+                "a continuous Box space",
+                format!("{:?}", self.action_space),
+            )),
+        }
     }
 }
 

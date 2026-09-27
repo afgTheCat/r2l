@@ -93,6 +93,7 @@ pub use r2l_core::{
     on_policy::algorithm::OnPolicyAlgorithm,
     tensor::VecTensor,
 };
+pub use r2l_distributions::distributions::sde::SdeConfig;
 #[cfg(feature = "gym")]
 pub use r2l_gym::{GymEnv, GymEnvBuilder};
 pub use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};

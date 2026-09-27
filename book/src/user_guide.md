@@ -34,6 +34,31 @@ currently require `start = 0`; non-zero `start` values are not supported. The
 builders support other environment types through a different construction, which
 will be introduced later on.
 
+## State-dependent exploration
+
+For continuous `Box` actions, PPO and A2C can use generalized state-dependent
+exploration (gSDE):
+
+```rust,ignore
+use r2l::SdeConfig;
+
+let builder = builder.with_sde(SdeConfig::default());
+```
+
+Each environment samples its own noise matrix at the start of a rollout. The
+matrix acts on the policy's last hidden features, so nearby states receive
+related action noise. Set `SdeConfig::resample_every` to a `NonZeroUsize` to also
+refresh it after that many environment steps. Episode resets within a rollout
+keep the current matrix. Without gSDE, continuous policies sample independent
+Gaussian noise for every action.
+
+The implementation uses a learned scale for every feature/action pair and
+detaches features in the variance calculation, matching SB3's default gSDE
+settings. With gSDE, `with_log_std_init` initializes these weight scales; the
+resulting action variance also depends on the hidden features. Candle MLPs and
+Burn MLPs/CNNs support it. The benchmark worker honors `use_sde` and
+`sde_sample_freq` from its task configuration.
+
 ## Saving training artifacts
 
 We rarely want to train algorithms for the sake of it. Once an algorithm is
@@ -67,7 +92,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Under the hood, `r2l` evaluates the policy with dedicated environments that are
 reset and reused between evaluation passes, and remembers the best-performing
-policy. Evaluation runs after every rollout by default. Its frequency and other
+policy. Evaluation selects modal actions (the mean for Gaussian policies),
+without exploration noise. It runs after every rollout by default. Its frequency and other
 settings can be customized with `EvaluationSettings`. Once training is done, the
 following new files are created in the artifacts folder:
 

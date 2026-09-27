@@ -49,6 +49,20 @@ impl<B: Backend> Network for NetworkKind<B> {
             Self::Cnn(cnn) => cnn.forward(t),
         }
     }
+
+    fn feature_size(&self) -> Option<usize> {
+        match self {
+            Self::Mlp(mlp) => mlp.feature_size(),
+            Self::Cnn(cnn) => cnn.feature_size(),
+        }
+    }
+
+    fn forward_with_features(&self, t: Self::Tensor) -> Result<(Self::Tensor, Self::Tensor)> {
+        match self {
+            Self::Mlp(mlp) => mlp.forward_with_features(t),
+            Self::Cnn(cnn) => cnn.forward_with_features(t),
+        }
+    }
 }
 
 impl<B: Backend> NetworkKind<B> {

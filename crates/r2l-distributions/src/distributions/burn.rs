@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     TensorParameter, bernoulli::MultiBernoulli, categorical::Categorical, composite::Composite,
     diagonal::DiagGaussian, multi_categorical::MultiCategorical, policy::DistributionKind,
+    sde::StateDependentNoise,
 };
 use crate::Network;
 
@@ -169,6 +170,7 @@ impl<B: Backend, N: Network<Tensor = Tensor<B, 2>> + Module<B>> Module<B>
         Self {
             mean: self.mean.fork(device),
             log_std: self.log_std.fork(device),
+            sde: self.sde.map(|sde| StateDependentNoise::new(sde.config)),
         }
     }
 
@@ -176,6 +178,7 @@ impl<B: Backend, N: Network<Tensor = Tensor<B, 2>> + Module<B>> Module<B>
         Self {
             mean: self.mean.to_device(device),
             log_std: self.log_std.to_device(device),
+            sde: self.sde.map(|sde| StateDependentNoise::new(sde.config)),
         }
     }
 
@@ -195,13 +198,18 @@ impl<B: Backend, N: Network<Tensor = Tensor<B, 2>> + Module<B>> Module<B>
         mapper.enter_module("log_std", "Struct:DiagGaussian");
         let log_std = Module::map(self.log_std, mapper);
         mapper.exit_module("log_std", "Struct:DiagGaussian");
-        Self { mean, log_std }
+        Self {
+            mean,
+            log_std,
+            sde: self.sde.map(|sde| StateDependentNoise::new(sde.config)),
+        }
     }
 
     fn load_record(self, (mean, log_std): Self::Record) -> Self {
         Self {
             mean: self.mean.load_record(mean),
             log_std: self.log_std.load_record(log_std),
+            sde: self.sde.map(|sde| StateDependentNoise::new(sde.config)),
         }
     }
 
@@ -222,6 +230,10 @@ where
         DiagGaussian {
             mean: self.mean.valid(),
             log_std: self.log_std.valid(),
+            sde: self
+                .sde
+                .as_ref()
+                .map(|sde| StateDependentNoise::new(sde.config)),
         }
     }
 
@@ -229,6 +241,7 @@ where
         Self {
             mean: N::from_inner(module.mean),
             log_std: Param::from_inner(module.log_std),
+            sde: module.sde.map(|sde| StateDependentNoise::new(sde.config)),
         }
     }
 }

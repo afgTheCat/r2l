@@ -110,6 +110,22 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns an error if the tensor backend cannot perform the operation.
     fn mul(&self, other: &Self) -> Result<Self>;
 
+    /// Multiplies rank-two matrices, preserving gradients through both operands.
+    ///
+    /// # Errors
+    /// Returns an error unless the inner dimensions match.
+    fn matmul(&self, other: &Self) -> Result<Self>;
+
+    /// Elementwise natural logarithm.
+    ///
+    /// # Errors
+    /// Returns an error if the backend cannot evaluate the logarithm.
+    fn log(&self) -> Result<Self>;
+
+    /// Returns the same values without a connection to the gradient graph.
+    #[must_use]
+    fn detach(&self) -> Self;
+
     /// Selects values along `dim` using category indices stored in `indices`.
     ///
     /// The tensors must have the same rank and match in every dimension except
@@ -379,6 +395,31 @@ impl VecTensor {
 }
 
 impl R2lTensor for VecTensor {
+    fn matmul(&self, other: &Self) -> Result<Self> {
+        let [rows, inner, columns] = matrix_dimensions(&self.shape, &other.shape)?;
+        let data = (0..rows * columns)
+            .map(|index| {
+                let row = index / columns;
+                let column = index % columns;
+                (0..inner)
+                    .map(|k| self.data[row * inner + k] * other.data[k * columns + column])
+                    .sum()
+            })
+            .collect();
+        Self::new(data, [rows, columns])
+    }
+
+    fn log(&self) -> Result<Self> {
+        Self::new(
+            self.data.iter().map(|value| value.ln()).collect(),
+            self.shape.clone(),
+        )
+    }
+
+    fn detach(&self) -> Self {
+        self.clone()
+    }
+
     fn to_vec(&self) -> Result<Vec<f32>> {
         Ok(self.data.clone())
     }
@@ -617,6 +658,19 @@ impl R2lTensor for VecTensor {
 
     fn log_softmax(&self, dim: usize) -> Result<Self> {
         self.normalized_exp(dim, true)
+    }
+}
+
+fn matrix_dimensions(left: &Shape, right: &Shape) -> Result<[usize; 3]> {
+    match (left.dims(), right.dims()) {
+        ([rows, inner], [other_inner, columns]) if inner == other_inner => {
+            Ok([*rows, *inner, *columns])
+        }
+        _ => Err(TensorError::ShapeMismatch {
+            operation: "matrix multiplication".into(),
+            left: left.clone(),
+            right: right.clone(),
+        }),
     }
 }
 

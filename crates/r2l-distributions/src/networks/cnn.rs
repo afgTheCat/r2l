@@ -132,12 +132,11 @@ impl<B: Backend> Cnn<B> {
         })
     }
 
-    fn forward_inner(&self, mut t: Tensor<B, 4>) -> Tensor<B, 2> {
+    fn convolve(&self, mut t: Tensor<B, 4>) -> Tensor<B, 2> {
         for layer in &self.cnn_layers {
             t = layer.forward(t);
         }
-        let t: Tensor<B, 2> = t.flatten(1, 3);
-        self.mlp.forward(t)
+        t.flatten(1, 3)
     }
 }
 
@@ -153,6 +152,14 @@ impl<B: Backend> Network for Cnn<B> {
     }
 
     fn forward(&self, t: Self::Tensor) -> Result<Self::Tensor> {
+        self.forward_with_features(t).map(|(output, _)| output)
+    }
+
+    fn feature_size(&self) -> Option<usize> {
+        self.mlp.feature_size()
+    }
+
+    fn forward_with_features(&self, t: Self::Tensor) -> Result<(Self::Tensor, Self::Tensor)> {
         let [batch_size, features] = t.dims();
         let input_size = self.shape.num_elements();
         if batch_size == 0 || features == 0 || features != input_size {
@@ -166,6 +173,6 @@ impl<B: Backend> Network for Cnn<B> {
             unreachable!("CNN input shape must have three dimensions");
         };
         let t: Tensor<B, 4> = t.reshape([batch_size, channels, height, width]);
-        Ok(self.forward_inner(t))
+        self.mlp.forward_with_features(self.convolve(t))
     }
 }

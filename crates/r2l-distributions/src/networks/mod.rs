@@ -31,4 +31,21 @@ pub trait Network: Send + Debug + Clone + 'static {
     ///
     /// Returns an error for incompatible input dimensions or failed evaluation.
     fn forward(&self, t: Self::Tensor) -> Result<Self::Tensor>;
+
+    /// Width of the features immediately before the output layer, when exposed by this network.
+    fn feature_size(&self) -> Option<usize> {
+        None
+    }
+
+    /// Evaluates a batch and returns `(output, features)` for state-dependent exploration.
+    ///
+    /// # Errors
+    /// Returns an error if the network does not expose features or evaluation fails.
+    fn forward_with_features(&self, _t: Self::Tensor) -> Result<(Self::Tensor, Self::Tensor)> {
+        Err(r2l_core::error::Error::invalid_parameter(
+            "state-dependent exploration",
+            "a network exposing its output-layer features",
+            "features are unavailable",
+        ))
+    }
 }

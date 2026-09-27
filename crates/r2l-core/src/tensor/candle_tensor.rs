@@ -17,6 +17,21 @@ impl From<candle_core::Error> for Error {
 }
 
 impl R2lTensor for Tensor {
+    fn matmul(&self, other: &Self) -> Result<Self> {
+        super::matrix_dimensions(&self.to_shape(), &other.to_shape())?;
+        self.matmul(other)
+            .map_err(|error| TensorError::operation("matrix multiplication", error))
+    }
+
+    fn log(&self) -> Result<Self> {
+        self.log()
+            .map_err(|error| TensorError::operation("logarithm", error))
+    }
+
+    fn detach(&self) -> Self {
+        self.detach()
+    }
+
     fn to_vec(&self) -> Result<Vec<f32>> {
         self.flatten_all()
             .and_then(|tensor| tensor.to_vec1())

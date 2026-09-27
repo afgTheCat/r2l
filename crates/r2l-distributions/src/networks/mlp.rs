@@ -127,7 +127,18 @@ impl<B: Backend> Network for Mlp<B> {
         [self.output_size].into()
     }
 
+    fn feature_size(&self) -> Option<usize> {
+        match self.layers.last() {
+            Some(LinearLayer::LinearLayer(layer)) => Some(layer.weight.dims()[0]),
+            _ => None,
+        }
+    }
+
     fn forward(&self, t: Self::Tensor) -> Result<Self::Tensor> {
+        self.forward_with_features(t).map(|(output, _)| output)
+    }
+
+    fn forward_with_features(&self, mut t: Self::Tensor) -> Result<(Self::Tensor, Self::Tensor)> {
         let [batch_size, features] = t.dims();
         if batch_size == 0 || features != self.input_size {
             return Err(Error::invalid_parameter(
@@ -136,6 +147,11 @@ impl<B: Backend> Network for Mlp<B> {
                 format!("{:?}", t.dims()),
             ));
         }
-        Ok(self.forward(t))
+        let (output_layer, hidden_layers) =
+            self.layers.split_last().expect("MLP has an output layer");
+        for layer in hidden_layers {
+            t = layer.forward(t);
+        }
+        Ok((output_layer.forward(t.clone()), t))
     }
 }

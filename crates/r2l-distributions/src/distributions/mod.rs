@@ -13,6 +13,7 @@ pub mod composite;
 pub mod diagonal;
 pub mod multi_categorical;
 pub mod policy;
+pub mod sde;
 
 /// A tensor value held directly or in a backend's trainable parameter wrapper.
 pub trait TensorParameter<T: R2lTensor>: Clone + std::fmt::Debug + Send + 'static {

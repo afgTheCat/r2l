@@ -12,6 +12,19 @@ use crate::{error::TensorError, tensor::R2lTensor};
 type Result<T> = std::result::Result<T, TensorError>;
 
 impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
+    fn matmul(&self, other: &Self) -> Result<Self> {
+        super::matrix_dimensions(&self.to_shape(), &other.to_shape())?;
+        Ok(self.clone().matmul(other.clone()))
+    }
+
+    fn log(&self) -> Result<Self> {
+        Ok(self.clone().log())
+    }
+
+    fn detach(&self) -> Self {
+        self.clone().detach()
+    }
+
     fn to_vec(&self) -> Result<Vec<f32>> {
         self.to_data()
             .to_vec()

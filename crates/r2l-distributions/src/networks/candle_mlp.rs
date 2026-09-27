@@ -122,7 +122,15 @@ impl Network for Mlp {
         [self.output_size].into()
     }
 
-    fn forward(&self, mut t: Tensor) -> Result<Tensor> {
+    fn feature_size(&self) -> Option<usize> {
+        self.layers.last().map(|layer| layer.weight().dims()[1])
+    }
+
+    fn forward(&self, t: Tensor) -> Result<Tensor> {
+        self.forward_with_features(t).map(|(output, _)| output)
+    }
+
+    fn forward_with_features(&self, mut t: Tensor) -> Result<(Tensor, Tensor)> {
         if !matches!(t.dims(), [batch, width] if *batch > 0 && *width == self.input_size) {
             return Err(Error::invalid_parameter(
                 "network input shape",
@@ -130,12 +138,12 @@ impl Network for Mlp {
                 format!("{:?}", t.dims()),
             ));
         }
-        for (index, layer) in self.layers.iter().enumerate() {
+        let (output_layer, hidden_layers) =
+            self.layers.split_last().expect("MLP has an output layer");
+        for layer in hidden_layers {
             t = layer.forward(&t)?;
-            if index + 1 < self.layers.len() {
-                t = self.activate(&t)?;
-            }
+            t = self.activate(&t)?;
         }
-        Ok(t)
+        Ok((output_layer.forward(&t)?, t))
     }
 }

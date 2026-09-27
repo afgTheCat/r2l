@@ -1,7 +1,7 @@
 use std::{fs::File, io::Write as _, marker::PhantomData, path::PathBuf};
 
 use r2l_core::{
-    ActorWrapper,
+    ModeActorWrapper,
     buffers::TrajectoryBatch,
     env::{Env, EnvBuilder, EnvBuilderType, normalizer::Normalizer},
     error::Error,
@@ -213,7 +213,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestPolicyEval
         rt: &mut OnPolicyRuntime<AG, TS>,
     ) -> Result<(), Error> {
         let actor = rt.actor();
-        let adapted_actor = ActorWrapper::new(actor.clone());
+        let adapted_actor = ModeActorWrapper::new(actor.clone());
         self.eval_adapted(adapted_actor, &actor)?;
         Ok(())
     }

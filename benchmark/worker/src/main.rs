@@ -4,8 +4,8 @@ use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
 use r2l::{
-    AdamWConfig, GradientClippingConfig, OptimizerConfig, PPOBuilder, TrainingArtifactsConfig,
-    TrainingLimit,
+    AdamWConfig, GradientClippingConfig, OptimizerConfig, PPOBuilder, SdeConfig,
+    TrainingArtifactsConfig, TrainingLimit,
 };
 use r2l_benchmark_task::{Backend, BenchmarkTask};
 
@@ -38,6 +38,16 @@ fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
         .with_log_std_init(config.log_std_init)
         .with_value_loss_coefficient(config.vf_coef)
         .with_seed(0); // TODO: should we keep this?
+    if config.use_sde {
+        if config.sde_sample_freq < -1 {
+            bail!("sde_sample_freq must be -1, zero, or a positive number of steps");
+        }
+        builder = builder.with_sde(SdeConfig {
+            resample_every: usize::try_from(config.sde_sample_freq)
+                .ok()
+                .and_then(std::num::NonZeroUsize::new),
+        });
+    }
     if config.normalize.norm_reward() {
         builder = builder.with_reward_normalizer(config.gamma, 10.0);
     }
