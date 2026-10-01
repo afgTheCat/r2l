@@ -15,6 +15,7 @@ pub(crate) enum ScheduledEvaluator<A: Actor, E: Env> {
         evaluator: BestPolicyEvaluator<A, E>,
         rollouts_per_evaluation: usize,
         progress: SharedTrainingProgress,
+        avg_reward_threshold: Option<f32>,
     },
 }
 
@@ -30,10 +31,13 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
     /// * `evaluator` - Evaluates and tracks the best policy.
     /// * `rollouts_per_evaluation` - Number of training rollouts between evaluations.
     /// * `progress` - Training progress used to determine when evaluation is due.
+    /// * `avg_reward_threshold` - Stop when the average episode reward reaches this value, or
+    ///   `None` to evaluate without a reward-based stop condition.
     pub(crate) fn new(
         evaluator: BestPolicyEvaluator<A, E>,
         rollouts_per_evaluation: usize,
         progress: SharedTrainingProgress,
+        avg_reward_threshold: Option<f32>,
     ) -> Self {
         assert!(
             rollouts_per_evaluation > 0,
@@ -43,6 +47,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
             evaluator,
             rollouts_per_evaluation,
             progress,
+            avg_reward_threshold,
         }
     }
 
@@ -54,14 +59,18 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
             evaluator,
             rollouts_per_evaluation,
             progress,
+            avg_reward_threshold,
         } = self
         else {
             return Ok(HookResult::Continue);
         };
         let completed_rollouts = progress.borrow().completed_rollouts();
-        if completed_rollouts.is_multiple_of(*rollouts_per_evaluation) {
-            evaluator.evaluate(runtime)?;
-            Ok(HookResult::Continue)
+        if !completed_rollouts.is_multiple_of(*rollouts_per_evaluation) {
+            return Ok(HookResult::Continue);
+        }
+        let evaluation_result = evaluator.evaluate(runtime)?;
+        if avg_reward_threshold.is_some_and(|t| t <= evaluation_result.avg_reward()) {
+            Ok(HookResult::Break)
         } else {
             Ok(HookResult::Continue)
         }

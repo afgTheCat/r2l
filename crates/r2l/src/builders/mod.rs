@@ -156,7 +156,7 @@ impl TrainingArtifactsConfig {
         self
     }
 
-    /// Sets the evaluation behavior used by evaluation results and inference artifacts.
+    /// Sets the evaluation behavior used by artifacts and average-reward stopping.
     ///
     /// # Arguments
     ///
@@ -367,6 +367,7 @@ struct Builder<E: Env> {
 
     // for the hooks
     training_limit: TrainingLimit,
+    avg_reward_threshold: Option<f32>,
     training_artifacts: Option<TrainingArtifactsConfig>,
     control_endpoint: Option<OnPolicyControlEndpoint>,
 
@@ -406,6 +407,7 @@ impl<E: Env> Builder<E> {
             backend_configuration,
             algorithm_configuration,
             training_limit: TrainingLimit::rollouts(50),
+            avg_reward_threshold: None,
             training_artifacts: None,
             control_endpoint: None,
             policy_config,
@@ -425,14 +427,24 @@ impl<E: Env> Builder<E> {
         })
     }
 
+    fn needs_evaluator(&self) -> bool {
+        self.avg_reward_threshold.is_some()
+            || self
+                .training_artifacts
+                .as_ref()
+                .is_some_and(TrainingArtifactsConfig::needs_evaluator)
+    }
+
     fn validate_evaluation_schedule(&self) -> Result<(), Error> {
-        let Some(config) = &self.training_artifacts else {
-            return Ok(());
-        };
-        if !config.needs_evaluator() {
+        if !self.needs_evaluator() {
             return Ok(());
         }
-        let rollouts_per_evaluation = config.evaluation_settings.rollouts_per_evaluation;
+        let defaults = EvaluationSettings::default();
+        let settings = self
+            .training_artifacts
+            .as_ref()
+            .map_or(&defaults, |config| &config.evaluation_settings);
+        let rollouts_per_evaluation = settings.rollouts_per_evaluation;
         match self.total_rollouts() {
             Some(total_rollouts) if rollouts_per_evaluation > total_rollouts => {
                 Err(Error::InvalidState {
@@ -538,38 +550,45 @@ impl<E: Env> Builder<E> {
         self,
         progress: SharedTrainingProgress,
     ) -> Result<OnPolicyTrainingHooks<A, S, E>, Error> {
-        let (evaluator, timing_recorder) = if let Some(config) = self.training_artifacts {
-            let evaluator = if config.needs_evaluator() {
-                let obs_normalizer = self
-                    .sampler_configuration
-                    .obs_normalizer()
-                    .map(|n| n.with_mode(NormalizerMode::ReadOnly));
-                let sampler = self.env_build_plan.build_evaluator_sampler(
-                    config.evaluation_settings.episodes_per_evaluation,
-                    config.evaluation_settings.evaluation_execution_mode,
-                    obs_normalizer,
-                )?;
-                ScheduledEvaluator::new(
-                    BestPolicyEvaluator::new(
-                        sampler,
-                        config.output_dir.clone(),
-                        config.evaluation_results,
-                        config.inference_artifacts,
-                    )?,
-                    config.evaluation_settings.rollouts_per_evaluation,
-                    progress.clone(),
-                )
-            } else {
-                ScheduledEvaluator::disabled()
-            };
-            let timing_recorder = if config.needs_timing_recorder() {
-                TimingRecorder::create(&config.output_dir, progress.clone())?
-            } else {
-                TimingRecorder::disabled()
-            };
-            (evaluator, timing_recorder)
+        let evaluator = if self.needs_evaluator() {
+            let defaults = EvaluationSettings::default();
+            let settings = self
+                .training_artifacts
+                .as_ref()
+                .map_or(&defaults, |config| &config.evaluation_settings);
+            let obs_normalizer = self
+                .sampler_configuration
+                .obs_normalizer()
+                .map(|n| n.with_mode(NormalizerMode::ReadOnly));
+            let sampler = self.env_build_plan.build_evaluator_sampler(
+                settings.episodes_per_evaluation,
+                settings.evaluation_execution_mode,
+                obs_normalizer,
+            )?;
+            let artifacts = self
+                .training_artifacts
+                .as_ref()
+                .filter(|config| config.needs_evaluator());
+            ScheduledEvaluator::new(
+                BestPolicyEvaluator::new(
+                    sampler,
+                    artifacts.map(|config| config.output_dir.clone()),
+                    artifacts.is_some_and(|config| config.evaluation_results),
+                    artifacts.is_some_and(|config| config.inference_artifacts),
+                )?,
+                settings.rollouts_per_evaluation,
+                progress.clone(),
+                self.avg_reward_threshold,
+            )
         } else {
-            (ScheduledEvaluator::disabled(), TimingRecorder::disabled())
+            ScheduledEvaluator::disabled()
+        };
+        let timing_recorder = if let Some(config) = &self.training_artifacts
+            && config.needs_timing_recorder()
+        {
+            TimingRecorder::create(&config.output_dir, progress.clone())?
+        } else {
+            TimingRecorder::disabled()
         };
         Ok(OnPolicyTrainingHooks::new(
             progress,
@@ -886,6 +905,30 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `training_limit` - The rollout or sampled-step limit for the training run.
     pub fn with_training_limit(mut self, training_limit: TrainingLimit) -> Self {
         self.builder.training_limit = training_limit;
+        self
+    }
+
+    /// Stops training when an evaluation's average episode reward reaches the threshold.
+    ///
+    /// Enabling this condition also enables evaluation without requiring training artifacts.
+    /// By default, evaluation uses modal actions for five episodes per environment after every
+    /// training rollout. If training artifacts are configured, their evaluation settings apply.
+    /// The configured training limit still applies when the threshold has not been reached.
+    ///
+    /// # Arguments
+    ///
+    /// * `avg_reward_threshold` - Stop when the mean episode reward is at least this value, or
+    ///   `None` to disable reward-based stopping. Evaluation uses unnormalized environment rewards.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a supplied threshold is not finite.
+    pub fn with_avg_reward_threshold(mut self, avg_reward_threshold: Option<f32>) -> Self {
+        assert!(
+            avg_reward_threshold.is_none_or(f32::is_finite),
+            "average reward threshold must be finite"
+        );
+        self.builder.avg_reward_threshold = avg_reward_threshold;
         self
     }
 

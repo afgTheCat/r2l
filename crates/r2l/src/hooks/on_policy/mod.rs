@@ -96,14 +96,16 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
     ) -> HookResult {
         self.timing_recorder.finish_current_phase_recording();
         self.timing_recorder.record_new_phase(Phase::Evaluation);
-        let evaluation_result = self.evaluator.evaluate(runtime);
-        self.timing_recorder.finish_current_phase_recording();
-        let timing_result = self.timing_recorder.flush();
-        try_or_break!(self, evaluation_result.and(timing_result));
+        let evaluation_result = try_or_break!(self, {
+            let eval_res = self.evaluator.evaluate(runtime);
+            self.timing_recorder.finish_current_phase_recording();
+            let timing_result = self.timing_recorder.flush();
+            timing_result.and(eval_res)
+        });
         let progress_result = self.progress.borrow().progress_result();
         let command_result = try_or_break!(self, self.command_handler.process_pending(runtime));
         self.timing_recorder.record_new_phase(Phase::Rollout);
-        progress_result.and(command_result)
+        evaluation_result.and(progress_result).and(command_result)
     }
 
     fn finish_training_hook(
