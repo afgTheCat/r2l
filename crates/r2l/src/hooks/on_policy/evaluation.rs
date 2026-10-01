@@ -1,4 +1,5 @@
 use r2l_core::{
+    HookResult,
     env::Env,
     error::Error,
     models::{Actor, ToSafetensors},
@@ -48,20 +49,22 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
     pub(super) fn evaluate<AG: Agent<Actor = A>, S: Sampler<Tensor = E::Tensor>>(
         &mut self,
         runtime: &mut OnPolicyRuntime<AG, S>,
-    ) -> Result<(), Error> {
+    ) -> Result<HookResult, Error> {
         let Self::Enabled {
             evaluator,
             rollouts_per_evaluation,
             progress,
         } = self
         else {
-            return Ok(());
+            return Ok(HookResult::Continue);
         };
         let completed_rollouts = progress.borrow().completed_rollouts();
         if completed_rollouts.is_multiple_of(*rollouts_per_evaluation) {
-            return evaluator.evaluate(runtime);
+            evaluator.evaluate(runtime)?;
+            Ok(HookResult::Continue)
+        } else {
+            Ok(HookResult::Continue)
         }
-        Ok(())
     }
 
     pub(super) fn finish_training(&self) -> Result<(), Error> {

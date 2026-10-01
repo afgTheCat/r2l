@@ -5,7 +5,10 @@ use candle_core::DType;
 use candle_nn::VarBuilder;
 use r2l_core::{
     ActorWrapper,
-    env::{Env, normalizer::Normalizer},
+    env::{
+        Env,
+        normalizer::{Normalizer, NormalizerSnapshot},
+    },
     error::{BoxedError, BrokenArtifact, Error},
     models::Actor,
     rng::sample_u64,
@@ -16,9 +19,7 @@ use r2l_distributions::learning_modules::candle_lm::CandleDistributionKind;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    builders::{
-        BurnBackendConfig, CandleBackend, normalizer::NormalizerBuilder, policy::PolicyBuilder,
-    },
+    builders::{BurnBackendConfig, CandleBackend, policy::PolicyBuilder},
     constants::{ACTOR_FILE, INFERENCE_CONFIG_FILE, NORMALIZER_FILE},
 };
 
@@ -179,9 +180,9 @@ impl<T: R2lTensor> InferencePolicy<T> {
                 let artifact =
                     ArtifactFile::new(directory.join(NORMALIZER_FILE), "observation normalizer");
                 let serialized = artifact.read_to_string()?;
-                let normalizer_builder: NormalizerBuilder = yaml_serde::from_str(&serialized)
+                let normalizer_snapshot: NormalizerSnapshot = yaml_serde::from_str(&serialized)
                     .map_err(|error| artifact.decode_error(Box::new(error)))?;
-                Some(normalizer_builder.into_normalizer()?)
+                Some(normalizer_snapshot.into_normalizer()?)
             }
         };
         let actor_artifact = ArtifactFile::new(directory.join(ACTOR_FILE), "actor");

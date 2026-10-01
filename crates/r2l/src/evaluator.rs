@@ -3,7 +3,10 @@ use std::{fs::File, io::Write as _, marker::PhantomData, path::PathBuf};
 use r2l_core::{
     ModeActorWrapper,
     buffers::TrajectoryBatch,
-    env::{Env, EnvBuilder, EnvBuilderType, normalizer::Normalizer},
+    env::{
+        Env, EnvBuilder, EnvBuilderType,
+        normalizer::{Normalizer, NormalizerSnapshot},
+    },
     error::Error,
     models::{Actor, ToSafetensors},
     on_policy::algorithm::{Agent, OnPolicyRuntime, Sampler},
@@ -12,7 +15,6 @@ use r2l_core::{
 use r2l_sampler::{DirectSampler, RolloutMode, SamplerExecutionMode, StagedSampler};
 
 use crate::{
-    builders::normalizer::NormalizerBuilder,
     constants::{ACTOR_FILE, EVALUATIONS_FILE, NORMALIZER_FILE},
     hooks::{
         progress::{TrainingLimit, TrainingProgress},
@@ -54,16 +56,6 @@ impl<E: Env> EvaluationSampler<E> {
         }
     }
 
-    fn evaluate<A: Actor<Tensor = E::Tensor> + Clone>(
-        &mut self,
-        actor: A,
-    ) -> Result<(f32, f32), Error> {
-        match self {
-            Self::Direct(sampler) => Self::evaluate_with_sampler(sampler, actor),
-            Self::Staged(sampler) => Self::evaluate_with_sampler(sampler, actor),
-        }
-    }
-
     fn evaluate_with_sampler<S: Sampler<Tensor = E::Tensor>>(
         sampler: &mut S,
         actor: impl Actor<Tensor = E::Tensor> + Clone,
@@ -84,12 +76,22 @@ impl<E: Env> EvaluationSampler<E> {
         Ok((total_reward, total_episodes))
     }
 
-    fn normalizer_snapshot(&self) -> Result<Option<NormalizerBuilder>, Error> {
+    fn evaluate<A: Actor<Tensor = E::Tensor> + Clone>(
+        &mut self,
+        actor: A,
+    ) -> Result<(f32, f32), Error> {
+        match self {
+            Self::Direct(sampler) => Self::evaluate_with_sampler(sampler, actor),
+            Self::Staged(sampler) => Self::evaluate_with_sampler(sampler, actor),
+        }
+    }
+
+    fn normalizer_snapshot(&self) -> Result<Option<NormalizerSnapshot>, Error> {
         match self {
             Self::Direct(_) => Ok(None),
             Self::Staged(sampler) => sampler
                 .obs_normalizer()
-                .map(NormalizerBuilder::from_normalizer)
+                .map(Normalizer::snapshot)
                 .transpose()
                 .map_err(Into::into),
         }
@@ -235,8 +237,8 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> BestPolicyEval
         {
             if let Some(output_dir) = &self.inference_artifacts {
                 let actor_bytes = actor.to_safetensors()?;
-                let normalizer = self.sampler.normalizer_snapshot()?;
                 std::fs::write(output_dir.join(ACTOR_FILE), actor_bytes).map_err(Error::wrap)?;
+                let normalizer = self.sampler.normalizer_snapshot()?;
                 if let Some(normalizer) = normalizer {
                     let serialized = yaml_serde::to_string(&normalizer).map_err(Error::wrap)?;
                     std::fs::write(output_dir.join(NORMALIZER_FILE), serialized)

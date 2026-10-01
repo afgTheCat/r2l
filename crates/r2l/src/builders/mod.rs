@@ -1,6 +1,5 @@
 /// Backend-independent network configuration and construction.
 pub mod networks;
-pub(crate) mod normalizer;
 /// Adam optimizer settings, learning-rate schedules, and clipping.
 pub mod optimizer;
 pub(crate) mod policy;
