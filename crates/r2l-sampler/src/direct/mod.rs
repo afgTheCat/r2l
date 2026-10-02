@@ -3,7 +3,7 @@
 
 pub mod worker;
 
-use std::sync::Arc;
+use std::{num::NonZeroUsize, sync::Arc};
 
 use bimodal_array::ArrayHandle;
 use bimodal_array::bimodal_array;
@@ -76,8 +76,10 @@ impl<E: Env> DirectSamplerCore<E> {
         env_builder: EnvBuilderType<EB>,
         execution_mode: SamplerExecutionMode,
     ) -> Self {
-        let num_envs = env_builder.num_envs();
-        let buffers: Vec<TrajectoryBuffer<E::Tensor>> = vec![TrajectoryBuffer::default(); num_envs];
+        let num_envs =
+            NonZeroUsize::new(env_builder.num_envs()).expect("environment builders are nonempty");
+        let buffers: Vec<TrajectoryBuffer<E::Tensor>> =
+            vec![TrajectoryBuffer::default(); num_envs.get()];
         let (buffers, buffer_handlers) = bimodal_array(buffers);
         let worker_pool = match execution_mode {
             SamplerExecutionMode::SingleThreaded => {

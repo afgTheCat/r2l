@@ -73,7 +73,7 @@ impl DirectSamplerHook for OneStep {
             SamplerHookResult::Stop
         } else {
             self.0 = true;
-            SamplerHookResult::Bound(RolloutMode::StepBound { n_steps: 1 })
+            SamplerHookResult::Bound(RolloutMode::step_bound(1))
         }
     }
 }

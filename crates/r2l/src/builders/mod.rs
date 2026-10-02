@@ -4,7 +4,7 @@ pub mod networks;
 pub mod optimizer;
 pub(crate) mod policy;
 
-use std::{marker::PhantomData, path::PathBuf, sync::mpsc::Sender};
+use std::{marker::PhantomData, num::NonZeroUsize, path::PathBuf, sync::mpsc::Sender};
 
 use burn::{backend::ndarray::NdArrayDevice, prelude::Backend};
 use candle_core::{Device, DeviceLocation};
@@ -244,14 +244,14 @@ impl CandleBackend {
 
 enum SamplerConfiguration<E: Env> {
     DirectStep {
-        rollout_steps: usize,
+        rollout_steps: NonZeroUsize,
         reward_normalizer: Option<RewardNormalizer>,
     },
     DirectEpisode {
-        rollout_episodes: usize,
+        rollout_episodes: NonZeroUsize,
     },
     StagedStep {
-        rollout_steps: usize,
+        rollout_steps: NonZeroUsize,
         reward_normalizer: Option<RewardNormalizer>,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     },
@@ -289,7 +289,7 @@ enum BackendConfiguration {
 
 struct PPOConfig {
     normalize_advantage: Option<bool>,
-    total_epochs: usize,
+    total_epochs: NonZeroUsize,
     target_kl: Option<f32>,
     clip_range_schedule: ClipRangeSchedule,
     reporter: Option<Sender<PPORolloutStats>>,
@@ -306,7 +306,7 @@ enum AlgorithmConfiguration {
 trait EnvBuildPlan<E: Env>: Send {
     fn build_evaluator_sampler(
         &self,
-        episodes_per_evaluation: usize,
+        episodes_per_evaluation: NonZeroUsize,
         evaluation_execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<EvaluationSampler<E>, Error>;
@@ -330,7 +330,7 @@ struct TypedEnvBuildPlan<EB: EnvBuilder> {
 impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
     fn build_evaluator_sampler(
         &self,
-        episodes_per_evaluation: usize,
+        episodes_per_evaluation: NonZeroUsize,
         evaluation_execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<<EB::Env as Env>::Tensor>>,
     ) -> Result<EvaluationSampler<EB::Env>, Error> {
@@ -361,7 +361,7 @@ impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
 struct Builder<E: Env> {
     env_build_plan: Box<dyn EnvBuildPlan<E>>,
     env_desription: EnvDescription<E::Tensor>,
-    n_envs: usize,
+    n_envs: NonZeroUsize,
     backend_configuration: BackendConfiguration,
     algorithm_configuration: AlgorithmConfiguration,
 
@@ -380,7 +380,7 @@ struct Builder<E: Env> {
     vf_coeff: f32,
     gamma: f32,
     lambda: f32,
-    sample_size: usize,
+    sample_size: NonZeroUsize,
     seed: Option<u64>,
 
     // for the sampler
@@ -397,6 +397,7 @@ impl<E: Env> Builder<E> {
         sampler_configuration: SamplerConfiguration<E>,
     ) -> Result<Self, Error> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
+        let n_envs = NonZeroUsize::new(n_envs).expect("environment builders are nonempty");
         let env_desription = env_builder.env_description()?;
         let policy_config = PolicyBuilder::new(&env_desription)?;
         Ok(Self {
@@ -421,7 +422,7 @@ impl<E: Env> Builder<E> {
             vf_coeff: 1.0,
             gamma: 0.98,
             lambda: 0.8,
-            sample_size: 64,
+            sample_size: NonZeroUsize::new(64).unwrap(),
             seed: None,
             sampler_execution_mode: SamplerExecutionMode::MultiThreaded,
         })
@@ -753,7 +754,7 @@ impl<E: Env> Builder<E> {
             clip_range: self.ppo_config().clip_range_schedule.initial_value(),
             gamma: self.gamma,
             lambda: self.lambda,
-            sample_size: self.sample_size,
+            sample_size: self.sample_size.get(),
         }
     }
 
@@ -761,7 +762,7 @@ impl<E: Env> Builder<E> {
         A2CParams {
             gamma: self.gamma,
             lambda: self.lambda,
-            sample_size: self.sample_size,
+            sample_size: self.sample_size.get(),
         }
     }
 
@@ -1223,8 +1224,13 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Arguments
     ///
     /// * `sample_size` - Maximum number of transitions in each learning minibatch.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `sample_size` is zero.
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
-        self.builder.sample_size = sample_size;
+        self.builder.sample_size =
+            NonZeroUsize::new(sample_size).expect("sample size must be greater than zero");
         self
     }
 
@@ -1338,8 +1344,13 @@ where
     /// # Arguments
     ///
     /// * `total_epochs` - Maximum optimization epochs performed over each rollout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `total_epochs` is zero.
     pub fn with_total_epochs(mut self, total_epochs: usize) -> Self {
-        self.builder.ppo_config_mut().total_epochs = total_epochs;
+        self.builder.ppo_config_mut().total_epochs =
+            NonZeroUsize::new(total_epochs).expect("total epochs must be greater than zero");
         self
     }
 
@@ -1453,6 +1464,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     /// # Arguments
     ///
     /// * `rollout_steps` - Number of steps collected from each environment per rollout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rollout_steps` is zero.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
         let SamplerConfiguration::DirectStep {
             rollout_steps: configured,
@@ -1461,7 +1476,8 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
         else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
-        *configured = rollout_steps;
+        *configured =
+            NonZeroUsize::new(rollout_steps).expect("rollout steps must be greater than zero");
         self
     }
 
@@ -1540,6 +1556,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     ///
     /// * `rollout_episodes` - Number of completed episodes collected from each environment per
     ///   rollout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rollout_episodes` is zero.
     pub fn with_rollout_episodes(
         mut self,
         rollout_episodes: usize,
@@ -1547,6 +1567,8 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
         let SamplerConfiguration::DirectStep { .. } = self.builder.sampler_configuration else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
+        let rollout_episodes = NonZeroUsize::new(rollout_episodes)
+            .expect("rollout episodes must be greater than zero");
         self.builder.sampler_configuration =
             SamplerConfiguration::DirectEpisode { rollout_episodes };
         self.with_sampler(Builder::direct_sampler_episode_bound)
@@ -1561,6 +1583,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     /// # Arguments
     ///
     /// * `rollout_steps` - Number of steps collected from each environment per rollout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rollout_steps` is zero.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
         let SamplerConfiguration::StagedStep {
             rollout_steps: configured,
@@ -1569,7 +1595,8 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
         else {
             unreachable!("staged step-bound sampler type must use matching configuration")
         };
-        *configured = rollout_steps;
+        *configured =
+            NonZeroUsize::new(rollout_steps).expect("rollout steps must be greater than zero");
         self
     }
 
@@ -1620,7 +1647,7 @@ impl<E: Env> PPOBuilder<E> {
             num_envs,
             AlgorithmConfiguration::Ppo(PPOConfig {
                 normalize_advantage: None,
-                total_epochs: 10,
+                total_epochs: NonZeroUsize::new(10).unwrap(),
                 target_kl: None,
                 clip_range_schedule: ClipRangeSchedule::Constant(0.2),
                 reporter: None,
@@ -1629,7 +1656,7 @@ impl<E: Env> PPOBuilder<E> {
                 device: Device::Cpu,
             }),
             SamplerConfiguration::DirectStep {
-                rollout_steps: 1024,
+                rollout_steps: NonZeroUsize::new(1024).unwrap(),
                 reward_normalizer: None,
             },
             Builder::ppo_candle_agent,
@@ -1663,7 +1690,7 @@ impl<E: Env> A2CBuilder<E> {
                 device: Device::Cpu,
             }),
             SamplerConfiguration::DirectStep {
-                rollout_steps: 1024,
+                rollout_steps: NonZeroUsize::new(1024).unwrap(),
                 reward_normalizer: None,
             },
             Builder::a2c_candle_agent,

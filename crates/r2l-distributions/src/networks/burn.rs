@@ -1,4 +1,6 @@
 //! Burn networks constructed from shared architecture configurations.
+use std::num::NonZeroUsize;
+
 use burn::{module::Module, prelude::Backend, tensor::Tensor};
 use r2l_core::Shape;
 use r2l_core::{
@@ -82,7 +84,9 @@ impl<B: Backend> NetworkKind<B> {
             NetworkConfig::Mlp(config) => config,
             NetworkConfig::Cnn(config) => &config.mlp,
         };
-        if output_size == 0 || mlp.hidden_layers.contains(&0) {
+        let output_size = NonZeroUsize::new(output_size)
+            .ok_or_else(|| Self::invalid_config("layer widths must be positive"))?;
+        if mlp.hidden_layers.contains(&0) {
             return Err(Self::invalid_config("layer widths must be positive"));
         }
         Ok(match config {
@@ -101,12 +105,9 @@ impl<B: Backend> NetworkKind<B> {
         })
     }
 
-    pub(super) fn flat_size(shape: &Shape) -> Result<usize> {
-        let size = shape.num_elements();
-        if size == 0 {
-            return Err(Self::invalid_config("shape must have a positive size"));
-        }
-        Ok(size)
+    pub(super) fn flat_size(shape: &Shape) -> Result<NonZeroUsize> {
+        NonZeroUsize::new(shape.num_elements())
+            .ok_or_else(|| Self::invalid_config("shape must have a positive size"))
     }
 
     pub(super) fn invalid_config(details: &str) -> Error {

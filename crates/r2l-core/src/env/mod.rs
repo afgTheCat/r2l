@@ -2,7 +2,7 @@ use crate::Shape;
 
 pub mod normalizer;
 
-use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
+use std::{collections::BTreeMap, fmt::Debug, num::NonZeroUsize, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
@@ -271,7 +271,7 @@ enum EnvBuilderKind<EB: EnvBuilder> {
         /// Shared environment builder.
         builder: Arc<EB>,
         /// Number of environments to construct.
-        n_envs: usize,
+        n_envs: NonZeroUsize,
     },
     /// Uses one builder per worker.
     Heterogeneous {
@@ -297,13 +297,6 @@ impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
 impl<EB: EnvBuilder> EnvBuilderType<EB> {
     fn from_kind(kind: EnvBuilderKind<EB>) -> Result<Self, Error> {
         match &kind {
-            EnvBuilderKind::Homogeneous { n_envs: 0, .. } => {
-                return Err(Error::invalid_parameter(
-                    "n_envs",
-                    "a value greater than zero",
-                    "0",
-                ));
-            }
             EnvBuilderKind::Heterogeneous { builders } if builders.is_empty() => {
                 return Err(Error::invalid_parameter(
                     "builders",
@@ -322,6 +315,8 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     ///
     /// Returns an error if `n_envs` is zero.
     pub fn homogeneous(builder: EB, n_envs: usize) -> Result<Self, Error> {
+        let n_envs = NonZeroUsize::new(n_envs)
+            .ok_or_else(|| Error::invalid_parameter("n_envs", "a value greater than zero", "0"))?;
         Self::from_kind(EnvBuilderKind::Homogeneous {
             builder: Arc::new(builder),
             n_envs,
@@ -363,7 +358,7 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     #[must_use]
     pub fn num_envs(&self) -> usize {
         match &self.0 {
-            EnvBuilderKind::Homogeneous { n_envs, .. } => *n_envs,
+            EnvBuilderKind::Homogeneous { n_envs, .. } => n_envs.get(),
             EnvBuilderKind::Heterogeneous { builders } => builders.len(),
         }
     }

@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use r2l_core::{
     Shape,
     env::action_ranges,
@@ -16,7 +18,7 @@ use crate::{Network, Policy};
 pub struct Composite<N: Network, P: TensorParameter<N::Tensor> = <N as Network>::Tensor> {
     pub(super) policies: Vec<DistributionKind<N, P>>,
     pub(super) action_sizes: Vec<usize>,
-    pub(super) action_size: usize,
+    pub(super) action_size: NonZeroUsize,
 }
 
 impl<N: Network, P: TensorParameter<N::Tensor>> Composite<N, P> {
@@ -35,7 +37,7 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Composite<N, P> {
         let total = action_sizes
             .iter()
             .try_fold(0_usize, |size, &width| size.checked_add(width));
-        let Some(action_size) = total.filter(|&size| size > 0) else {
+        let Some(action_size) = total.and_then(NonZeroUsize::new) else {
             return Err(Error::invalid_parameter(
                 "composite actions",
                 "nonempty representable action vector",
@@ -74,7 +76,7 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for Composite<N, P> {
 
 impl<N: Network, P: TensorParameter<N::Tensor>> Policy for Composite<N, P> {
     fn action_shape(&self) -> Shape {
-        [self.action_size].into()
+        [self.action_size.get()].into()
     }
 
     fn log_probs(&self, observations: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
@@ -86,7 +88,7 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Policy for Composite<N, P> {
                 format!("{shape:?}"),
             ));
         }
-        super::action_batch(&actions, shape[0], self.action_size)?;
+        super::action_batch(&actions, shape[0], self.action_size.get())?;
         let mut log_probs = Vec::with_capacity(self.policies.len());
         for (policy, (offset, width)) in self.policies.iter().zip(action_ranges(&self.action_sizes))
         {

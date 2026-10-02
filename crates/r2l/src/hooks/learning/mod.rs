@@ -3,7 +3,7 @@
 pub(crate) mod reporter;
 pub(crate) mod stats;
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, num::NonZeroUsize};
 
 use burn::tensor::backend::AutodiffBackend;
 use candle_core::Tensor;
@@ -65,7 +65,7 @@ pub struct A2CSettings {
 
 /// Epoch, clipping, KL, and reporting state specific to PPO learning.
 pub struct PPOSettings {
-    pub(crate) total_epochs: usize,
+    pub(crate) total_epochs: NonZeroUsize,
     pub(crate) current_epoch: usize,
     pub(crate) clip_range_schedule: ClipRangeSchedule,
     pub(crate) target_kl: Option<TargetKl>,
@@ -87,7 +87,7 @@ impl PPOSettings {
             .target_kl
             .as_mut()
             .is_some_and(TargetKl::target_kl_exceeded);
-        self.current_epoch == self.total_epochs || target_exceeded
+        self.current_epoch == self.total_epochs.get() || target_exceeded
     }
 
     fn check_kl(&mut self, approx_kl: f32) -> HookResult {

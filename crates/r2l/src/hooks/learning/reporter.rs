@@ -1,3 +1,4 @@
+use std::num::NonZeroUsize;
 use std::{fmt::Display, sync::mpsc::Sender};
 
 use itertools::izip;
@@ -73,7 +74,7 @@ impl<R: Default + Display> RolloutReporter<R> {
     /// * `tx` - Optional channel receiving each rollout's statistics.
     /// * `log_progress` - Whether to print rollout statistics.
     /// * `n_envs` - Number of environment reward streams to track.
-    pub(crate) fn new(tx: Option<Sender<R>>, log_progress: bool, n_envs: usize) -> Self {
+    pub(crate) fn new(tx: Option<Sender<R>>, log_progress: bool, n_envs: NonZeroUsize) -> Self {
         if tx.is_none() && !log_progress {
             return Self::Disabled;
         }
@@ -81,7 +82,7 @@ impl<R: Default + Display> RolloutReporter<R> {
             report: R::default(),
             tx,
             log_progress,
-            unfinished_episode_rewards: vec![0.; n_envs],
+            unfinished_episode_rewards: vec![0.; n_envs.get()],
             latest_average_reward: 0.,
         })
     }

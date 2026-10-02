@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, num::NonZeroUsize, rc::Rc};
 
 use r2l_core::{
     HookResult,
@@ -13,12 +13,12 @@ pub enum TrainingLimit {
     /// Stop after `total_rollouts` completed rollouts.
     RolloutBound {
         /// Number of rollouts after which training stops.
-        total_rollouts: usize,
+        total_rollouts: NonZeroUsize,
     },
     /// Stop after at least `total_steps` sampled environment steps.
     TotalStepBound {
         /// Number of sampled steps after which training stops.
-        total_steps: usize,
+        total_steps: NonZeroUsize,
     },
 }
 
@@ -34,8 +34,10 @@ impl TrainingLimit {
     /// Panics if `total_steps` is zero.
     #[must_use]
     pub fn steps(total_steps: usize) -> Self {
-        assert!(total_steps > 0, "total steps must be greater than zero");
-        Self::TotalStepBound { total_steps }
+        Self::TotalStepBound {
+            total_steps: NonZeroUsize::new(total_steps)
+                .expect("total steps must be greater than zero"),
+        }
     }
 
     /// Creates a schedule bounded by completed rollouts.
@@ -49,11 +51,10 @@ impl TrainingLimit {
     /// Panics if `total_rollouts` is zero.
     #[must_use]
     pub fn rollouts(total_rollouts: usize) -> Self {
-        assert!(
-            total_rollouts > 0,
-            "total rollouts must be greater than zero"
-        );
-        Self::RolloutBound { total_rollouts }
+        Self::RolloutBound {
+            total_rollouts: NonZeroUsize::new(total_rollouts)
+                .expect("total rollouts must be greater than zero"),
+        }
     }
 }
 
@@ -67,7 +68,7 @@ pub(crate) struct TrainingProgress {
     counters: TrainingCounters,
     training_limit: TrainingLimit,
     rollout_mode: RolloutMode,
-    n_envs: usize,
+    n_envs: NonZeroUsize,
 }
 
 pub(crate) type SharedTrainingProgress = Rc<RefCell<TrainingProgress>>;
@@ -83,12 +84,8 @@ impl TrainingProgress {
     pub(crate) fn shared(
         training_limit: TrainingLimit,
         rollout_mode: RolloutMode,
-        n_envs: usize,
+        n_envs: NonZeroUsize,
     ) -> SharedTrainingProgress {
-        assert!(
-            n_envs > 0,
-            "number of environments must be greater than zero"
-        );
         Rc::new(RefCell::new(Self {
             counters: TrainingCounters::default(),
             training_limit,
@@ -123,12 +120,11 @@ impl TrainingProgress {
 
     pub(crate) fn total_rollouts(&self) -> Option<usize> {
         match self.training_limit {
-            TrainingLimit::RolloutBound { total_rollouts } => Some(total_rollouts),
+            TrainingLimit::RolloutBound { total_rollouts } => Some(total_rollouts.get()),
             TrainingLimit::TotalStepBound { total_steps } => match self.rollout_mode {
                 RolloutMode::StepBound { n_steps } => n_steps
                     .checked_mul(self.n_envs)
-                    .filter(|steps| *steps > 0)
-                    .map(|steps| total_steps.div_ceil(steps)),
+                    .map(|steps| total_steps.get().div_ceil(steps.get())),
                 RolloutMode::EpisodeBound { .. } => None,
             },
         }
@@ -138,10 +134,10 @@ impl TrainingProgress {
     pub(crate) fn progress_remaining(&self) -> f64 {
         let remaining = match self.training_limit {
             TrainingLimit::RolloutBound { total_rollouts } => {
-                1.0 - self.counters.completed_rollouts as f64 / total_rollouts as f64
+                1.0 - self.counters.completed_rollouts as f64 / total_rollouts.get() as f64
             }
             TrainingLimit::TotalStepBound { total_steps } => {
-                1.0 - self.counters.steps_taken as f64 / total_steps as f64
+                1.0 - self.counters.steps_taken as f64 / total_steps.get() as f64
             }
         };
         remaining.clamp(0.0, 1.0)

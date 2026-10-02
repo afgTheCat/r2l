@@ -1,5 +1,7 @@
 //! Dense Candle networks with parameters supplied by a native `VarBuilder`.
 
+use std::num::NonZeroUsize;
+
 use candle_core::Tensor;
 use candle_nn::{
     Activation, Init, Linear, Module, VarBuilder,
@@ -21,8 +23,8 @@ use super::Network;
 pub struct Mlp {
     layers: Vec<Linear>,
     activation: ActivationFunction,
-    input_size: usize,
-    output_size: usize,
+    input_size: NonZeroUsize,
+    output_size: NonZeroUsize,
 }
 
 impl Mlp {
@@ -39,20 +41,25 @@ impl Mlp {
         activation: ActivationFunction,
         vb: &VarBuilder<'_>,
     ) -> Result<Self> {
-        if layer_sizes.len() < 2 || layer_sizes.contains(&0) {
+        let widths = layer_sizes
+            .iter()
+            .copied()
+            .map(NonZeroUsize::new)
+            .collect::<Option<Vec<_>>>();
+        let Some(layer_sizes) = widths.filter(|widths| widths.len() >= 2) else {
             return Err(Error::invalid_parameter(
                 "layer_sizes",
                 "at least two positive widths",
                 format!("{layer_sizes:?}"),
             ));
-        }
+        };
         let layers = layer_sizes
             .windows(2)
             .enumerate()
             .map(|(index, widths)| {
                 let vb = vb.pp(index);
                 let weight = vb.get_with_hints(
-                    (widths[1], widths[0]),
+                    (widths[1].get(), widths[0].get()),
                     "weight",
                     Init::Kaiming {
                         dist: NormalOrUniform::Uniform,
@@ -60,9 +67,9 @@ impl Mlp {
                         non_linearity: NonLinearity::ExplicitGain(1.0 / 3.0f64.sqrt()),
                     },
                 )?;
-                let bound = 1.0 / (widths[0] as f64).sqrt();
+                let bound = 1.0 / (widths[0].get() as f64).sqrt();
                 let bias = vb.get_with_hints(
-                    widths[1],
+                    widths[1].get(),
                     "bias",
                     Init::Uniform {
                         lo: -bound,
@@ -115,11 +122,11 @@ impl Network for Mlp {
     type Tensor = Tensor;
 
     fn input_shape(&self) -> Shape {
-        [self.input_size].into()
+        [self.input_size.get()].into()
     }
 
     fn output_shape(&self) -> Shape {
-        [self.output_size].into()
+        [self.output_size.get()].into()
     }
 
     fn feature_size(&self) -> Option<usize> {
@@ -131,7 +138,7 @@ impl Network for Mlp {
     }
 
     fn forward_with_features(&self, mut t: Tensor) -> Result<(Tensor, Tensor)> {
-        if !matches!(t.dims(), [batch, width] if *batch > 0 && *width == self.input_size) {
+        if !matches!(t.dims(), [batch, width] if *batch > 0 && *width == self.input_size.get()) {
             return Err(Error::invalid_parameter(
                 "network input shape",
                 format!("[nonzero batch, {}]", self.input_size),

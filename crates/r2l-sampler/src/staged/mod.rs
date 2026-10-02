@@ -1,6 +1,6 @@
 mod worker;
 
-use std::sync::Arc;
+use std::{num::NonZeroUsize, sync::Arc};
 
 use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
 use itertools::Itertools;
@@ -65,8 +65,9 @@ impl<E: Env> StagedSamplerCore<E> {
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
-        let num_envs = env_builder.num_envs();
-        let buffers = vec![TrajectoryBuffer::default(); num_envs];
+        let num_envs =
+            NonZeroUsize::new(env_builder.num_envs()).expect("environment builders are nonempty");
+        let buffers = vec![TrajectoryBuffer::default(); num_envs.get()];
         let (mut last_states, pool) = match execution_mode {
             SamplerExecutionMode::SingleThreaded => Self::build_vec_workers(env_builder, num_envs),
             SamplerExecutionMode::MultiThreaded => {
@@ -87,11 +88,11 @@ impl<E: Env> StagedSamplerCore<E> {
 
     fn build_vec_workers<EB: EnvBuilder<Env = E>>(
         env_builder: &EnvBuilderType<EB>,
-        num_envs: usize,
+        num_envs: NonZeroUsize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
-        let mut envs = Vec::with_capacity(num_envs);
-        let mut initial_states = Vec::with_capacity(num_envs);
-        for env_idx in 0..num_envs {
+        let mut envs = Vec::with_capacity(num_envs.get());
+        let mut initial_states = Vec::with_capacity(num_envs.get());
+        for env_idx in 0..num_envs.get() {
             let mut env = env_builder.build_idx(env_idx).unwrap();
             let state = env.reset(sample_u64()).unwrap();
             initial_states.push(state.clone());
@@ -104,10 +105,10 @@ impl<E: Env> StagedSamplerCore<E> {
 
     fn build_thread_workers<EB: EnvBuilder<Env = E>>(
         env_builder: &EnvBuilderType<EB>,
-        num_envs: usize,
+        num_envs: NonZeroUsize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
-        let mut worker_handles = Vec::with_capacity(num_envs);
-        let factories = (0..num_envs)
+        let mut worker_handles = Vec::with_capacity(num_envs.get());
+        let factories = (0..num_envs.get())
             .map(|idx| {
                 let (command_tx, command_rx) = crossbeam::channel::unbounded();
                 let (result_tx, result_rx) = crossbeam::channel::unbounded();
@@ -130,7 +131,7 @@ impl<E: Env> StagedSamplerCore<E> {
     pub fn collect(&mut self, bound: RolloutMode) -> Result<()> {
         match bound {
             RolloutMode::StepBound { n_steps } => {
-                for _ in 0..n_steps {
+                for _ in 0..n_steps.get() {
                     self.step()?;
                 }
             }
@@ -139,7 +140,7 @@ impl<E: Env> StagedSamplerCore<E> {
                 loop {
                     let worker_idxs = episode_counts
                         .iter()
-                        .positions(|count| *count < n_episodes)
+                        .positions(|count| *count < n_episodes.get())
                         .collect::<Vec<_>>();
                     if worker_idxs.is_empty() {
                         break;

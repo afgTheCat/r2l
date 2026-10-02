@@ -11,7 +11,7 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 
-use crate::direct::RolloutMode;
+use crate::RolloutMode;
 
 fn worker_interrupted(details: impl Into<String>) -> Error {
     Error::ResourceInterrupted(ResourceInterrupted {
@@ -144,13 +144,13 @@ impl<E: Env> Worker<E> {
                         Some(memory.next_state.clone())
                     };
                     buffer.push(memory);
-                    if episodes >= n_episodes {
+                    if episodes >= n_episodes.get() {
                         break;
                     }
                 }
             }
             RolloutMode::StepBound { n_steps } => {
-                for _ in 0..n_steps {
+                for _ in 0..n_steps.get() {
                     let last_state = self.last_state.take();
                     let memory = step_env(&mut self.env, actor, last_state)?;
                     self.last_state = if memory.is_done() {

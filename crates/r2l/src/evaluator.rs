@@ -28,12 +28,12 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct EvaluationResult {
     total_reward: f32,
-    num_episodes: usize,
+    num_episodes: NonZeroUsize,
 }
 
 impl EvaluationResult {
     pub(crate) fn new(total_reward: f32, num_episodes: usize) -> Self {
-        assert!(num_episodes > 0, "Results cannot be empty");
+        let num_episodes = NonZeroUsize::new(num_episodes).expect("Results cannot be empty");
         Self {
             total_reward,
             num_episodes,
@@ -41,7 +41,7 @@ impl EvaluationResult {
     }
 
     pub(crate) fn avg_reward(&self) -> f32 {
-        self.total_reward / self.num_episodes as f32
+        self.total_reward / self.num_episodes.get() as f32
     }
 }
 
@@ -125,14 +125,14 @@ pub(crate) enum EvaluationSampler<E: Env> {
 impl<E: Env> EvaluationSampler<E> {
     pub(crate) fn build<EB: EnvBuilder<Env = E>>(
         env_builder: EnvBuilderType<EB>,
-        n_episodes: usize,
+        n_episodes: NonZeroUsize,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
         let progress = TrainingProgress::shared(
             TrainingLimit::rollouts(1),
             RolloutMode::EpisodeBound { n_episodes },
-            env_builder.num_envs(),
+            NonZeroUsize::new(env_builder.num_envs()).expect("environment builders are nonempty"),
         );
         let hook = EpisodeBoundHook::new(progress, None);
         if let Some(obs_normalizer) = obs_normalizer {
@@ -251,7 +251,7 @@ impl<A: Actor + ToSafetensors + Clone, E: Env> BestPolicyEvaluator<A, E> {
 
 /// Configures how policies are evaluated during training.
 pub struct EvaluationSettings {
-    pub(crate) episodes_per_evaluation: usize,
+    pub(crate) episodes_per_evaluation: NonZeroUsize,
     pub(crate) evaluation_execution_mode: SamplerExecutionMode,
     pub(crate) rollouts_per_evaluation: NonZeroUsize,
 }
@@ -260,7 +260,7 @@ impl Default for EvaluationSettings {
     fn default() -> Self {
         Self {
             rollouts_per_evaluation: NonZeroUsize::new(1).unwrap(),
-            episodes_per_evaluation: 5,
+            episodes_per_evaluation: NonZeroUsize::new(5).unwrap(),
             evaluation_execution_mode: SamplerExecutionMode::MultiThreaded,
         }
     }
@@ -284,11 +284,8 @@ impl EvaluationSettings {
     /// Panics if `episodes_per_evaluation` is zero.
     #[must_use]
     pub fn with_episodes_per_evaluation(mut self, episodes_per_evaluation: usize) -> Self {
-        assert!(
-            episodes_per_evaluation > 0,
-            "evaluation episode count must be greater than zero"
-        );
-        self.episodes_per_evaluation = episodes_per_evaluation;
+        self.episodes_per_evaluation = NonZeroUsize::new(episodes_per_evaluation)
+            .expect("evaluation episode count must be greater than zero");
         self
     }
 
@@ -315,11 +312,8 @@ impl EvaluationSettings {
     /// Panics if `rollouts_per_evaluation` is zero.
     #[must_use]
     pub fn with_rollouts_per_evaluation(mut self, rollouts_per_evaluation: usize) -> Self {
-        assert!(
-            rollouts_per_evaluation > 0,
-            "rollouts per evaluation must be greater than zero"
-        );
-        self.rollouts_per_evaluation = NonZeroUsize::new(rollouts_per_evaluation).unwrap();
+        self.rollouts_per_evaluation = NonZeroUsize::new(rollouts_per_evaluation)
+            .expect("rollouts per evaluation must be greater than zero");
         self
     }
 }

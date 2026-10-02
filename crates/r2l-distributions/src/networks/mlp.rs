@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use burn::nn::activation::{Activation, ActivationConfig};
 use burn::nn::{Dropout, EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig};
 use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
@@ -44,8 +46,8 @@ impl<B: Backend> LinearLayer<B> {
         config.init::<B>(device)
     }
 
-    fn linear(input: usize, output: usize, device: &B::Device) -> Self {
-        let liner_config = LinearConfig::new(input, output).with_bias(true);
+    fn linear(input: NonZeroUsize, output: NonZeroUsize, device: &B::Device) -> Self {
+        let liner_config = LinearConfig::new(input.get(), output.get()).with_bias(true);
         let linear: Linear<B> = liner_config.init::<B>(device);
         Self::LinearLayer(linear)
     }
@@ -54,8 +56,10 @@ impl<B: Backend> LinearLayer<B> {
 #[derive(Debug, Module)]
 pub struct Mlp<B: Backend> {
     layers: Vec<LinearLayer<B>>,
-    input_size: usize,
-    output_size: usize,
+    #[module(skip)]
+    input_size: NonZeroUsize,
+    #[module(skip)]
+    output_size: NonZeroUsize,
 }
 
 impl<B: Backend> Mlp<B> {
@@ -77,11 +81,16 @@ impl<B: Backend> Mlp<B> {
 
     pub(super) fn from_config(
         config: &MlpConfig,
-        input_size: usize,
-        output_size: usize,
+        input_size: NonZeroUsize,
+        output_size: NonZeroUsize,
         device: &B::Device,
     ) -> Self {
-        let layers = [&[input_size][..], &config.hidden_layers, &[output_size]].concat();
+        let layers = [
+            &[input_size.get()][..],
+            &config.hidden_layers,
+            &[output_size.get()],
+        ]
+        .concat();
         Self::build_on_device(&layers, config.activation, device)
     }
 
@@ -91,9 +100,15 @@ impl<B: Backend> Mlp<B> {
         device: &B::Device,
     ) -> Self {
         assert!(
-            layer_sizes.len() >= 2 && !layer_sizes.contains(&0),
+            layer_sizes.len() >= 2,
             "MLP requires positive input and output widths"
         );
+        let layer_sizes: Vec<_> = layer_sizes
+            .iter()
+            .map(|&size| {
+                NonZeroUsize::new(size).expect("MLP requires positive input and output widths")
+            })
+            .collect();
         let mut last_dim = layer_sizes[0];
         let mut layers = vec![];
         let num_layers = layer_sizes.len();
@@ -120,11 +135,11 @@ impl<B: Backend> Network for Mlp<B> {
     type Tensor = Tensor<B, 2>;
 
     fn input_shape(&self) -> Shape {
-        [self.input_size].into()
+        [self.input_size.get()].into()
     }
 
     fn output_shape(&self) -> Shape {
-        [self.output_size].into()
+        [self.output_size.get()].into()
     }
 
     fn feature_size(&self) -> Option<usize> {
@@ -140,7 +155,7 @@ impl<B: Backend> Network for Mlp<B> {
 
     fn forward_with_features(&self, mut t: Self::Tensor) -> Result<(Self::Tensor, Self::Tensor)> {
         let [batch_size, features] = t.dims();
-        if batch_size == 0 || features != self.input_size {
+        if batch_size == 0 || features != self.input_size.get() {
             return Err(Error::invalid_parameter(
                 "network input shape",
                 format!("[nonzero batch, {}]", self.input_size),

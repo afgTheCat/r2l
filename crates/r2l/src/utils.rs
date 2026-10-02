@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use r2l_core::{
     buffers::buffer::TrajectoryBuffer, running_mean::RunningMeanStdF32, tensor::R2lTensor,
 };
@@ -39,9 +41,9 @@ impl RewardNormalizer {
     /// * `n_envs` - Number of independent environment return streams to track.
     /// * `gamma` - Discount factor used to accumulate returns.
     /// * `clip_reward` - Absolute limit applied to normalized rewards.
-    pub(crate) fn new(n_envs: usize, gamma: f32, clip_reward: f32) -> Self {
+    pub(crate) fn new(n_envs: NonZeroUsize, gamma: f32, clip_reward: f32) -> Self {
         Self {
-            reward_accumulator: vec![0.0; n_envs],
+            reward_accumulator: vec![0.0; n_envs.get()],
             return_rms: RunningMeanStdF32::new(),
             gamma,
             clip_reward,

@@ -126,14 +126,14 @@ pub struct OneBoundHook {
 impl OneBoundHook {
     pub fn steps(n_steps: usize) -> Self {
         Self {
-            bound: RolloutMode::StepBound { n_steps },
+            bound: RolloutMode::step_bound(n_steps),
             scheduled: false,
         }
     }
 
     pub fn episodes(n_episodes: usize) -> Self {
         Self {
-            bound: RolloutMode::EpisodeBound { n_episodes },
+            bound: RolloutMode::episode_bound(n_episodes),
             scheduled: false,
         }
     }
