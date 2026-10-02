@@ -57,6 +57,7 @@
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
 
+pub mod backend;
 /// Algorithm and network builders.
 pub mod builders;
 mod constants;
@@ -65,11 +66,7 @@ mod hooks;
 mod inference;
 mod utils;
 
-use burn::backend::{Autodiff, NdArray};
-
-/// Default autodifferentiation backend used by Burn-based builders.
-pub type BurnBackend = Autodiff<NdArray>;
-
+pub use backend::BurnBackend;
 pub use builders::{
     A2CBuilder, A2CBurn, A2CCandle, AdamWConfig, GradientClippingConfig, LearningRateSchedule,
     ObsNormalizerConfig, OnPolicyBuilder, OptimizerConfig, PPOBuilder, PPOBurn, PPOCandle,

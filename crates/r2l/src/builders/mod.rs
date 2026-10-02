@@ -6,8 +6,8 @@ pub(crate) mod policy;
 
 use std::{marker::PhantomData, num::NonZeroUsize, path::PathBuf, sync::mpsc::Sender};
 
-use burn::{backend::ndarray::NdArrayDevice, prelude::Backend};
-use candle_core::{Device, DeviceLocation};
+use burn::{backend::ndarray::NdArrayDevice, prelude::Backend as _};
+use candle_core::Device;
 use networks::{MlpConfig, NetworkBuilder, NetworkConfig};
 pub use optimizer::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
 use policy::PolicyBuilder;
@@ -37,12 +37,11 @@ use r2l_sampler::{
     DirectSampler, DirectSamplerCore, RolloutMode, SamplerExecutionMode, StagedSampler,
     StagedSamplerCore,
 };
-use serde::{Deserialize, Serialize, de::Error as _};
 
-use crate::inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
 use crate::{
-    A2CRolloutStats, BurnBackend, EpisodeBoundHook, OnPolicyControlHandle, PPORolloutStats,
-    StepBoundHook, TrainingLimit,
+    A2CRolloutStats, EpisodeBoundHook, OnPolicyControlHandle, PPORolloutStats, StepBoundHook,
+    TrainingLimit,
+    backend::{Backend, BurnBackend, BurnBackendConfig, CandleBackend},
     evaluator::{BestPolicyEvaluator, EvaluationSampler, EvaluationSettings},
     hooks::{
         learning::{
@@ -59,6 +58,7 @@ use crate::{
         },
         progress::{SharedTrainingProgress, TrainingProgress},
     },
+    inference::{InferenceConfig, InferenceObservationMode},
     utils::RewardNormalizer,
 };
 
@@ -186,62 +186,6 @@ fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
     path
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub(crate) struct BurnBackendConfig;
-
-#[derive(Serialize, Deserialize)]
-enum CandleDeviceConfig {
-    Cpu,
-    Cuda { ordinal: usize },
-    Metal { ordinal: usize },
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct CandleBackend {
-    pub(crate) device: Device,
-}
-
-impl Serialize for CandleBackend {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let device = match self.device.location() {
-            DeviceLocation::Cpu => CandleDeviceConfig::Cpu,
-            DeviceLocation::Cuda { gpu_id } => CandleDeviceConfig::Cuda { ordinal: gpu_id },
-            DeviceLocation::Metal { gpu_id } => CandleDeviceConfig::Metal { ordinal: gpu_id },
-        };
-        device.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for CandleBackend {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let device = match CandleDeviceConfig::deserialize(deserializer)? {
-            CandleDeviceConfig::Cpu => Device::Cpu,
-            CandleDeviceConfig::Cuda { ordinal } => {
-                Device::new_cuda(ordinal).map_err(D::Error::custom)?
-            }
-            CandleDeviceConfig::Metal { ordinal } => {
-                Device::new_metal(ordinal).map_err(D::Error::custom)?
-            }
-        };
-        Ok(Self { device })
-    }
-}
-
-impl CandleBackend {
-    fn seed(&self, seed: u64) -> Result<(), Error> {
-        if !matches!(&self.device, Device::Cpu) {
-            self.device.set_seed(seed).map_err(Error::wrap)?;
-        }
-        Ok(())
-    }
-}
-
 enum SamplerConfiguration<E: Env> {
     DirectStep {
         rollout_steps: NonZeroUsize,
@@ -280,11 +224,6 @@ impl<E: Env> SamplerConfiguration<E> {
             _ => None,
         }
     }
-}
-
-enum BackendConfiguration {
-    Candle(CandleBackend),
-    Burn(BurnBackendConfig),
 }
 
 struct PPOConfig {
@@ -362,7 +301,7 @@ struct Builder<E: Env> {
     env_build_plan: Box<dyn EnvBuildPlan<E>>,
     env_desription: EnvDescription<E::Tensor>,
     n_envs: NonZeroUsize,
-    backend_configuration: BackendConfiguration,
+    backend_configuration: Backend,
     algorithm_configuration: AlgorithmConfiguration,
 
     // for the hooks
@@ -393,7 +332,7 @@ impl<E: Env> Builder<E> {
         env_builder: EB,
         n_envs: usize,
         algorithm_configuration: AlgorithmConfiguration,
-        backend_configuration: BackendConfiguration,
+        backend_configuration: Backend,
         sampler_configuration: SamplerConfiguration<E>,
     ) -> Result<Self, Error> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
@@ -469,10 +408,10 @@ impl<E: Env> Builder<E> {
     }
 
     fn build_candle_learner(&self) -> Result<CandlePolicyValueLearner, Error> {
-        let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
+        let Backend::Candle(backend) = &self.backend_configuration else {
             unreachable!("Candle agent type must use Candle backend configuration")
         };
-        self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
+        self.write_inference_config()?;
         if let Some(seed) = self.seed {
             backend.seed(seed)?;
         }
@@ -513,10 +452,10 @@ impl<E: Env> Builder<E> {
     }
 
     fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner<BurnBackend>, Error> {
-        let BackendConfiguration::Burn(backend) = self.backend_configuration else {
+        let Backend::Burn(_) = self.backend_configuration else {
             unreachable!("Burn agent type must use Burn backend configuration")
         };
-        self.write_inference_config(InferenceBackend::Burn(backend))?;
+        self.write_inference_config()?;
         if let Some(seed) = self.seed {
             BurnBackend::seed(&NdArrayDevice::default(), seed);
         }
@@ -654,7 +593,7 @@ impl<E: Env> Builder<E> {
         Ok(StagedSampler::new(sampler_core, step_bound_hook))
     }
 
-    fn write_inference_config(&self, backend: InferenceBackend) -> Result<(), Error> {
+    fn write_inference_config(&self) -> Result<(), Error> {
         if let Some(config) = &self.training_artifacts
             && config.inference_artifacts
         {
@@ -666,8 +605,12 @@ impl<E: Env> Builder<E> {
                 _ => InferenceObservationMode::Raw,
             };
             let policy_builder = self.policy_config.clone();
-            InferenceConfig::new(policy_builder, observation_mode, backend)
-                .write_to_dir(&config.output_dir)?;
+            InferenceConfig::new(
+                policy_builder,
+                observation_mode,
+                self.backend_configuration.clone(),
+            )
+            .write_to_dir(&config.output_dir)?;
         }
         Ok(())
     }
@@ -843,7 +786,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         env_builder: EB,
         n_envs: usize,
         algorithm_configuration: AlgorithmConfiguration,
-        backend_configuration: BackendConfiguration,
+        backend_configuration: Backend,
         sampler_configuration: SamplerConfiguration<E>,
         build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
         build_sampler: fn(&Builder<E>, SharedTrainingProgress) -> Result<S, Error>,
@@ -1250,10 +1193,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self.builder.validate_evaluation_schedule()?;
         #[cfg(feature = "simd")]
         if self.builder.seed.is_some()
-            && matches!(
-                self.builder.backend_configuration,
-                BackendConfiguration::Burn(_)
-            )
+            && matches!(self.builder.backend_configuration, Backend::Burn(_))
         {
             return Err(Error::Unsupported {
                 operation: "seeded Burn training".into(),
@@ -1292,13 +1232,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOCandle, S, E> {
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> Self {
-        self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
+        self.builder.backend_configuration = Backend::Candle(CandleBackend { device });
         self
     }
 
     /// Switches PPO learning to the default Burn backend.
     pub fn with_burn(mut self) -> OnPolicyBuilder<PPOBurn<BurnBackend>, S, E> {
-        self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
+        self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self.with_agent(Builder::ppo_burn_agent)
     }
 }
@@ -1310,13 +1250,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOBurn<BurnBackend
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<PPOCandle, S, E> {
-        self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
+        self.builder.backend_configuration = Backend::Candle(CandleBackend { device });
         self.with_agent(Builder::ppo_candle_agent)
     }
 
     /// Keeps PPO learning on the default Burn backend.
     pub fn with_burn(mut self) -> Self {
-        self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
+        self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self
     }
 }
@@ -1403,13 +1343,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CCandle, S, E> {
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> Self {
-        self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
+        self.builder.backend_configuration = Backend::Candle(CandleBackend { device });
         self
     }
 
     /// Switches A2C learning to the default Burn backend.
     pub fn with_burn(mut self) -> OnPolicyBuilder<A2CBurn<BurnBackend>, S, E> {
-        self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
+        self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self.with_agent(Builder::a2c_burn_agent)
     }
 }
@@ -1421,13 +1361,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CBurn<BurnBackend
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<A2CCandle, S, E> {
-        self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
+        self.builder.backend_configuration = Backend::Candle(CandleBackend { device });
         self.with_agent(Builder::a2c_candle_agent)
     }
 
     /// Keeps A2C learning on the default Burn backend.
     pub fn with_burn(mut self) -> Self {
-        self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
+        self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self
     }
 }
@@ -1652,7 +1592,7 @@ impl<E: Env> PPOBuilder<E> {
                 clip_range_schedule: ClipRangeSchedule::Constant(0.2),
                 reporter: None,
             }),
-            BackendConfiguration::Candle(CandleBackend {
+            Backend::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
             SamplerConfiguration::DirectStep {
@@ -1686,7 +1626,7 @@ impl<E: Env> A2CBuilder<E> {
                 normalize_advantage: None,
                 reporter: None,
             },
-            BackendConfiguration::Candle(CandleBackend {
+            Backend::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
             SamplerConfiguration::DirectStep {

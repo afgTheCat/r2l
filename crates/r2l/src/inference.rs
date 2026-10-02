@@ -19,7 +19,8 @@ use r2l_distributions::learning_modules::candle_lm::CandleDistributionKind;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    builders::{BurnBackendConfig, CandleBackend, policy::PolicyBuilder},
+    backend::Backend,
+    builders::policy::PolicyBuilder,
     constants::{ACTOR_FILE, INFERENCE_CONFIG_FILE, NORMALIZER_FILE},
 };
 
@@ -75,21 +76,12 @@ pub(crate) enum InferenceObservationMode {
     Normalized,
 }
 
-/// Backend used to construct the inference policy.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) enum InferenceBackend {
-    /// Candle backend configuration.
-    Candle(CandleBackend),
-    /// Default Burn backend configuration.
-    Burn(BurnBackendConfig),
-}
-
 /// Serializable recipe for reconstructing an inference runtime.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct InferenceConfig {
     policy_builder: PolicyBuilder,
     observation_mode: InferenceObservationMode,
-    backend: InferenceBackend,
+    backend: Backend,
 }
 
 impl InferenceConfig {
@@ -97,7 +89,7 @@ impl InferenceConfig {
     pub(crate) fn new(
         policy_builder: PolicyBuilder,
         observation_mode: InferenceObservationMode,
-        backend: InferenceBackend,
+        backend: Backend,
     ) -> Self {
         Self {
             policy_builder,
@@ -188,7 +180,7 @@ impl<T: R2lTensor> InferencePolicy<T> {
         let actor_artifact = ArtifactFile::new(directory.join(ACTOR_FILE), "actor");
         let actor_bytes = actor_artifact.read()?;
         let actor = match config.backend {
-            InferenceBackend::Candle(backend) => {
+            Backend::Candle(backend) => {
                 let var_builder =
                     VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &backend.device)
                         .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
@@ -198,7 +190,7 @@ impl<T: R2lTensor> InferencePolicy<T> {
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
-            InferenceBackend::Burn(_) => {
+            Backend::Burn(_) => {
                 let actor = config
                     .policy_builder
                     .build_burn::<NdArray, T>()?
