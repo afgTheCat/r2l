@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use r2l_core::{
     HookResult,
     env::Env,
@@ -13,7 +15,7 @@ pub(crate) enum ScheduledEvaluator<A: Actor, E: Env> {
     Disabled,
     Enabled {
         evaluator: BestPolicyEvaluator<A, E>,
-        rollouts_per_evaluation: usize,
+        rollouts_per_evaluation: NonZeroUsize,
         progress: SharedTrainingProgress,
         avg_reward_threshold: Option<f32>,
     },
@@ -35,14 +37,10 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
     ///   `None` to evaluate without a reward-based stop condition.
     pub(crate) fn new(
         evaluator: BestPolicyEvaluator<A, E>,
-        rollouts_per_evaluation: usize,
+        rollouts_per_evaluation: NonZeroUsize,
         progress: SharedTrainingProgress,
         avg_reward_threshold: Option<f32>,
     ) -> Self {
-        assert!(
-            rollouts_per_evaluation > 0,
-            "rollouts per evaluation must be greater than zero"
-        );
         Self::Enabled {
             evaluator,
             rollouts_per_evaluation,
@@ -65,7 +63,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
             return Ok(HookResult::Continue);
         };
         let completed_rollouts = progress.borrow().completed_rollouts();
-        if !completed_rollouts.is_multiple_of(*rollouts_per_evaluation) {
+        if !completed_rollouts.is_multiple_of(rollouts_per_evaluation.get()) {
             return Ok(HookResult::Continue);
         }
         let evaluation_result = evaluator.evaluate(runtime)?;

@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::marker::PhantomData;
+use std::num::NonZeroUsize;
 use std::{
     fs::{File, OpenOptions},
     path::{Path, PathBuf},
@@ -252,13 +253,13 @@ impl<A: Actor + ToSafetensors + Clone, E: Env> BestPolicyEvaluator<A, E> {
 pub struct EvaluationSettings {
     pub(crate) episodes_per_evaluation: usize,
     pub(crate) evaluation_execution_mode: SamplerExecutionMode,
-    pub(crate) rollouts_per_evaluation: usize,
+    pub(crate) rollouts_per_evaluation: NonZeroUsize,
 }
 
 impl Default for EvaluationSettings {
     fn default() -> Self {
         Self {
-            rollouts_per_evaluation: 1,
+            rollouts_per_evaluation: NonZeroUsize::new(1).unwrap(),
             episodes_per_evaluation: 5,
             evaluation_execution_mode: SamplerExecutionMode::MultiThreaded,
         }
@@ -318,7 +319,7 @@ impl EvaluationSettings {
             rollouts_per_evaluation > 0,
             "rollouts per evaluation must be greater than zero"
         );
-        self.rollouts_per_evaluation = rollouts_per_evaluation;
+        self.rollouts_per_evaluation = NonZeroUsize::new(rollouts_per_evaluation).unwrap();
         self
     }
 }

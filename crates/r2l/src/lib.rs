@@ -60,7 +60,6 @@
 /// Algorithm and network builders.
 pub mod builders;
 mod constants;
-// mod evaluator;
 mod evaluator;
 mod hooks;
 mod inference;

@@ -446,7 +446,7 @@ impl<E: Env> Builder<E> {
             .map_or(&defaults, |config| &config.evaluation_settings);
         let rollouts_per_evaluation = settings.rollouts_per_evaluation;
         match self.total_rollouts() {
-            Some(total_rollouts) if rollouts_per_evaluation > total_rollouts => {
+            Some(total_rollouts) if rollouts_per_evaluation.get() > total_rollouts => {
                 Err(Error::InvalidState {
                     operation: "configuring evaluation".into(),
                     details: format!(
@@ -456,7 +456,7 @@ impl<E: Env> Builder<E> {
                 })
             }
             Some(_) => Ok(()),
-            None if rollouts_per_evaluation == 1 => Ok(()),
+            None if rollouts_per_evaluation.get() == 1 => Ok(()),
             None => Err(Error::InvalidState {
                 operation: "configuring evaluation".into(),
                 details: format!(
