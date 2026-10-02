@@ -13,7 +13,7 @@ use r2l_core::{
     models::ActivationFunction,
 };
 
-use super::Network;
+use crate::networks::Network;
 
 /// A dense network with an activation between hidden layers and a linear output.
 ///

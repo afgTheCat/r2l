@@ -46,7 +46,7 @@ impl PolicyBuilder {
     ) -> Result<(CandleDistributionKind, VarMap)> {
         let varmap = VarMap::new();
         let var_builder =
-            r2l_distributions::networks::seeded_var_builder(&varmap, DType::F32, device);
+            r2l_distributions::networks::candle::seeded_var_builder(&varmap, DType::F32, device);
         let policy = self.build_candle::<T>(&var_builder)?;
         Ok((policy, varmap))
     }

@@ -5,7 +5,7 @@ use candle_nn::VarBuilder;
 use r2l_core::Shape;
 use r2l_core::error::{Error, Result};
 pub use r2l_core::networks::{CnnConfig, CnnLayerConfig, MlpConfig, NetworkConfig};
-use r2l_distributions::networks::candle_mlp::Mlp;
+use r2l_distributions::networks::candle::mlp::Mlp;
 pub use r2l_distributions::{
     Network as BurnNetwork, networks::burn::NetworkKind as BurnNetworkKind,
 };

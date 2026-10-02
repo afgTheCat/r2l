@@ -239,10 +239,10 @@ impl<A: Actor + ToSafetensors + Clone, E: Env> BestPolicyEvaluator<A, E> {
         }) = &self.artifacts
             && best_reward.is_none()
         {
-            Err(Error::InvalidState {
-                operation: "serializing actor".into(),
-                details: "no actor was evaluated, serialization is not possible".into(),
-            })
+            Err(Error::invalid_state(
+                "serializing actor",
+                "no actor was evaluated, serialization is not possible",
+            ))
         } else {
             Ok(())
         }

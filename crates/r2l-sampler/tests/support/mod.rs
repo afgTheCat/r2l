@@ -73,10 +73,10 @@ impl Env for TestEnv {
     fn step(&mut self, _action: Self::Tensor) -> Result<Snapshot<Self::Tensor>, Error> {
         self.step += 1;
         if self.fail_at_step == Some(self.step) {
-            return Err(Error::InvalidState {
-                operation: "test environment step".into(),
-                details: "configured failure".into(),
-            });
+            return Err(Error::invalid_state(
+                "test environment step",
+                "configured failure",
+            ));
         }
         let done = self.step == self.episode_len;
         let (terminated, truncated) = match self.episode_end {

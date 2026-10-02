@@ -304,6 +304,20 @@ impl Error {
         }))
     }
 
+    /// Describes an operation that cannot run in the current state.
+    ///
+    /// # Arguments
+    ///
+    /// * `operation` - Operation that was requested.
+    /// * `details` - Why the current state does not permit the operation.
+    #[must_use]
+    pub fn invalid_state(operation: impl Into<String>, details: impl Into<String>) -> Self {
+        Self::InvalidState {
+            operation: operation.into(),
+            details: details.into(),
+        }
+    }
+
     /// Wraps a lower-level error without discarding its source chain.
     pub fn wrap(error: impl StdError + Send + Sync + 'static) -> Self {
         Self::Wrapped(Box::new(error))

@@ -387,23 +387,23 @@ impl<E: Env> Builder<E> {
         let rollouts_per_evaluation = settings.rollouts_per_evaluation;
         match self.total_rollouts() {
             Some(total_rollouts) if rollouts_per_evaluation.get() > total_rollouts => {
-                Err(Error::InvalidState {
-                    operation: "configuring evaluation".into(),
-                    details: format!(
+                Err(Error::invalid_state(
+                    "configuring evaluation",
+                    format!(
                         "evaluation frequency ({rollouts_per_evaluation} rollouts) exceeds the \
                      configured training length ({total_rollouts} rollouts)"
                     ),
-                })
+                ))
             }
             Some(_) => Ok(()),
             None if rollouts_per_evaluation.get() == 1 => Ok(()),
-            None => Err(Error::InvalidState {
-                operation: "configuring evaluation".into(),
-                details: format!(
+            None => Err(Error::invalid_state(
+                "configuring evaluation",
+                format!(
                     "evaluation every {rollouts_per_evaluation} rollouts cannot be guaranteed because \
                  the configured training schedule has no statically known rollout count"
                 ),
-            }),
+            )),
         }
     }
 
@@ -423,7 +423,7 @@ impl<E: Env> Builder<E> {
             OptimizerConfig::Joint(_) => policy_varmap.clone(),
             OptimizerConfig::Split { .. } => candle_nn::VarMap::new(),
         };
-        let vb = r2l_distributions::networks::seeded_var_builder(
+        let vb = r2l_distributions::networks::candle::seeded_var_builder(
             &value_varmap,
             candle_core::DType::F32,
             device,

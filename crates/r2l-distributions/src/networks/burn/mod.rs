@@ -1,4 +1,8 @@
 //! Burn networks constructed from shared architecture configurations.
+
+pub mod cnn;
+pub mod mlp;
+
 use std::num::NonZeroUsize;
 
 use burn::{module::Module, prelude::Backend, tensor::Tensor};
@@ -8,11 +12,8 @@ use r2l_core::{
     networks::NetworkConfig,
 };
 
-use super::{
-    Network,
-    cnn::{self, Cnn},
-    mlp::{self, Mlp},
-};
+use self::{cnn::Cnn, mlp::Mlp};
+use super::Network;
 
 #[derive(Debug, Module)]
 pub enum NetworkKind<B: Backend> {

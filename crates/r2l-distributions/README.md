@@ -19,7 +19,7 @@ sampling and learning boundaries.
 
 Burn Gaussian policies register `log_std` through `Param<Tensor<B, 2>>`. Candle
 policies obtain it from the optimizer's `VarMap` before constructing the optimizer.
-For reproducible Candle initialization, use `networks::seeded_var_builder` with
+For reproducible Candle initialization, use `networks::candle::seeded_var_builder` with
 `r2l_core::rng::set_seed`.
 
 Candle inference policies detach their outputs and share live parameter storage.

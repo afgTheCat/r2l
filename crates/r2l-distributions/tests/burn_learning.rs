@@ -16,7 +16,7 @@ use r2l_distributions::{
     learning_modules::burn_lm::{
         BurnDistributionKind, BurnPolicy, NetworkKind, PolicyValueLearner, PolicyValueLosses,
     },
-    networks::mlp::Mlp,
+    networks::burn::mlp::Mlp,
 };
 
 type B = Autodiff<NdArray>;

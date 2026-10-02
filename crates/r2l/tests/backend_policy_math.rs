@@ -13,7 +13,10 @@ use r2l_core::{
 use r2l_distributions::learning_modules::burn_lm::BurnDistributionKind;
 use r2l_distributions::{
     learning_modules::candle_lm::CandleDistributionKind,
-    networks::{burn::NetworkKind, candle_mlp::Mlp, seeded_var_builder},
+    networks::{
+        burn::NetworkKind,
+        candle::{mlp::Mlp, seeded_var_builder},
+    },
 };
 use safetensors::SafeTensors;
 

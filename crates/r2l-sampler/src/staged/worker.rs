@@ -42,10 +42,10 @@ impl<T: R2lTensor, E: Env<Tensor = T>> Worker<T, E> {
 
     fn step(&mut self, handle: &mut ElementHandle<T>) -> Result<Memory<T>> {
         let Some(policy) = &mut self.actor else {
-            return Err(Error::InvalidState {
-                operation: "step staged sampler worker".into(),
-                details: "no policy has been installed".into(),
-            });
+            return Err(Error::invalid_state(
+                "step staged sampler worker",
+                "no policy has been installed",
+            ));
         };
         let state = handle.lock().unwrap().clone();
         let action = policy.action(state.clone())?;

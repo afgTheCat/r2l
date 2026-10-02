@@ -55,9 +55,8 @@ impl<T> Clone for StateDependentNoise<T> {
 
 impl<T: R2lTensor> StateDependentNoise<T> {
     pub fn sample(&self, features: &T, log_std: &T) -> Result<T> {
-        let mut noise = self.noise.lock().map_err(|_| Error::InvalidState {
-            operation: "sample state-dependent noise".into(),
-            details: "noise lock was poisoned".into(),
+        let mut noise = self.noise.lock().map_err(|_| {
+            Error::invalid_state("sample state-dependent noise", "noise lock was poisoned")
         })?;
         if noise.matrix.is_none()
             || self

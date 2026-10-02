@@ -17,9 +17,11 @@ use r2l_core::{
     error::{Error, Result},
 };
 
-use super::{burn::NetworkKind, mlp::LinearLayer};
+use super::{
+    NetworkKind,
+    mlp::{LinearLayer, Mlp},
+};
 use crate::networks::Network;
-use crate::networks::mlp::Mlp;
 
 #[derive(Module, Debug)]
 enum CNNLayer<B: Backend> {

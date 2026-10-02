@@ -71,8 +71,8 @@ macro_rules! network_artifact {
     };
 }
 
-network_artifact!(crate::networks::mlp::Mlp<B>);
-network_artifact!(crate::networks::cnn::Cnn<B>);
+network_artifact!(crate::networks::burn::mlp::Mlp<B>);
+network_artifact!(crate::networks::burn::cnn::Cnn<B>);
 network_artifact!(crate::networks::burn::NetworkKind<B>);
 
 impl<B: Backend> TensorParameter<Tensor<B, 2>> for Param<Tensor<B, 2>> {

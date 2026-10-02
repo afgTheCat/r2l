@@ -83,12 +83,9 @@ impl OnPolicyControlHandle {
         self.send(OnPolicyCommand::SerializeCurrentPolicy(path.into()))?;
         match self.receive()? {
             OnPolicyCommandResult::CurrentPolicySerialized(result) => result,
-            OnPolicyCommandResult::Stopping | OnPolicyCommandResult::Stopped => {
-                Err(Error::InvalidState {
-                    operation: "serialize current policy".into(),
-                    details: "the training loop is stopping".into(),
-                })
-            }
+            OnPolicyCommandResult::Stopping | OnPolicyCommandResult::Stopped => Err(
+                Error::invalid_state("serialize current policy", "the training loop is stopping"),
+            ),
         }
     }
 

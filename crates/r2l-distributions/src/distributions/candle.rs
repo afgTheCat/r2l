@@ -10,7 +10,7 @@ use super::{
     bernoulli::MultiBernoulli, categorical::Categorical, composite::Composite,
     diagonal::DiagGaussian, multi_categorical::MultiCategorical, policy::DistributionKind,
 };
-use crate::networks::candle_mlp::Mlp;
+use crate::networks::candle::mlp::Mlp;
 
 impl DistributionKind<Mlp> {
     fn named_tensors(&self, prefix: &str) -> Vec<(String, Tensor)> {

@@ -8,7 +8,7 @@
 //! ```
 //! use burn::{backend::{Autodiff, NdArray}, optim::AdamWConfig};
 //! use r2l_core::models::ActivationFunction;
-//! use r2l_distributions::{Categorical, networks::mlp::Mlp};
+//! use r2l_distributions::{Categorical, networks::burn::mlp::Mlp};
 //! use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner;
 //!
 //! type B = Autodiff<NdArray>;
@@ -33,7 +33,7 @@ use r2l_core::{
 
 pub use crate::networks::burn::NetworkKind;
 use crate::{
-    DistributionKind, Network, OnPolicyLearner, Policy, ValueFunction, networks::mlp::Mlp,
+    DistributionKind, Network, OnPolicyLearner, Policy, ValueFunction, networks::burn::mlp::Mlp,
 };
 
 /// Burn distributions with optimizer-managed Gaussian log standard deviations.

@@ -5,7 +5,7 @@ use r2l_distributions::{
     Categorical, Composite, DiagGaussian, DistributionKind, MultiBernoulli, MultiCategorical,
     Network, OnPolicyLearner, Policy, ValueFunction,
     learning_modules::candle_lm::{PolicyValueLearner, PolicyValueLosses, PolicyValueOptimizer},
-    networks::candle_mlp::Mlp,
+    networks::candle::mlp::Mlp,
 };
 
 fn builder(vm: &VarMap) -> VarBuilder<'_> {

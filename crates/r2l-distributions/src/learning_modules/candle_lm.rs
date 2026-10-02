@@ -14,7 +14,7 @@
 //! use candle_core::{DType, Device};
 //! use candle_nn::{ParamsAdamW, VarBuilder, VarMap};
 //! use r2l_core::models::ActivationFunction;
-//! use r2l_distributions::{Categorical, networks::candle_mlp::Mlp};
+//! use r2l_distributions::{Categorical, networks::candle::mlp::Mlp};
 //! use r2l_distributions::learning_modules::candle_lm::{
 //!     PolicyValueLearner, PolicyValueOptimizer,
 //! };
@@ -45,7 +45,7 @@ use r2l_core::{
 };
 
 use crate::{
-    DistributionKind, Network, OnPolicyLearner, Policy, ValueFunction, networks::candle_mlp::Mlp,
+    DistributionKind, Network, OnPolicyLearner, Policy, ValueFunction, networks::candle::mlp::Mlp,
 };
 
 /// Candle distributions backed by a dense network and native variable tensors.
@@ -107,10 +107,10 @@ fn validate_max_norm(max_norm: Option<f32>) -> Result<()> {
 }
 
 fn variables(vm: &VarMap) -> Result<Vec<Var>> {
-    let vars = vm.data().lock().map_err(|error| Error::InvalidState {
-        operation: "read optimizer variables".into(),
-        details: error.to_string(),
-    })?;
+    let vars = vm
+        .data()
+        .lock()
+        .map_err(|error| Error::invalid_state("read optimizer variables", error.to_string()))?;
     let mut named = vars.iter().collect::<Vec<_>>();
     named.sort_unstable_by_key(|(name, _)| *name);
     let mut seen = HashSet::new();
