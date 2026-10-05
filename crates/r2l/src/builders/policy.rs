@@ -40,18 +40,18 @@ impl PolicyBuilder {
         })
     }
 
-    pub(crate) fn build_candle_with_varmap<T: R2lTensor>(
+    pub(crate) fn build_candle_with_varmap(
         &self,
         device: &Device,
     ) -> Result<(CandleDistributionKind, VarMap)> {
         let varmap = VarMap::new();
         let var_builder =
             r2l_distributions::networks::candle::seeded_var_builder(&varmap, DType::F32, device);
-        let policy = self.build_candle::<T>(&var_builder)?;
+        let policy = self.build_candle(&var_builder)?;
         Ok((policy, varmap))
     }
 
-    pub(crate) fn build_candle<T: R2lTensor>(
+    pub(crate) fn build_candle(
         &self,
         var_builder: &VarBuilder<'_>,
     ) -> Result<CandleDistributionKind> {
@@ -76,7 +76,7 @@ impl PolicyBuilder {
             ));
         }
         CandleDistributionKind::from_space(
-            self.action_space.convert::<T>()?,
+            self.action_space.clone(),
             &mut |prefix, width| {
                 network.build_candle(
                     &self.observation_space.observation_shape(),
@@ -99,7 +99,7 @@ impl PolicyBuilder {
     /// # Errors
     ///
     /// Returns an error if the policy configuration is invalid or unsupported.
-    pub(crate) fn build_burn<B: Backend, T: R2lTensor>(&self) -> Result<BurnDistributionKind<B>> {
+    pub(crate) fn build_burn<B: Backend>(&self) -> Result<BurnDistributionKind<B>> {
         let network = super::networks::NetworkBuilder::new(self.network.clone());
         if let Some(config) = self.sde {
             let width = self.sde_action_size()?;
@@ -121,7 +121,7 @@ impl PolicyBuilder {
             )?));
         }
         BurnDistributionKind::from_space(
-            self.action_space.convert::<T>()?,
+            self.action_space.clone(),
             &mut |_, width| {
                 network.build_burn::<B>(
                     &self.observation_space.observation_shape(),

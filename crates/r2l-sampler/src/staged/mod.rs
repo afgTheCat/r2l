@@ -238,8 +238,8 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     }
 
     /// Returns the shared observation normalizer, when configured.
-    pub fn obs_normalizer(&self) -> Option<&Normalizer<E::Tensor>> {
-        self.core.obs_normalizer.as_ref()
+    pub fn obs_normalizer(&self) -> Option<Normalizer<E::Tensor>> {
+        self.core.obs_normalizer.as_ref().cloned()
     }
 
     /// Builds a sampler with an existing shared observation normalizer.

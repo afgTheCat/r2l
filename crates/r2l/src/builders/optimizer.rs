@@ -4,9 +4,10 @@ use burn::{
     grad_clipping::GradientClippingConfig as BurnClipping, optim::AdamWConfig as BurnAdamW,
 };
 use candle_nn::ParamsAdamW;
+use serde::{Deserialize, Serialize};
 
 /// Gradient clipping applied by an optimizer before each parameter update.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub enum GradientClippingConfig {
     /// Leave gradients unclipped.
     #[default]
@@ -27,7 +28,7 @@ impl GradientClippingConfig {
 }
 
 /// Learning-rate policy applied to shared collection progress.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LearningRateSchedule {
     /// Keep the learning rate fixed throughout training.
     Constant(f64),
@@ -53,7 +54,7 @@ impl LearningRateSchedule {
 }
 
 /// Complete configuration for Adam optimization with decoupled weight decay.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AdamWConfig {
     /// Learning rate evaluated before each learning pass.
     pub learning_rate: LearningRateSchedule,
@@ -104,7 +105,7 @@ impl AdamWConfig {
 }
 
 /// Optimizer arrangement for the policy and value networks.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OptimizerConfig {
     /// One optimizer updates both networks using the same settings.
     Joint(AdamWConfig),

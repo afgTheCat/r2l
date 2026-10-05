@@ -19,12 +19,19 @@
 //! # Ok::<(), r2l_core::error::Error>(())
 //! ```
 
+use std::path::PathBuf;
+
 use burn::{
-    module::{AutodiffModule, Module, ModuleDisplay, Param},
-    optim::{AdamW, AdamWConfig, GradientsParams, Optimizer, adaptor::OptimizerAdaptor},
+    module::{AutodiffModule, Module, ModuleDisplay, Param, ParamId},
+    optim::{
+        AdamW, AdamWConfig, GradientsParams, Optimizer, adaptor::OptimizerAdaptor,
+        record::AdaptorRecord,
+    },
     prelude::Backend,
+    record::{BinFileRecorder, FullPrecisionSettings, Record, Recorder},
     tensor::{Tensor, backend::AutodiffBackend},
 };
+use hashbrown::HashMap;
 use r2l_core::{
     error::Result,
     models::{ActivationFunction, Learner},
@@ -33,7 +40,8 @@ use r2l_core::{
 
 pub use crate::networks::burn::NetworkKind;
 use crate::{
-    DistributionKind, Network, OnPolicyLearner, Policy, ValueFunction, networks::burn::mlp::Mlp,
+    DistributionKind, Network, OnPolicyLearner, Policy, ValueFunction,
+    networks::burn::{NetworkKindRecord, mlp::Mlp},
 };
 
 /// Burn distributions with optimizer-managed Gaussian log standard deviations.
@@ -134,6 +142,20 @@ pub struct JointPolicyValueLearner<B: AutodiffBackend, M: BurnPolicy<B>> {
     optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
 }
 
+#[derive(Record)]
+pub struct JointPolicyValueSnapshot<B: AutodiffBackend, M: BurnPolicy<B>> {
+    lr: f64,
+    model: JointActorModelRecord<B, M>,
+    optimizer: HashMap<ParamId, AdaptorRecord<AdamW, B>>,
+}
+
+impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueSnapshot<B, M> {
+    pub fn to_file(self, file: PathBuf) {
+        let recorder: BinFileRecorder<FullPrecisionSettings> = BinFileRecorder::new();
+        recorder.record(self, file).unwrap();
+    }
+}
+
 impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
     fn new(
         model: JointActorModel<B, M>,
@@ -147,6 +169,21 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
         }
     }
 
+    pub fn load_snapshot(self, snapshot: JointPolicyValueSnapshot<B, M>) -> Self {
+        let JointPolicyValueSnapshot {
+            lr,
+            model,
+            optimizer,
+        } = snapshot;
+        let model = self.model.load_record(model);
+        let optimizer = self.optimizer.load_record(optimizer);
+        Self {
+            model,
+            optimizer,
+            lr,
+        }
+    }
+
     /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         self.lr
@@ -155,6 +192,16 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
     /// Sets the learning rate for the shared optimizer.
     pub fn set_learning_rate(&mut self, learning_rate: f64) {
         self.lr = learning_rate;
+    }
+
+    pub fn to_snapshot(&self) -> JointPolicyValueSnapshot<B, M> {
+        let model = self.model.clone().into_record();
+        let optimizer = self.optimizer.to_record();
+        JointPolicyValueSnapshot {
+            model,
+            optimizer,
+            lr: self.lr,
+        }
     }
 }
 
@@ -219,6 +266,23 @@ pub struct SplitPolicyValueLearner<B: AutodiffBackend, M: BurnPolicy<B>> {
     value_lr: f64,
 }
 
+#[derive(Record)]
+pub struct SplitPolicyValueLeranerSnapshot<B: AutodiffBackend, M: BurnPolicy<B>> {
+    policy: M::Record,
+    value_net: NetworkKindRecord<B>,
+    policy_optimizer: HashMap<ParamId, AdaptorRecord<AdamW, B>>,
+    policy_lr: f64,
+    value_optimizer: HashMap<ParamId, AdaptorRecord<AdamW, B>>,
+    value_lr: f64,
+}
+
+impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLeranerSnapshot<B, M> {
+    pub fn to_file(self, file: PathBuf) {
+        let recorder: BinFileRecorder<FullPrecisionSettings> = BinFileRecorder::new();
+        recorder.record(self, file).unwrap();
+    }
+}
+
 impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
     fn new(
         policy: M,
@@ -233,6 +297,29 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
             [1],
             "value network must output one value"
         );
+        Self {
+            policy,
+            value_net,
+            policy_optimizer,
+            policy_lr,
+            value_optimizer,
+            value_lr,
+        }
+    }
+
+    fn load_snapshot(self, snapshot: SplitPolicyValueLeranerSnapshot<B, M>) -> Self {
+        let SplitPolicyValueLeranerSnapshot {
+            policy,
+            value_net,
+            policy_optimizer,
+            policy_lr,
+            value_optimizer,
+            value_lr,
+        } = snapshot;
+        let policy = self.policy.load_record(policy);
+        let value_net = self.value_net.load_record(value_net);
+        let policy_optimizer = self.policy_optimizer.load_record(policy_optimizer);
+        let value_optimizer = self.value_optimizer.load_record(value_optimizer);
         Self {
             policy,
             value_net,
@@ -313,6 +400,13 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for SplitPolicyValueL
     }
 }
 
+#[derive(Record)]
+pub enum PolicyValueLearnerSnapshot<B: AutodiffBackend, D: BurnPolicy<B> = BurnDistributionKind<B>>
+{
+    Joint(JointPolicyValueSnapshot<B, D>),
+    Split(SplitPolicyValueLeranerSnapshot<B, D>),
+}
+
 /// Erased Burn policy/value module covering joint and split optimizer layouts.
 pub enum PolicyValueLearner<B: AutodiffBackend, D: BurnPolicy<B> = BurnDistributionKind<B>> {
     /// Policy/value module with one shared optimizer configuration.
@@ -339,6 +433,21 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
             optimizer_config,
             lr,
         )
+    }
+
+    pub fn load_snapshot(self, snapshot: PolicyValueLearnerSnapshot<B, D>) -> Self {
+        match snapshot {
+            PolicyValueLearnerSnapshot::Joint(joint_policy_value_snapshot) => {
+                let Self::Joint(joint) = self else { panic!() };
+                let joint = joint.load_snapshot(joint_policy_value_snapshot);
+                Self::Joint(joint)
+            }
+            PolicyValueLearnerSnapshot::Split(split_policy_value_leraner_snapshot) => {
+                let Self::Split(split) = self else { panic!() };
+                let split = split.load_snapshot(split_policy_value_leraner_snapshot);
+                Self::Split(split)
+            }
+        }
     }
 
     /// Builds a joint learner with an independently constructed value network.

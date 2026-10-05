@@ -186,14 +186,14 @@ impl<T: R2lTensor> InferencePolicy<T> {
                         .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 let actor = config
                     .policy_builder
-                    .build_candle::<T>(&var_builder)
+                    .build_candle(&var_builder)
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
             Backend::Burn(_) => {
                 let actor = config
                     .policy_builder
-                    .build_burn::<NdArray, T>()?
+                    .build_burn::<NdArray>()?
                     .load_from_bytes(actor_bytes)
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))

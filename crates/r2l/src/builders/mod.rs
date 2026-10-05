@@ -1,5 +1,7 @@
+pub mod learner;
 /// Backend-independent network configuration and construction.
 pub mod networks;
+pub mod on_policy_hook;
 /// Adam optimizer settings, learning-rate schedules, and clipping.
 pub mod optimizer;
 pub(crate) mod policy;
@@ -8,15 +10,15 @@ use std::{marker::PhantomData, num::NonZeroUsize, path::PathBuf, sync::mpsc::Sen
 
 use burn::{backend::ndarray::NdArrayDevice, prelude::Backend as _};
 use candle_core::Device;
-use networks::{MlpConfig, NetworkBuilder, NetworkConfig};
+use networks::{MlpConfig, NetworkConfig};
 pub use optimizer::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
 use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CHook, A2CParams},
     ppo::{PPO, PPOHook, PPOParams},
 };
-use r2l_core::env::EnvDescription;
 use r2l_core::env::normalizer::{Normalizer, NormalizerMode};
+use r2l_core::env::{EnvBuilderKind, EnvDescription};
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     error::Error,
@@ -28,9 +30,7 @@ use r2l_core::{
     rng::set_seed,
 };
 use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner as BurnPolicyValueLearner;
-use r2l_distributions::learning_modules::candle_lm::{
-    PolicyValueLearner as CandlePolicyValueLearner, PolicyValueOptimizer,
-};
+use r2l_distributions::learning_modules::candle_lm::PolicyValueLearner as CandlePolicyValueLearner;
 #[cfg(feature = "gym")]
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{
@@ -42,6 +42,7 @@ use crate::{
     A2CRolloutStats, EpisodeBoundHook, OnPolicyControlHandle, PPORolloutStats, StepBoundHook,
     TrainingLimit,
     backend::{Backend, BurnBackend, BurnBackendConfig, CandleBackend},
+    builders::learner::LearnerConfig,
     evaluator::{BestPolicyEvaluator, EvaluationSampler, EvaluationSettings},
     hooks::{
         learning::{
@@ -227,7 +228,6 @@ impl<E: Env> SamplerConfiguration<E> {
 }
 
 struct PPOConfig {
-    normalize_advantage: Option<bool>,
     total_epochs: NonZeroUsize,
     target_kl: Option<f32>,
     clip_range_schedule: ClipRangeSchedule,
@@ -237,7 +237,6 @@ struct PPOConfig {
 enum AlgorithmConfiguration {
     Ppo(PPOConfig),
     A2C {
-        normalize_advantage: Option<bool>,
         reporter: Option<Sender<A2CRolloutStats>>,
     },
 }
@@ -260,6 +259,10 @@ trait EnvBuildPlan<E: Env>: Send {
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<StagedSamplerCore<E>, Error>;
+
+    fn env_description(&self) -> EnvDescription<E::Tensor>;
+
+    fn n_envs(&self) -> NonZeroUsize;
 }
 
 struct TypedEnvBuildPlan<EB: EnvBuilder> {
@@ -295,14 +298,28 @@ impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
     ) -> Result<StagedSamplerCore<EB::Env>, Error> {
         StagedSamplerCore::build(&self.env_builder, execution_mode, obs_normalizer)
     }
+
+    fn env_description(&self) -> EnvDescription<<EB::Env as Env>::Tensor> {
+        match &self.env_builder.0 {
+            EnvBuilderKind::Homogeneous { builder, .. } => builder.env_description().unwrap(),
+            EnvBuilderKind::Heterogeneous { builders } => builders[0].env_description().unwrap(),
+        }
+    }
+
+    fn n_envs(&self) -> NonZeroUsize {
+        match &self.env_builder.0 {
+            EnvBuilderKind::Homogeneous { n_envs, .. } => n_envs.clone(),
+            EnvBuilderKind::Heterogeneous { builders } => {
+                NonZeroUsize::new(builders.len()).unwrap()
+            }
+        }
+    }
 }
 
 struct Builder<E: Env> {
     env_build_plan: Box<dyn EnvBuildPlan<E>>,
-    env_desription: EnvDescription<E::Tensor>,
-    n_envs: NonZeroUsize,
     backend_configuration: Backend,
-    algorithm_configuration: AlgorithmConfiguration,
+    seed: Option<u64>,
 
     // for the hooks
     training_limit: TrainingLimit,
@@ -311,16 +328,17 @@ struct Builder<E: Env> {
     control_endpoint: Option<OnPolicyControlEndpoint>,
 
     // for the agent
-    policy_config: PolicyBuilder,
-    value_network: NetworkConfig,
-    optimizer: OptimizerConfig,
+    learner_builder: LearnerConfig,
     log_progress: bool,
-    entropy_coeff: f32,
-    vf_coeff: f32,
     gamma: f32,
     lambda: f32,
     sample_size: NonZeroUsize,
-    seed: Option<u64>,
+
+    // learning hook
+    entropy_coeff: f32,
+    vf_coeff: f32,
+    normalize_advantage: bool,
+    algorithm_configuration: AlgorithmConfiguration,
 
     // for the sampler
     sampler_execution_mode: SamplerExecutionMode,
@@ -334,15 +352,22 @@ impl<E: Env> Builder<E> {
         algorithm_configuration: AlgorithmConfiguration,
         backend_configuration: Backend,
         sampler_configuration: SamplerConfiguration<E>,
+        normalize_advantage: bool,
     ) -> Result<Self, Error> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
-        let n_envs = NonZeroUsize::new(n_envs).expect("environment builders are nonempty");
-        let env_desription = env_builder.env_description()?;
-        let policy_config = PolicyBuilder::new(&env_desription)?;
+        let env_description = env_builder.env_description()?;
+        let policy_config = PolicyBuilder::new(&env_description)?;
+        let value_network = NetworkConfig::Mlp(MlpConfig {
+            hidden_layers: vec![64, 64],
+            activation: ActivationFunction::default(),
+        });
+        let learner_builder = LearnerConfig {
+            policy_config,
+            value_network,
+            optimizer: OptimizerConfig::default(),
+        };
         Ok(Self {
             env_build_plan: Box::new(TypedEnvBuildPlan { env_builder }),
-            env_desription,
-            n_envs,
             sampler_configuration,
             backend_configuration,
             algorithm_configuration,
@@ -350,12 +375,7 @@ impl<E: Env> Builder<E> {
             avg_reward_threshold: None,
             training_artifacts: None,
             control_endpoint: None,
-            policy_config,
-            value_network: NetworkConfig::Mlp(MlpConfig {
-                hidden_layers: vec![64, 64],
-                activation: ActivationFunction::default(),
-            }),
-            optimizer: OptimizerConfig::default(),
+            learner_builder,
             log_progress: true,
             entropy_coeff: 0.0,
             vf_coeff: 1.0,
@@ -364,6 +384,7 @@ impl<E: Env> Builder<E> {
             sample_size: NonZeroUsize::new(64).unwrap(),
             seed: None,
             sampler_execution_mode: SamplerExecutionMode::MultiThreaded,
+            normalize_advantage,
         })
     }
 
@@ -415,40 +436,7 @@ impl<E: Env> Builder<E> {
         if let Some(seed) = self.seed {
             backend.seed(seed)?;
         }
-        let device = &backend.device;
-        let (policy, policy_varmap) = self
-            .policy_config
-            .build_candle_with_varmap::<E::Tensor>(device)?;
-        let value_varmap = match self.optimizer {
-            OptimizerConfig::Joint(_) => policy_varmap.clone(),
-            OptimizerConfig::Split { .. } => candle_nn::VarMap::new(),
-        };
-        let vb = r2l_distributions::networks::candle::seeded_var_builder(
-            &value_varmap,
-            candle_core::DType::F32,
-            device,
-        );
-        let value = NetworkBuilder::new(self.value_network.clone()).build_candle(
-            &self.policy_config.observation_space.observation_shape(),
-            1,
-            &vb.pp("value"),
-        )?;
-        let optimizer = match &self.optimizer {
-            OptimizerConfig::Joint(config) => PolicyValueOptimizer::joint(
-                &policy_varmap,
-                config.candle_params(),
-                config.gradient_clipping.max_norm(),
-            )?,
-            OptimizerConfig::Split { policy, value } => PolicyValueOptimizer::split(
-                &policy_varmap,
-                &value_varmap,
-                policy.candle_params(),
-                value.candle_params(),
-                policy.gradient_clipping.max_norm(),
-                value.gradient_clipping.max_norm(),
-            )?,
-        };
-        CandlePolicyValueLearner::new(policy, value, optimizer, device.clone())
+        self.learner_builder.build_candle_learner(&backend.device)
     }
 
     fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner<BurnBackend>, Error> {
@@ -459,31 +447,7 @@ impl<E: Env> Builder<E> {
         if let Some(seed) = self.seed {
             BurnBackend::seed(&NdArrayDevice::default(), seed);
         }
-        let policy = self.policy_config.build_burn::<BurnBackend, E::Tensor>()?;
-        let value_net = NetworkBuilder::new(self.value_network.clone()).build_burn::<BurnBackend>(
-            &self.policy_config.observation_space.observation_shape(),
-            1,
-            &NdArrayDevice::default(),
-        )?;
-        Ok(match &self.optimizer {
-            OptimizerConfig::Joint(config) => BurnPolicyValueLearner::joint_with_network(
-                policy,
-                value_net,
-                &config.burn_config(),
-                config.learning_rate.value(1.0),
-            ),
-            OptimizerConfig::Split {
-                policy: policy_config,
-                value,
-            } => BurnPolicyValueLearner::split_with_network(
-                policy,
-                value_net,
-                &policy_config.burn_config(),
-                policy_config.learning_rate.value(1.0),
-                &value.burn_config(),
-                value.learning_rate.value(1.0),
-            ),
-        })
+        self.learner_builder.build_burn_learner()
     }
 
     fn default_on_policy_hook<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>>(
@@ -604,7 +568,7 @@ impl<E: Env> Builder<E> {
                 } => InferenceObservationMode::Normalized,
                 _ => InferenceObservationMode::Raw,
             };
-            let policy_builder = self.policy_config.clone();
+            let policy_builder = self.learner_builder.policy_config.clone();
             InferenceConfig::new(
                 policy_builder,
                 observation_mode,
@@ -619,7 +583,7 @@ impl<E: Env> Builder<E> {
         TrainingProgress::shared(
             self.training_limit,
             self.sampler_configuration.rollout_mode(),
-            self.n_envs,
+            self.env_build_plan.n_envs(),
         )
     }
 
@@ -634,7 +598,7 @@ impl<E: Env> Builder<E> {
         algorithm: A,
     ) -> LearningHook<M, A> {
         let (policy_learning_rate_schedule, value_learning_rate_schedule) =
-            self.optimizer.learning_rate_schedules();
+            self.learner_builder.optimizer.learning_rate_schedules();
         LearningHook {
             normalize_advantage,
             entropy_coeff: self.entropy_coeff,
@@ -662,8 +626,9 @@ impl<E: Env> Builder<E> {
     }
 
     fn ppo_hook<M>(&mut self, progress: SharedTrainingProgress) -> PPOLearningHook<M> {
+        let n_envs = self.env_build_plan.n_envs();
+        let normalize_advantage = self.normalize_advantage;
         let config = self.ppo_config_mut();
-        let normalize_advantage = config.normalize_advantage.unwrap_or(true);
         let algorithm = PPOSettings {
             total_epochs: config.total_epochs,
             current_epoch: 0,
@@ -672,22 +637,19 @@ impl<E: Env> Builder<E> {
                 target,
                 target_exceeded: false,
             }),
-            reporter: RolloutReporter::new(config.reporter.take(), self.log_progress, self.n_envs),
+            reporter: RolloutReporter::new(config.reporter.take(), self.log_progress, n_envs),
         };
         self.learning_hook(progress, normalize_advantage, algorithm)
     }
 
     fn a2c_hook<M>(&mut self, progress: SharedTrainingProgress) -> A2CLearningHook<M> {
-        let AlgorithmConfiguration::A2C {
-            normalize_advantage,
-            reporter,
-        } = &mut self.algorithm_configuration
-        else {
+        let normalize_advantage = self.normalize_advantage;
+        let AlgorithmConfiguration::A2C { reporter } = &mut self.algorithm_configuration else {
             unreachable!("A2C agent type must use A2C configuration")
         };
-        let normalize_advantage = normalize_advantage.unwrap_or(false);
+        let n_envs = self.env_build_plan.n_envs();
         let algorithm = A2CSettings {
-            reporter: RolloutReporter::new(reporter.take(), self.log_progress, self.n_envs),
+            reporter: RolloutReporter::new(reporter.take(), self.log_progress, n_envs),
         };
         self.learning_hook(progress, normalize_advantage, algorithm)
     }
@@ -788,6 +750,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         algorithm_configuration: AlgorithmConfiguration,
         backend_configuration: Backend,
         sampler_configuration: SamplerConfiguration<E>,
+        normalize_advantage: bool,
         build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
         build_sampler: fn(&Builder<E>, SharedTrainingProgress) -> Result<S, Error>,
     ) -> Result<Self, Error> {
@@ -798,6 +761,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
                 algorithm_configuration,
                 backend_configuration,
                 sampler_configuration,
+                normalize_advantage,
             )?,
             config: Config {
                 build_agent,
@@ -895,9 +859,12 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         mut self,
         learning_rate_schedule: LearningRateSchedule,
     ) -> Self {
-        self.builder.optimizer.for_each_mut(|config| {
-            config.learning_rate = learning_rate_schedule;
-        });
+        self.builder
+            .learner_builder
+            .optimizer
+            .for_each_mut(|config| {
+                config.learning_rate = learning_rate_schedule;
+            });
         self
     }
 
@@ -929,7 +896,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `network` - Hidden architecture; observation shape and action-space outputs are inferred.
     pub fn with_policy_network(mut self, network: NetworkConfig) -> Self {
-        self.builder.policy_config.network = network;
+        self.builder.learner_builder.policy_config.network = network;
         self
     }
 
@@ -940,7 +907,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `network` - Hidden architecture; observation shape is inferred and output width is one.
     pub fn with_value_network(mut self, network: NetworkConfig) -> Self {
-        self.builder.value_network = network;
+        self.builder.learner_builder.value_network = network;
         self
     }
 
@@ -951,6 +918,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `policy_hidden_layers` - Dense hidden-layer widths, including the dense layers after a CNN.
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
         self.builder
+            .learner_builder
             .policy_config
             .network
             .mlp_config_mut()
@@ -965,11 +933,16 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `activation_function` - Activation function applied by hidden layers.
     pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
         self.builder
+            .learner_builder
             .policy_config
             .network
             .mlp_config_mut()
             .activation = activation_function;
-        self.builder.value_network.mlp_config_mut().activation = activation_function;
+        self.builder
+            .learner_builder
+            .value_network
+            .mlp_config_mut()
+            .activation = activation_function;
         self
     }
 
@@ -979,7 +952,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `log_std_init` - Initial logarithm of the action distribution's standard deviation.
     pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
-        self.builder.policy_config.log_std_init = log_std_init;
+        self.builder.learner_builder.policy_config.log_std_init = log_std_init;
         self
     }
 
@@ -993,7 +966,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `config` - Controls additional noise refreshes within a rollout.
     pub fn with_sde(mut self, config: crate::SdeConfig) -> Self {
-        self.builder.policy_config.sde = Some(config);
+        self.builder.learner_builder.policy_config.sde = Some(config);
         self
     }
 
@@ -1013,6 +986,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `beta1` - First-moment exponential decay coefficient.
     pub fn with_beta1(mut self, beta1: f64) -> Self {
         self.builder
+            .learner_builder
             .optimizer
             .for_each_mut(|config| config.beta1 = beta1);
         self
@@ -1025,6 +999,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `beta2` - Second-moment exponential decay coefficient.
     pub fn with_beta2(mut self, beta2: f64) -> Self {
         self.builder
+            .learner_builder
             .optimizer
             .for_each_mut(|config| config.beta2 = beta2);
         self
@@ -1037,6 +1012,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `epsilon` - Small value added to the optimizer denominator for numerical stability.
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
         self.builder
+            .learner_builder
             .optimizer
             .for_each_mut(|config| config.eps = epsilon);
         self
@@ -1049,6 +1025,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `weight_decay` - Decoupled weight-decay coefficient.
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
         self.builder
+            .learner_builder
             .optimizer
             .for_each_mut(|config| config.weight_decay = weight_decay);
         self
@@ -1063,7 +1040,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `config` - Joint or split Adam optimizers, including schedules and gradient clipping.
     pub fn with_optimizer(mut self, config: OptimizerConfig) -> Self {
-        self.builder.optimizer = config;
+        self.builder.learner_builder.optimizer = config;
         self
     }
 
@@ -1073,7 +1050,11 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `value_hidden_layers` - Dense hidden-layer widths, including the dense layers after a CNN.
     pub fn with_value_hidden_layers(mut self, value_hidden_layers: Vec<usize>) -> Self {
-        self.builder.value_network.mlp_config_mut().hidden_layers = value_hidden_layers;
+        self.builder
+            .learner_builder
+            .value_network
+            .mlp_config_mut()
+            .hidden_layers = value_hidden_layers;
         self
     }
 
@@ -1083,16 +1064,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `normalize_advantage` - Whether to normalize advantages before optimizer updates.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
-        match &mut self.builder.algorithm_configuration {
-            AlgorithmConfiguration::Ppo(PPOConfig {
-                normalize_advantage: configured,
-                ..
-            })
-            | AlgorithmConfiguration::A2C {
-                normalize_advantage: configured,
-                ..
-            } => *configured = Some(normalize_advantage),
-        }
+        self.builder.normalize_advantage = normalize_advantage;
         self
     }
 
@@ -1126,9 +1098,12 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `gradient_clipping` - Clipping mode; `Disabled` clears the optimizer's clipping.
     pub fn with_gradient_clipping(mut self, gradient_clipping: GradientClippingConfig) -> Self {
-        self.builder.optimizer.for_each_mut(|config| {
-            config.gradient_clipping = gradient_clipping;
-        });
+        self.builder
+            .learner_builder
+            .optimizer
+            .for_each_mut(|config| {
+                config.gradient_clipping = gradient_clipping;
+            });
         self
     }
 
@@ -1434,11 +1409,8 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
         else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
-        *reward_normalizer = Some(RewardNormalizer::new(
-            self.builder.n_envs,
-            gamma,
-            clip_reward,
-        ));
+        let n_envs = self.builder.env_build_plan.n_envs();
+        *reward_normalizer = Some(RewardNormalizer::new(n_envs, gamma, clip_reward));
         self
     }
 
@@ -1475,11 +1447,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
                 };
             }
             ObsNormalizerConfig::Enabled { clip } => {
-                let obs_normalizer = Normalizer::build(
-                    NormalizerMode::Update,
-                    clip,
-                    vec![self.builder.env_desription.observation_space.size()],
-                );
+                let env_description = self.builder.env_build_plan.env_description();
+                let observation_space = env_description.observation_space.shape().unwrap();
+                let obs_normalizer =
+                    Normalizer::build(NormalizerMode::Update, clip, observation_space);
                 self.builder.sampler_configuration = SamplerConfiguration::StagedStep {
                     rollout_steps,
                     reward_normalizer,
@@ -1553,11 +1524,8 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
         else {
             unreachable!("staged step-bound sampler type must use matching configuration")
         };
-        *reward_normalizer = Some(RewardNormalizer::new(
-            self.builder.n_envs,
-            gamma,
-            clip_reward,
-        ));
+        let n_envs = self.builder.env_build_plan.n_envs();
+        *reward_normalizer = Some(RewardNormalizer::new(n_envs, gamma, clip_reward));
         self
     }
 }
@@ -1586,7 +1554,6 @@ impl<E: Env> PPOBuilder<E> {
             env_builder,
             num_envs,
             AlgorithmConfiguration::Ppo(PPOConfig {
-                normalize_advantage: None,
                 total_epochs: NonZeroUsize::new(10).unwrap(),
                 target_kl: None,
                 clip_range_schedule: ClipRangeSchedule::Constant(0.2),
@@ -1599,6 +1566,7 @@ impl<E: Env> PPOBuilder<E> {
                 rollout_steps: NonZeroUsize::new(1024).unwrap(),
                 reward_normalizer: None,
             },
+            true,
             Builder::ppo_candle_agent,
             Builder::direct_sampler_step_bound,
         )
@@ -1622,10 +1590,7 @@ impl<E: Env> A2CBuilder<E> {
         Self::configured(
             env_builder,
             num_envs,
-            AlgorithmConfiguration::A2C {
-                normalize_advantage: None,
-                reporter: None,
-            },
+            AlgorithmConfiguration::A2C { reporter: None },
             Backend::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
@@ -1633,6 +1598,7 @@ impl<E: Env> A2CBuilder<E> {
                 rollout_steps: NonZeroUsize::new(1024).unwrap(),
                 reward_normalizer: None,
             },
+            true,
             Builder::a2c_candle_agent,
             Builder::direct_sampler_step_bound,
         )

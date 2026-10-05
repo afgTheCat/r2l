@@ -64,6 +64,7 @@ mod constants;
 mod evaluator;
 mod hooks;
 mod inference;
+mod snapshot;
 mod utils;
 
 pub use backend::BurnBackend;

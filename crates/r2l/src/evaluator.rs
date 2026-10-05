@@ -184,7 +184,7 @@ impl<E: Env> EvaluationSampler<E> {
     fn normalizer(&self) -> Option<Normalizer<E::Tensor>> {
         match self {
             Self::Direct(_) => None,
-            Self::Staged(sampler) => sampler.obs_normalizer().cloned(),
+            Self::Staged(sampler) => sampler.obs_normalizer(),
         }
     }
 }

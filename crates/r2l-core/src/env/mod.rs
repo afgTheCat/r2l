@@ -262,10 +262,7 @@ where
     }
 }
 
-/// Validated, non-empty collection of environment builders used to create rollout workers.
-pub struct EnvBuilderType<EB: EnvBuilder>(EnvBuilderKind<EB>);
-
-enum EnvBuilderKind<EB: EnvBuilder> {
+pub enum EnvBuilderKind<EB: EnvBuilder> {
     /// Reuses one builder for `n_envs` homogeneous workers.
     Homogeneous {
         /// Shared environment builder.
@@ -279,6 +276,9 @@ enum EnvBuilderKind<EB: EnvBuilder> {
         builders: Vec<Arc<EB>>,
     },
 }
+
+/// Validated, non-empty collection of environment builders used to create rollout workers.
+pub struct EnvBuilderType<EB: EnvBuilder>(pub EnvBuilderKind<EB>);
 
 impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
     fn clone(&self) -> Self {

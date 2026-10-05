@@ -22,6 +22,10 @@ rand = { workspace = true }
 safetensors = { workspace = true }
 rand_distr = { workspace = true }
 serde = { workspace = true }
+hashbrown = "0.16.1"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+r2l-agents = { workspace = true }
