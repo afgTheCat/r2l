@@ -2,7 +2,13 @@ use std::marker::PhantomData;
 
 use burn::tensor::Device as BurnDevice;
 use candle_core::Device;
-use r2l_core::{error::Error, networks::NetworkConfig};
+use r2l_core::{
+    env::EnvDescription,
+    error::Error,
+    models::ActivationFunction,
+    networks::{MlpConfig, NetworkConfig},
+    tensor::R2lTensor,
+};
 use r2l_distributions::learning_modules::burn_lm::{
     PolicyValueLearner as BurnPolicyValueLearner, PolicyValueOptimizer as BurnPolicyValueOptimizer,
 };
@@ -26,6 +32,17 @@ pub struct LearnerConfig {
 }
 
 impl LearnerConfig {
+    pub(crate) fn new<T: R2lTensor>(env_description: &EnvDescription<T>) -> Result<Self, Error> {
+        Ok(Self {
+            policy_config: PolicyBuilder::new(env_description)?,
+            value_network: NetworkConfig::Mlp(MlpConfig {
+                hidden_layers: vec![64, 64],
+                activation: ActivationFunction::default(),
+            }),
+            optimizer: OptimizerConfig::default(),
+        })
+    }
+
     pub fn build_candle_learner(&self, device: &Device) -> Result<CandlePolicyValueLearner, Error> {
         let (policy, policy_varmap) = self.policy_config.build_candle_with_varmap(device)?;
         let value_varmap = match self.optimizer {
@@ -95,6 +112,14 @@ pub struct LearningHookConfig {
 }
 
 impl LearningHookConfig {
+    pub(crate) fn new(normalize_advantage: bool) -> Self {
+        Self {
+            normalize_advantage,
+            entropy_coeff: 0.0,
+            vf_coeff: 1.0,
+        }
+    }
+
     /// Builds learning hooks using the learner's optimizer schedules.
     ///
     /// # Arguments

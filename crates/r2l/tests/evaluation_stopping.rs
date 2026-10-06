@@ -157,18 +157,26 @@ fn stopping_saves_the_normalized_policy_before_finishing() {
 }
 
 #[test]
-fn stopping_validates_evaluation_schedule_when_artifacts_are_disabled() {
+fn stopping_validates_evaluation_schedule_before_creating_artifacts() {
     let output = TempDir::new().unwrap();
-    let error = ppo_builder()
-        .with_training_limit(TrainingLimit::rollouts(4))
-        .with_avg_reward_threshold(Some(1.0))
-        .with_training_artifacts(disabled_artifacts(output.path(), 5))
-        .build()
-        .err()
-        .expect("an unreachable evaluation interval should fail");
-    assert!(
-        error
-            .to_string()
-            .contains("exceeds the configured training length")
-    );
+    let folder = output.path().join("unused");
+    for artifacts in [
+        disabled_artifacts(&folder, 5),
+        TrainingArtifactsConfig::new(&folder)
+            .with_evaluation_settings(EvaluationSettings::new().with_rollouts_per_evaluation(5)),
+    ] {
+        let error = ppo_builder()
+            .with_training_limit(TrainingLimit::rollouts(4))
+            .with_avg_reward_threshold(Some(1.0))
+            .with_training_artifacts(artifacts)
+            .build()
+            .err()
+            .expect("an unreachable evaluation interval should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("exceeds the configured training length")
+        );
+        assert!(!folder.exists());
+    }
 }

@@ -1,6 +1,9 @@
 //! Backend types for training and inference.
 
-use burn::backend::{Autodiff, Flex};
+use burn::{
+    backend::{Autodiff, Flex},
+    tensor::Device as BurnDevice,
+};
 use candle_core::{Device, DeviceLocation};
 use r2l_core::error::Error;
 use serde::{Deserialize, Serialize, de::Error as _};
@@ -86,4 +89,22 @@ pub(crate) enum Backend {
     Candle(CandleBackend),
     /// Default Burn backend configuration.
     Burn(BurnBackendConfig),
+}
+
+impl Backend {
+    /// Seeds r2l and the selected learner backend before constructing networks or samplers.
+    ///
+    /// # Arguments
+    ///
+    /// * `seed` - Initial seed for action sampling, environment workers, and model parameters.
+    pub(crate) fn seed(&self, seed: u64) -> Result<(), Error> {
+        r2l_core::rng::set_seed(seed);
+        match self {
+            Self::Candle(backend) => backend.seed(seed),
+            Self::Burn(_) => {
+                BurnDevice::flex().seed(seed);
+                Ok(())
+            }
+        }
+    }
 }

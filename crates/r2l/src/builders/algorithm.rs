@@ -1,10 +1,18 @@
 use std::{num::NonZeroUsize, sync::mpsc::Sender};
 
-use r2l_agents::on_policy_algorithms::{a2c::A2CParams, ppo::PPOParams};
+use r2l_agents::on_policy_algorithms::{
+    a2c::{A2C, A2CHook, A2CParams},
+    ppo::{PPO, PPOHook, PPOParams},
+};
+use r2l_core::on_policy::learning_module::OnPolicyLearner;
 
+use super::{learner::LearningHookConfig, optimizer::OptimizerConfig};
 use crate::{
     A2CRolloutStats, A2CSettings, ClipRangeSchedule, PPORolloutStats, PPOSettings,
-    hooks::learning::{TargetKl, reporter::RolloutReporter},
+    hooks::{
+        learning::{A2CLearningHook, PPOLearningHook, TargetKl, reporter::RolloutReporter},
+        progress::SharedTrainingProgress,
+    },
 };
 
 pub(crate) enum AlgoConfig {
@@ -26,7 +34,51 @@ pub(crate) enum AlgoConfig {
 }
 
 impl AlgoConfig {
-    pub(crate) fn ppo_parts(
+    pub(crate) fn build_ppo<M>(
+        &self,
+        learner: M,
+        learning_hook: &LearningHookConfig,
+        optimizer: &OptimizerConfig,
+        progress: SharedTrainingProgress,
+        reporter: Option<Sender<PPORolloutStats>>,
+        n_envs: NonZeroUsize,
+    ) -> PPO<M, PPOLearningHook<M>>
+    where
+        M: OnPolicyLearner,
+        PPOLearningHook<M>: PPOHook<M>,
+    {
+        let (params, settings) = self.ppo_parts(reporter, n_envs);
+        let hooks = learning_hook.build(settings, optimizer, progress);
+        PPO {
+            lm: learner,
+            hooks,
+            params,
+        }
+    }
+
+    pub(crate) fn build_a2c<M>(
+        &self,
+        learner: M,
+        learning_hook: &LearningHookConfig,
+        optimizer: &OptimizerConfig,
+        progress: SharedTrainingProgress,
+        reporter: Option<Sender<A2CRolloutStats>>,
+        n_envs: NonZeroUsize,
+    ) -> A2C<M, A2CLearningHook<M>>
+    where
+        M: OnPolicyLearner,
+        A2CLearningHook<M>: A2CHook<M>,
+    {
+        let (params, settings) = self.a2c_parts(reporter, n_envs);
+        let hooks = learning_hook.build(settings, optimizer, progress);
+        A2C {
+            lm: learner,
+            hooks,
+            params,
+        }
+    }
+
+    fn ppo_parts(
         &self,
         reporter: Option<Sender<PPORolloutStats>>,
         n_envs: NonZeroUsize,
@@ -62,7 +114,7 @@ impl AlgoConfig {
         (params, settings)
     }
 
-    pub(crate) fn a2c_parts(
+    fn a2c_parts(
         &self,
         reporter: Option<Sender<A2CRolloutStats>>,
         n_envs: NonZeroUsize,
