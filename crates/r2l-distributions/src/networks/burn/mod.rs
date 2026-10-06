@@ -33,6 +33,10 @@ impl From<Mlp> for NetworkKind {
 impl Network for NetworkKind {
     type Tensor = Tensor<2>;
 
+    fn for_inference(&self) -> Self {
+        self.valid()
+    }
+
     fn input_shape(&self) -> r2l_core::Shape {
         match self {
             Self::Mlp(mlp) => mlp.input_shape(),

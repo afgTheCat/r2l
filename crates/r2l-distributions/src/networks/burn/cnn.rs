@@ -164,6 +164,10 @@ impl Cnn {
 impl Network for Cnn {
     type Tensor = Tensor<2>;
 
+    fn for_inference(&self) -> Self {
+        self.valid()
+    }
+
     fn input_shape(&self) -> Shape {
         [self.shape.iter().map(|size| size.get()).product::<usize>()].into()
     }

@@ -135,6 +135,10 @@ impl Mlp {
 impl Network for Mlp {
     type Tensor = Tensor<2>;
 
+    fn for_inference(&self) -> Self {
+        self.valid()
+    }
+
     fn input_shape(&self) -> Shape {
         [self.input_size.get()].into()
     }

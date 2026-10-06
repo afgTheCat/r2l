@@ -25,6 +25,7 @@ pub struct Mlp {
     activation: ActivationFunction,
     input_size: NonZeroUsize,
     output_size: NonZeroUsize,
+    inference: bool,
 }
 
 impl Mlp {
@@ -84,6 +85,7 @@ impl Mlp {
             activation,
             input_size: layer_sizes[0],
             output_size: layer_sizes[layer_sizes.len() - 1],
+            inference: false,
         })
     }
 
@@ -121,6 +123,24 @@ impl Mlp {
 impl Network for Mlp {
     type Tensor = Tensor;
 
+    fn for_inference(&self) -> Self {
+        Self {
+            layers: self
+                .layers
+                .iter()
+                .map(|layer| Linear::new(layer.weight().detach(), layer.bias().map(Tensor::detach)))
+                .collect(),
+            activation: self.activation,
+            input_size: self.input_size,
+            output_size: self.output_size,
+            inference: true,
+        }
+    }
+
+    fn prepare_input(&self, t: Tensor) -> Tensor {
+        if self.inference { t.detach() } else { t }
+    }
+
     fn input_shape(&self) -> Shape {
         [self.input_size.get()].into()
     }
@@ -138,6 +158,7 @@ impl Network for Mlp {
     }
 
     fn forward_with_features(&self, mut t: Tensor) -> Result<(Tensor, Tensor)> {
+        t = self.prepare_input(t);
         if !matches!(t.dims(), [batch, width] if *batch > 0 && *width == self.input_size.get()) {
             return Err(Error::invalid_parameter(
                 "network input shape",

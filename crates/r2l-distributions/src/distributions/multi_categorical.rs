@@ -83,11 +83,19 @@ impl<N: Network> Actor for MultiCategorical<N> {
 }
 
 impl<N: Network> Policy for MultiCategorical<N> {
+    fn for_inference(&self) -> Self {
+        Self {
+            logits: self.logits.for_inference(),
+            categories: self.categories.clone(),
+        }
+    }
+
     fn action_shape(&self) -> Shape {
         [self.categories.len()].into()
     }
 
     fn log_probs(&self, observations: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
+        let actions = self.logits.prepare_input(actions);
         let logits = self.logits.forward(observations)?;
         super::action_batch(&actions, logits.to_shape()[0], self.categories.len())?;
         let mut selected = Vec::with_capacity(self.categories.len());

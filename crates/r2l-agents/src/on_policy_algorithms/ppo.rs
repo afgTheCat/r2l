@@ -221,7 +221,7 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
 
 impl<M: OnPolicyLearner, H: PPOHook<M>> Agent for PPO<M, H> {
     type Tensor = M::Tensor;
-    type Actor = M::InferencePolicy;
+    type Actor = M::Policy;
 
     fn actor(&self) -> Self::Actor {
         self.lm.inference_policy()

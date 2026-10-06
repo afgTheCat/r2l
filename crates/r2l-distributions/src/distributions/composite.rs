@@ -75,6 +75,14 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for Composite<N, P> {
 }
 
 impl<N: Network, P: TensorParameter<N::Tensor>> Policy for Composite<N, P> {
+    fn for_inference(&self) -> Self {
+        Self {
+            policies: self.policies.iter().map(Policy::for_inference).collect(),
+            action_sizes: self.action_sizes.clone(),
+            action_size: self.action_size,
+        }
+    }
+
     fn action_shape(&self) -> Shape {
         [self.action_size.get()].into()
     }

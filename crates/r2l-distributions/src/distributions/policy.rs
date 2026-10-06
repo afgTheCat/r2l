@@ -120,6 +120,16 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DistributionKind<N, P>
 }
 
 impl<N: Network, P: TensorParameter<N::Tensor>> Policy for DistributionKind<N, P> {
+    fn for_inference(&self) -> Self {
+        match self {
+            Self::Categorical(policy) => Self::Categorical(policy.for_inference()),
+            Self::DiagGaussian(policy) => Self::DiagGaussian(policy.for_inference()),
+            Self::MultiBernoulli(policy) => Self::MultiBernoulli(policy.for_inference()),
+            Self::MultiCategorical(policy) => Self::MultiCategorical(policy.for_inference()),
+            Self::Composite(policy) => Self::Composite(policy.for_inference()),
+        }
+    }
+
     fn action_shape(&self) -> Shape {
         self.inner().action_shape()
     }

@@ -72,6 +72,12 @@ impl<T: R2lTensor, N: Network<Tensor = T>> Actor for Categorical<N> {
 }
 
 impl<T: R2lTensor, N: Network<Tensor = T>> Policy for Categorical<N> {
+    fn for_inference(&self) -> Self {
+        Self {
+            logits: self.logits.for_inference(),
+        }
+    }
+
     fn action_shape(&self) -> r2l_core::Shape {
         [1].into()
     }
@@ -79,6 +85,7 @@ impl<T: R2lTensor, N: Network<Tensor = T>> Policy for Categorical<N> {
     /// Evaluates `[batch, categories]` logits and `[batch, 1]` actions,
     /// returning log probabilities with shape `[batch, 1]`.
     fn log_probs(&self, observations: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
+        let actions = self.logits.prepare_input(actions);
         let logits = self.logits.forward(observations)?;
         super::action_batch(&actions, logits.to_shape()[0], 1)?;
         let log_probs = logits.log_softmax(1)?;

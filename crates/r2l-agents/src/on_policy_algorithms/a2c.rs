@@ -189,7 +189,7 @@ impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
 
 impl<M: OnPolicyLearner, H: A2CHook<M>> Agent for A2C<M, H> {
     type Tensor = M::Tensor;
-    type Actor = M::InferencePolicy;
+    type Actor = M::Policy;
 
     fn actor(&self) -> Self::Actor {
         self.lm.inference_policy()

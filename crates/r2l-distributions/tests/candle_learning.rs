@@ -4,6 +4,7 @@ use r2l_core::models::{ActivationFunction, Actor, Learner};
 use r2l_distributions::{
     Categorical, Composite, DiagGaussian, DistributionKind, MultiBernoulli, MultiCategorical,
     Network, OnPolicyLearner, Policy, ValueFunction,
+    distributions::sde::SdeConfig,
     learning_modules::candle_lm::{PolicyValueLearner, PolicyValueLosses, PolicyValueOptimizer},
     networks::candle::mlp::Mlp,
 };
@@ -155,22 +156,76 @@ fn gaussian_updates_mean_and_log_std_and_detaches_rollout_outputs() {
         assert!(learner.policy().std().unwrap().unwrap() > 1.0);
         assert!(data(&log_std)[0] > 0.0);
         let input = Var::from_tensor(&zeros(1, 2)).unwrap();
-        let inference = learner.inference_policy();
+        let action = Var::from_tensor(&zeros(1, 1)).unwrap();
+        let inference: DiagGaussian<Mlp> = learner.inference_policy();
         let outputs = [
             inference.action(input.as_tensor().clone()).unwrap(),
             inference.mode_action(input.as_tensor().clone()).unwrap(),
             inference
-                .log_probs(input.as_tensor().clone(), zeros(1, 1))
+                .log_probs(input.as_tensor().clone(), action.as_tensor().clone())
                 .unwrap(),
             inference.entropy(input.as_tensor().clone()).unwrap(),
         ];
         for output in outputs {
+            assert!(!output.track_op());
             let grads = output.backward().unwrap();
             assert!(grads.get(&input).is_none());
+            assert!(grads.get(&action).is_none());
             for var in vm.all_vars() {
                 assert!(grads.get(&var).is_none());
             }
         }
+        let old_std = inference.std().unwrap();
+        update(&mut learner, &actions);
+        assert_ne!(old_std, inference.std().unwrap());
+        assert_eq!(inference.std().unwrap(), learner.policy().std().unwrap());
+    }
+}
+
+#[test]
+fn sde_inference_detaches_parameters_and_cached_noise_without_freezing_training() {
+    let vm = VarMap::new();
+    let vb = builder(&vm);
+    let mean = Mlp::build(&[2, 3, 1], ActivationFunction::Tanh, &vb.pp("mean")).unwrap();
+    let log_std = vb
+        .get_with_hints((3, 1), "log_std", Init::Const(0.0))
+        .unwrap();
+    let policy = DiagGaussian::with_sde(mean, log_std, SdeConfig::default()).unwrap();
+    let input = Var::from_tensor(&Tensor::new(&[[1.0f32, 2.0]], &Device::Cpu).unwrap()).unwrap();
+    let action = Var::from_tensor(&zeros(1, 1)).unwrap();
+    assert!(policy.action(input.as_tensor().clone()).unwrap().track_op());
+
+    let inference = policy.for_inference();
+    for _ in 0..2 {
+        assert!(
+            !inference
+                .action(input.as_tensor().clone())
+                .unwrap()
+                .track_op()
+        );
+    }
+    let log_probs = inference
+        .log_probs(input.as_tensor().clone(), action.as_tensor().clone())
+        .unwrap();
+    assert!(!log_probs.track_op());
+    assert!(
+        !inference
+            .entropy(input.as_tensor().clone())
+            .unwrap()
+            .track_op()
+    );
+
+    let gradients = policy
+        .log_probs(input.as_tensor().clone(), action.as_tensor().clone())
+        .unwrap()
+        .sum_all()
+        .unwrap()
+        .backward()
+        .unwrap();
+    assert!(gradients.get(&input).is_some());
+    assert!(gradients.get(&action).is_some());
+    for var in vm.all_vars() {
+        assert!(gradients.get(&var).is_some());
     }
 }
 
@@ -226,6 +281,27 @@ fn nested_composite_trains_every_distribution_variant() {
         let inference = learner.inference_policy();
         assert_eq!(inference.action(zeros(1, 2)).unwrap().dims(), [1, 5]);
         assert_eq!(inference.mode_action(zeros(1, 2)).unwrap().dims(), [1, 5]);
+        let input = Var::from_tensor(&zeros(1, 2)).unwrap();
+        let actions = Var::from_tensor(&inference.mode_action(zeros(1, 2)).unwrap()).unwrap();
+        let log_probs = inference
+            .log_probs(input.as_tensor().clone(), actions.as_tensor().clone())
+            .unwrap();
+        assert!(!log_probs.track_op());
+        assert!(
+            !inference
+                .entropy(input.as_tensor().clone())
+                .unwrap()
+                .track_op()
+        );
+        assert_eq!(
+            data(&log_probs),
+            data(
+                &learner
+                    .policy()
+                    .log_probs(input.as_tensor().clone(), actions.as_tensor().clone())
+                    .unwrap()
+            )
+        );
     }
 }
 

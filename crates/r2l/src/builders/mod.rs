@@ -1170,7 +1170,7 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOBurn, S, E> {
 impl<M, S, E> OnPolicyBuilder<PPO<M, PPOLearningHook<M>>, S, E>
 where
     M: OnPolicyLearner,
-    M::InferencePolicy: ToSafetensors,
+    M::Policy: ToSafetensors,
     PPOLearningHook<M>: PPOHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
@@ -1290,7 +1290,7 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CBurn, S, E> {
 impl<M, S, E> OnPolicyBuilder<A2C<M, A2CLearningHook<M>>, S, E>
 where
     M: OnPolicyLearner,
-    M::InferencePolicy: ToSafetensors,
+    M::Policy: ToSafetensors,
     A2CLearningHook<M>: A2CHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,

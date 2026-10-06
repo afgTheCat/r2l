@@ -443,11 +443,6 @@ impl<P: BurnPolicy> ValueFunction for PolicyValueLearner<P> {
 
 impl<P: BurnPolicy> OnPolicyLearner for PolicyValueLearner<P> {
     type Policy = P;
-    type InferencePolicy = P;
-
-    fn inference_policy(&self) -> Self::InferencePolicy {
-        self.model.policy.valid()
-    }
 
     fn policy(&self) -> &Self::Policy {
         &self.model.policy

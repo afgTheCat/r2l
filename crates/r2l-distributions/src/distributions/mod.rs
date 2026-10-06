@@ -19,11 +19,19 @@ pub mod sde;
 pub trait TensorParameter<T: R2lTensor>: Clone + std::fmt::Debug + Send + 'static {
     /// Returns the current tensor while preserving its gradient graph.
     fn value(&self) -> T;
+
+    /// Returns an inference parameter without a connection to its gradient graph.
+    #[must_use]
+    fn for_inference(&self) -> Self;
 }
 
 impl<T: R2lTensor> TensorParameter<T> for T {
     fn value(&self) -> T {
         self.clone()
+    }
+
+    fn for_inference(&self) -> Self {
+        self.detach()
     }
 }
 

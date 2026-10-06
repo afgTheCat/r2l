@@ -319,6 +319,14 @@ fn network_and_value_function_reject_invalid_batches() {
 fn raw_gaussian_preserves_externally_managed_parameter_gradients() {
     let log_std = Tensor::<2>::zeros([1, 1], &Device::flex().autodiff()).require_grad();
     let policy: DiagGaussian<Mlp> = DiagGaussian::new(mlp(1), log_std.clone()).unwrap();
+    let inference = policy.for_inference();
+    let log_probs = inference
+        .log_probs(
+            Tensor::zeros([2, 2], &Device::flex()),
+            Tensor::zeros([2, 1], &Device::flex()),
+        )
+        .unwrap();
+    assert!(!log_probs.is_require_grad());
     let entropy = policy
         .entropy(Tensor::zeros([2, 2], &Device::flex().autodiff()))
         .unwrap();

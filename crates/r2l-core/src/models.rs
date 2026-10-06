@@ -108,6 +108,15 @@ pub trait ToSafetensors {
 /// A `Policy` extends [`Actor`] with the quantities needed to compute policy
 /// gradient losses and entropy bonuses over a batch.
 pub trait Policy: Actor {
+    /// Returns an inference-ready instance of this policy without changing `self`.
+    ///
+    /// Disables parameter gradients and training-only behavior. Parameter storage
+    /// may still be shared; finish inference before updating the learner.
+    #[must_use]
+    fn for_inference(&self) -> Self
+    where
+        Self: Sized;
+
     /// Shape of one flattened action, without the batch axis.
     fn action_shape(&self) -> crate::Shape;
 

@@ -71,6 +71,10 @@ impl TensorParameter<Tensor<2>> for Param<Tensor<2>> {
     fn value(&self) -> Tensor<2> {
         self.val()
     }
+
+    fn for_inference(&self) -> Self {
+        self.valid()
+    }
 }
 
 // These policies contain one trainable network and optional fixed action metadata.

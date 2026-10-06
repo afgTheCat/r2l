@@ -6,16 +6,14 @@ use crate::{
 
 /// Learner contract using batched policies and value functions.
 ///
-/// This ties together a train-time policy, an inference-time policy, a value
-/// function, and a shared loss bundle. Training and inference use the same
-/// tensor type; the backend controls gradient tracking at runtime.
+/// This ties together a policy, a value function, and a shared loss bundle.
+/// Training and inference use the same policy and tensor types; inference
+/// preparation controls gradient tracking and training-only behavior.
 pub trait OnPolicyLearner:
     Learner<Losses = PolicyValueLosses<Self::Tensor>> + ValueFunction
 {
-    /// Policy type used for rollout/inference.
-    type InferencePolicy: Policy<Tensor = Self::Tensor> + Clone;
-    /// Policy type used while computing losses.
-    type Policy: Policy<Tensor = Self::Tensor>;
+    /// Policy type used for both learning and rollout/inference.
+    type Policy: Policy<Tensor = Self::Tensor> + Clone;
 
     /// Prepares rollout data for loss computation without connecting it to an
     /// earlier gradient graph. Burn enables autodiff; Candle detaches the input.
@@ -29,7 +27,9 @@ pub trait OnPolicyLearner:
     fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::Tensor>;
 
     /// Returns a policy suitable for rollout/inference.
-    fn inference_policy(&self) -> Self::InferencePolicy;
+    fn inference_policy(&self) -> Self::Policy {
+        self.policy().for_inference()
+    }
 
     /// Returns the train-time policy.
     fn policy(&self) -> &Self::Policy;

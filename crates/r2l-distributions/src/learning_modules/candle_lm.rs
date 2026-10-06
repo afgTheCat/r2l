@@ -6,8 +6,8 @@
 //! builders before constructing the optimizer. Keep the maps to save/load weights
 //! with Candle's native APIs.
 //!
-//! Inference policies share live parameter storage with the learner and detach
-//! their outputs. Collect rollouts and run optimizer updates in separate phases;
+//! Inference policies use the same type with detached parameters and inputs, and
+//! share live parameter storage. Collect rollouts and update in separate phases;
 //! an inference clone is not a frozen snapshot of an earlier policy.
 //!
 //! ```
@@ -38,9 +38,8 @@ use std::collections::HashSet;
 use candle_core::{DType, Device, Tensor, Var, backprop::GradStore};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarMap};
 use r2l_core::{
-    Shape,
     error::{Error, Result},
-    models::{Actor, Learner},
+    models::Learner,
 };
 
 use crate::{
@@ -243,51 +242,6 @@ impl Learner for PolicyValueOptimizer {
     }
 }
 
-/// A live view of a Candle policy that detaches inputs and outputs for rollouts.
-///
-/// Parameter storage is shared: subsequent learner updates change this policy.
-#[derive(Clone)]
-pub struct InferencePolicy<P>(P);
-
-impl<P: r2l_core::models::ToSafetensors> r2l_core::models::ToSafetensors for InferencePolicy<P> {
-    fn to_safetensors(&self) -> Result<Vec<u8>> {
-        self.0.to_safetensors()
-    }
-}
-
-impl<P: Policy<Tensor = Tensor>> Actor for InferencePolicy<P> {
-    type Tensor = Tensor;
-
-    fn action(&self, observation: Tensor) -> Result<Tensor> {
-        Ok(self.0.action(observation.detach())?.detach())
-    }
-
-    fn mode_action(&self, observation: Tensor) -> Result<Tensor> {
-        Ok(self.0.mode_action(observation.detach())?.detach())
-    }
-}
-
-impl<P: Policy<Tensor = Tensor>> Policy for InferencePolicy<P> {
-    fn action_shape(&self) -> Shape {
-        self.0.action_shape()
-    }
-
-    fn log_probs(&self, observations: Tensor, actions: Tensor) -> Result<Tensor> {
-        Ok(self
-            .0
-            .log_probs(observations.detach(), actions.detach())?
-            .detach())
-    }
-
-    fn entropy(&self, observations: Tensor) -> Result<Tensor> {
-        Ok(self.0.entropy(observations.detach())?.detach())
-    }
-
-    fn std(&self) -> Result<Option<f32>> {
-        self.0.std()
-    }
-}
-
 /// Candle on-policy learner for any batched policy and value network.
 pub struct PolicyValueLearner<P = DistributionKind<Mlp>, N = Mlp> {
     policy: P,
@@ -353,7 +307,6 @@ impl<P: Policy<Tensor = Tensor> + Clone, N: Network<Tensor = Tensor>> OnPolicyLe
     for PolicyValueLearner<P, N>
 {
     type Policy = P;
-    type InferencePolicy = InferencePolicy<P>;
 
     fn prepare_learning_tensor(t: &Tensor) -> Tensor {
         t.detach()
@@ -361,10 +314,6 @@ impl<P: Policy<Tensor = Tensor> + Clone, N: Network<Tensor = Tensor>> OnPolicyLe
 
     fn tensor_from_slice(&self, slice: &[f32]) -> Result<Tensor> {
         Ok(Tensor::from_slice(slice, (slice.len(), 1), &self.device)?)
-    }
-
-    fn inference_policy(&self) -> Self::InferencePolicy {
-        InferencePolicy(self.policy.clone())
     }
 
     fn policy(&self) -> &P {

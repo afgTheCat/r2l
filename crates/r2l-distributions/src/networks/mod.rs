@@ -16,13 +16,24 @@ pub use candle::seeded_var_builder;
 pub trait Network: Send + Debug + Clone + 'static {
     type Tensor: R2lTensor;
 
+    /// Returns an inference-ready network without changing the training instance.
+    /// Parameter storage may remain shared with the original.
+    #[must_use]
+    fn for_inference(&self) -> Self;
+
+    /// Prepares observation or action inputs for this network's execution mode.
+    /// Backends that need explicit input detachment during inference override this.
+    fn prepare_input(&self, t: Self::Tensor) -> Self::Tensor {
+        t
+    }
+
     fn input_shape(&self) -> Shape;
     fn output_shape(&self) -> Shape;
     fn io_shape(&self) -> (Shape, Shape) {
         (self.input_shape(), self.output_shape())
     }
 
-    /// Evaluates a nonempty batch, preserving gradients through network parameters.
+    /// Evaluates a nonempty batch, preserving parameter gradients in training mode.
     ///
     /// # Errors
     ///

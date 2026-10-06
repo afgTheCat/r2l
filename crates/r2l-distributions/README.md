@@ -17,12 +17,14 @@ returns and advantages use `[batch, 1]`. A single actor call accepts `[1, featur
 and returns `[1, actions]`. The `r2l` runtime adapts environment tensors at its
 sampling and learning boundaries.
 
-Burn Gaussian policies register `log_std` through `Param<Tensor<B, 2>>`. Candle
+Burn Gaussian policies register `log_std` through `Param<Tensor<2>>`. Candle
 policies obtain it from the optimizer's `VarMap` before constructing the optimizer.
 For reproducible Candle initialization, use `networks::candle::seeded_var_builder` with
 `r2l_core::rng::set_seed`.
 
-Candle inference policies detach their outputs and share live parameter storage.
+Training and inference use the same policy type. `Policy::for_inference` prepares
+an inference instance; `OnPolicyLearner::inference_policy` uses that same path.
+Candle detaches parameters and inputs while sharing live parameter storage.
 Complete rollout collection before optimizer updates, as the built-in loop does.
 
 ## Networks, artifacts and features

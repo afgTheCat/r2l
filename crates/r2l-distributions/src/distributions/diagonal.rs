@@ -116,11 +116,20 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DiagGaussian<N, P> {
 }
 
 impl<N: Network, P: TensorParameter<N::Tensor>> Policy for DiagGaussian<N, P> {
+    fn for_inference(&self) -> Self {
+        Self {
+            mean: self.mean.for_inference(),
+            log_std: self.log_std.for_inference(),
+            sde: self.sde.clone(),
+        }
+    }
+
     fn action_shape(&self) -> Shape {
         self.mean.output_shape()
     }
 
     fn log_probs(&self, observations: Self::Tensor, actions: Self::Tensor) -> Result<Self::Tensor> {
+        let actions = self.mean.prepare_input(actions);
         if self.sde.is_some() {
             let (mean, features) = self.mean.forward_with_features(observations)?;
             let shape = mean.to_shape();
