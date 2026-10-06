@@ -5,7 +5,8 @@ pub mod mlp;
 
 use std::num::NonZeroUsize;
 
-use burn::{module::Module, prelude::Backend, tensor::Tensor};
+use burn::tensor::Device;
+use burn::{module::Module, tensor::Tensor};
 use r2l_core::Shape;
 use r2l_core::{
     error::{Error, Result},
@@ -16,21 +17,21 @@ use self::{cnn::Cnn, mlp::Mlp};
 use super::Network;
 
 #[derive(Debug, Module)]
-pub enum NetworkKind<B: Backend> {
+pub enum NetworkKind {
     /// Fully connected network.
-    Mlp(Mlp<B>),
+    Mlp(Mlp),
     /// Convolutional network with a dense output network.
-    Cnn(Cnn<B>),
+    Cnn(Cnn),
 }
 
-impl<B: Backend> From<Mlp<B>> for NetworkKind<B> {
-    fn from(network: Mlp<B>) -> Self {
+impl From<Mlp> for NetworkKind {
+    fn from(network: Mlp) -> Self {
         Self::Mlp(network)
     }
 }
 
-impl<B: Backend> Network for NetworkKind<B> {
-    type Tensor = Tensor<B, 2>;
+impl Network for NetworkKind {
+    type Tensor = Tensor<2>;
 
     fn input_shape(&self) -> r2l_core::Shape {
         match self {
@@ -46,7 +47,7 @@ impl<B: Backend> Network for NetworkKind<B> {
         }
     }
 
-    fn forward(&self, t: Tensor<B, 2>) -> Result<Tensor<B, 2>> {
+    fn forward(&self, t: Tensor<2>) -> Result<Tensor<2>> {
         match self {
             Self::Mlp(mlp) => Network::forward(mlp, t),
             Self::Cnn(cnn) => cnn.forward(t),
@@ -68,7 +69,7 @@ impl<B: Backend> Network for NetworkKind<B> {
     }
 }
 
-impl<B: Backend> NetworkKind<B> {
+impl NetworkKind {
     /// Builds a network for one observation shape and a requested output width.
     ///
     /// # Errors
@@ -78,7 +79,7 @@ impl<B: Backend> NetworkKind<B> {
         config: &NetworkConfig,
         observation_shape: &Shape,
         output_size: usize,
-        device: &B::Device,
+        device: &Device,
     ) -> Result<Self> {
         let input_size = Self::flat_size(observation_shape)?;
         let mlp = match config {

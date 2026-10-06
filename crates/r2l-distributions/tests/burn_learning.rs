@@ -1,10 +1,8 @@
 use burn::{
-    backend::{Autodiff, NdArray, ndarray::NdArrayDevice},
-    module::{AutodiffModule, Module, ModuleVisitor, Param, ParamId},
+    module::{Module, ModuleVisitor, Param, ParamId},
     optim::AdamWConfig,
-    prelude::Backend,
-    record::{FullPrecisionSettings, NamedMpkBytesRecorder, Recorder},
-    tensor::Tensor,
+    store::ModuleRecord,
+    tensor::{Device, Tensor},
 };
 use r2l_core::{
     models::{ActivationFunction, Actor, Learner},
@@ -19,17 +17,15 @@ use r2l_distributions::{
     networks::burn::mlp::Mlp,
 };
 
-type B = Autodiff<NdArray>;
-
-fn mlp(outputs: usize) -> Mlp<B> {
-    Mlp::build(&[2, outputs], ActivationFunction::Tanh)
+fn mlp(outputs: usize) -> Mlp {
+    Mlp::build(&[2, outputs], ActivationFunction::Tanh).train()
 }
 
-fn network(outputs: usize) -> NetworkKind<B> {
+fn network(outputs: usize) -> NetworkKind {
     NetworkKind::Mlp(mlp(outputs))
 }
 
-fn build_learner<P: BurnPolicy<B>>(policy: P, split: bool) -> PolicyValueLearner<B, P> {
+fn build_learner<P: BurnPolicy>(policy: P, split: bool) -> PolicyValueLearner<P> {
     let optimizer = AdamWConfig::new().with_weight_decay(0.0);
     if split {
         PolicyValueLearner::split_with_network(
@@ -45,8 +41,8 @@ fn build_learner<P: BurnPolicy<B>>(policy: P, split: bool) -> PolicyValueLearner
     }
 }
 
-fn update<P: BurnPolicy<B>>(learner: &mut PolicyValueLearner<B, P>, actions: Tensor<B, 2>) {
-    let observations = Tensor::zeros([2, 2], &NdArrayDevice::Cpu);
+fn update<P: BurnPolicy>(learner: &mut PolicyValueLearner<P>, actions: Tensor<2>) {
+    let observations = Tensor::zeros([2, 2], &Device::ndarray().autodiff());
     let log_probs = learner
         .policy()
         .log_probs(observations.clone(), actions)
@@ -69,24 +65,22 @@ fn update<P: BurnPolicy<B>>(learner: &mut PolicyValueLearner<B, P>, actions: Ten
     learner.update(losses).unwrap();
 }
 
-fn restore<BackendType: Backend, M: Module<BackendType>>(target: M, source: M) -> M {
-    let recorder = NamedMpkBytesRecorder::<FullPrecisionSettings>::default();
-    let bytes = Recorder::<BackendType>::record(&recorder, source.into_record(), ()).unwrap();
-    let record =
-        Recorder::<BackendType>::load(&recorder, bytes, &BackendType::Device::default()).unwrap();
+fn restore<M: Module>(target: M, source: M) -> M {
+    let bytes = source.into_record().into_bytes().unwrap();
+    let record = ModuleRecord::from_bytes(bytes).unwrap();
     target.load_record(record)
 }
 
 #[derive(Default)]
 struct ParameterIds(Vec<ParamId>);
 
-impl<BackendType: Backend> ModuleVisitor<BackendType> for ParameterIds {
-    fn visit_float<const D: usize>(&mut self, param: &Param<Tensor<BackendType, D>>) {
+impl ModuleVisitor for ParameterIds {
+    fn visit_float<const D: usize>(&mut self, param: &Param<Tensor<D>>) {
         self.0.push(param.id);
     }
 }
 
-fn parameter_ids<BackendType: Backend>(module: &impl Module<BackendType>) -> Vec<ParamId> {
+fn parameter_ids(module: &impl Module) -> Vec<ParamId> {
     let mut visitor = ParameterIds::default();
     module.visit(&mut visitor);
     visitor.0
@@ -97,8 +91,8 @@ fn categorical_joint_and_split_learners_update_policy_and_value() {
     for split in [false, true] {
         let policy = Categorical::new(mlp(2)).unwrap();
         let mut learner = build_learner(policy, split);
-        let observations = Tensor::zeros([2, 2], &NdArrayDevice::Cpu);
-        let actions = Tensor::zeros([2, 1], &NdArrayDevice::Cpu);
+        let observations = Tensor::zeros([2, 2], &Device::ndarray().autodiff());
+        let actions = Tensor::zeros([2, 1], &Device::ndarray().autodiff());
         let before = learner
             .policy()
             .log_probs(observations.clone(), actions.clone())
@@ -126,9 +120,10 @@ fn categorical_joint_and_split_learners_update_policy_and_value() {
             learner.values(observations).unwrap().to_vec().unwrap()
         );
         let inference = learner.inference_policy();
-        let input = Tensor::<NdArray, 2>::zeros([2, 2], &NdArrayDevice::Cpu);
-        let actions = Tensor::<NdArray, 2>::zeros([2, 1], &NdArrayDevice::Cpu);
+        let input = Tensor::<2>::zeros([2, 2], &Device::ndarray());
+        let actions = Tensor::<2>::zeros([2, 1], &Device::ndarray());
         let inference_log_probs = inference.log_probs(input.clone(), actions.clone()).unwrap();
+        assert!(!inference_log_probs.is_autodiff());
         assert!(!inference_log_probs.is_require_grad());
         assert_eq!(after, inference_log_probs.to_vec().unwrap());
         assert_eq!(
@@ -139,7 +134,7 @@ fn categorical_joint_and_split_learners_update_policy_and_value() {
                 .to_vec()
                 .unwrap()
         );
-        let restored = restore::<NdArray, _>(snapshot, inference);
+        let restored = restore(snapshot, inference);
         assert_eq!(
             after,
             restored
@@ -154,11 +149,11 @@ fn categorical_joint_and_split_learners_update_policy_and_value() {
 #[test]
 fn gaussian_updates_mean_and_log_std_and_preserves_parameter_ids() {
     for split in [false, true] {
-        let log_std = Param::from_tensor(Tensor::<B, 2>::zeros([1, 1], &NdArrayDevice::Cpu));
+        let log_std = Param::from_tensor(Tensor::<2>::zeros([1, 1], &Device::ndarray().autodiff()));
         let std_id = log_std.id;
         let policy = DiagGaussian::new(mlp(1), log_std).unwrap();
         let mut learner = build_learner(policy, split);
-        let observations = Tensor::zeros([1, 2], &NdArrayDevice::Cpu);
+        let observations = Tensor::zeros([1, 2], &Device::ndarray().autodiff());
         let mean_before = learner
             .policy()
             .mode_action(observations.clone())
@@ -167,11 +162,14 @@ fn gaussian_updates_mean_and_log_std_and_preserves_parameter_ids() {
             .unwrap();
         let snapshot = learner.inference_policy();
         let trainable_template = learner.policy().clone();
-        let ids = parameter_ids::<B>(learner.policy());
+        let ids = parameter_ids(learner.policy());
         assert!(ids.contains(&std_id));
         assert_eq!(learner.policy().std().unwrap(), Some(1.0));
         for _ in 0..2 {
-            update(&mut learner, Tensor::full([2, 1], 2.0, &NdArrayDevice::Cpu));
+            update(
+                &mut learner,
+                Tensor::full([2, 1], 2.0, &Device::ndarray().autodiff()),
+            );
         }
         let trained_std = learner.policy().std().unwrap().unwrap();
         assert!(trained_std > 1.0);
@@ -184,26 +182,28 @@ fn gaussian_updates_mean_and_log_std_and_preserves_parameter_ids() {
                 .to_vec()
                 .unwrap()
         );
-        assert_eq!(ids, parameter_ids::<B>(learner.policy()));
+        assert_eq!(ids, parameter_ids(learner.policy()));
         let inference = learner.inference_policy();
         assert_eq!(inference.std().unwrap(), Some(trained_std));
         assert_eq!(snapshot.std().unwrap(), Some(1.0));
-        let trainable =
-            DiagGaussian::<Mlp<B>, Param<Tensor<B, 2>>>::from_inner(learner.inference_policy());
-        assert_eq!(ids, parameter_ids::<B>(&trainable));
+        let trainable = learner.inference_policy().train();
+        assert_eq!(ids, parameter_ids(&trainable));
         let mut from_inference = build_learner(trainable, split);
         update(
             &mut from_inference,
-            Tensor::full([2, 1], 2.0, &NdArrayDevice::Cpu),
+            Tensor::full([2, 1], 2.0, &Device::ndarray().autodiff()),
         );
         assert!(from_inference.policy().std().unwrap().unwrap() > trained_std);
-        let restored = restore::<NdArray, _>(snapshot, inference);
+        let restored = restore(snapshot, inference);
         assert_eq!(restored.std().unwrap(), Some(trained_std));
-        let restored = restore::<B, _>(trainable_template, learner.policy().clone());
+        let restored = restore(trainable_template, learner.policy().clone());
         let mut resumed = build_learner(restored, split);
-        update(&mut resumed, Tensor::full([2, 1], 2.0, &NdArrayDevice::Cpu));
+        update(
+            &mut resumed,
+            Tensor::full([2, 1], 2.0, &Device::ndarray().autodiff()),
+        );
         assert!(resumed.policy().std().unwrap().unwrap() > trained_std);
-        assert_eq!(ids, parameter_ids::<B>(resumed.policy()));
+        assert_eq!(ids, parameter_ids(resumed.policy()));
     }
 }
 
@@ -213,14 +213,14 @@ fn nested_composite_updates_and_round_trips_all_distribution_variants() {
         DistributionKind::DiagGaussian(
             DiagGaussian::new(
                 network(1),
-                Param::from_tensor(Tensor::zeros([1, 1], &NdArrayDevice::Cpu)),
+                Param::from_tensor(Tensor::zeros([1, 1], &Device::ndarray().autodiff())),
             )
             .unwrap(),
         ),
         DistributionKind::MultiBernoulli(MultiBernoulli::new(network(1)).unwrap()),
         DistributionKind::MultiCategorical(MultiCategorical::new(network(5), vec![2, 3]).unwrap()),
     ];
-    let policy: BurnDistributionKind<B> = DistributionKind::Composite(
+    let policy: BurnDistributionKind = DistributionKind::Composite(
         Composite::new(vec![
             DistributionKind::Categorical(Categorical::new(network(2)).unwrap()),
             DistributionKind::Composite(Composite::new(children).unwrap()),
@@ -229,9 +229,12 @@ fn nested_composite_updates_and_round_trips_all_distribution_variants() {
     );
     assert_eq!(policy.action_shape().dims(), [5]);
     assert_eq!(Module::num_params(&policy), 28);
-    let mut learner: PolicyValueLearner<B> = build_learner(policy, false);
-    let observations = Tensor::<B, 2>::zeros([2, 2], &NdArrayDevice::Cpu);
-    let actions = Tensor::from_data([[0.0, 2.0, 1.0, 0.0, 1.0]; 2], &NdArrayDevice::Cpu);
+    let mut learner: PolicyValueLearner = build_learner(policy, false);
+    let observations = Tensor::<2>::zeros([2, 2], &Device::ndarray().autodiff());
+    let actions = Tensor::from_data(
+        [[0.0, 2.0, 1.0, 0.0, 1.0]; 2],
+        &Device::ndarray().autodiff(),
+    );
     let before = learner
         .policy()
         .log_probs(observations.clone(), actions.clone())
@@ -249,27 +252,33 @@ fn nested_composite_updates_and_round_trips_all_distribution_variants() {
         .unwrap();
     assert!(after[0] > before[0]);
     let inference = learner.inference_policy();
-    let restored = restore::<NdArray, _>(snapshot, inference);
+    let restored = restore(snapshot, inference);
     assert_eq!(restored.action_shape().dims(), [5]);
     assert_eq!(
         after,
         restored
-            .log_probs(Tensor::zeros([2, 2], &NdArrayDevice::Cpu), actions.inner())
+            .log_probs(Tensor::zeros([2, 2], &Device::ndarray()), actions.inner())
             .unwrap()
             .to_vec()
             .unwrap()
     );
     let mode = restored
-        .mode_action(Tensor::zeros([1, 2], &NdArrayDevice::Cpu))
+        .mode_action(Tensor::zeros([1, 2], &Device::ndarray()))
         .unwrap();
     assert_eq!(mode.dims(), [1, 5]);
-    let restored = restore::<B, _>(trainable_template, learner.policy().clone());
-    let mut resumed: PolicyValueLearner<B> = build_learner(restored, false);
-    let actions = Tensor::from_data([[0.0, 2.0, 1.0, 0.0, 1.0]; 2], &NdArrayDevice::Cpu);
+    let restored = restore(trainable_template, learner.policy().clone());
+    let mut resumed: PolicyValueLearner = build_learner(restored, false);
+    let actions = Tensor::from_data(
+        [[0.0, 2.0, 1.0, 0.0, 1.0]; 2],
+        &Device::ndarray().autodiff(),
+    );
     update(&mut resumed, actions.clone());
     let resumed_log_probs = resumed
         .policy()
-        .log_probs(Tensor::zeros([2, 2], &NdArrayDevice::Cpu), actions)
+        .log_probs(
+            Tensor::zeros([2, 2], &Device::ndarray().autodiff()),
+            actions,
+        )
         .unwrap()
         .to_vec()
         .unwrap();
@@ -281,38 +290,39 @@ fn network_and_value_function_reject_invalid_batches() {
     let network = network(1);
     assert!(
         network
-            .forward(Tensor::zeros([1, 3], &NdArrayDevice::Cpu))
+            .forward(Tensor::zeros([1, 3], &Device::ndarray().autodiff()))
             .is_err()
     );
     assert!(
         network
-            .forward(Tensor::zeros([0, 2], &NdArrayDevice::Cpu))
+            .forward(Tensor::zeros([0, 2], &Device::ndarray().autodiff()))
             .is_err()
     );
     let learner = build_learner(Categorical::new(mlp(2)).unwrap(), false);
     assert!(
         learner
-            .values(Tensor::zeros([1, 3], &NdArrayDevice::Cpu))
+            .values(Tensor::zeros([1, 3], &Device::ndarray().autodiff()))
             .is_err()
     );
     assert!(
         learner
-            .values(Tensor::zeros([0, 2], &NdArrayDevice::Cpu))
+            .values(Tensor::zeros([0, 2], &Device::ndarray().autodiff()))
             .is_err()
     );
-    let inference = Tensor::<NdArray, 2>::from_data([[1.0, 2.0]], &NdArrayDevice::Cpu);
-    let lifted = <PolicyValueLearner<B> as OnPolicyLearner>::lifter(&inference);
+    let inference = Tensor::<2>::from_data([[1.0, 2.0]], &Device::ndarray());
+    let lifted = <PolicyValueLearner as OnPolicyLearner>::lifter(&inference);
     assert_eq!(lifted.dims(), [1, 2]);
-    assert_eq!(lifted.device(), inference.device());
+    assert!(lifted.is_autodiff());
+    assert_eq!(lifted.clone().inner().device(), inference.device());
     assert_eq!(lifted.to_vec().unwrap(), vec![1.0, 2.0]);
 }
 
 #[test]
 fn raw_gaussian_preserves_externally_managed_parameter_gradients() {
-    let log_std = Tensor::<B, 2>::zeros([1, 1], &NdArrayDevice::Cpu).require_grad();
-    let policy: DiagGaussian<Mlp<B>> = DiagGaussian::new(mlp(1), log_std.clone()).unwrap();
+    let log_std = Tensor::<2>::zeros([1, 1], &Device::ndarray().autodiff()).require_grad();
+    let policy: DiagGaussian<Mlp> = DiagGaussian::new(mlp(1), log_std.clone()).unwrap();
     let entropy = policy
-        .entropy(Tensor::zeros([2, 2], &NdArrayDevice::Cpu))
+        .entropy(Tensor::zeros([2, 2], &Device::ndarray().autodiff()))
         .unwrap();
     let grads = entropy.backward();
     assert_eq!(log_std.grad(&grads).unwrap().to_vec().unwrap(), vec![1.0]);

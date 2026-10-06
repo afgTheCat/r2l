@@ -1,16 +1,19 @@
 use std::num::NonZeroUsize;
 
 use burn::nn::{
-    Dropout,
-    activation::Activation,
-    conv::Conv2d,
-    pool::{AvgPool2d, MaxPool2d},
-};
-use burn::nn::{
     conv::Conv2dConfig,
     pool::{AvgPool2dConfig, MaxPool2dConfig},
 };
-use burn::{module::Module, prelude::Backend, tensor::Tensor};
+use burn::{module::Module, tensor::Tensor};
+use burn::{
+    nn::{
+        Dropout,
+        activation::Activation,
+        conv::Conv2d,
+        pool::{AvgPool2d, MaxPool2d},
+    },
+    tensor::Device,
+};
 use r2l_core::networks::{CnnConfig, CnnLayerConfig};
 use r2l_core::{
     Shape,
@@ -24,16 +27,16 @@ use super::{
 use crate::networks::Network;
 
 #[derive(Module, Debug)]
-enum CNNLayer<B: Backend> {
-    Activation(Activation<B>),
-    Conv(Conv2d<B>),
+enum CNNLayer {
+    Activation(Activation),
+    Conv(Conv2d),
     MaxPool(MaxPool2d),
     AvgPool(AvgPool2d),
     Dropout(Dropout),
 }
 
-impl<B: Backend> CNNLayer<B> {
-    pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+impl CNNLayer {
+    pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
         match &self {
             CNNLayer::Activation(activation) => activation.forward(input),
             CNNLayer::Conv(conv2d) => conv2d.forward(input),
@@ -45,27 +48,27 @@ impl<B: Backend> CNNLayer<B> {
 }
 
 #[derive(Module, Debug)]
-pub struct Cnn<B: Backend> {
+pub struct Cnn {
     #[module(skip)]
     shape: [NonZeroUsize; 3],
-    cnn_layers: Vec<CNNLayer<B>>,
-    mlp: Mlp<B>,
+    cnn_layers: Vec<CNNLayer>,
+    mlp: Mlp,
 }
 
-impl<B: Backend> Cnn<B> {
+impl Cnn {
     pub(super) fn build(
         config: &CnnConfig,
         observation_shape: &Shape,
         output_size: NonZeroUsize,
-        device: &B::Device,
+        device: &Device,
     ) -> Result<Self> {
         let shape: [usize; 3] = observation_shape.dims().try_into().map_err(|_| {
-            NetworkKind::<B>::invalid_config(
+            NetworkKind::invalid_config(
                 "CNN observations must have shape [channels, height, width]",
             )
         })?;
         let [Some(channels), Some(height), Some(width)] = shape.map(NonZeroUsize::new) else {
-            return Err(NetworkKind::<B>::invalid_config(
+            return Err(NetworkKind::invalid_config(
                 "CNN dimensions must be positive",
             ));
         };
@@ -102,12 +105,12 @@ impl<B: Backend> Cnn<B> {
                 Some(stride_width),
             ] = [kernel_size[0], kernel_size[1], stride[0], stride[1]].map(NonZeroUsize::new)
             else {
-                return Err(NetworkKind::<B>::invalid_config(
+                return Err(NetworkKind::invalid_config(
                     "kernel and stride must be positive, and the kernel must fit its input",
                 ));
             };
             if kernel_height > height || kernel_width > width {
-                return Err(NetworkKind::<B>::invalid_config(
+                return Err(NetworkKind::invalid_config(
                     "kernel and stride must be positive, and the kernel must fit its input",
                 ));
             }
@@ -118,7 +121,7 @@ impl<B: Backend> Cnn<B> {
             let layer = match layer {
                 CnnLayerConfig::Conv2d { out_channels, .. } => {
                     let out_channels = NonZeroUsize::new(*out_channels).ok_or_else(|| {
-                        NetworkKind::<B>::invalid_config("convolution channels must be positive")
+                        NetworkKind::invalid_config("convolution channels must be positive")
                     })?;
                     let conv = Conv2dConfig::new([channels.get(), out_channels.get()], kernel_size)
                         .with_stride(stride)
@@ -141,7 +144,7 @@ impl<B: Backend> Cnn<B> {
             cnn_layers.push(layer);
         }
         let input_size =
-            NetworkKind::<B>::flat_size(&Shape::from([channels.get(), height.get(), width.get()]))?;
+            NetworkKind::flat_size(&Shape::from([channels.get(), height.get(), width.get()]))?;
         let mlp = Mlp::from_config(&config.mlp, input_size, output_size, device);
         Ok(Self {
             shape,
@@ -150,7 +153,7 @@ impl<B: Backend> Cnn<B> {
         })
     }
 
-    fn convolve(&self, mut t: Tensor<B, 4>) -> Tensor<B, 2> {
+    fn convolve(&self, mut t: Tensor<4>) -> Tensor<2> {
         for layer in &self.cnn_layers {
             t = layer.forward(t);
         }
@@ -158,8 +161,8 @@ impl<B: Backend> Cnn<B> {
     }
 }
 
-impl<B: Backend> Network for Cnn<B> {
-    type Tensor = Tensor<B, 2>;
+impl Network for Cnn {
+    type Tensor = Tensor<2>;
 
     fn input_shape(&self) -> Shape {
         [self.shape.iter().map(|size| size.get()).product::<usize>()].into()
@@ -188,7 +191,7 @@ impl<B: Backend> Network for Cnn<B> {
             ));
         }
         let [channels, height, width] = self.shape.map(NonZeroUsize::get);
-        let t: Tensor<B, 4> = t.reshape([batch_size, channels, height, width]);
+        let t: Tensor<4> = t.reshape([batch_size, channels, height, width]);
         self.mlp.forward_with_features(self.convolve(t))
     }
 }

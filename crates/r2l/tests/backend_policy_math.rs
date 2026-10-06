@@ -1,7 +1,4 @@
-use burn::{
-    backend::{NdArray, ndarray::NdArrayDevice},
-    tensor::Tensor as BurnTensor,
-};
+use burn::tensor::{Device as BurnDevice, Tensor as BurnTensor};
 use candle_core::{DType, Device, Tensor as CandleTensor};
 use candle_nn::VarMap;
 use r2l_core::networks::{MlpConfig, NetworkConfig};
@@ -20,7 +17,7 @@ use r2l_distributions::{
 };
 use safetensors::SafeTensors;
 
-type BurnBatch = BurnTensor<NdArray, 2>;
+type BurnBatch = BurnTensor<2>;
 
 fn assert_close(actual: &[f32], expected: &[f32], tolerance: f32) {
     assert_eq!(actual.len(), expected.len());
@@ -153,19 +150,19 @@ fn candle_distribution(space: Space<VecTensor>, log_std: f32) -> CandleDistribut
     .unwrap()
 }
 
-fn burn_distribution(space: Space<VecTensor>, log_std: f32) -> BurnDistributionKind<NdArray> {
+fn burn_distribution(space: Space<VecTensor>, log_std: f32) -> BurnDistributionKind {
     let config = NetworkConfig::Mlp(MlpConfig {
         hidden_layers: vec![],
         activation: ActivationFunction::Tanh,
     });
     BurnDistributionKind::from_space(
         space,
-        &mut |_, width| NetworkKind::build(&config, &[2].into(), width, &NdArrayDevice::Cpu),
+        &mut |_, width| NetworkKind::build(&config, &[2].into(), width, &BurnDevice::ndarray()),
         &mut |_, width| {
             Ok(burn::module::Param::from_tensor(BurnTensor::full(
                 [1, width],
                 log_std,
-                &NdArrayDevice::Cpu,
+                &BurnDevice::ndarray(),
             )))
         },
     )
@@ -271,7 +268,7 @@ fn diagonal_gaussian_backends_agree_on_std_and_entropy() {
     );
     assert_close(
         &burn
-            .entropy(BurnTensor::zeros([1, 2], &NdArrayDevice::Cpu))
+            .entropy(BurnTensor::zeros([1, 2], &BurnDevice::ndarray()))
             .unwrap()
             .to_vec()
             .unwrap(),

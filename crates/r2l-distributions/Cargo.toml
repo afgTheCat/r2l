@@ -15,6 +15,7 @@ r2l-core = { workspace = true }
 burn = { workspace = true }
 burn-ndarray = { workspace = true }
 burn-store = { workspace = true }
+burn-pack = "0.22.0"
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
 itertools = { workspace = true }
@@ -22,7 +23,6 @@ rand = { workspace = true }
 safetensors = { workspace = true }
 rand_distr = { workspace = true }
 serde = { workspace = true }
-hashbrown = "0.16.1"
 
 [lints]
 workspace = true

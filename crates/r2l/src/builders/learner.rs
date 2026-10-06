@@ -1,25 +1,18 @@
 use std::marker::PhantomData;
-use std::num::NonZeroUsize;
-use std::sync::mpsc::Sender;
 
-use burn::backend::ndarray::NdArrayDevice;
+use burn::tensor::Device as BurnDevice;
 use candle_core::Device;
 use r2l_core::{error::Error, networks::NetworkConfig};
 use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner as BurnPolicyValueLearner;
-use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner;
 use r2l_distributions::learning_modules::candle_lm::{
     PolicyValueLearner as CandlePolicyValueLearner, PolicyValueOptimizer,
 };
 use serde::{Deserialize, Serialize};
 
+use crate::LearningHook;
 use crate::hooks::progress::SharedTrainingProgress;
-use crate::snapshot::PPOSettingsB;
 use crate::{
-    A2CRolloutStats, ClipRangeSchedule, LearningHook, LearningRateSchedule, PPORolloutStats,
-    PPOSettings,
-};
-use crate::{
-    BurnBackend, OptimizerConfig,
+    OptimizerConfig,
     builders::{networks::NetworkBuilder, policy::PolicyBuilder},
 };
 
@@ -65,12 +58,13 @@ impl LearnerConfig {
         CandlePolicyValueLearner::new(policy, value, optimizer, device.clone())
     }
 
-    pub fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner<BurnBackend>, Error> {
-        let policy = self.policy_config.build_burn::<BurnBackend>()?;
-        let value_net = NetworkBuilder::new(self.value_network.clone()).build_burn::<BurnBackend>(
+    pub fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner, Error> {
+        let device = BurnDevice::ndarray();
+        let policy = self.policy_config.build_burn(&device)?;
+        let value_net = NetworkBuilder::new(self.value_network.clone()).build_burn(
             &self.policy_config.observation_space.observation_shape(),
             1,
-            &NdArrayDevice::default(),
+            &device,
         )?;
         Ok(match &self.optimizer {
             OptimizerConfig::Joint(config) => BurnPolicyValueLearner::joint_with_network(
@@ -94,41 +88,35 @@ impl LearnerConfig {
     }
 }
 
-pub struct PPOConfig {
-    total_epochs: NonZeroUsize,
-    target_kl: Option<f32>,
-    clip_range_schedule: ClipRangeSchedule,
-    reporter: Option<Sender<PPORolloutStats>>,
-}
-
-pub enum AlgorithmConfiguration {
-    Ppo(PPOConfig),
-    A2C {
-        reporter: Option<Sender<A2CRolloutStats>>,
-    },
-}
-
+/// Loss settings shared by PPO and A2C learning hooks.
 pub struct LearningHookConfig {
-    normalize_advantage: bool,
-    entropy_coeff: f32,
-    vf_coeff: f32,
-    policy_learning_rate_schedule: LearningRateSchedule,
-    value_learning_rate_schedule: LearningRateSchedule,
+    pub(super) normalize_advantage: bool,
+    pub(super) entropy_coeff: f32,
+    pub(super) vf_coeff: f32,
 }
 
 impl LearningHookConfig {
-    pub fn burn_ppo_hook(
+    /// Builds learning hooks using the learner's optimizer schedules.
+    ///
+    /// # Arguments
+    ///
+    /// * `algorithm` - Fresh algorithm-specific learning and reporting state.
+    /// * `optimizer` - Supplies the authoritative policy and value learning-rate schedules.
+    /// * `progress` - Shared training progress used to evaluate the schedules.
+    pub(crate) fn build<M, A>(
         &self,
-        algorithm: PPOSettingsB,
+        algorithm: A,
+        optimizer: &OptimizerConfig,
         progress: SharedTrainingProgress,
-    ) -> LearningHook<PolicyValueLearner<BurnBackend>, PPOSettings> {
-        let algorithm = algorithm.to_settings();
+    ) -> LearningHook<M, A> {
+        let (policy_learning_rate_schedule, value_learning_rate_schedule) =
+            optimizer.learning_rate_schedules();
         LearningHook {
             normalize_advantage: self.normalize_advantage,
             entropy_coeff: self.entropy_coeff,
             vf_coeff: self.vf_coeff,
-            policy_learning_rate_schedule: self.policy_learning_rate_schedule,
-            value_learning_rate_schedule: self.value_learning_rate_schedule,
+            policy_learning_rate_schedule,
+            value_learning_rate_schedule,
             progress,
             algorithm,
             _lm: PhantomData,

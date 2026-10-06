@@ -1,3 +1,4 @@
+pub(crate) mod algorithm;
 pub mod learner;
 /// Backend-independent network configuration and construction.
 pub mod networks;
@@ -6,16 +7,16 @@ pub mod on_policy_hook;
 pub mod optimizer;
 pub(crate) mod policy;
 
-use std::{marker::PhantomData, num::NonZeroUsize, path::PathBuf, sync::mpsc::Sender};
+use std::{num::NonZeroUsize, path::PathBuf, sync::mpsc::Sender};
 
-use burn::{backend::ndarray::NdArrayDevice, prelude::Backend as _};
+use burn::tensor::Device as BurnDevice;
 use candle_core::Device;
 use networks::{MlpConfig, NetworkConfig};
 pub use optimizer::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
 use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{
-    a2c::{A2C, A2CHook, A2CParams},
-    ppo::{PPO, PPOHook, PPOParams},
+    a2c::{A2C, A2CHook},
+    ppo::{PPO, PPOHook},
 };
 use r2l_core::env::normalizer::{Normalizer, NormalizerMode};
 use r2l_core::env::{EnvBuilderKind, EnvDescription};
@@ -41,14 +42,14 @@ use r2l_sampler::{
 use crate::{
     A2CRolloutStats, EpisodeBoundHook, OnPolicyControlHandle, PPORolloutStats, StepBoundHook,
     TrainingLimit,
-    backend::{Backend, BurnBackend, BurnBackendConfig, CandleBackend},
-    builders::learner::LearnerConfig,
+    backend::{Backend, BurnBackendConfig, CandleBackend},
+    builders::{
+        algorithm::AlgoConfig,
+        learner::{LearnerConfig, LearningHookConfig},
+    },
     evaluator::{BestPolicyEvaluator, EvaluationSampler, EvaluationSettings},
     hooks::{
-        learning::{
-            A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, PPOLearningHook,
-            PPOSettings, TargetKl, reporter::RolloutReporter,
-        },
+        learning::{A2CLearningHook, ClipRangeSchedule, PPOLearningHook},
         on_policy::{
             OnPolicyTrainingHooks,
             commands::{
@@ -93,11 +94,11 @@ impl ObsNormalizerConfig {
 /// PPO agent produced by a Candle-backed algorithm builder.
 pub type PPOCandle = PPO<CandlePolicyValueLearner, PPOLearningHook<CandlePolicyValueLearner>>;
 /// PPO agent produced by a Burn-backed algorithm builder.
-pub type PPOBurn<B> = PPO<BurnPolicyValueLearner<B>, PPOLearningHook<BurnPolicyValueLearner<B>>>;
+pub type PPOBurn = PPO<BurnPolicyValueLearner, PPOLearningHook<BurnPolicyValueLearner>>;
 /// A2C agent produced by a Candle-backed algorithm builder.
 pub type A2CCandle = A2C<CandlePolicyValueLearner, A2CLearningHook<CandlePolicyValueLearner>>;
 /// A2C agent produced by a Burn-backed algorithm builder.
-pub type A2CBurn<B> = A2C<BurnPolicyValueLearner<B>, A2CLearningHook<BurnPolicyValueLearner<B>>>;
+pub type A2CBurn = A2C<BurnPolicyValueLearner, A2CLearningHook<BurnPolicyValueLearner>>;
 
 /// Selects the artifacts produced during training and where they are written.
 pub struct TrainingArtifactsConfig {
@@ -227,20 +228,6 @@ impl<E: Env> SamplerConfiguration<E> {
     }
 }
 
-struct PPOConfig {
-    total_epochs: NonZeroUsize,
-    target_kl: Option<f32>,
-    clip_range_schedule: ClipRangeSchedule,
-    reporter: Option<Sender<PPORolloutStats>>,
-}
-
-enum AlgorithmConfiguration {
-    Ppo(PPOConfig),
-    A2C {
-        reporter: Option<Sender<A2CRolloutStats>>,
-    },
-}
-
 trait EnvBuildPlan<E: Env>: Send {
     fn build_evaluator_sampler(
         &self,
@@ -329,16 +316,10 @@ struct Builder<E: Env> {
 
     // for the agent
     learner_builder: LearnerConfig,
-    log_progress: bool,
-    gamma: f32,
-    lambda: f32,
-    sample_size: NonZeroUsize,
-
-    // learning hook
-    entropy_coeff: f32,
-    vf_coeff: f32,
-    normalize_advantage: bool,
-    algorithm_configuration: AlgorithmConfiguration,
+    algo_config: AlgoConfig,
+    learning_hook: LearningHookConfig,
+    ppo_reporter: Option<Sender<PPORolloutStats>>,
+    a2c_reporter: Option<Sender<A2CRolloutStats>>,
 
     // for the sampler
     sampler_execution_mode: SamplerExecutionMode,
@@ -349,7 +330,7 @@ impl<E: Env> Builder<E> {
     fn new<EB: EnvBuilder<Env = E>>(
         env_builder: EB,
         n_envs: usize,
-        algorithm_configuration: AlgorithmConfiguration,
+        algo_config: AlgoConfig,
         backend_configuration: Backend,
         sampler_configuration: SamplerConfiguration<E>,
         normalize_advantage: bool,
@@ -370,21 +351,21 @@ impl<E: Env> Builder<E> {
             env_build_plan: Box::new(TypedEnvBuildPlan { env_builder }),
             sampler_configuration,
             backend_configuration,
-            algorithm_configuration,
+            algo_config,
             training_limit: TrainingLimit::rollouts(50),
             avg_reward_threshold: None,
             training_artifacts: None,
             control_endpoint: None,
             learner_builder,
-            log_progress: true,
-            entropy_coeff: 0.0,
-            vf_coeff: 1.0,
-            gamma: 0.98,
-            lambda: 0.8,
-            sample_size: NonZeroUsize::new(64).unwrap(),
+            learning_hook: LearningHookConfig {
+                normalize_advantage,
+                entropy_coeff: 0.0,
+                vf_coeff: 1.0,
+            },
+            ppo_reporter: None,
+            a2c_reporter: None,
             seed: None,
             sampler_execution_mode: SamplerExecutionMode::MultiThreaded,
-            normalize_advantage,
         })
     }
 
@@ -439,13 +420,13 @@ impl<E: Env> Builder<E> {
         self.learner_builder.build_candle_learner(&backend.device)
     }
 
-    fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner<BurnBackend>, Error> {
+    fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner, Error> {
         let Backend::Burn(_) = self.backend_configuration else {
             unreachable!("Burn agent type must use Burn backend configuration")
         };
         self.write_inference_config()?;
         if let Some(seed) = self.seed {
-            BurnBackend::seed(&NdArrayDevice::default(), seed);
+            BurnDevice::ndarray().seed(seed);
         }
         self.learner_builder.build_burn_learner()
     }
@@ -591,130 +572,68 @@ impl<E: Env> Builder<E> {
         self.progress().borrow().total_rollouts()
     }
 
-    fn learning_hook<M, A>(
-        &self,
+    fn ppo_agent<M>(
+        &mut self,
+        learner: M,
         progress: SharedTrainingProgress,
-        normalize_advantage: bool,
-        algorithm: A,
-    ) -> LearningHook<M, A> {
-        let (policy_learning_rate_schedule, value_learning_rate_schedule) =
-            self.learner_builder.optimizer.learning_rate_schedules();
-        LearningHook {
-            normalize_advantage,
-            entropy_coeff: self.entropy_coeff,
-            vf_coeff: self.vf_coeff,
-            progress,
-            policy_learning_rate_schedule,
-            value_learning_rate_schedule,
-            algorithm,
-            _lm: PhantomData,
+    ) -> PPO<M, PPOLearningHook<M>>
+    where
+        M: OnPolicyLearner,
+        PPOLearningHook<M>: PPOHook<M>,
+    {
+        let (params, settings) = self
+            .algo_config
+            .ppo_parts(self.ppo_reporter.take(), self.env_build_plan.n_envs());
+        let hooks = self
+            .learning_hook
+            .build(settings, &self.learner_builder.optimizer, progress);
+        PPO {
+            lm: learner,
+            hooks,
+            params,
         }
     }
 
-    fn ppo_config(&self) -> &PPOConfig {
-        let AlgorithmConfiguration::Ppo(config) = &self.algorithm_configuration else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        config
-    }
-
-    fn ppo_config_mut(&mut self) -> &mut PPOConfig {
-        let AlgorithmConfiguration::Ppo(config) = &mut self.algorithm_configuration else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        config
-    }
-
-    fn ppo_hook<M>(&mut self, progress: SharedTrainingProgress) -> PPOLearningHook<M> {
-        let n_envs = self.env_build_plan.n_envs();
-        let normalize_advantage = self.normalize_advantage;
-        let config = self.ppo_config_mut();
-        let algorithm = PPOSettings {
-            total_epochs: config.total_epochs,
-            current_epoch: 0,
-            clip_range_schedule: config.clip_range_schedule,
-            target_kl: config.target_kl.map(|target| TargetKl {
-                target,
-                target_exceeded: false,
-            }),
-            reporter: RolloutReporter::new(config.reporter.take(), self.log_progress, n_envs),
-        };
-        self.learning_hook(progress, normalize_advantage, algorithm)
-    }
-
-    fn a2c_hook<M>(&mut self, progress: SharedTrainingProgress) -> A2CLearningHook<M> {
-        let normalize_advantage = self.normalize_advantage;
-        let AlgorithmConfiguration::A2C { reporter } = &mut self.algorithm_configuration else {
-            unreachable!("A2C agent type must use A2C configuration")
-        };
-        let n_envs = self.env_build_plan.n_envs();
-        let algorithm = A2CSettings {
-            reporter: RolloutReporter::new(reporter.take(), self.log_progress, n_envs),
-        };
-        self.learning_hook(progress, normalize_advantage, algorithm)
-    }
-
-    fn ppo_params(&self) -> PPOParams {
-        PPOParams {
-            clip_range: self.ppo_config().clip_range_schedule.initial_value(),
-            gamma: self.gamma,
-            lambda: self.lambda,
-            sample_size: self.sample_size.get(),
-        }
-    }
-
-    fn a2c_params(&self) -> A2CParams {
-        A2CParams {
-            gamma: self.gamma,
-            lambda: self.lambda,
-            sample_size: self.sample_size.get(),
+    fn a2c_agent<M>(
+        &mut self,
+        learner: M,
+        progress: SharedTrainingProgress,
+    ) -> A2C<M, A2CLearningHook<M>>
+    where
+        M: OnPolicyLearner,
+        A2CLearningHook<M>: A2CHook<M>,
+    {
+        let (params, settings) = self
+            .algo_config
+            .a2c_parts(self.a2c_reporter.take(), self.env_build_plan.n_envs());
+        let hooks = self
+            .learning_hook
+            .build(settings, &self.learner_builder.optimizer, progress);
+        A2C {
+            lm: learner,
+            hooks,
+            params,
         }
     }
 
     fn ppo_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<PPOCandle, Error> {
         let learner = self.build_candle_learner()?;
-        let hooks = self.ppo_hook(progress);
-        Ok(PPO {
-            lm: learner,
-            hooks,
-            params: self.ppo_params(),
-        })
+        Ok(self.ppo_agent(learner, progress))
     }
 
-    fn ppo_burn_agent(
-        &mut self,
-        progress: SharedTrainingProgress,
-    ) -> Result<PPOBurn<BurnBackend>, Error> {
+    fn ppo_burn_agent(&mut self, progress: SharedTrainingProgress) -> Result<PPOBurn, Error> {
         let learner = self.build_burn_learner()?;
-        let hooks = self.ppo_hook(progress);
-        Ok(PPO {
-            lm: learner,
-            hooks,
-            params: self.ppo_params(),
-        })
+        Ok(self.ppo_agent(learner, progress))
     }
 
     fn a2c_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<A2CCandle, Error> {
         let learner = self.build_candle_learner()?;
-        let hooks = self.a2c_hook(progress);
-        Ok(A2C {
-            lm: learner,
-            hooks,
-            params: self.a2c_params(),
-        })
+        Ok(self.a2c_agent(learner, progress))
     }
 
-    fn a2c_burn_agent(
-        &mut self,
-        progress: SharedTrainingProgress,
-    ) -> Result<A2CBurn<BurnBackend>, Error> {
+    fn a2c_burn_agent(&mut self, progress: SharedTrainingProgress) -> Result<A2CBurn, Error> {
         let learner = self.build_burn_learner()?;
-        let hooks = self.a2c_hook(progress);
-        Ok(A2C {
-            lm: learner,
-            hooks,
-            params: self.a2c_params(),
-        })
+        Ok(self.a2c_agent(learner, progress))
     }
 }
 
@@ -747,7 +666,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     fn configured<EB: EnvBuilder<Env = E>>(
         env_builder: EB,
         n_envs: usize,
-        algorithm_configuration: AlgorithmConfiguration,
+        algo_config: AlgoConfig,
         backend_configuration: Backend,
         sampler_configuration: SamplerConfiguration<E>,
         normalize_advantage: bool,
@@ -758,7 +677,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
             builder: Builder::new(
                 env_builder,
                 n_envs,
-                algorithm_configuration,
+                algo_config,
                 backend_configuration,
                 sampler_configuration,
                 normalize_advantage,
@@ -1064,7 +983,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `normalize_advantage` - Whether to normalize advantages before optimizer updates.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
-        self.builder.normalize_advantage = normalize_advantage;
+        self.builder.learning_hook.normalize_advantage = normalize_advantage;
         self
     }
 
@@ -1074,7 +993,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `entropy_coeff` - Multiplier applied to the entropy term.
     pub fn with_entropy_coefficient(mut self, entropy_coeff: f32) -> Self {
-        self.builder.entropy_coeff = entropy_coeff;
+        self.builder.learning_hook.entropy_coeff = entropy_coeff;
         self
     }
 
@@ -1084,7 +1003,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `vf_coeff` - Value-loss multiplier; `1.0` uses the unscaled loss.
     pub fn with_value_loss_coefficient(mut self, vf_coeff: f32) -> Self {
-        self.builder.vf_coeff = vf_coeff;
+        self.builder.learning_hook.vf_coeff = vf_coeff;
         self
     }
 
@@ -1113,7 +1032,16 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `log_progress` - Whether to print training progress.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
-        self.builder.log_progress = log_progress;
+        match &mut self.builder.algo_config {
+            AlgoConfig::PPO {
+                log_progress: configured,
+                ..
+            }
+            | AlgoConfig::A2C {
+                log_progress: configured,
+                ..
+            } => *configured = log_progress,
+        }
         self
     }
 
@@ -1123,7 +1051,14 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `gamma` - Discount factor used to compute returns.
     pub fn with_gamma(mut self, gamma: f32) -> Self {
-        self.builder.gamma = gamma;
+        match &mut self.builder.algo_config {
+            AlgoConfig::PPO {
+                gamma: configured, ..
+            }
+            | AlgoConfig::A2C {
+                gamma: configured, ..
+            } => *configured = gamma,
+        }
         self
     }
 
@@ -1133,7 +1068,14 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `lambda` - Bias-variance tradeoff used by generalized advantage estimation.
     pub fn with_lambda(mut self, lambda: f32) -> Self {
-        self.builder.lambda = lambda;
+        match &mut self.builder.algo_config {
+            AlgoConfig::PPO {
+                lambda: configured, ..
+            }
+            | AlgoConfig::A2C {
+                lambda: configured, ..
+            } => *configured = lambda,
+        }
         self
     }
 
@@ -1147,8 +1089,18 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// Panics if `sample_size` is zero.
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
-        self.builder.sample_size =
+        let sample_size =
             NonZeroUsize::new(sample_size).expect("sample size must be greater than zero");
+        match &mut self.builder.algo_config {
+            AlgoConfig::PPO {
+                sample_size: configured,
+                ..
+            }
+            | AlgoConfig::A2C {
+                sample_size: configured,
+                ..
+            } => *configured = sample_size,
+        }
         self
     }
 
@@ -1212,13 +1164,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOCandle, S, E> {
     }
 
     /// Switches PPO learning to the default Burn backend.
-    pub fn with_burn(mut self) -> OnPolicyBuilder<PPOBurn<BurnBackend>, S, E> {
+    pub fn with_burn(mut self) -> OnPolicyBuilder<PPOBurn, S, E> {
         self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self.with_agent(Builder::ppo_burn_agent)
     }
 }
 
-impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOBurn<BurnBackend>, S, E> {
+impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOBurn, S, E> {
     /// Switches PPO learning to Candle on `device`.
     ///
     /// # Arguments
@@ -1250,7 +1202,7 @@ where
     ///
     /// * `tx` - Channel sender that receives rollout statistics, or `None` to disable reporting.
     pub fn with_rollout_reporter(mut self, tx: Option<Sender<PPORolloutStats>>) -> Self {
-        self.builder.ppo_config_mut().reporter = tx;
+        self.builder.ppo_reporter = tx;
         self
     }
 
@@ -1264,7 +1216,14 @@ where
     ///
     /// Panics if `total_epochs` is zero.
     pub fn with_total_epochs(mut self, total_epochs: usize) -> Self {
-        self.builder.ppo_config_mut().total_epochs =
+        let AlgoConfig::PPO {
+            total_epochs: configured,
+            ..
+        } = &mut self.builder.algo_config
+        else {
+            unreachable!("PPO agent type must use PPO configuration")
+        };
+        *configured =
             NonZeroUsize::new(total_epochs).expect("total epochs must be greater than zero");
         self
     }
@@ -1275,7 +1234,14 @@ where
     ///
     /// * `target_kl` - KL-divergence threshold, or `None` to disable early stopping.
     pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
-        self.builder.ppo_config_mut().target_kl = target_kl;
+        let AlgoConfig::PPO {
+            target_kl: configured,
+            ..
+        } = &mut self.builder.algo_config
+        else {
+            unreachable!("PPO agent type must use PPO configuration")
+        };
+        *configured = target_kl;
         self
     }
 
@@ -1284,9 +1250,8 @@ where
     /// # Arguments
     ///
     /// * `clip_range` - Maximum allowed deviation of the policy ratio from `1.0`.
-    pub fn with_clip_range(mut self, clip_range: f32) -> Self {
-        self.builder.ppo_config_mut().clip_range_schedule = ClipRangeSchedule::Constant(clip_range);
-        self
+    pub fn with_clip_range(self, clip_range: f32) -> Self {
+        self.with_clip_range_schedule(ClipRangeSchedule::Constant(clip_range))
     }
 
     /// Sets the PPO policy-ratio clipping schedule.
@@ -1295,7 +1260,14 @@ where
     ///
     /// * `clip_range_schedule` - Schedule applied to the clipping range as training progresses.
     pub fn with_clip_range_schedule(mut self, clip_range_schedule: ClipRangeSchedule) -> Self {
-        self.builder.ppo_config_mut().clip_range_schedule = clip_range_schedule;
+        let AlgoConfig::PPO {
+            clip_range_schedule: configured,
+            ..
+        } = &mut self.builder.algo_config
+        else {
+            unreachable!("PPO agent type must use PPO configuration")
+        };
+        *configured = clip_range_schedule;
         self
     }
 }
@@ -1323,13 +1295,13 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CCandle, S, E> {
     }
 
     /// Switches A2C learning to the default Burn backend.
-    pub fn with_burn(mut self) -> OnPolicyBuilder<A2CBurn<BurnBackend>, S, E> {
+    pub fn with_burn(mut self) -> OnPolicyBuilder<A2CBurn, S, E> {
         self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self.with_agent(Builder::a2c_burn_agent)
     }
 }
 
-impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CBurn<BurnBackend>, S, E> {
+impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CBurn, S, E> {
     /// Switches A2C learning to Candle on `device`.
     ///
     /// # Arguments
@@ -1361,12 +1333,7 @@ where
     ///
     /// * `tx` - Channel sender that receives rollout statistics, or `None` to disable reporting.
     pub fn with_rollout_reporter(mut self, tx: Option<Sender<A2CRolloutStats>>) -> Self {
-        let AlgorithmConfiguration::A2C { reporter, .. } =
-            &mut self.builder.algorithm_configuration
-        else {
-            unreachable!("A2C agent type must use A2C configuration")
-        };
-        *reporter = tx;
+        self.builder.a2c_reporter = tx;
         self
     }
 }
@@ -1553,12 +1520,15 @@ impl<E: Env> PPOBuilder<E> {
         Self::configured(
             env_builder,
             num_envs,
-            AlgorithmConfiguration::Ppo(PPOConfig {
+            AlgoConfig::PPO {
+                gamma: 0.98,
+                lambda: 0.8,
+                sample_size: NonZeroUsize::new(64).unwrap(),
                 total_epochs: NonZeroUsize::new(10).unwrap(),
                 target_kl: None,
                 clip_range_schedule: ClipRangeSchedule::Constant(0.2),
-                reporter: None,
-            }),
+                log_progress: true,
+            },
             Backend::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
@@ -1590,7 +1560,12 @@ impl<E: Env> A2CBuilder<E> {
         Self::configured(
             env_builder,
             num_envs,
-            AlgorithmConfiguration::A2C { reporter: None },
+            AlgoConfig::A2C {
+                gamma: 0.98,
+                lambda: 0.8,
+                sample_size: NonZeroUsize::new(64).unwrap(),
+                log_progress: true,
+            },
             Backend::Candle(CandleBackend {
                 device: Device::Cpu,
             }),

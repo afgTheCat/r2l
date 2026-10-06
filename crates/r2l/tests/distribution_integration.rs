@@ -1,10 +1,10 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, path::Path, sync::mpsc};
 
 use r2l::{
-    A2CBuilder, ActivationFunction, AdamWConfig, Env, EnvDescription, EvaluationSettings,
-    GradientClippingConfig, InferencePolicy, LearningRateSchedule, OnPolicyAlgorithm,
-    OptimizerConfig, PPOBuilder, SamplerExecutionMode, Snapshot, Space, TrainingArtifactsConfig,
-    TrainingLimit, VecTensor,
+    A2CBuilder, ActivationFunction, AdamWConfig, ClipRangeSchedule, Env, EnvDescription,
+    EvaluationSettings, GradientClippingConfig, InferencePolicy, LearningRateSchedule,
+    OnPolicyAlgorithm, OptimizerConfig, PPOBuilder, SamplerExecutionMode, Snapshot, Space,
+    TrainingArtifactsConfig, TrainingLimit, VecTensor,
     builders::networks::{CnnConfig, CnnLayerConfig, MlpConfig, NetworkConfig},
 };
 use r2l_core::{
@@ -179,6 +179,82 @@ fn ppo_and_a2c_train_and_reload_all_distributions_with_joint_and_split_optimizer
             );
             exercise!(A2CBuilder::new(|| Ok(CompositeEnv), 2).unwrap());
         }
+    }
+}
+
+#[test]
+fn builders_preserve_schedules_and_reporting_across_algorithms_and_backends() {
+    for split in [false, true] {
+        let policy = AdamWConfig {
+            learning_rate: LearningRateSchedule::Linear(0.02),
+            ..optimizer()
+        };
+        let config = if split {
+            OptimizerConfig::Split {
+                policy,
+                value: optimizer(),
+            }
+        } else {
+            OptimizerConfig::Joint(policy)
+        };
+        macro_rules! train {
+            ($builder:expr, $batches:expr) => {{
+                let (tx, rx) = mpsc::channel();
+                let mut algorithm = $builder
+                    .with_execution_mode(SamplerExecutionMode::SingleThreaded)
+                    .with_rollout_steps(4)
+                    .with_training_limit(TrainingLimit::rollouts(2))
+                    .with_policy_hidden_layers(vec![4])
+                    .with_value_hidden_layers(vec![4])
+                    .with_gamma(0.9)
+                    .with_lambda(0.7)
+                    .with_sample_size(2)
+                    .with_normalize_advantage(false)
+                    .with_entropy_coefficient(0.01)
+                    .with_value_loss_coefficient(0.5)
+                    .with_learning_rate(0.08)
+                    .with_optimizer(config.clone())
+                    .with_log_progress(false)
+                    .with_rollout_reporter(Some(tx))
+                    .build()
+                    .unwrap();
+                assert_eq!(algorithm.runtime.agent.params.gamma, 0.9);
+                assert_eq!(algorithm.runtime.agent.params.lambda, 0.7);
+                assert_eq!(algorithm.runtime.agent.params.sample_size, 2);
+                algorithm.train().unwrap();
+                let reports: Vec<_> = rx.try_iter().collect();
+                assert_eq!(reports.len(), 2);
+                for (index, (report, learning_rate)) in reports.iter().zip([0.01, 0.0]).enumerate()
+                {
+                    assert_eq!(report.rollout_idx, index + 1);
+                    assert_eq!(report.total_rollouts, Some(2));
+                    assert_eq!(report.learning_rate, learning_rate);
+                    assert_eq!(report.minibatch_stats.len(), $batches);
+                }
+                reports
+            }};
+        }
+        macro_rules! check_ppo {
+            ($builder:expr) => {{
+                let reports = train!(
+                    $builder
+                        .with_total_epochs(2)
+                        .with_clip_range(0.3)
+                        .with_clip_range_schedule(ClipRangeSchedule::Linear(0.2))
+                        .with_target_kl(Some(f32::MAX)),
+                    4
+                );
+                assert_eq!(reports[0].clip_range, 0.1);
+                assert_eq!(reports[1].clip_range, 0.0);
+            }};
+        }
+        check_ppo!(PPOBuilder::new(|| Ok(CompositeEnv), 1).unwrap());
+        check_ppo!(PPOBuilder::new(|| Ok(CompositeEnv), 1).unwrap().with_burn());
+        train!(A2CBuilder::new(|| Ok(CompositeEnv), 1).unwrap(), 2);
+        train!(
+            A2CBuilder::new(|| Ok(CompositeEnv), 1).unwrap().with_burn(),
+            2
+        );
     }
 }
 

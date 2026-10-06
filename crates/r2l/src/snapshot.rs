@@ -1,11 +1,8 @@
 // super basic stuff, we begin with burn
 
-use std::num::NonZeroUsize;
+use std::{num::NonZeroUsize, sync::mpsc::Sender};
 
-use r2l_agents::on_policy_algorithms::{
-    a2c::A2CParams,
-    ppo::{PPO, PPOParams},
-};
+use r2l_agents::on_policy_algorithms::ppo::PPO;
 use r2l_core::{
     env::{
         Env, EnvDescription,
@@ -20,52 +17,17 @@ use r2l_sampler::{
 };
 
 use crate::{
-    BurnBackend, ClipRangeSchedule, EpisodeBoundHook, OnPolicyTrainingHooks, PPOBurn, PPOCandle,
-    PPORolloutStats, PPOSettings, StepBoundHook,
+    EpisodeBoundHook, OnPolicyTrainingHooks, PPOBurn, PPOCandle, PPORolloutStats, StepBoundHook,
     backend::Backend,
     builders::{
+        algorithm::AlgoConfig,
         learner::{LearnerConfig, LearningHookConfig},
         on_policy_hook::OnPolicyHookConfig,
     },
     evaluator::EvaluationSampler,
-    hooks::{
-        learning::{TargetKl, reporter::RolloutReporter},
-        progress::SharedTrainingProgress,
-    },
+    hooks::progress::SharedTrainingProgress,
     utils::RewardNormalizer,
 };
-
-pub struct PPOSettingsB {
-    total_epochs: NonZeroUsize,
-    clip_range_schedule: ClipRangeSchedule,
-    target_kl: Option<TargetKl>,
-    reporter: RolloutReporter<PPORolloutStats>,
-}
-
-impl PPOSettingsB {
-    pub(crate) fn to_settings(self) -> PPOSettings {
-        PPOSettings {
-            total_epochs: self.total_epochs,
-            current_epoch: 0,
-            clip_range_schedule: self.clip_range_schedule,
-            target_kl: self.target_kl,
-            reporter: self.reporter,
-        }
-    }
-}
-
-pub struct A2CSettingsB {}
-
-enum AlgoConfig {
-    PPO {
-        settings: PPOSettingsB,
-        params: PPOParams,
-    },
-    A2C {
-        settings: A2CSettingsB,
-        params: A2CParams,
-    },
-}
 
 enum SamplerSetup<E: Env> {
     DirectStep {
@@ -191,7 +153,7 @@ impl<E: Env> SnapshotAlgo<E> {
     }
 
     // this we might not need as a serparate func, this is just black boxing the exact construction
-    fn get_policy_learner_snapshot(&self) -> PolicyValueLearnerSnapshot<BurnBackend> {
+    fn get_policy_learner_snapshot(&self) -> PolicyValueLearnerSnapshot {
         todo!()
     }
 
@@ -202,27 +164,27 @@ impl<E: Env> SnapshotAlgo<E> {
 
     fn burn_algo(
         self,
+        reporter: Option<Sender<PPORolloutStats>>,
     ) -> OnPolicyAlgorithm<
-        PPOBurn<BurnBackend>,
+        PPOBurn,
         StagedSampler<E, StepBoundHook<E>>,
-        OnPolicyTrainingHooks<PPOBurn<BurnBackend>, StagedSampler<E, StepBoundHook<E>>, E>,
+        OnPolicyTrainingHooks<PPOBurn, StagedSampler<E, StepBoundHook<E>>, E>,
     > {
         let snapshot = self.get_policy_learner_snapshot();
         let progress = self.shared_progress();
         let Self {
             backend,
-            learner,
+            learner: learner_config,
             learning_hook,
             sampler_configuration,
             hook_config,
             algo_config,
         } = self;
-        let learner = learner.build_burn_learner().unwrap();
+        let learner = learner_config.build_burn_learner().unwrap();
         let learner = learner.load_snapshot(snapshot);
-        let AlgoConfig::PPO { settings, params } = algo_config else {
-            unreachable!()
-        };
-        let hooks = learning_hook.burn_ppo_hook(settings, progress.clone());
+        let (params, settings) =
+            algo_config.ppo_parts(reporter, sampler_configuration.env_build_plan.n_envs());
+        let hooks = learning_hook.build(settings, &learner_config.optimizer, progress.clone());
         let agent = PPO {
             params,
             lm: learner,

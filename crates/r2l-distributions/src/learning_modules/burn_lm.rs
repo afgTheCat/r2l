@@ -4,15 +4,16 @@
 //! probabilities use `[batch, 1]`. Reduced losses use `[1, 1]`.
 //! Gaussian policies use `Param::from_tensor(log_std)` to register trainable
 //! log standard deviations alongside the mean network.
+//! Learner construction enables training on both networks. Inference policies
+//! use `Module::valid()`, and `OnPolicyLearner::lifter` enables autodiff on batches.
 //!
 //! ```
-//! use burn::{backend::{Autodiff, NdArray}, optim::AdamWConfig};
+//! use burn::optim::AdamWConfig;
 //! use r2l_core::models::ActivationFunction;
 //! use r2l_distributions::{Categorical, networks::burn::mlp::Mlp};
 //! use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner;
 //!
-//! type B = Autodiff<NdArray>;
-//! let policy = Categorical::new(Mlp::<B>::build(&[4, 8, 2], ActivationFunction::Tanh))?;
+//! let policy = Categorical::new(Mlp::build(&[4, 8, 2], ActivationFunction::Tanh))?;
 //! let learner = PolicyValueLearner::joint(
 //!     policy, &[4, 8, 1], ActivationFunction::Tanh, &AdamWConfig::new(), 0.001,
 //! );
@@ -21,17 +22,15 @@
 
 use std::path::PathBuf;
 
+#[cfg(test)]
+mod tests;
+
 use burn::{
-    module::{AutodiffModule, Module, ModuleDisplay, Param, ParamId},
-    optim::{
-        AdamW, AdamWConfig, GradientsParams, Optimizer, adaptor::OptimizerAdaptor,
-        record::AdaptorRecord,
-    },
-    prelude::Backend,
-    record::{BinFileRecorder, FullPrecisionSettings, Record, Recorder},
-    tensor::{Tensor, backend::AutodiffBackend},
+    module::{Module, ModuleDisplay, Param},
+    optim::{AdamWConfig, GradientsParams, ModuleOptimizer, OptimizerRecord},
+    store::ModuleRecord,
+    tensor::{Bytes, DType, Tensor},
 };
-use hashbrown::HashMap;
 use r2l_core::{
     error::Result,
     models::{ActivationFunction, Learner},
@@ -40,47 +39,36 @@ use r2l_core::{
 
 pub use crate::networks::burn::NetworkKind;
 use crate::{
-    DistributionKind, Network, OnPolicyLearner, Policy, ValueFunction,
-    networks::burn::{NetworkKindRecord, mlp::Mlp},
+    DistributionKind, Network, OnPolicyLearner, Policy, ValueFunction, networks::burn::mlp::Mlp,
 };
 
 /// Burn distributions with optimizer-managed Gaussian log standard deviations.
-pub type BurnDistributionKind<B> = DistributionKind<NetworkKind<B>, Param<Tensor<B, 2>>>;
+pub type BurnDistributionKind = DistributionKind<NetworkKind, Param<Tensor<2>>>;
 
 // Constraints needed for the policy to work with Adam optimization and decoupled weight decay.
 /// Trait alias-like bound for Burn policies used by on-policy learners.
 ///
 /// This captures the combination of Burn autodiff support and batched
 /// [`Policy`] behavior required by the Burn learner implementations.
-pub trait BurnPolicy<B: AutodiffBackend>:
-    AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 2>>>
-    + ModuleDisplay
-    + Policy<Tensor = Tensor<B, 2>>
-{
-}
+pub trait BurnPolicy: Module + ModuleDisplay + Policy<Tensor = Tensor<2>> {}
 
-impl<B: AutodiffBackend, M> BurnPolicy<B> for M where
-    M: AutodiffModule<B, InnerModule: ModuleDisplay + Policy<Tensor = Tensor<B::InnerBackend, 2>>>
-        + ModuleDisplay
-        + Policy<Tensor = Tensor<B, 2>>
-{
-}
+impl<M> BurnPolicy for M where M: Module + ModuleDisplay + Policy<Tensor = Tensor<2>> {}
 
 /// Loss container used by Burn on-policy learners.
 ///
 /// This stores the policy loss, value loss, and a multiplier applied
 /// to the value loss during optimization.
-pub struct PolicyValueLosses<B: AutodiffBackend> {
+pub struct PolicyValueLosses {
     /// Policy loss to optimize.
-    pub policy_loss: Tensor<B, 2>,
+    pub policy_loss: Tensor<2>,
     /// Value-function loss to optimize.
-    pub value_loss: Tensor<B, 2>,
+    pub value_loss: Tensor<2>,
     /// Coefficient applied to `value_loss`, defaulting to `1.0`.
     pub vf_coeff: f32,
 }
 
-impl<B: AutodiffBackend> FromPolicyValueLosses<Tensor<B, 2>> for PolicyValueLosses<B> {
-    fn from_policy_value_losses(policy_loss: Tensor<B, 2>, value_loss: Tensor<B, 2>) -> Self {
+impl FromPolicyValueLosses<Tensor<2>> for PolicyValueLosses {
+    fn from_policy_value_losses(policy_loss: Tensor<2>, value_loss: Tensor<2>) -> Self {
         Self {
             policy_loss,
             value_loss,
@@ -89,9 +77,9 @@ impl<B: AutodiffBackend> FromPolicyValueLosses<Tensor<B, 2>> for PolicyValueLoss
     }
 }
 
-impl<B: AutodiffBackend> PolicyValueLosses<B> {
+impl PolicyValueLosses {
     /// Creates a loss container from policy and value losses.
-    pub fn new(policy_loss: Tensor<B, 2>, value_loss: Tensor<B, 2>) -> Self {
+    pub fn new(policy_loss: Tensor<2>, value_loss: Tensor<2>) -> Self {
         Self {
             policy_loss,
             value_loss,
@@ -100,7 +88,7 @@ impl<B: AutodiffBackend> PolicyValueLosses<B> {
     }
 
     /// Adds an entropy term into the policy loss.
-    pub fn add_entropy_loss(&mut self, entropy_loss: Tensor<B, 2>) {
+    pub fn add_entropy_loss(&mut self, entropy_loss: Tensor<2>) {
         self.policy_loss = self.policy_loss.clone() + entropy_loss;
     }
 
@@ -113,17 +101,17 @@ impl<B: AutodiffBackend> PolicyValueLosses<B> {
 // a model with a value function
 /// Combined policy/value model used by the joint Burn optimizer path.
 #[derive(Debug, Module)]
-pub struct JointActorModel<B: Backend, M: Module<B>> {
+pub struct JointActorModel<M: Module> {
     policy: M,
-    value_net: NetworkKind<B>,
+    value_net: NetworkKind,
 }
 
-impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
+impl<M: Module> JointActorModel<M> {
     /// Creates a joint model from a policy and value network.
     ///
     /// # Panics
     /// Panics unless the value network outputs one value per observation.
-    pub fn new(policy: M, value_net: impl Into<NetworkKind<B>>) -> Self {
+    pub fn new(policy: M, value_net: impl Into<NetworkKind>) -> Self {
         let value_net = value_net.into();
         assert_eq!(
             value_net.output_shape().dims(),
@@ -135,41 +123,47 @@ impl<B: Backend, M: Module<B>> JointActorModel<B, M> {
 }
 
 /// Burn on-policy learner with one shared optimizer configuration.
-pub struct JointPolicyValueLearner<B: AutodiffBackend, M: BurnPolicy<B>> {
+pub struct JointPolicyValueLearner<M: BurnPolicy> {
     lr: f64,
-    model: JointActorModel<B, M>,
+    model: JointActorModel<M>,
     // NOTE: the optimizer needs to be optimizing both the policy and the value net at the same time
-    optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
+    optimizer: ModuleOptimizer,
 }
 
-#[derive(Record)]
-pub struct JointPolicyValueSnapshot<B: AutodiffBackend, M: BurnPolicy<B>> {
+/// Model parameters, optimizer state, and learning rate for a joint learner.
+pub struct JointPolicyValueSnapshot {
     lr: f64,
-    model: JointActorModelRecord<B, M>,
-    optimizer: HashMap<ParamId, AdaptorRecord<AdamW, B>>,
+    model: ModuleRecord,
+    optimizer: OptimizerRecord,
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueSnapshot<B, M> {
+impl JointPolicyValueSnapshot {
+    /// Saves model and optimizer records in a Burnpack snapshot file.
+    ///
+    /// # Panics
+    /// Panics if a record cannot be serialized or the file cannot be written.
     pub fn to_file(self, file: PathBuf) {
-        let recorder: BinFileRecorder<FullPrecisionSettings> = BinFileRecorder::new();
-        recorder.record(self, file).unwrap();
+        PolicyValueLearnerSnapshot::save_records(
+            file,
+            [
+                ("model", self.model.into_bytes().unwrap()),
+                ("optimizer", self.optimizer.into_bytes().unwrap()),
+            ],
+            [("lr", self.lr)],
+        );
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
-    fn new(
-        model: JointActorModel<B, M>,
-        optimizer: OptimizerAdaptor<AdamW, JointActorModel<B, M>, B>,
-        lr: f64,
-    ) -> Self {
+impl<M: BurnPolicy> JointPolicyValueLearner<M> {
+    fn new(model: JointActorModel<M>, optimizer: ModuleOptimizer, lr: f64) -> Self {
         Self {
             lr,
-            model,
+            model: model.train(),
             optimizer,
         }
     }
 
-    pub fn load_snapshot(self, snapshot: JointPolicyValueSnapshot<B, M>) -> Self {
+    pub fn load_snapshot(self, snapshot: JointPolicyValueSnapshot) -> Self {
         let JointPolicyValueSnapshot {
             lr,
             model,
@@ -194,7 +188,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
         self.lr = learning_rate;
     }
 
-    pub fn to_snapshot(&self) -> JointPolicyValueSnapshot<B, M> {
+    pub fn to_snapshot(&self) -> JointPolicyValueSnapshot {
         let model = self.model.clone().into_record();
         let optimizer = self.optimizer.to_record();
         JointPolicyValueSnapshot {
@@ -205,8 +199,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> JointPolicyValueLearner<B, M> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for JointPolicyValueLearner<B, M> {
-    type Losses = PolicyValueLosses<B>;
+impl<M: BurnPolicy> Learner for JointPolicyValueLearner<M> {
+    type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         let loss = losses.policy_loss + losses.value_loss.mul_scalar(losses.vf_coeff);
@@ -218,19 +212,19 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for JointPolicyValueLearner<B
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for JointPolicyValueLearner<B, M> {
-    type Tensor = Tensor<B, 2>;
+impl<M: BurnPolicy> ValueFunction for JointPolicyValueLearner<M> {
+    type Tensor = Tensor<2>;
 
     fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
         self.model.value_net.forward(observations)
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueLearner<B, D> {
-    type LearningTensor = Tensor<B, 2>;
-    type InferenceTensor = Tensor<B::InnerBackend, 2>;
+impl<D: BurnPolicy> OnPolicyLearner for JointPolicyValueLearner<D> {
+    type LearningTensor = Tensor<2>;
+    type InferenceTensor = Tensor<2>;
     type Policy = D;
-    type InferencePolicy = D::InnerModule;
+    type InferencePolicy = D;
 
     fn inference_policy(&self) -> Self::InferencePolicy {
         self.model.policy.valid()
@@ -252,44 +246,62 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for JointPolicyValueL
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        Tensor::from_inner(t.clone())
+        t.clone().autodiff()
     }
 }
 
 /// Burn on-policy learner with separate policy and value optimizers.
-pub struct SplitPolicyValueLearner<B: AutodiffBackend, M: BurnPolicy<B>> {
+pub struct SplitPolicyValueLearner<M: BurnPolicy> {
     policy: M,
-    value_net: NetworkKind<B>,
-    policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
+    value_net: NetworkKind,
+    policy_optimizer: ModuleOptimizer,
     policy_lr: f64,
-    value_optimizer: OptimizerAdaptor<AdamW, NetworkKind<B>, B>,
+    value_optimizer: ModuleOptimizer,
     value_lr: f64,
 }
 
-#[derive(Record)]
-pub struct SplitPolicyValueLeranerSnapshot<B: AutodiffBackend, M: BurnPolicy<B>> {
-    policy: M::Record,
-    value_net: NetworkKindRecord<B>,
-    policy_optimizer: HashMap<ParamId, AdaptorRecord<AdamW, B>>,
+/// Model parameters, optimizer states, and learning rates for a split learner.
+pub struct SplitPolicyValueLeranerSnapshot {
+    policy: ModuleRecord,
+    value_net: ModuleRecord,
+    policy_optimizer: OptimizerRecord,
     policy_lr: f64,
-    value_optimizer: HashMap<ParamId, AdaptorRecord<AdamW, B>>,
+    value_optimizer: OptimizerRecord,
     value_lr: f64,
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLeranerSnapshot<B, M> {
+impl SplitPolicyValueLeranerSnapshot {
+    /// Saves model and optimizer records in a Burnpack snapshot file.
+    ///
+    /// # Panics
+    /// Panics if a record cannot be serialized or the file cannot be written.
     pub fn to_file(self, file: PathBuf) {
-        let recorder: BinFileRecorder<FullPrecisionSettings> = BinFileRecorder::new();
-        recorder.record(self, file).unwrap();
+        PolicyValueLearnerSnapshot::save_records(
+            file,
+            [
+                ("policy", self.policy.into_bytes().unwrap()),
+                ("value_net", self.value_net.into_bytes().unwrap()),
+                (
+                    "policy_optimizer",
+                    self.policy_optimizer.into_bytes().unwrap(),
+                ),
+                (
+                    "value_optimizer",
+                    self.value_optimizer.into_bytes().unwrap(),
+                ),
+            ],
+            [("policy_lr", self.policy_lr), ("value_lr", self.value_lr)],
+        );
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
+impl<M: BurnPolicy> SplitPolicyValueLearner<M> {
     fn new(
         policy: M,
-        value_net: NetworkKind<B>,
-        policy_optimizer: OptimizerAdaptor<AdamW, M, B>,
+        value_net: NetworkKind,
+        policy_optimizer: ModuleOptimizer,
         policy_lr: f64,
-        value_optimizer: OptimizerAdaptor<AdamW, NetworkKind<B>, B>,
+        value_optimizer: ModuleOptimizer,
         value_lr: f64,
     ) -> Self {
         assert_eq!(
@@ -298,8 +310,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
             "value network must output one value"
         );
         Self {
-            policy,
-            value_net,
+            policy: policy.train(),
+            value_net: value_net.train(),
             policy_optimizer,
             policy_lr,
             value_optimizer,
@@ -307,7 +319,7 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
         }
     }
 
-    fn load_snapshot(self, snapshot: SplitPolicyValueLeranerSnapshot<B, M>) -> Self {
+    fn load_snapshot(self, snapshot: SplitPolicyValueLeranerSnapshot) -> Self {
         let SplitPolicyValueLeranerSnapshot {
             policy,
             value_net,
@@ -342,8 +354,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> SplitPolicyValueLearner<B, M> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for SplitPolicyValueLearner<B, M> {
-    type Losses = PolicyValueLosses<B>;
+impl<M: BurnPolicy> Learner for SplitPolicyValueLearner<M> {
+    type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         let policy_grads = losses.policy_loss.backward();
@@ -361,19 +373,19 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for SplitPolicyValueLearner<B
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for SplitPolicyValueLearner<B, M> {
-    type Tensor = Tensor<B, 2>;
+impl<M: BurnPolicy> ValueFunction for SplitPolicyValueLearner<M> {
+    type Tensor = Tensor<2>;
 
     fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
         self.value_net.forward(observations)
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for SplitPolicyValueLearner<B, D> {
-    type LearningTensor = Tensor<B, 2>;
-    type InferenceTensor = Tensor<B::InnerBackend, 2>;
+impl<D: BurnPolicy> OnPolicyLearner for SplitPolicyValueLearner<D> {
+    type LearningTensor = Tensor<2>;
+    type InferenceTensor = Tensor<2>;
     type Policy = D;
-    type InferencePolicy = D::InnerModule;
+    type InferencePolicy = D;
 
     fn inference_policy(&self) -> Self::InferencePolicy {
         self.policy.valid()
@@ -396,26 +408,48 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for SplitPolicyValueL
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        Tensor::from_inner(t.clone())
+        t.clone().autodiff()
     }
 }
 
-#[derive(Record)]
-pub enum PolicyValueLearnerSnapshot<B: AutodiffBackend, D: BurnPolicy<B> = BurnDistributionKind<B>>
-{
-    Joint(JointPolicyValueSnapshot<B, D>),
-    Split(SplitPolicyValueLeranerSnapshot<B, D>),
+/// Snapshot state matching the learner's optimizer layout.
+pub enum PolicyValueLearnerSnapshot {
+    Joint(JointPolicyValueSnapshot),
+    Split(SplitPolicyValueLeranerSnapshot),
+}
+
+impl PolicyValueLearnerSnapshot {
+    // Store each Burn record as a byte tensor, with learning rates as typed scalars.
+    fn save_records<const N: usize, const L: usize>(
+        file: PathBuf,
+        records: [(&str, Bytes); N],
+        learning_rates: [(&str, f64); L],
+    ) {
+        let tensors = records
+            .into_iter()
+            .map(|(name, bytes)| {
+                let shape = [bytes.len()];
+                burn_pack::Tensor::new(name.into(), DType::U8, shape, None, bytes)
+            })
+            .collect();
+        let writer = learning_rates
+            .into_iter()
+            .fold(burn_pack::Writer::new(tensors), |writer, (name, lr)| {
+                writer.with_scalar(name, burn_pack::Scalar::Float(lr))
+            });
+        writer.write_to_file(file).unwrap();
+    }
 }
 
 /// Erased Burn policy/value module covering joint and split optimizer layouts.
-pub enum PolicyValueLearner<B: AutodiffBackend, D: BurnPolicy<B> = BurnDistributionKind<B>> {
+pub enum PolicyValueLearner<D: BurnPolicy = BurnDistributionKind> {
     /// Policy/value module with one shared optimizer configuration.
-    Joint(JointPolicyValueLearner<B, D>),
+    Joint(JointPolicyValueLearner<D>),
     /// Policy/value module with separate policy and value optimizers.
-    Split(SplitPolicyValueLearner<B, D>),
+    Split(SplitPolicyValueLearner<D>),
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
+impl<D: BurnPolicy> PolicyValueLearner<D> {
     /// Builds a policy/value module with a shared optimizer configuration.
     ///
     /// # Panics
@@ -435,7 +469,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
         )
     }
 
-    pub fn load_snapshot(self, snapshot: PolicyValueLearnerSnapshot<B, D>) -> Self {
+    pub fn load_snapshot(self, snapshot: PolicyValueLearnerSnapshot) -> Self {
         match snapshot {
             PolicyValueLearnerSnapshot::Joint(joint_policy_value_snapshot) => {
                 let Self::Joint(joint) = self else { panic!() };
@@ -456,7 +490,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     /// Panics unless the value network outputs one value per observation.
     pub fn joint_with_network(
         policy: D,
-        value_net: NetworkKind<B>,
+        value_net: NetworkKind,
         optimizer_config: &AdamWConfig,
         lr: f64,
     ) -> Self {
@@ -494,7 +528,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     /// Panics unless the value network outputs one value per observation.
     pub fn split_with_network(
         policy: D,
-        value_net: NetworkKind<B>,
+        value_net: NetworkKind,
         policy_optimizer_config: &AdamWConfig,
         policy_lr: f64,
         value_optimizer_config: &AdamWConfig,
@@ -512,7 +546,7 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
+impl<D: BurnPolicy> PolicyValueLearner<D> {
     /// Returns the current policy optimizer learning rate.
     pub fn policy_learning_rate(&self) -> f64 {
         match self {
@@ -530,8 +564,8 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> PolicyValueLearner<B, D> {
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for PolicyValueLearner<B, M> {
-    type Losses = PolicyValueLosses<B>;
+impl<M: BurnPolicy> Learner for PolicyValueLearner<M> {
+    type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
         match self {
@@ -541,8 +575,8 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> Learner for PolicyValueLearner<B, M> 
     }
 }
 
-impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueLearner<B, M> {
-    type Tensor = Tensor<B, 2>;
+impl<M: BurnPolicy> ValueFunction for PolicyValueLearner<M> {
+    type Tensor = Tensor<2>;
 
     fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
         match self {
@@ -552,11 +586,11 @@ impl<B: AutodiffBackend, M: BurnPolicy<B>> ValueFunction for PolicyValueLearner<
     }
 }
 
-impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for PolicyValueLearner<B, D> {
-    type LearningTensor = Tensor<B, 2>;
-    type InferenceTensor = Tensor<B::InnerBackend, 2>;
+impl<D: BurnPolicy> OnPolicyLearner for PolicyValueLearner<D> {
+    type LearningTensor = Tensor<2>;
+    type InferenceTensor = Tensor<2>;
     type Policy = D;
-    type InferencePolicy = D::InnerModule;
+    type InferencePolicy = D;
 
     fn inference_policy(&self) -> Self::InferencePolicy {
         match self {
@@ -587,6 +621,6 @@ impl<B: AutodiffBackend, D: BurnPolicy<B>> OnPolicyLearner for PolicyValueLearne
     }
 
     fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        Tensor::from_inner(t.clone())
+        t.clone().autodiff()
     }
 }

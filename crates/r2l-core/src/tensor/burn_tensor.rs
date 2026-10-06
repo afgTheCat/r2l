@@ -1,9 +1,6 @@
-use burn::{
-    prelude::Backend,
-    tensor::{
-        Tensor, TensorData as BurnTensorData,
-        activation::{log_softmax, softmax},
-    },
+use burn::tensor::{
+    Device, Tensor, TensorData as BurnTensorData,
+    activation::{log_softmax, softmax},
 };
 
 use crate::Shape;
@@ -11,7 +8,7 @@ use crate::{error::TensorError, tensor::R2lTensor};
 
 type Result<T> = std::result::Result<T, TensorError>;
 
-impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
+impl<const D: usize> R2lTensor for Tensor<D> {
     fn matmul(&self, other: &Self) -> Result<Self> {
         super::matrix_dimensions(&self.to_shape(), &other.to_shape())?;
         Ok(self.clone().matmul(other.clone()))
@@ -27,7 +24,7 @@ impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
 
     fn to_vec(&self) -> Result<Vec<f32>> {
         self.to_data()
-            .to_vec()
+            .try_to_vec()
             .map_err(|error| TensorError::operation("convert to vector", error))
     }
 
@@ -45,7 +42,7 @@ impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
             });
         }
         let data = BurnTensorData::new(data.to_vec(), shape.dims());
-        Ok(Tensor::from_data(data, &Default::default()))
+        Ok(Tensor::from_data(data, &Device::default()))
     }
 
     fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
@@ -58,7 +55,7 @@ impl<const D: usize, B: Backend> R2lTensor for Tensor<B, D> {
             });
         }
         let data = BurnTensorData::new(data, shape.dims());
-        Ok(Tensor::from_data(data, &Default::default()))
+        Ok(Tensor::from_data(data, &Device::default()))
     }
 
     fn from_vec_like(data: Vec<f32>, shape: impl Into<Shape>, like: &Self) -> Result<Self> {
@@ -181,9 +178,9 @@ fn validate_shape(data_len: usize, shape: &Shape) -> Result<()> {
     Ok(())
 }
 
-fn ensure_same_shape<const D: usize, B: Backend>(
-    left: &Tensor<B, D>,
-    right: &Tensor<B, D>,
+fn ensure_same_shape<const D: usize>(
+    left: &Tensor<D>,
+    right: &Tensor<D>,
     operation: &str,
 ) -> Result<()> {
     let left = left.shape().to_vec();

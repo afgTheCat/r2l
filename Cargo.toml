@@ -22,9 +22,9 @@ r2l = { path = "crates/r2l", version = "0.0.3" }
 r2l-distributions = { path = "crates/r2l-distributions", version = "0.0.3" }
 r2l-sampler = { path = "crates/r2l-sampler", version = "0.0.3" }
 r2l-benchmark-task = { path = "benchmark/task" }
-burn = { version = "0.21.0", default-features = false, features = ["std", "ndarray", "autodiff"] }
-burn-ndarray = { version = "0.21.0", default-features = false, features = ["std", "multi-threads"] }
-burn-store = { version = "0.21.0" }
+burn = { version = "0.22.0", default-features = false, features = ["std", "ndarray", "autodiff", "optim"] }
+burn-ndarray = { version = "0.22.0", default-features = false, features = ["std", "multi-threads"] }
+burn-store = { version = "0.22.0" }
 candle-core = { version = "0.11.0" }
 candle-nn = { version = "0.11.0" }
 either = "1.17.0"

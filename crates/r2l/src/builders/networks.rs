@@ -1,6 +1,6 @@
 //! Construct networks independently of policy and value-function configuration.
 
-use burn::prelude::Backend;
+use burn::tensor::Device;
 use candle_nn::VarBuilder;
 use r2l_core::Shape;
 use r2l_core::error::{Error, Result};
@@ -39,12 +39,12 @@ impl NetworkBuilder {
     /// # Errors
     ///
     /// Returns an error if layer dimensions or the observation shape are invalid.
-    pub fn build_burn<B: Backend>(
+    pub fn build_burn(
         &self,
         observation_shape: &Shape,
         output_size: usize,
-        device: &B::Device,
-    ) -> Result<BurnNetworkKind<B>> {
+        device: &Device,
+    ) -> Result<BurnNetworkKind> {
         BurnNetworkKind::build(&self.config, observation_shape, output_size, device)
     }
 

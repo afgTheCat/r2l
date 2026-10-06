@@ -1,4 +1,3 @@
-use burn::prelude::Backend;
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
 use r2l_core::{
@@ -94,27 +93,28 @@ impl PolicyBuilder {
         )
     }
 
-    /// Builds a Burn policy for backend `B`.
+    /// Builds a Burn policy on the given device.
+    ///
+    /// # Arguments
+    ///
+    /// * `device` - Device on which network parameters and Gaussian log deviations are initialized.
     ///
     /// # Errors
     ///
     /// Returns an error if the policy configuration is invalid or unsupported.
-    pub(crate) fn build_burn<B: Backend>(&self) -> Result<BurnDistributionKind<B>> {
+    pub(crate) fn build_burn(&self, device: &burn::tensor::Device) -> Result<BurnDistributionKind> {
         let network = super::networks::NetworkBuilder::new(self.network.clone());
         if let Some(config) = self.sde {
             let width = self.sde_action_size()?;
-            let mean = network.build_burn::<B>(
-                &self.observation_space.observation_shape(),
-                width,
-                &Default::default(),
-            )?;
+            let mean =
+                network.build_burn(&self.observation_space.observation_shape(), width, device)?;
             let features = mean
                 .feature_size()
                 .expect("built-in networks expose features");
             let log_std = burn::module::Param::from_tensor(burn::Tensor::full(
                 [features, width],
                 self.log_std_init,
-                &Default::default(),
+                device,
             ));
             return Ok(BurnDistributionKind::DiagGaussian(DiagGaussian::with_sde(
                 mean, log_std, config,
@@ -123,17 +123,13 @@ impl PolicyBuilder {
         BurnDistributionKind::from_space(
             self.action_space.clone(),
             &mut |_, width| {
-                network.build_burn::<B>(
-                    &self.observation_space.observation_shape(),
-                    width,
-                    &Default::default(),
-                )
+                network.build_burn(&self.observation_space.observation_shape(), width, device)
             },
             &mut |_, width| {
                 Ok(burn::module::Param::from_tensor(burn::Tensor::full(
                     [1, width],
                     self.log_std_init,
-                    &Default::default(),
+                    device,
                 )))
             },
         )

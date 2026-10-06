@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use burn::backend::NdArray;
+use burn::tensor::Device as BurnDevice;
 use candle_core::DType;
 use candle_nn::VarBuilder;
 use r2l_core::{
@@ -125,7 +125,7 @@ enum InferenceActor<T: R2lTensor> {
     /// Candle-backed inference actor.
     Candle(ActorWrapper<CandleDistributionKind, T>),
     /// Burn-backed inference actor.
-    Burn(Box<ActorWrapper<BurnDistributionKind<NdArray>, T>>),
+    Burn(Box<ActorWrapper<BurnDistributionKind, T>>),
 }
 
 impl<T: R2lTensor> Actor for InferenceActor<T> {
@@ -193,7 +193,7 @@ impl<T: R2lTensor> InferencePolicy<T> {
             Backend::Burn(_) => {
                 let actor = config
                     .policy_builder
-                    .build_burn::<NdArray>()?
+                    .build_burn(&BurnDevice::ndarray())?
                     .load_from_bytes(actor_bytes)
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))

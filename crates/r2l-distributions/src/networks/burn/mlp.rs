@@ -2,7 +2,8 @@ use std::num::NonZeroUsize;
 
 use burn::nn::activation::{Activation, ActivationConfig};
 use burn::nn::{Dropout, EluConfig, HardSigmoidConfig, LeakyReluConfig, LinearConfig};
-use burn::{module::Module, nn::Linear, prelude::Backend, tensor::Tensor};
+use burn::tensor::Device;
+use burn::{module::Module, nn::Linear, tensor::Tensor};
 use r2l_core::{
     Shape,
     error::{Error, Result},
@@ -14,14 +15,14 @@ use crate::networks::Network;
 
 #[derive(Debug, Module)]
 #[allow(clippy::large_enum_variant)]
-pub enum LinearLayer<B: Backend> {
-    Activation(Activation<B>),
-    LinearLayer(Linear<B>),
+pub enum LinearLayer {
+    Activation(Activation),
+    LinearLayer(Linear),
     Dropout(Dropout),
 }
 
-impl<B: Backend> LinearLayer<B> {
-    pub fn forward(&self, t: Tensor<B, 2>) -> Tensor<B, 2> {
+impl LinearLayer {
+    pub fn forward(&self, t: Tensor<2>) -> Tensor<2> {
         match &self {
             Self::LinearLayer(linear) => linear.forward(t),
             Self::Activation(activation) => activation.forward(t),
@@ -29,7 +30,7 @@ impl<B: Backend> LinearLayer<B> {
         }
     }
 
-    pub(super) fn activation(activation: ActivationFunction, device: &B::Device) -> Activation<B> {
+    pub(super) fn activation(activation: ActivationFunction, device: &Device) -> Activation {
         let config = match activation {
             ActivationFunction::Elu => ActivationConfig::Elu(EluConfig::new()),
             ActivationFunction::Gelu => ActivationConfig::Gelu,
@@ -43,27 +44,27 @@ impl<B: Backend> LinearLayer<B> {
             ActivationFunction::Sigmoid => ActivationConfig::Sigmoid,
             ActivationFunction::Tanh => ActivationConfig::Tanh,
         };
-        config.init::<B>(device)
+        config.init(device)
     }
 
-    fn linear(input: NonZeroUsize, output: NonZeroUsize, device: &B::Device) -> Self {
+    fn linear(input: NonZeroUsize, output: NonZeroUsize, device: &Device) -> Self {
         let liner_config = LinearConfig::new(input.get(), output.get()).with_bias(true);
-        let linear: Linear<B> = liner_config.init::<B>(device);
+        let linear: Linear = liner_config.init(device);
         Self::LinearLayer(linear)
     }
 }
 
 #[derive(Debug, Module)]
-pub struct Mlp<B: Backend> {
-    layers: Vec<LinearLayer<B>>,
+pub struct Mlp {
+    layers: Vec<LinearLayer>,
     #[module(skip)]
     input_size: NonZeroUsize,
     #[module(skip)]
     output_size: NonZeroUsize,
 }
 
-impl<B: Backend> Mlp<B> {
-    pub fn forward(&self, mut t: Tensor<B, 2>) -> Tensor<B, 2> {
+impl Mlp {
+    pub fn forward(&self, mut t: Tensor<2>) -> Tensor<2> {
         for layer in &self.layers {
             t = layer.forward(t);
         }
@@ -76,14 +77,14 @@ impl<B: Backend> Mlp<B> {
     /// Panics if fewer than two widths are supplied or any width is zero.
     #[must_use]
     pub fn build(layer_sizes: &[usize], activation: ActivationFunction) -> Self {
-        Self::build_on_device(layer_sizes, activation, &Default::default())
+        Self::build_on_device(layer_sizes, activation, &Device::default())
     }
 
     pub(super) fn from_config(
         config: &MlpConfig,
         input_size: NonZeroUsize,
         output_size: NonZeroUsize,
-        device: &B::Device,
+        device: &Device,
     ) -> Self {
         let layers = [
             &[input_size.get()][..],
@@ -97,7 +98,7 @@ impl<B: Backend> Mlp<B> {
     fn build_on_device(
         layer_sizes: &[usize],
         activation: ActivationFunction,
-        device: &B::Device,
+        device: &Device,
     ) -> Self {
         assert!(
             layer_sizes.len() >= 2,
@@ -131,8 +132,8 @@ impl<B: Backend> Mlp<B> {
     }
 }
 
-impl<B: Backend> Network for Mlp<B> {
-    type Tensor = Tensor<B, 2>;
+impl Network for Mlp {
+    type Tensor = Tensor<2>;
 
     fn input_shape(&self) -> Shape {
         [self.input_size.get()].into()

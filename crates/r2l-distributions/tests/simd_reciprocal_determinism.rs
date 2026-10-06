@@ -1,15 +1,10 @@
 #![cfg(not(feature = "simd"))]
 
-use burn::{
-    backend::ndarray::{NdArray, NdArrayDevice},
-    tensor::{Tensor, TensorData},
-};
-
-type Backend = NdArray<f32>;
+use burn::tensor::{Device, Tensor, TensorData};
 
 fn reciprocal_bits() -> Vec<u32> {
-    let device = NdArrayDevice::default();
-    let input = Tensor::<Backend, 1>::from_data(TensorData::new(vec![3.0; 257], [257]), &device);
+    let device = Device::ndarray();
+    let input = Tensor::<1>::from_data(TensorData::new(vec![3.0; 257], [257]), &device);
 
     input
         .recip()

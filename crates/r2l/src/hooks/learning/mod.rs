@@ -5,7 +5,6 @@ pub(crate) mod stats;
 
 use std::{marker::PhantomData, num::NonZeroUsize};
 
-use burn::tensor::backend::AutodiffBackend;
 use candle_core::Tensor;
 use r2l_agents::on_policy_algorithms::{
     Advantages, Returns,
@@ -134,12 +133,12 @@ impl<M: OnPolicyLearner, A> LearningHook<M, A> {
 }
 
 // Backend-specific operations are shared by both algorithm adapters below.
-impl<B: AutodiffBackend, P: BurnPolicy<B>, A> LearningHook<BurnLearner<B, P>, A> {
+impl<P: BurnPolicy, A> LearningHook<BurnLearner<P>, A> {
     fn process_batch(
         &self,
-        module: &mut BurnLearner<B, P>,
-        losses: &mut BurnLosses<B>,
-        observations: &burn::Tensor<B, 2>,
+        module: &mut BurnLearner<P>,
+        losses: &mut BurnLosses,
+        observations: &burn::Tensor<2>,
         collect_stats: bool,
     ) -> Result<Option<A2CMinibatchStats>> {
         losses.set_vf_coeff(self.vf_coeff);
@@ -195,13 +194,11 @@ impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone, A> LearningHook<Candl
     }
 }
 
-impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
-    for LearningHook<BurnLearner<B, P>, A2CSettings>
-{
-    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 2>>>(
+impl<P: BurnPolicy> A2CHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, A2CSettings> {
+    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<2>>>(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnLearner<B, P>,
+        module: &mut BurnLearner<P>,
         _batches: &[T],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -213,9 +210,9 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
     fn batch_hook(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnLearner<B, P>,
-        losses: &mut BurnLosses<B>,
-        data: &A2CBatchData<burn::Tensor<B, 2>>,
+        module: &mut BurnLearner<P>,
+        losses: &mut BurnLosses,
+        data: &A2CBatchData<burn::Tensor<2>>,
     ) -> Result<HookResult> {
         let stats = self.process_batch(
             module,
@@ -227,10 +224,10 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> A2CHook<BurnLearner<B, P>>
         Ok(HookResult::Continue)
     }
 
-    fn after_learning_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 2>>>(
+    fn after_learning_hook<T: TrajectoryBatch<burn::Tensor<2>>>(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnLearner<B, P>,
+        module: &mut BurnLearner<P>,
         batches: &[T],
     ) -> Result<HookResult> {
         if self.algorithm.reporter.is_enabled() {
@@ -305,13 +302,11 @@ impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone> A2CHook<CandleLearner
     }
 }
 
-impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
-    for LearningHook<BurnLearner<B, P>, PPOSettings>
-{
-    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 2>>>(
+impl<P: BurnPolicy> PPOHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, PPOSettings> {
+    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<2>>>(
         &mut self,
         params: &mut PPOParams,
-        module: &mut BurnLearner<B, P>,
+        module: &mut BurnLearner<P>,
         _batches: &[T],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -321,10 +316,10 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<T: TrajectoryBatch<burn::Tensor<B::InnerBackend, 2>>>(
+    fn rollout_hook<T: TrajectoryBatch<burn::Tensor<2>>>(
         &mut self,
         params: &mut PPOParams,
-        module: &mut BurnLearner<B, P>,
+        module: &mut BurnLearner<P>,
         batches: &[T],
     ) -> Result<HookResult> {
         if !self.algorithm.finish_epoch() {
@@ -350,9 +345,9 @@ impl<B: AutodiffBackend, P: BurnPolicy<B>> PPOHook<BurnLearner<B, P>>
     fn batch_hook(
         &mut self,
         params: &mut PPOParams,
-        module: &mut BurnLearner<B, P>,
-        losses: &mut BurnLosses<B>,
-        data: &PPOBatchData<burn::Tensor<B, 2>>,
+        module: &mut BurnLearner<P>,
+        losses: &mut BurnLosses,
+        data: &PPOBatchData<burn::Tensor<2>>,
     ) -> Result<HookResult> {
         let stats = self.process_batch(
             module,
