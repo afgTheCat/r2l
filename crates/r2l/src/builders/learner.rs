@@ -13,6 +13,7 @@ use r2l_distributions::learning_modules::candle_lm::{
 use serde::{Deserialize, Serialize};
 
 use crate::hooks::progress::SharedTrainingProgress;
+use crate::snapshot::PPOSettingsB;
 use crate::{
     A2CRolloutStats, ClipRangeSchedule, LearningHook, LearningRateSchedule, PPORolloutStats,
     PPOSettings,
@@ -111,7 +112,6 @@ pub struct LearningHookConfig {
     normalize_advantage: bool,
     entropy_coeff: f32,
     vf_coeff: f32,
-    algorithm_config: AlgorithmConfiguration,
     policy_learning_rate_schedule: LearningRateSchedule,
     value_learning_rate_schedule: LearningRateSchedule,
 }
@@ -119,9 +119,10 @@ pub struct LearningHookConfig {
 impl LearningHookConfig {
     pub fn burn_ppo_hook(
         &self,
-        algorithm: PPOSettings,
+        algorithm: PPOSettingsB,
         progress: SharedTrainingProgress,
     ) -> LearningHook<PolicyValueLearner<BurnBackend>, PPOSettings> {
+        let algorithm = algorithm.to_settings();
         LearningHook {
             normalize_advantage: self.normalize_advantage,
             entropy_coeff: self.entropy_coeff,

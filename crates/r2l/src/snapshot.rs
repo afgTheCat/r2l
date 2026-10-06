@@ -20,27 +20,51 @@ use r2l_sampler::{
 };
 
 use crate::{
-    A2CSettings, BurnBackend, EpisodeBoundHook, OnPolicyTrainingHooks, PPOBurn, PPOCandle,
-    PPOSettings, StepBoundHook,
+    BurnBackend, ClipRangeSchedule, EpisodeBoundHook, OnPolicyTrainingHooks, PPOBurn, PPOCandle,
+    PPORolloutStats, PPOSettings, StepBoundHook,
     backend::Backend,
     builders::{
-        learner::{AlgorithmConfiguration, LearnerConfig, LearningHookConfig},
+        learner::{LearnerConfig, LearningHookConfig},
         on_policy_hook::OnPolicyHookConfig,
     },
     evaluator::EvaluationSampler,
-    hooks::progress::SharedTrainingProgress,
+    hooks::{
+        learning::{TargetKl, reporter::RolloutReporter},
+        progress::SharedTrainingProgress,
+    },
     utils::RewardNormalizer,
 };
 
-// #[derive(Debug, Clone, Copy)]
-enum AlgoSettings {
-    A2C(A2CSettings),
-    PPO(PPOSettings),
+pub struct PPOSettingsB {
+    total_epochs: NonZeroUsize,
+    clip_range_schedule: ClipRangeSchedule,
+    target_kl: Option<TargetKl>,
+    reporter: RolloutReporter<PPORolloutStats>,
 }
 
-enum AlgoParams {
-    A2C(A2CParams),
-    PPO(PPOParams),
+impl PPOSettingsB {
+    pub(crate) fn to_settings(self) -> PPOSettings {
+        PPOSettings {
+            total_epochs: self.total_epochs,
+            current_epoch: 0,
+            clip_range_schedule: self.clip_range_schedule,
+            target_kl: self.target_kl,
+            reporter: self.reporter,
+        }
+    }
+}
+
+pub struct A2CSettingsB {}
+
+enum AlgoConfig {
+    PPO {
+        settings: PPOSettingsB,
+        params: PPOParams,
+    },
+    A2C {
+        settings: A2CSettingsB,
+        params: A2CParams,
+    },
 }
 
 enum SamplerSetup<E: Env> {
@@ -147,8 +171,7 @@ impl<E: Env> SamplerConfiguration<E> {
 
 pub struct SnapshotAlgo<E: Env> {
     backend: Backend,
-    algo_settings: AlgoSettings,
-    algo_params: AlgoParams,
+    algo_config: AlgoConfig,
     learner: LearnerConfig,
     learning_hook: LearningHookConfig,
     sampler_configuration: SamplerConfiguration<E>,
@@ -188,22 +211,18 @@ impl<E: Env> SnapshotAlgo<E> {
         let progress = self.shared_progress();
         let Self {
             backend,
-            algo_settings,
             learner,
             learning_hook,
-            algo_params,
             sampler_configuration,
             hook_config,
+            algo_config,
         } = self;
         let learner = learner.build_burn_learner().unwrap();
         let learner = learner.load_snapshot(snapshot);
-        let AlgoSettings::PPO(ppo_settings) = algo_settings else {
+        let AlgoConfig::PPO { settings, params } = algo_config else {
             unreachable!()
         };
-        let hooks = learning_hook.burn_ppo_hook(ppo_settings, progress.clone());
-        let AlgoParams::PPO(params) = algo_params else {
-            unreachable!()
-        };
+        let hooks = learning_hook.burn_ppo_hook(settings, progress.clone());
         let agent = PPO {
             params,
             lm: learner,
