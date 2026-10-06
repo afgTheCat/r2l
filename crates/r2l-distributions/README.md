@@ -30,5 +30,5 @@ Complete rollout collection before optimizer updates, as the built-in loop does.
 Burn supports MLP and CNN configurations; Candle supports MLP configurations.
 Built-in policies implement `ToSafetensors`.
 
-The `simd` feature enables Burn SIMD support. The `cuda` feature enables Candle
-CUDA support. These features are forwarded by the corresponding `r2l` features.
+Burn uses the Flex CPU backend with SIMD and parallel execution support enabled.
+The `cuda` feature enables Candle CUDA support and is forwarded by `r2l`.

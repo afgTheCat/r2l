@@ -157,12 +157,12 @@ fn burn_distribution(space: Space<VecTensor>, log_std: f32) -> BurnDistributionK
     });
     BurnDistributionKind::from_space(
         space,
-        &mut |_, width| NetworkKind::build(&config, &[2].into(), width, &BurnDevice::ndarray()),
+        &mut |_, width| NetworkKind::build(&config, &[2].into(), width, &BurnDevice::flex()),
         &mut |_, width| {
             Ok(burn::module::Param::from_tensor(BurnTensor::full(
                 [1, width],
                 log_std,
-                &BurnDevice::ndarray(),
+                &BurnDevice::flex(),
             )))
         },
     )
@@ -268,7 +268,7 @@ fn diagonal_gaussian_backends_agree_on_std_and_entropy() {
     );
     assert_close(
         &burn
-            .entropy(BurnTensor::zeros([1, 2], &BurnDevice::ndarray()))
+            .entropy(BurnTensor::zeros([1, 2], &BurnDevice::flex()))
             .unwrap()
             .to_vec()
             .unwrap(),

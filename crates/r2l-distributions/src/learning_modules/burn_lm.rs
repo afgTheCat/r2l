@@ -5,7 +5,7 @@
 //! Gaussian policies use `Param::from_tensor(log_std)` to register trainable
 //! log standard deviations alongside the mean network.
 //! Learner construction enables training on both networks. Inference policies
-//! use `Module::valid()`, and `OnPolicyLearner::lifter` enables autodiff on batches.
+//! use `Module::valid()`, and `OnPolicyLearner::prepare_learning_tensor` enables autodiff on batches.
 //!
 //! ```
 //! use burn::optim::AdamWConfig;
@@ -34,7 +34,6 @@ use burn::{
 use r2l_core::{
     error::Result,
     models::{ActivationFunction, Learner},
-    on_policy::losses::FromPolicyValueLosses,
 };
 
 pub use crate::networks::burn::NetworkKind;
@@ -54,371 +53,211 @@ pub trait BurnPolicy: Module + ModuleDisplay + Policy<Tensor = Tensor<2>> {}
 
 impl<M> BurnPolicy for M where M: Module + ModuleDisplay + Policy<Tensor = Tensor<2>> {}
 
-/// Loss container used by Burn on-policy learners.
-///
-/// This stores the policy loss, value loss, and a multiplier applied
-/// to the value loss during optimization.
-pub struct PolicyValueLosses {
-    /// Policy loss to optimize.
-    pub policy_loss: Tensor<2>,
-    /// Value-function loss to optimize.
-    pub value_loss: Tensor<2>,
-    /// Coefficient applied to `value_loss`, defaulting to `1.0`.
-    pub vf_coeff: f32,
-}
+/// Shared policy/value losses specialized to this backend.
+pub type PolicyValueLosses = r2l_core::on_policy::losses::PolicyValueLosses<Tensor<2>>;
 
-impl FromPolicyValueLosses<Tensor<2>> for PolicyValueLosses {
-    fn from_policy_value_losses(policy_loss: Tensor<2>, value_loss: Tensor<2>) -> Self {
-        Self {
-            policy_loss,
-            value_loss,
-            vf_coeff: 1.0,
-        }
-    }
-}
-
-impl PolicyValueLosses {
-    /// Creates a loss container from policy and value losses.
-    pub fn new(policy_loss: Tensor<2>, value_loss: Tensor<2>) -> Self {
-        Self {
-            policy_loss,
-            value_loss,
-            vf_coeff: 1.0,
-        }
-    }
-
-    /// Adds an entropy term into the policy loss.
-    pub fn add_entropy_loss(&mut self, entropy_loss: Tensor<2>) {
-        self.policy_loss = self.policy_loss.clone() + entropy_loss;
-    }
-
-    /// Sets the value-loss coefficient used during optimization.
-    pub fn set_vf_coeff(&mut self, vf_coeff: f32) {
-        self.vf_coeff = vf_coeff;
-    }
-}
-
-// a model with a value function
-/// Combined policy/value model used by the joint Burn optimizer path.
 #[derive(Debug, Module)]
-pub struct JointActorModel<M: Module> {
-    policy: M,
+struct PolicyValueModel<P: Module> {
+    policy: P,
     value_net: NetworkKind,
 }
 
-impl<M: Module> JointActorModel<M> {
-    /// Creates a joint model from a policy and value network.
-    ///
-    /// # Panics
-    /// Panics unless the value network outputs one value per observation.
-    pub fn new(policy: M, value_net: impl Into<NetworkKind>) -> Self {
-        let value_net = value_net.into();
-        assert_eq!(
-            value_net.output_shape().dims(),
-            [1],
-            "value network must output one value"
-        );
-        Self { policy, value_net }
-    }
-}
-
-/// Burn on-policy learner with one shared optimizer configuration.
-pub struct JointPolicyValueLearner<M: BurnPolicy> {
-    lr: f64,
-    model: JointActorModel<M>,
-    // NOTE: the optimizer needs to be optimizing both the policy and the value net at the same time
-    optimizer: ModuleOptimizer,
-}
-
-/// Model parameters, optimizer state, and learning rate for a joint learner.
-pub struct JointPolicyValueSnapshot {
-    lr: f64,
-    model: ModuleRecord,
-    optimizer: OptimizerRecord,
-}
-
-impl JointPolicyValueSnapshot {
-    /// Saves model and optimizer records in a Burnpack snapshot file.
-    ///
-    /// # Panics
-    /// Panics if a record cannot be serialized or the file cannot be written.
-    pub fn to_file(self, file: PathBuf) {
-        PolicyValueLearnerSnapshot::save_records(
-            file,
-            [
-                ("model", self.model.into_bytes().unwrap()),
-                ("optimizer", self.optimizer.into_bytes().unwrap()),
-            ],
-            [("lr", self.lr)],
-        );
-    }
-}
-
-impl<M: BurnPolicy> JointPolicyValueLearner<M> {
-    fn new(model: JointActorModel<M>, optimizer: ModuleOptimizer, lr: f64) -> Self {
-        Self {
-            lr,
-            model: model.train(),
-            optimizer,
-        }
-    }
-
-    pub fn load_snapshot(self, snapshot: JointPolicyValueSnapshot) -> Self {
-        let JointPolicyValueSnapshot {
-            lr,
-            model,
-            optimizer,
-        } = snapshot;
-        let model = self.model.load_record(model);
-        let optimizer = self.optimizer.load_record(optimizer);
-        Self {
-            model,
-            optimizer,
-            lr,
-        }
-    }
-
-    /// Returns the current policy optimizer learning rate.
-    pub fn policy_learning_rate(&self) -> f64 {
-        self.lr
-    }
-
-    /// Sets the learning rate for the shared optimizer.
-    pub fn set_learning_rate(&mut self, learning_rate: f64) {
-        self.lr = learning_rate;
-    }
-
-    pub fn to_snapshot(&self) -> JointPolicyValueSnapshot {
-        let model = self.model.clone().into_record();
-        let optimizer = self.optimizer.to_record();
-        JointPolicyValueSnapshot {
-            model,
-            optimizer,
-            lr: self.lr,
-        }
-    }
-}
-
-impl<M: BurnPolicy> Learner for JointPolicyValueLearner<M> {
-    type Losses = PolicyValueLosses;
-
-    fn update(&mut self, losses: Self::Losses) -> Result<()> {
-        let loss = losses.policy_loss + losses.value_loss.mul_scalar(losses.vf_coeff);
-        let grads = loss.backward();
-        let grads = GradientsParams::from_grads(grads, &self.model);
-        let new_model = self.optimizer.step(self.lr, self.model.clone(), grads);
-        self.model = new_model;
-        Ok(())
-    }
-}
-
-impl<M: BurnPolicy> ValueFunction for JointPolicyValueLearner<M> {
-    type Tensor = Tensor<2>;
-
-    fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
-        self.model.value_net.forward(observations)
-    }
-}
-
-impl<D: BurnPolicy> OnPolicyLearner for JointPolicyValueLearner<D> {
-    type LearningTensor = Tensor<2>;
-    type InferenceTensor = Tensor<2>;
-    type Policy = D;
-    type InferencePolicy = D;
-
-    fn inference_policy(&self) -> Self::InferencePolicy {
-        self.model.policy.valid()
-    }
-
-    fn policy(&self) -> &Self::Policy {
-        &self.model.policy
-    }
-
-    fn set_learning_rates(&mut self, policy_learning_rate: f64, _value_learning_rate: f64) {
-        self.lr = policy_learning_rate;
-    }
-
-    fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
-        Ok(Tensor::from_data(
-            burn::tensor::TensorData::new(slice.to_vec(), [slice.len(), 1]),
-            &self.model.value_net.devices()[0],
-        ))
-    }
-
-    fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        t.clone().autodiff()
-    }
-}
-
-/// Burn on-policy learner with separate policy and value optimizers.
-pub struct SplitPolicyValueLearner<M: BurnPolicy> {
-    policy: M,
-    value_net: NetworkKind,
-    policy_optimizer: ModuleOptimizer,
-    policy_lr: f64,
-    value_optimizer: ModuleOptimizer,
-    value_lr: f64,
-}
-
-/// Model parameters, optimizer states, and learning rates for a split learner.
-pub struct SplitPolicyValueLeranerSnapshot {
-    policy: ModuleRecord,
-    value_net: ModuleRecord,
-    policy_optimizer: OptimizerRecord,
-    policy_lr: f64,
-    value_optimizer: OptimizerRecord,
-    value_lr: f64,
-}
-
-impl SplitPolicyValueLeranerSnapshot {
-    /// Saves model and optimizer records in a Burnpack snapshot file.
-    ///
-    /// # Panics
-    /// Panics if a record cannot be serialized or the file cannot be written.
-    pub fn to_file(self, file: PathBuf) {
-        PolicyValueLearnerSnapshot::save_records(
-            file,
-            [
-                ("policy", self.policy.into_bytes().unwrap()),
-                ("value_net", self.value_net.into_bytes().unwrap()),
-                (
-                    "policy_optimizer",
-                    self.policy_optimizer.into_bytes().unwrap(),
-                ),
-                (
-                    "value_optimizer",
-                    self.value_optimizer.into_bytes().unwrap(),
-                ),
-            ],
-            [("policy_lr", self.policy_lr), ("value_lr", self.value_lr)],
-        );
-    }
-}
-
-impl<M: BurnPolicy> SplitPolicyValueLearner<M> {
-    fn new(
-        policy: M,
-        value_net: NetworkKind,
-        policy_optimizer: ModuleOptimizer,
+enum OptimizerKind<O> {
+    Joint {
+        optimizer: O,
+        lr: f64,
+    },
+    Split {
+        policy: O,
         policy_lr: f64,
-        value_optimizer: ModuleOptimizer,
+        value: O,
+        value_lr: f64,
+    },
+}
+
+/// Joint or split Burn optimizers, with a learning rate for each optimizer.
+pub struct PolicyValueOptimizer {
+    inner: OptimizerKind<ModuleOptimizer>,
+}
+
+impl PolicyValueOptimizer {
+    /// Builds one optimizer for both policy and value parameters.
+    #[must_use]
+    pub fn joint(config: &AdamWConfig, lr: f64) -> Self {
+        Self {
+            inner: OptimizerKind::Joint {
+                optimizer: config.init(),
+                lr,
+            },
+        }
+    }
+
+    /// Builds separate optimizers for independent policy and value networks.
+    #[must_use]
+    pub fn split(
+        policy_config: &AdamWConfig,
+        policy_lr: f64,
+        value_config: &AdamWConfig,
         value_lr: f64,
     ) -> Self {
-        assert_eq!(
-            value_net.output_shape().dims(),
-            [1],
-            "value network must output one value"
-        );
         Self {
-            policy: policy.train(),
-            value_net: value_net.train(),
-            policy_optimizer,
-            policy_lr,
-            value_optimizer,
-            value_lr,
-        }
-    }
-
-    fn load_snapshot(self, snapshot: SplitPolicyValueLeranerSnapshot) -> Self {
-        let SplitPolicyValueLeranerSnapshot {
-            policy,
-            value_net,
-            policy_optimizer,
-            policy_lr,
-            value_optimizer,
-            value_lr,
-        } = snapshot;
-        let policy = self.policy.load_record(policy);
-        let value_net = self.value_net.load_record(value_net);
-        let policy_optimizer = self.policy_optimizer.load_record(policy_optimizer);
-        let value_optimizer = self.value_optimizer.load_record(value_optimizer);
-        Self {
-            policy,
-            value_net,
-            policy_optimizer,
-            policy_lr,
-            value_optimizer,
-            value_lr,
+            inner: OptimizerKind::Split {
+                policy: policy_config.init(),
+                policy_lr,
+                value: value_config.init(),
+                value_lr,
+            },
         }
     }
 
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
-        self.policy_lr
+        match &self.inner {
+            OptimizerKind::Joint { lr, .. } => *lr,
+            OptimizerKind::Split { policy_lr, .. } => *policy_lr,
+        }
     }
 
-    /// Sets the learning rate for both policy and value optimizers.
+    /// Sets the same learning rate for both policy and value updates.
     pub fn set_learning_rate(&mut self, learning_rate: f64) {
-        self.policy_lr = learning_rate;
-        self.value_lr = learning_rate;
+        self.set_learning_rates(learning_rate, learning_rate);
+    }
+
+    /// Sets independent rates; joint optimizers use the policy rate.
+    pub fn set_learning_rates(&mut self, policy_learning_rate: f64, value_learning_rate: f64) {
+        match &mut self.inner {
+            OptimizerKind::Joint { lr, .. } => *lr = policy_learning_rate,
+            OptimizerKind::Split {
+                policy_lr,
+                value_lr,
+                ..
+            } => {
+                *policy_lr = policy_learning_rate;
+                *value_lr = value_learning_rate;
+            }
+        }
+    }
+
+    fn update<P: BurnPolicy>(
+        &mut self,
+        model: &mut PolicyValueModel<P>,
+        losses: PolicyValueLosses,
+    ) {
+        let value_loss = losses.value_loss.mul_scalar(losses.vf_coeff);
+        match &mut self.inner {
+            OptimizerKind::Joint { optimizer, lr } => {
+                let grads = (losses.policy_loss + value_loss).backward();
+                let grads = GradientsParams::from_grads(grads, model);
+                *model = optimizer.step(*lr, model.clone(), grads);
+            }
+            OptimizerKind::Split {
+                policy,
+                policy_lr,
+                value,
+                value_lr,
+            } => {
+                let policy_grads =
+                    GradientsParams::from_grads(losses.policy_loss.backward(), &model.policy);
+                let value_grads =
+                    GradientsParams::from_grads(value_loss.backward(), &model.value_net);
+                model.policy = policy.step(*policy_lr, model.policy.clone(), policy_grads);
+                model.value_net = value.step(*value_lr, model.value_net.clone(), value_grads);
+            }
+        }
+    }
+
+    fn to_snapshot(&self) -> OptimizerKind<OptimizerRecord> {
+        match &self.inner {
+            OptimizerKind::Joint { optimizer, lr } => OptimizerKind::Joint {
+                optimizer: optimizer.to_record(),
+                lr: *lr,
+            },
+            OptimizerKind::Split {
+                policy,
+                policy_lr,
+                value,
+                value_lr,
+            } => OptimizerKind::Split {
+                policy: policy.to_record(),
+                policy_lr: *policy_lr,
+                value: value.to_record(),
+                value_lr: *value_lr,
+            },
+        }
+    }
+
+    fn load_snapshot(self, snapshot: OptimizerKind<OptimizerRecord>) -> Self {
+        let inner = match (self.inner, snapshot) {
+            (
+                OptimizerKind::Joint { optimizer, .. },
+                OptimizerKind::Joint {
+                    optimizer: record,
+                    lr,
+                },
+            ) => OptimizerKind::Joint {
+                optimizer: optimizer.load_record(record),
+                lr,
+            },
+            (
+                OptimizerKind::Split { policy, value, .. },
+                OptimizerKind::Split {
+                    policy: policy_record,
+                    policy_lr,
+                    value: value_record,
+                    value_lr,
+                },
+            ) => OptimizerKind::Split {
+                policy: policy.load_record(policy_record),
+                policy_lr,
+                value: value.load_record(value_record),
+                value_lr,
+            },
+            _ => panic!("snapshot optimizer layout must match the learner"),
+        };
+        Self { inner }
     }
 }
 
-impl<M: BurnPolicy> Learner for SplitPolicyValueLearner<M> {
-    type Losses = PolicyValueLosses;
-
-    fn update(&mut self, losses: Self::Losses) -> Result<()> {
-        let policy_grads = losses.policy_loss.backward();
-        let policy_grads = GradientsParams::from_grads(policy_grads, &self.policy);
-        self.policy = self
-            .policy_optimizer
-            .step(self.policy_lr, self.policy.clone(), policy_grads);
-        let value_loss = losses.value_loss * losses.vf_coeff;
-        let value_grads = value_loss.backward();
-        let value_grads = GradientsParams::from_grads(value_grads, &self.value_net);
-        self.value_net =
-            self.value_optimizer
-                .step(self.value_lr, self.value_net.clone(), value_grads);
-        Ok(())
-    }
-}
-
-impl<M: BurnPolicy> ValueFunction for SplitPolicyValueLearner<M> {
-    type Tensor = Tensor<2>;
-
-    fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
-        self.value_net.forward(observations)
-    }
-}
-
-impl<D: BurnPolicy> OnPolicyLearner for SplitPolicyValueLearner<D> {
-    type LearningTensor = Tensor<2>;
-    type InferenceTensor = Tensor<2>;
-    type Policy = D;
-    type InferencePolicy = D;
-
-    fn inference_policy(&self) -> Self::InferencePolicy {
-        self.policy.valid()
-    }
-
-    fn policy(&self) -> &Self::Policy {
-        &self.policy
-    }
-
-    fn set_learning_rates(&mut self, policy_learning_rate: f64, value_learning_rate: f64) {
-        self.policy_lr = policy_learning_rate;
-        self.value_lr = value_learning_rate;
-    }
-
-    fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
-        Ok(Tensor::from_data(
-            burn::tensor::TensorData::new(slice.to_vec(), [slice.len(), 1]),
-            &self.value_net.devices()[0],
-        ))
-    }
-
-    fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        t.clone().autodiff()
-    }
-}
-
-/// Snapshot state matching the learner's optimizer layout.
-pub enum PolicyValueLearnerSnapshot {
-    Joint(JointPolicyValueSnapshot),
-    Split(SplitPolicyValueLeranerSnapshot),
+/// Model parameters and optimizer state, independent of the policy's Rust type.
+pub struct PolicyValueLearnerSnapshot {
+    model: ModuleRecord,
+    optimizer: OptimizerKind<OptimizerRecord>,
 }
 
 impl PolicyValueLearnerSnapshot {
+    /// Saves model and optimizer records in a Burnpack snapshot file.
+    ///
+    /// # Panics
+    /// Panics if a record cannot be serialized or the file cannot be written.
+    pub fn to_file(self, file: PathBuf) {
+        let model = self.model.into_bytes().unwrap();
+        match self.optimizer {
+            OptimizerKind::Joint { optimizer, lr } => Self::save_records(
+                file,
+                [
+                    ("model", model),
+                    ("optimizer", optimizer.into_bytes().unwrap()),
+                ],
+                [("lr", lr)],
+            ),
+            OptimizerKind::Split {
+                policy,
+                policy_lr,
+                value,
+                value_lr,
+            } => Self::save_records(
+                file,
+                [
+                    ("model", model),
+                    ("policy_optimizer", policy.into_bytes().unwrap()),
+                    ("value_optimizer", value.into_bytes().unwrap()),
+                ],
+                [("policy_lr", policy_lr), ("value_lr", value_lr)],
+            ),
+        }
+    }
+
     // Store each Burn record as a byte tensor, with learning rates as typed scalars.
     fn save_records<const N: usize, const L: usize>(
         file: PathBuf,
@@ -441,21 +280,37 @@ impl PolicyValueLearnerSnapshot {
     }
 }
 
-/// Erased Burn policy/value module covering joint and split optimizer layouts.
-pub enum PolicyValueLearner<D: BurnPolicy = BurnDistributionKind> {
-    /// Policy/value module with one shared optimizer configuration.
-    Joint(JointPolicyValueLearner<D>),
-    /// Policy/value module with separate policy and value optimizers.
-    Split(SplitPolicyValueLearner<D>),
+/// Burn policy/value learner with a joint or split optimizer.
+pub struct PolicyValueLearner<P: BurnPolicy = BurnDistributionKind> {
+    model: PolicyValueModel<P>,
+    optimizer: PolicyValueOptimizer,
 }
 
-impl<D: BurnPolicy> PolicyValueLearner<D> {
-    /// Builds a policy/value module with a shared optimizer configuration.
+impl<P: BurnPolicy> PolicyValueLearner<P> {
+    /// Combines a policy, value network, and optimizer, enabling training on both networks.
+    ///
+    /// # Panics
+    /// Panics unless the value network outputs one value per observation.
+    #[must_use]
+    pub fn new(policy: P, value_net: NetworkKind, optimizer: PolicyValueOptimizer) -> Self {
+        assert_eq!(
+            value_net.output_shape().dims(),
+            [1],
+            "value network must output one value"
+        );
+        Self {
+            model: PolicyValueModel { policy, value_net }.train(),
+            optimizer,
+        }
+    }
+
+    /// Builds a policy/value learner with a shared optimizer configuration.
     ///
     /// # Panics
     /// Panics for invalid layer widths or a value output width other than one.
+    #[must_use]
     pub fn joint(
-        policy: D,
+        policy: P,
         value_layers: &[usize],
         activation: ActivationFunction,
         optimizer_config: &AdamWConfig,
@@ -469,42 +324,31 @@ impl<D: BurnPolicy> PolicyValueLearner<D> {
         )
     }
 
-    pub fn load_snapshot(self, snapshot: PolicyValueLearnerSnapshot) -> Self {
-        match snapshot {
-            PolicyValueLearnerSnapshot::Joint(joint_policy_value_snapshot) => {
-                let Self::Joint(joint) = self else { panic!() };
-                let joint = joint.load_snapshot(joint_policy_value_snapshot);
-                Self::Joint(joint)
-            }
-            PolicyValueLearnerSnapshot::Split(split_policy_value_leraner_snapshot) => {
-                let Self::Split(split) = self else { panic!() };
-                let split = split.load_snapshot(split_policy_value_leraner_snapshot);
-                Self::Split(split)
-            }
-        }
-    }
-
     /// Builds a joint learner with an independently constructed value network.
     ///
     /// # Panics
     /// Panics unless the value network outputs one value per observation.
+    #[must_use]
     pub fn joint_with_network(
-        policy: D,
+        policy: P,
         value_net: NetworkKind,
         optimizer_config: &AdamWConfig,
         lr: f64,
     ) -> Self {
-        let model = JointActorModel::new(policy, value_net);
-        let model = JointPolicyValueLearner::new(model, optimizer_config.init(), lr);
-        Self::Joint(model)
+        Self::new(
+            policy,
+            value_net,
+            PolicyValueOptimizer::joint(optimizer_config, lr),
+        )
     }
 
-    /// Builds a policy/value module with separate policy and value optimizers.
+    /// Builds a policy/value learner with separate policy and value optimizers.
     ///
     /// # Panics
     /// Panics for invalid layer widths or a value output width other than one.
+    #[must_use]
     pub fn split(
-        policy: D,
+        policy: P,
         value_layers: &[usize],
         activation: ActivationFunction,
         policy_optimizer_config: &AdamWConfig,
@@ -526,101 +370,106 @@ impl<D: BurnPolicy> PolicyValueLearner<D> {
     ///
     /// # Panics
     /// Panics unless the value network outputs one value per observation.
+    #[must_use]
     pub fn split_with_network(
-        policy: D,
+        policy: P,
         value_net: NetworkKind,
         policy_optimizer_config: &AdamWConfig,
         policy_lr: f64,
         value_optimizer_config: &AdamWConfig,
         value_lr: f64,
     ) -> Self {
-        let model = SplitPolicyValueLearner::new(
+        Self::new(
             policy,
             value_net,
-            policy_optimizer_config.init(),
-            policy_lr,
-            value_optimizer_config.init(),
-            value_lr,
-        );
-        Self::Split(model)
+            PolicyValueOptimizer::split(
+                policy_optimizer_config,
+                policy_lr,
+                value_optimizer_config,
+                value_lr,
+            ),
+        )
     }
-}
 
-impl<D: BurnPolicy> PolicyValueLearner<D> {
     /// Returns the current policy optimizer learning rate.
+    #[must_use]
     pub fn policy_learning_rate(&self) -> f64 {
-        match self {
-            Self::Joint(lm) => lm.policy_learning_rate(),
-            Self::Split(lm) => lm.policy_learning_rate(),
+        self.optimizer.policy_learning_rate()
+    }
+
+    /// Sets the same learning rate for both policy and value updates.
+    pub fn set_learning_rate(&mut self, learning_rate: f64) {
+        self.optimizer.set_learning_rate(learning_rate);
+    }
+
+    /// Captures model parameters, optimizer state, and learning rates.
+    #[must_use]
+    pub fn to_snapshot(&self) -> PolicyValueLearnerSnapshot {
+        PolicyValueLearnerSnapshot {
+            model: self.model.clone().into_record(),
+            optimizer: self.optimizer.to_snapshot(),
         }
     }
 
-    /// Sets the learning rate on the contained optimizer state.
-    pub fn set_learning_rate(&mut self, learning_rate: f64) {
-        match self {
-            Self::Joint(lm) => lm.set_learning_rate(learning_rate),
-            Self::Split(lm) => lm.set_learning_rate(learning_rate),
+    /// Restores a snapshot into matching model and optimizer configurations.
+    ///
+    /// # Panics
+    /// Panics if the model parameters or optimizer layout do not match.
+    #[must_use]
+    pub fn load_snapshot(self, snapshot: PolicyValueLearnerSnapshot) -> Self {
+        Self {
+            model: self.model.load_record(snapshot.model),
+            optimizer: self.optimizer.load_snapshot(snapshot.optimizer),
         }
     }
 }
 
-impl<M: BurnPolicy> Learner for PolicyValueLearner<M> {
+impl<P: BurnPolicy> Learner for PolicyValueLearner<P> {
     type Losses = PolicyValueLosses;
 
     fn update(&mut self, losses: Self::Losses) -> Result<()> {
-        match self {
-            Self::Joint(lm) => lm.update(losses),
-            Self::Split(lm) => lm.update(losses),
-        }
+        self.optimizer.update(&mut self.model, losses);
+        Ok(())
     }
 }
 
-impl<M: BurnPolicy> ValueFunction for PolicyValueLearner<M> {
+impl<P: BurnPolicy> ValueFunction for PolicyValueLearner<P> {
     type Tensor = Tensor<2>;
 
     fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
-        match self {
-            Self::Joint(lm) => lm.values(observations),
-            Self::Split(lm) => lm.values(observations),
-        }
+        self.model.value_net.forward(observations)
     }
 }
 
-impl<D: BurnPolicy> OnPolicyLearner for PolicyValueLearner<D> {
-    type LearningTensor = Tensor<2>;
-    type InferenceTensor = Tensor<2>;
-    type Policy = D;
-    type InferencePolicy = D;
+impl<P: BurnPolicy> OnPolicyLearner for PolicyValueLearner<P> {
+    type Policy = P;
+    type InferencePolicy = P;
 
     fn inference_policy(&self) -> Self::InferencePolicy {
-        match self {
-            Self::Joint(lm) => lm.inference_policy(),
-            Self::Split(lm) => lm.inference_policy(),
-        }
+        self.model.policy.valid()
     }
 
     fn policy(&self) -> &Self::Policy {
-        match self {
-            Self::Joint(lm) => lm.policy(),
-            Self::Split(lm) => lm.policy(),
-        }
+        &self.model.policy
+    }
+
+    fn policy_learning_rate(&self) -> f64 {
+        self.optimizer.policy_learning_rate()
     }
 
     fn set_learning_rates(&mut self, policy_learning_rate: f64, value_learning_rate: f64) {
-        match self {
-            Self::Joint(lm) => lm.set_learning_rates(policy_learning_rate, value_learning_rate),
-            Self::Split(lm) => lm.set_learning_rates(policy_learning_rate, value_learning_rate),
-        }
+        self.optimizer
+            .set_learning_rates(policy_learning_rate, value_learning_rate);
     }
 
-    fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::LearningTensor> {
-        match self {
-            Self::Joint(lm) => lm.tensor_from_slice(slice),
-            Self::Split(lm) => lm.tensor_from_slice(slice),
-        }
+    fn tensor_from_slice(&self, slice: &[f32]) -> Result<Self::Tensor> {
+        Ok(Tensor::from_data(
+            burn::tensor::TensorData::new(slice.to_vec(), [slice.len(), 1]),
+            &self.model.value_net.devices()[0],
+        ))
     }
 
-    fn lifter(t: &Self::InferenceTensor) -> Self::LearningTensor {
-        t.clone().autodiff()
+    fn prepare_learning_tensor(t: &Self::Tensor) -> Self::Tensor {
+        t.clone().detach().autodiff()
     }
 }

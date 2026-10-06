@@ -75,43 +75,33 @@ fn snapshot_records_preserve_the_next_optimizer_update() {
             "r2l-burn-snapshot-{}-{split}.bpk",
             std::process::id()
         ));
-        match &original {
-            PolicyValueLearner::Joint(joint) => joint.to_snapshot().to_file(path.clone()),
-            PolicyValueLearner::Split(split) => SplitPolicyValueLeranerSnapshot {
-                policy: split.policy.clone().into_record(),
-                value_net: split.value_net.clone().into_record(),
-                policy_optimizer: split.policy_optimizer.to_record(),
-                policy_lr: split.policy_lr,
-                value_optimizer: split.value_optimizer.to_record(),
-                value_lr: split.value_lr,
-            }
-            .to_file(path.clone()),
-        }
+        original.to_snapshot().to_file(path.clone());
 
         let reader = burn_pack::Reader::from_file(&path).unwrap();
         let bytes = |name| Bytes::from_bytes_vec(reader.tensor_data(name).unwrap());
         let rate = |name| f64::try_from(*reader.scalars().get(name).unwrap()).unwrap();
-        let snapshot = if split {
-            PolicyValueLearnerSnapshot::Split(SplitPolicyValueLeranerSnapshot {
-                policy: ModuleRecord::from_bytes(bytes("policy")).unwrap(),
-                value_net: ModuleRecord::from_bytes(bytes("value_net")).unwrap(),
-                policy_optimizer: OptimizerRecord::from_bytes(bytes("policy_optimizer")).unwrap(),
+        let optimizer = if split {
+            OptimizerKind::Split {
+                policy: OptimizerRecord::from_bytes(bytes("policy_optimizer")).unwrap(),
                 policy_lr: rate("policy_lr"),
-                value_optimizer: OptimizerRecord::from_bytes(bytes("value_optimizer")).unwrap(),
+                value: OptimizerRecord::from_bytes(bytes("value_optimizer")).unwrap(),
                 value_lr: rate("value_lr"),
-            })
+            }
         } else {
-            PolicyValueLearnerSnapshot::Joint(JointPolicyValueSnapshot {
-                model: ModuleRecord::from_bytes(bytes("model")).unwrap(),
+            OptimizerKind::Joint {
                 optimizer: OptimizerRecord::from_bytes(bytes("optimizer")).unwrap(),
                 lr: rate("lr"),
-            })
+            }
+        };
+        let snapshot = PolicyValueLearnerSnapshot {
+            model: ModuleRecord::from_bytes(bytes("model")).unwrap(),
+            optimizer,
         };
         let mut restored = learner(split).load_snapshot(snapshot);
         std::fs::remove_file(path).unwrap();
         assert_eq!(restored.policy_learning_rate(), 0.003);
-        if let PolicyValueLearner::Split(split) = &restored {
-            assert_eq!(split.value_lr, 0.007);
+        if let OptimizerKind::Split { value_lr, .. } = &restored.optimizer.inner {
+            assert_eq!(*value_lr, 0.007);
         }
         assert_eq!(outputs(&original), outputs(&restored));
 

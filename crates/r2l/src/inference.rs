@@ -193,7 +193,7 @@ impl<T: R2lTensor> InferencePolicy<T> {
             Backend::Burn(_) => {
                 let actor = config
                     .policy_builder
-                    .build_burn(&BurnDevice::ndarray())?
+                    .build_burn(&BurnDevice::flex())?
                     .load_from_bytes(actor_bytes)
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))

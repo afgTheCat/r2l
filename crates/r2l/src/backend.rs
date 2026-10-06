@@ -1,6 +1,6 @@
 //! Backend types for training and inference.
 
-use burn::backend::{Autodiff, NdArray};
+use burn::backend::{Autodiff, Flex};
 use candle_core::{Device, DeviceLocation};
 use r2l_core::error::Error;
 use serde::{Deserialize, Serialize, de::Error as _};
@@ -73,9 +73,9 @@ impl<'de> Deserialize<'de> for CandleBackend {
 }
 
 /// Default CPU backend used by Burn training builders, with automatic differentiation.
-pub type BurnBackend = Autodiff<NdArray>;
+pub type BurnBackend = Autodiff<Flex>;
 
-/// Configuration marker for the default Burn ndarray backend.
+/// Configuration marker for the default Burn Flex backend.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub(crate) struct BurnBackendConfig;
 

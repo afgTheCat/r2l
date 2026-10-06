@@ -58,12 +58,13 @@ impl TrainingLimit {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct TrainingCounters {
     completed_rollouts: usize,
     steps_taken: usize,
 }
 
+#[derive(Clone)]
 pub(crate) struct TrainingProgress {
     counters: TrainingCounters,
     training_limit: TrainingLimit,
@@ -86,12 +87,18 @@ impl TrainingProgress {
         rollout_mode: RolloutMode,
         n_envs: NonZeroUsize,
     ) -> SharedTrainingProgress {
-        Rc::new(RefCell::new(Self {
+        Self {
             counters: TrainingCounters::default(),
             training_limit,
             rollout_mode,
             n_envs,
-        }))
+        }
+        .into_shared()
+    }
+
+    /// Wraps owned progress in fresh storage shared by the restored hooks.
+    pub(crate) fn into_shared(self) -> SharedTrainingProgress {
+        Rc::new(RefCell::new(self))
     }
 
     /// Records a collected rollout and its sampled steps before the learning pass.
@@ -149,5 +156,41 @@ impl TrainingProgress {
         } else {
             HookResult::Continue
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn restored_progress_owns_its_counters_and_preserves_the_schedule() {
+        let original = TrainingProgress::shared(
+            TrainingLimit::steps(100),
+            RolloutMode::StepBound {
+                n_steps: NonZeroUsize::new(5).unwrap(),
+            },
+            NonZeroUsize::new(2).unwrap(),
+        );
+        original.borrow_mut().counters = TrainingCounters {
+            completed_rollouts: 2,
+            steps_taken: 20,
+        };
+        let snapshot = original.borrow().clone();
+        original.borrow_mut().counters.steps_taken = 100;
+        let restored = snapshot.into_shared();
+        assert_eq!(restored.borrow().completed_rollouts(), 2);
+        assert_eq!(restored.borrow().total_rollouts(), Some(10));
+        assert_eq!(restored.borrow().progress_remaining(), 0.8);
+        assert!(matches!(
+            restored.borrow().progress_result(),
+            HookResult::Continue
+        ));
+        assert!(matches!(
+            original.borrow().progress_result(),
+            HookResult::Break
+        ));
+        restored.borrow_mut().counters.completed_rollouts = 3;
+        assert_eq!(original.borrow().completed_rollouts(), 2);
     }
 }

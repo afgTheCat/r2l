@@ -91,17 +91,12 @@ impl Logps {
     }
 }
 
-fn batch_advantages_and_returns<
-    T1: R2lTensor,
-    T2: R2lTensor,
-    B: TrajectoryBatch<T1>,
-    L: Fn(&T1) -> T2,
->(
+fn batch_advantages_and_returns<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
     batch: &B,
-    value_func: &impl ValueFunction<Tensor = T2>,
+    value_func: &impl ValueFunction<Tensor = T>,
     gamma: f32,
     lambda: f32,
-    lifter: L,
+    prepare_tensor: L,
 ) -> Result<(Vec<f32>, Vec<f32>)> {
     if batch.is_empty() {
         return Err(TensorError::EmptyInput {
@@ -109,10 +104,18 @@ fn batch_advantages_and_returns<
         }
         .into());
     }
-    let states = batch.states().iter().map(&lifter).collect::<Vec<_>>();
-    let next_states = batch.next_states().iter().map(&lifter).collect::<Vec<_>>();
-    let values: Vec<f32> = value_func.values(T2::cat(&states, 0)?)?.to_vec()?;
-    let next_values: Vec<f32> = value_func.values(T2::cat(&next_states, 0)?)?.to_vec()?;
+    let states = batch
+        .states()
+        .iter()
+        .map(&prepare_tensor)
+        .collect::<Vec<_>>();
+    let next_states = batch
+        .next_states()
+        .iter()
+        .map(&prepare_tensor)
+        .collect::<Vec<_>>();
+    let values: Vec<f32> = value_func.values(T::cat(&states, 0)?)?.to_vec()?;
+    let next_values: Vec<f32> = value_func.values(T::cat(&next_states, 0)?)?.to_vec()?;
     let total_steps = batch.rewards().len();
     let mut advantages: Vec<f32> = vec![0.; total_steps];
     let mut returns: Vec<f32> = vec![0.; total_steps];
@@ -136,23 +139,18 @@ fn batch_advantages_and_returns<
 /// # Errors
 ///
 /// Returns an error if value inference fails.
-pub fn batches_advantages_and_returns<
-    T1: R2lTensor,
-    T2: R2lTensor,
-    B: TrajectoryBatch<T1>,
-    L: Fn(&T1) -> T2,
->(
+pub fn batches_advantages_and_returns<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
     batches: &[B],
-    value_func: &impl ValueFunction<Tensor = T2>,
+    value_func: &impl ValueFunction<Tensor = T>,
     gamma: f32,
     lambda: f32,
-    lifter: L,
+    prepare_tensor: L,
 ) -> Result<(Advantages, Returns)> {
     let mut advantage_vec = vec![];
     let mut returns_vec = vec![];
     for batch in batches {
         let (advantages, returns) =
-            batch_advantages_and_returns(batch, value_func, gamma, lambda, &lifter)?;
+            batch_advantages_and_returns(batch, value_func, gamma, lambda, &prepare_tensor)?;
         advantage_vec.push(advantages);
         returns_vec.push(returns);
     }
@@ -163,18 +161,18 @@ pub fn batches_advantages_and_returns<
 ///
 /// # Errors
 /// Returns an error if rows cannot be concatenated into nonempty batches.
-pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -> T2>(
+pub fn sample<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
     batches: &[B],
     indices: &[(usize, usize)],
-    lifter: L,
-) -> Result<(T2, T2)> {
+    prepare_tensor: L,
+) -> Result<(T, T)> {
     let mut observations = vec![];
     let mut actions = vec![];
     for (batch_idx, idx) in indices {
-        observations.push(lifter(&batches[*batch_idx].states()[*idx]));
-        actions.push(lifter(&batches[*batch_idx].actions()[*idx]));
+        observations.push(prepare_tensor(&batches[*batch_idx].states()[*idx]));
+        actions.push(prepare_tensor(&batches[*batch_idx].actions()[*idx]));
     }
-    Ok((T2::cat(&observations, 0)?, T2::cat(&actions, 0)?))
+    Ok((T::cat(&observations, 0)?, T::cat(&actions, 0)?))
 }
 
 /// Computes action log-probabilities for every transition in each batch.

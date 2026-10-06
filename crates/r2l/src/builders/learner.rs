@@ -3,7 +3,9 @@ use std::marker::PhantomData;
 use burn::tensor::Device as BurnDevice;
 use candle_core::Device;
 use r2l_core::{error::Error, networks::NetworkConfig};
-use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner as BurnPolicyValueLearner;
+use r2l_distributions::learning_modules::burn_lm::{
+    PolicyValueLearner as BurnPolicyValueLearner, PolicyValueOptimizer as BurnPolicyValueOptimizer,
+};
 use r2l_distributions::learning_modules::candle_lm::{
     PolicyValueLearner as CandlePolicyValueLearner, PolicyValueOptimizer,
 };
@@ -59,32 +61,29 @@ impl LearnerConfig {
     }
 
     pub fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner, Error> {
-        let device = BurnDevice::ndarray();
+        let device = BurnDevice::flex();
         let policy = self.policy_config.build_burn(&device)?;
         let value_net = NetworkBuilder::new(self.value_network.clone()).build_burn(
             &self.policy_config.observation_space.observation_shape(),
             1,
             &device,
         )?;
-        Ok(match &self.optimizer {
-            OptimizerConfig::Joint(config) => BurnPolicyValueLearner::joint_with_network(
-                policy,
-                value_net,
+        let optimizer = match &self.optimizer {
+            OptimizerConfig::Joint(config) => BurnPolicyValueOptimizer::joint(
                 &config.burn_config(),
                 config.learning_rate.value(1.0),
             ),
             OptimizerConfig::Split {
                 policy: policy_config,
                 value,
-            } => BurnPolicyValueLearner::split_with_network(
-                policy,
-                value_net,
+            } => BurnPolicyValueOptimizer::split(
                 &policy_config.burn_config(),
                 policy_config.learning_rate.value(1.0),
                 &value.burn_config(),
                 value.learning_rate.value(1.0),
             ),
-        })
+        };
+        Ok(BurnPolicyValueLearner::new(policy, value_net, optimizer))
     }
 }
 

@@ -1,9 +1,7 @@
-#![cfg(not(feature = "simd"))]
-
 use burn::tensor::{Device, Tensor, TensorData};
 
 fn reciprocal_bits() -> Vec<u32> {
-    let device = Device::ndarray();
+    let device = Device::flex();
     let input = Tensor::<1>::from_data(TensorData::new(vec![3.0; 257], [257]), &device);
 
     input
@@ -17,7 +15,7 @@ fn reciprocal_bits() -> Vec<u32> {
 }
 
 #[test]
-fn ndarray_simd_reciprocal_is_bitwise_deterministic() {
+fn flex_reciprocal_is_bitwise_deterministic() {
     let expected = reciprocal_bits();
 
     for run in 1..32 {
@@ -29,7 +27,7 @@ fn ndarray_simd_reciprocal_is_bitwise_deterministic() {
                 .position(|(actual, expected)| actual != expected)
                 .expect("different vectors should contain a differing element");
             panic!(
-                "SIMD reciprocal diverged on run {run} at element {index}: {:#010x} != {:#010x}",
+                "Flex reciprocal diverged on run {run} at element {index}: {:#010x} != {:#010x}",
                 actual[index], expected[index]
             );
         }

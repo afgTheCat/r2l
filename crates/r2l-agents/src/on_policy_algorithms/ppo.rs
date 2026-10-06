@@ -4,9 +4,7 @@ use r2l_core::{
     buffers::TrajectoryBatch,
     error::Result,
     models::{Learner, Policy},
-    on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
-    },
+    on_policy::{algorithm::Agent, learning_module::OnPolicyLearner, losses::PolicyValueLosses},
     tensor::R2lTensor,
 };
 
@@ -65,7 +63,7 @@ pub trait PPOHook<M: OnPolicyLearner> {
     /// # Errors
     ///
     /// Returns an error if the hook cannot complete.
-    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn before_learning_hook<B: TrajectoryBatch<M::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
@@ -81,7 +79,7 @@ pub trait PPOHook<M: OnPolicyLearner> {
     /// # Errors
     ///
     /// Returns an error if the hook cannot complete.
-    fn rollout_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn rollout_hook<B: TrajectoryBatch<M::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
@@ -100,7 +98,7 @@ pub trait PPOHook<M: OnPolicyLearner> {
         _params: &mut PPOParams,
         _module: &mut M,
         _losses: &mut <M as Learner>::Losses,
-        _data: &PPOBatchData<M::LearningTensor>,
+        _data: &PPOBatchData<M::Tensor>,
     ) -> Result<HookResult> {
         Ok(HookResult::Continue)
     }
@@ -132,7 +130,7 @@ impl PPOObjective {
 }
 
 impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
-    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::Tensor>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -145,7 +143,8 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
             let Some(indices) = batch_indices.next_batch() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(batches, &indices, Module::lifter)?;
+            let (observations, actions) =
+                sample(batches, &indices, Module::prepare_learning_tensor)?;
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
             let logp_old = lm.tensor_from_slice(&logps.sample(&indices))?;
             let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
@@ -158,7 +157,7 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
             let ratio = logp_diff.exp()?;
             let policy_loss =
                 PPOObjective::policy_loss(&ratio, &advantages, self.params.clip_range)?;
-            let mut losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
+            let mut losses = PolicyValueLosses::new(policy_loss, value_loss);
             let ppo_data = PPOBatchData {
                 observations,
                 actions,
@@ -177,7 +176,7 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
         }
     }
 
-    fn learning_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn learning_loop<B: TrajectoryBatch<Module::Tensor>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -198,16 +197,13 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
     /// # Errors
     ///
     /// Returns an error if tensor computation, a hook, or the optimizer update fails.
-    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
-        &mut self,
-        batches: &[B],
-    ) -> Result<()> {
+    pub fn learn<B: TrajectoryBatch<Module::Tensor>>(&mut self, batches: &[B]) -> Result<()> {
         let (mut advantages, mut returns) = batches_advantages_and_returns(
             batches,
             &self.lm,
             self.params.gamma,
             self.params.lambda,
-            Module::lifter,
+            Module::prepare_learning_tensor,
         )?;
         r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
             &mut self.params,
@@ -224,7 +220,7 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
 }
 
 impl<M: OnPolicyLearner, H: PPOHook<M>> Agent for PPO<M, H> {
-    type Tensor = M::InferenceTensor;
+    type Tensor = M::Tensor;
     type Actor = M::InferencePolicy;
 
     fn actor(&self) -> Self::Actor {

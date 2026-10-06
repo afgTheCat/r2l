@@ -115,6 +115,6 @@ pub mod prelude {
         ActivationFunction, Actor, Learner, Policy, ToSafetensors, ValueFunction,
     };
     pub use crate::on_policy::learning_module::OnPolicyLearner;
-    pub use crate::on_policy::losses::FromPolicyValueLosses;
+    pub use crate::on_policy::losses::PolicyValueLosses;
     pub use crate::tensor::{R2lTensor, VecTensor};
 }

@@ -1045,6 +1045,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "portable-atomic",
+ "rayon",
 ]
 
 [[package]]
@@ -6386,6 +6387,7 @@ name = "r2l-core"
 version = "0.0.3"
 dependencies = [
  "burn",
+ "burn-core",
  "candle-core",
  "candle-nn",
  "derive_more",
@@ -6402,7 +6404,6 @@ name = "r2l-distributions"
 version = "0.0.3"
 dependencies = [
  "burn",
- "burn-ndarray",
  "burn-pack",
  "burn-store",
  "candle-core",

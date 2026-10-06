@@ -1,4 +1,4 @@
-// super basic stuff, we begin with burn
+//! Shared snapshot configuration and progress, with backend-specific learner state.
 
 use std::{num::NonZeroUsize, sync::mpsc::Sender};
 
@@ -17,15 +17,14 @@ use r2l_sampler::{
 };
 
 use crate::{
-    EpisodeBoundHook, OnPolicyTrainingHooks, PPOBurn, PPOCandle, PPORolloutStats, StepBoundHook,
-    backend::Backend,
+    EpisodeBoundHook, OnPolicyTrainingHooks, PPOBurn, PPORolloutStats, StepBoundHook,
     builders::{
         algorithm::AlgoConfig,
         learner::{LearnerConfig, LearningHookConfig},
         on_policy_hook::OnPolicyHookConfig,
     },
     evaluator::EvaluationSampler,
-    hooks::progress::SharedTrainingProgress,
+    hooks::progress::{SharedTrainingProgress, TrainingProgress},
     utils::RewardNormalizer,
 };
 
@@ -131,37 +130,22 @@ impl<E: Env> SamplerConfiguration<E> {
     }
 }
 
-pub struct SnapshotAlgo<E: Env> {
-    backend: Backend,
+/// Configuration and owned progress shared by backend-specific restoration paths.
+///
+/// `L` carries the backend's model and optimizer snapshot, independently of the
+/// concrete policy type. Snapshot capture and additional restoration paths are
+/// still under construction.
+pub struct SnapshotAlgo<E: Env, L> {
     algo_config: AlgoConfig,
     learner: LearnerConfig,
+    learner_state: L,
+    progress: TrainingProgress,
     learning_hook: LearningHookConfig,
     sampler_configuration: SamplerConfiguration<E>,
     hook_config: OnPolicyHookConfig<E>,
 }
 
-impl<E: Env> SnapshotAlgo<E> {
-    // just prototype things
-    fn candle_algo(
-        &self,
-    ) -> OnPolicyAlgorithm<
-        PPOCandle,
-        StagedSampler<E, StepBoundHook<E>>,
-        OnPolicyTrainingHooks<PPOCandle, StagedSampler<E, StepBoundHook<E>>, E>,
-    > {
-        todo!()
-    }
-
-    // this we might not need as a serparate func, this is just black boxing the exact construction
-    fn get_policy_learner_snapshot(&self) -> PolicyValueLearnerSnapshot {
-        todo!()
-    }
-
-    // creates the shared progress things, will be used to build a log of shit
-    fn shared_progress(&self) -> SharedTrainingProgress {
-        todo!()
-    }
-
+impl<E: Env> SnapshotAlgo<E, PolicyValueLearnerSnapshot> {
     fn burn_algo(
         self,
         reporter: Option<Sender<PPORolloutStats>>,
@@ -170,18 +154,18 @@ impl<E: Env> SnapshotAlgo<E> {
         StagedSampler<E, StepBoundHook<E>>,
         OnPolicyTrainingHooks<PPOBurn, StagedSampler<E, StepBoundHook<E>>, E>,
     > {
-        let snapshot = self.get_policy_learner_snapshot();
-        let progress = self.shared_progress();
         let Self {
-            backend,
             learner: learner_config,
+            learner_state,
+            progress,
             learning_hook,
             sampler_configuration,
             hook_config,
             algo_config,
         } = self;
+        let progress = progress.into_shared();
         let learner = learner_config.build_burn_learner().unwrap();
-        let learner = learner.load_snapshot(snapshot);
+        let learner = learner.load_snapshot(learner_state);
         let (params, settings) =
             algo_config.ppo_parts(reporter, sampler_configuration.env_build_plan.n_envs());
         let hooks = learning_hook.build(settings, &learner_config.optimizer, progress.clone());
@@ -196,9 +180,6 @@ impl<E: Env> SnapshotAlgo<E> {
         let obs_normalizer = sampler.obs_normalizer();
         let hooks = hook_config.build(obs_normalizer, progress);
         let runtime = OnPolicyRuntime { agent, sampler };
-        OnPolicyAlgorithm {
-            runtime: runtime,
-            hooks,
-        }
+        OnPolicyAlgorithm { runtime, hooks }
     }
 }

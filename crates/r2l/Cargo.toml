@@ -26,7 +26,6 @@ itertools = { workspace = true }
 default = []
 gym = ["dep:r2l-gym"]
 test-utils = []
-simd = ["r2l-distributions/simd"]
 cuda = [
   "r2l-core/cuda",
   "r2l-distributions/cuda",

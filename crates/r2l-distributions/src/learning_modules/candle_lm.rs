@@ -41,7 +41,6 @@ use r2l_core::{
     Shape,
     error::{Error, Result},
     models::{Actor, Learner},
-    on_policy::losses::FromPolicyValueLosses,
 };
 
 use crate::{
@@ -51,47 +50,8 @@ use crate::{
 /// Candle distributions backed by a dense network and native variable tensors.
 pub type CandleDistributionKind = DistributionKind<Mlp>;
 
-/// Reduced policy/value losses and a value-loss multiplier.
-pub struct PolicyValueLosses {
-    /// Policy loss, including any entropy term.
-    pub policy_loss: Tensor,
-    /// Value-function loss.
-    pub value_loss: Tensor,
-    /// Multiplier applied to the value loss, defaulting to `1.0`.
-    pub vf_coeff: f32,
-}
-
-impl PolicyValueLosses {
-    /// Creates a bundle of single-element policy and value losses.
-    #[must_use]
-    pub fn new(policy_loss: Tensor, value_loss: Tensor) -> Self {
-        Self {
-            policy_loss,
-            value_loss,
-            vf_coeff: 1.0,
-        }
-    }
-
-    /// Adds an already signed and weighted entropy term to the policy loss.
-    ///
-    /// # Errors
-    /// Returns an error unless both terms contain one element on the same device.
-    pub fn add_entropy_loss(&mut self, entropy_loss: &Tensor) -> Result<()> {
-        self.policy_loss = (self.policy_loss.reshape(())? + entropy_loss.reshape(())?)?;
-        Ok(())
-    }
-
-    /// Sets the value-loss multiplier applied when this bundle is optimized.
-    pub fn set_vf_coeff(&mut self, vf_coeff: f32) {
-        self.vf_coeff = vf_coeff;
-    }
-}
-
-impl FromPolicyValueLosses<Tensor> for PolicyValueLosses {
-    fn from_policy_value_losses(policy_loss: Tensor, value_loss: Tensor) -> Self {
-        Self::new(policy_loss, value_loss)
-    }
-}
+/// Shared policy/value losses specialized to this backend.
+pub type PolicyValueLosses = r2l_core::on_policy::losses::PolicyValueLosses<Tensor>;
 
 fn validate_max_norm(max_norm: Option<f32>) -> Result<()> {
     if let Some(norm) = max_norm
@@ -392,12 +352,10 @@ impl<P, N> Learner for PolicyValueLearner<P, N> {
 impl<P: Policy<Tensor = Tensor> + Clone, N: Network<Tensor = Tensor>> OnPolicyLearner
     for PolicyValueLearner<P, N>
 {
-    type LearningTensor = Tensor;
-    type InferenceTensor = Tensor;
     type Policy = P;
     type InferencePolicy = InferencePolicy<P>;
 
-    fn lifter(t: &Tensor) -> Tensor {
+    fn prepare_learning_tensor(t: &Tensor) -> Tensor {
         t.detach()
     }
 
@@ -411,6 +369,10 @@ impl<P: Policy<Tensor = Tensor> + Clone, N: Network<Tensor = Tensor>> OnPolicyLe
 
     fn policy(&self) -> &P {
         &self.policy
+    }
+
+    fn policy_learning_rate(&self) -> f64 {
+        self.optimizer.policy_learning_rate()
     }
 
     fn set_learning_rates(&mut self, policy_learning_rate: f64, value_learning_rate: f64) {

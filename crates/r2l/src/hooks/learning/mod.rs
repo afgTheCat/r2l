@@ -5,21 +5,15 @@ pub(crate) mod stats;
 
 use std::{marker::PhantomData, num::NonZeroUsize};
 
-use candle_core::Tensor;
 use r2l_agents::on_policy_algorithms::{
     Advantages, Returns,
     a2c::{A2CBatchData, A2CHook, A2CParams},
     ppo::{PPOBatchData, PPOHook, PPOParams},
 };
 use r2l_core::{
-    HookResult, buffers::TrajectoryBatch, error::Result,
-    on_policy::learning_module::OnPolicyLearner, tensor::R2lTensor,
-};
-use r2l_distributions::learning_modules::burn_lm::{
-    BurnPolicy, PolicyValueLearner as BurnLearner, PolicyValueLosses as BurnLosses,
-};
-use r2l_distributions::learning_modules::candle_lm::{
-    PolicyValueLearner as CandleLearner, PolicyValueLosses as CandleLosses,
+    HookResult, buffers::TrajectoryBatch, error::Result, models::Policy,
+    on_policy::learning_module::OnPolicyLearner, on_policy::losses::PolicyValueLosses,
+    tensor::R2lTensor,
 };
 
 use self::{
@@ -130,59 +124,27 @@ impl<M: OnPolicyLearner, A> LearningHook<M, A> {
         }
         progress
     }
-}
 
-// Backend-specific operations are shared by both algorithm adapters below.
-impl<P: BurnPolicy, A> LearningHook<BurnLearner<P>, A> {
     fn process_batch(
         &self,
-        module: &mut BurnLearner<P>,
-        losses: &mut BurnLosses,
-        observations: &burn::Tensor<2>,
+        module: &mut M,
+        losses: &mut PolicyValueLosses<M::Tensor>,
+        observations: &M::Tensor,
         collect_stats: bool,
     ) -> Result<Option<A2CMinibatchStats>> {
         losses.set_vf_coeff(self.vf_coeff);
         if self.entropy_coeff == 0. && !collect_stats {
             return Ok(None);
         }
-        let entropy_loss =
-            module.policy().entropy(observations.clone())?.neg() * self.entropy_coeff;
+        let entropy_loss = module
+            .policy()
+            .entropy(observations.clone())?
+            .mul_scalar(-self.entropy_coeff)?;
         let stats = if collect_stats {
             Some(A2CMinibatchStats {
                 policy_loss: losses.policy_loss.to_vec()?[0],
                 entropy_loss: entropy_loss.to_vec()?[0],
                 value_loss: losses.value_loss.to_vec()?[0],
-            })
-        } else {
-            None
-        };
-        if self.entropy_coeff != 0. {
-            losses.add_entropy_loss(entropy_loss);
-        }
-        Ok(stats)
-    }
-}
-
-impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone, A> LearningHook<CandleLearner<P>, A> {
-    fn process_batch(
-        &self,
-        module: &mut CandleLearner<P>,
-        losses: &mut CandleLosses,
-        observations: &Tensor,
-        collect_stats: bool,
-    ) -> Result<Option<A2CMinibatchStats>> {
-        losses.set_vf_coeff(self.vf_coeff);
-        if self.entropy_coeff == 0. && !collect_stats {
-            return Ok(None);
-        }
-        let entropy = module.policy().entropy(observations.clone())?;
-        let entropy_loss =
-            (Tensor::full(self.entropy_coeff, (), entropy.device())? * entropy.neg()?)?;
-        let stats = if collect_stats {
-            Some(A2CMinibatchStats {
-                policy_loss: losses.policy_loss.to_scalar()?,
-                entropy_loss: entropy_loss.to_scalar()?,
-                value_loss: losses.value_loss.to_scalar()?,
             })
         } else {
             None
@@ -194,11 +156,11 @@ impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone, A> LearningHook<Candl
     }
 }
 
-impl<P: BurnPolicy> A2CHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, A2CSettings> {
-    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<2>>>(
+impl<M: OnPolicyLearner> A2CHook<M> for LearningHook<M, A2CSettings> {
+    fn before_learning_hook<T: TrajectoryBatch<M::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnLearner<P>,
+        module: &mut M,
         _batches: &[T],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -210,9 +172,9 @@ impl<P: BurnPolicy> A2CHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, A2C
     fn batch_hook(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnLearner<P>,
-        losses: &mut BurnLosses,
-        data: &A2CBatchData<burn::Tensor<2>>,
+        module: &mut M,
+        losses: &mut PolicyValueLosses<M::Tensor>,
+        data: &A2CBatchData<M::Tensor>,
     ) -> Result<HookResult> {
         let stats = self.process_batch(
             module,
@@ -224,10 +186,10 @@ impl<P: BurnPolicy> A2CHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, A2C
         Ok(HookResult::Continue)
     }
 
-    fn after_learning_hook<T: TrajectoryBatch<burn::Tensor<2>>>(
+    fn after_learning_hook<T: TrajectoryBatch<M::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
-        module: &mut BurnLearner<P>,
+        module: &mut M,
         batches: &[T],
     ) -> Result<HookResult> {
         if self.algorithm.reporter.is_enabled() {
@@ -247,66 +209,11 @@ impl<P: BurnPolicy> A2CHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, A2C
     }
 }
 
-impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone> A2CHook<CandleLearner<P>>
-    for LearningHook<CandleLearner<P>, A2CSettings>
-{
-    fn before_learning_hook<T: TrajectoryBatch<Tensor>>(
-        &mut self,
-        _params: &mut A2CParams,
-        module: &mut CandleLearner<P>,
-        _batches: &[T],
-        advantages: &mut Advantages,
-        _returns: &mut Returns,
-    ) -> Result<HookResult> {
-        self.prepare_learning(module, advantages);
-        Ok(HookResult::Continue)
-    }
-
-    fn batch_hook(
-        &mut self,
-        _params: &mut A2CParams,
-        module: &mut CandleLearner<P>,
-        losses: &mut CandleLosses,
-        data: &A2CBatchData<Tensor>,
-    ) -> Result<HookResult> {
-        let stats = self.process_batch(
-            module,
-            losses,
-            &data.observations,
-            self.algorithm.reporter.is_enabled(),
-        )?;
-        self.algorithm.reporter.record_batch(stats);
-        Ok(HookResult::Continue)
-    }
-
-    fn after_learning_hook<T: TrajectoryBatch<Tensor>>(
-        &mut self,
-        _params: &mut A2CParams,
-        module: &mut CandleLearner<P>,
-        batches: &[T],
-    ) -> Result<HookResult> {
-        if self.algorithm.reporter.is_enabled() {
-            let (completed_rollouts, total_rollouts) = {
-                let progress = self.progress.borrow();
-                (progress.completed_rollouts(), progress.total_rollouts())
-            };
-            self.algorithm.reporter.report(
-                batches,
-                completed_rollouts,
-                total_rollouts,
-                module.policy().std()?,
-                module.policy_learning_rate(),
-            )?;
-        }
-        Ok(HookResult::Continue)
-    }
-}
-
-impl<P: BurnPolicy> PPOHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, PPOSettings> {
-    fn before_learning_hook<T: TrajectoryBatch<burn::Tensor<2>>>(
+impl<M: OnPolicyLearner> PPOHook<M> for LearningHook<M, PPOSettings> {
+    fn before_learning_hook<T: TrajectoryBatch<M::Tensor>>(
         &mut self,
         params: &mut PPOParams,
-        module: &mut BurnLearner<P>,
+        module: &mut M,
         _batches: &[T],
         advantages: &mut Advantages,
         _returns: &mut Returns,
@@ -316,10 +223,10 @@ impl<P: BurnPolicy> PPOHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, PPO
         Ok(HookResult::Continue)
     }
 
-    fn rollout_hook<T: TrajectoryBatch<burn::Tensor<2>>>(
+    fn rollout_hook<T: TrajectoryBatch<M::Tensor>>(
         &mut self,
         params: &mut PPOParams,
-        module: &mut BurnLearner<P>,
+        module: &mut M,
         batches: &[T],
     ) -> Result<HookResult> {
         if !self.algorithm.finish_epoch() {
@@ -345,9 +252,9 @@ impl<P: BurnPolicy> PPOHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, PPO
     fn batch_hook(
         &mut self,
         params: &mut PPOParams,
-        module: &mut BurnLearner<P>,
-        losses: &mut BurnLosses,
-        data: &PPOBatchData<burn::Tensor<2>>,
+        module: &mut M,
+        losses: &mut PolicyValueLosses<M::Tensor>,
+        data: &PPOBatchData<M::Tensor>,
     ) -> Result<HookResult> {
         let stats = self.process_batch(
             module,
@@ -358,102 +265,20 @@ impl<P: BurnPolicy> PPOHook<BurnLearner<P>> for LearningHook<BurnLearner<P>, PPO
         if stats.is_none() && self.algorithm.target_kl.is_none() {
             return Ok(HookResult::Continue);
         }
-        let ratio = data.ratio.to_vec()?;
-        let log_ratio = data.logp_diff.to_vec()?;
-        let approx_kl = ratio
-            .iter()
-            .zip(&log_ratio)
-            .map(|(ratio, log_ratio)| (ratio - 1.) - log_ratio)
-            .sum::<f32>()
-            / ratio.len() as f32;
+        let approx_kl = data
+            .ratio
+            .detach()
+            .add_scalar(-1.)?
+            .sub(&data.logp_diff.detach())?
+            .mean()?
+            .to_vec()?[0];
         let clip_fraction = if stats.is_some() {
+            let ratio = data.ratio.to_vec()?;
             ratio
                 .iter()
                 .filter(|value| (**value - 1.).abs() > params.clip_range)
                 .count() as f32
                 / ratio.len() as f32
-        } else {
-            0.
-        };
-        self.algorithm
-            .reporter
-            .record_batch(stats, clip_fraction, approx_kl);
-        Ok(self.algorithm.check_kl(approx_kl))
-    }
-}
-
-impl<P: r2l_core::models::Policy<Tensor = Tensor> + Clone> PPOHook<CandleLearner<P>>
-    for LearningHook<CandleLearner<P>, PPOSettings>
-{
-    fn before_learning_hook<T: TrajectoryBatch<Tensor>>(
-        &mut self,
-        params: &mut PPOParams,
-        module: &mut CandleLearner<P>,
-        _batches: &[T],
-        advantages: &mut Advantages,
-        _returns: &mut Returns,
-    ) -> Result<HookResult> {
-        let progress = self.prepare_learning(module, advantages);
-        self.algorithm.begin_learning(params, progress);
-        Ok(HookResult::Continue)
-    }
-
-    fn rollout_hook<T: TrajectoryBatch<Tensor>>(
-        &mut self,
-        params: &mut PPOParams,
-        module: &mut CandleLearner<P>,
-        batches: &[T],
-    ) -> Result<HookResult> {
-        if !self.algorithm.finish_epoch() {
-            return Ok(HookResult::Continue);
-        }
-        if self.algorithm.reporter.is_enabled() {
-            let (completed_rollouts, total_rollouts) = {
-                let progress = self.progress.borrow();
-                (progress.completed_rollouts(), progress.total_rollouts())
-            };
-            self.algorithm.reporter.report(
-                batches,
-                completed_rollouts,
-                total_rollouts,
-                module.policy().std()?,
-                module.policy_learning_rate(),
-                params.clip_range,
-            )?;
-        }
-        Ok(HookResult::Break)
-    }
-
-    fn batch_hook(
-        &mut self,
-        params: &mut PPOParams,
-        module: &mut CandleLearner<P>,
-        losses: &mut CandleLosses,
-        data: &PPOBatchData<Tensor>,
-    ) -> Result<HookResult> {
-        let stats = self.process_batch(
-            module,
-            losses,
-            &data.observations,
-            self.algorithm.reporter.is_enabled(),
-        )?;
-        if stats.is_none() && self.algorithm.target_kl.is_none() {
-            return Ok(HookResult::Continue);
-        }
-        let ratio = data.ratio.detach();
-        let log_ratio = data.logp_diff.detach();
-        let approx_kl = ratio
-            .sub(&Tensor::ones_like(&ratio)?)?
-            .sub(&log_ratio)?
-            .mean_all()?
-            .to_scalar::<f32>()?;
-        let clip_fraction = if stats.is_some() {
-            (&data.ratio - 1.)?
-                .abs()?
-                .gt(params.clip_range)?
-                .to_dtype(candle_core::DType::F32)?
-                .mean_all()?
-                .to_scalar::<f32>()?
         } else {
             0.
         };

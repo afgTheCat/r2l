@@ -14,13 +14,15 @@ either = {workspace = true}
 candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }
 burn = { workspace = true, optional = true }
+# Enable Flex here while burn/flex requires unavailable burn-vision 0.22 metadata.
+burn-core = { version = "0.22.0", default-features = false, features = ["flex"], optional = true }
 itertools = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
 [features]
 candle = ["dep:candle-core", "dep:candle-nn"]
-burn = ["dep:burn"]
+burn = ["dep:burn", "dep:burn-core"]
 cuda = ["candle", "candle-core/cuda"]
 default = ["candle", "burn"]
 

@@ -42,7 +42,7 @@ fn build_learner<P: BurnPolicy>(policy: P, split: bool) -> PolicyValueLearner<P>
 }
 
 fn update<P: BurnPolicy>(learner: &mut PolicyValueLearner<P>, actions: Tensor<2>) {
-    let observations = Tensor::zeros([2, 2], &Device::ndarray().autodiff());
+    let observations = Tensor::zeros([2, 2], &Device::flex().autodiff());
     let log_probs = learner
         .policy()
         .log_probs(observations.clone(), actions)
@@ -60,7 +60,7 @@ fn update<P: BurnPolicy>(learner: &mut PolicyValueLearner<P>, actions: Tensor<2>
     let policy_loss = R2lTensor::mean(&log_probs.neg()).unwrap();
     let value_loss = R2lTensor::mean(&(values - returns).powf_scalar(2.0)).unwrap();
     let mut losses = PolicyValueLosses::new(policy_loss, value_loss);
-    losses.add_entropy_loss(entropy_loss);
+    losses.add_entropy_loss(&entropy_loss).unwrap();
     losses.set_vf_coeff(0.5);
     learner.update(losses).unwrap();
 }
@@ -91,8 +91,8 @@ fn categorical_joint_and_split_learners_update_policy_and_value() {
     for split in [false, true] {
         let policy = Categorical::new(mlp(2)).unwrap();
         let mut learner = build_learner(policy, split);
-        let observations = Tensor::zeros([2, 2], &Device::ndarray().autodiff());
-        let actions = Tensor::zeros([2, 1], &Device::ndarray().autodiff());
+        let observations = Tensor::zeros([2, 2], &Device::flex().autodiff());
+        let actions = Tensor::zeros([2, 1], &Device::flex().autodiff());
         let before = learner
             .policy()
             .log_probs(observations.clone(), actions.clone())
@@ -120,8 +120,8 @@ fn categorical_joint_and_split_learners_update_policy_and_value() {
             learner.values(observations).unwrap().to_vec().unwrap()
         );
         let inference = learner.inference_policy();
-        let input = Tensor::<2>::zeros([2, 2], &Device::ndarray());
-        let actions = Tensor::<2>::zeros([2, 1], &Device::ndarray());
+        let input = Tensor::<2>::zeros([2, 2], &Device::flex());
+        let actions = Tensor::<2>::zeros([2, 1], &Device::flex());
         let inference_log_probs = inference.log_probs(input.clone(), actions.clone()).unwrap();
         assert!(!inference_log_probs.is_autodiff());
         assert!(!inference_log_probs.is_require_grad());
@@ -149,11 +149,11 @@ fn categorical_joint_and_split_learners_update_policy_and_value() {
 #[test]
 fn gaussian_updates_mean_and_log_std_and_preserves_parameter_ids() {
     for split in [false, true] {
-        let log_std = Param::from_tensor(Tensor::<2>::zeros([1, 1], &Device::ndarray().autodiff()));
+        let log_std = Param::from_tensor(Tensor::<2>::zeros([1, 1], &Device::flex().autodiff()));
         let std_id = log_std.id;
         let policy = DiagGaussian::new(mlp(1), log_std).unwrap();
         let mut learner = build_learner(policy, split);
-        let observations = Tensor::zeros([1, 2], &Device::ndarray().autodiff());
+        let observations = Tensor::zeros([1, 2], &Device::flex().autodiff());
         let mean_before = learner
             .policy()
             .mode_action(observations.clone())
@@ -168,7 +168,7 @@ fn gaussian_updates_mean_and_log_std_and_preserves_parameter_ids() {
         for _ in 0..2 {
             update(
                 &mut learner,
-                Tensor::full([2, 1], 2.0, &Device::ndarray().autodiff()),
+                Tensor::full([2, 1], 2.0, &Device::flex().autodiff()),
             );
         }
         let trained_std = learner.policy().std().unwrap().unwrap();
@@ -191,7 +191,7 @@ fn gaussian_updates_mean_and_log_std_and_preserves_parameter_ids() {
         let mut from_inference = build_learner(trainable, split);
         update(
             &mut from_inference,
-            Tensor::full([2, 1], 2.0, &Device::ndarray().autodiff()),
+            Tensor::full([2, 1], 2.0, &Device::flex().autodiff()),
         );
         assert!(from_inference.policy().std().unwrap().unwrap() > trained_std);
         let restored = restore(snapshot, inference);
@@ -200,7 +200,7 @@ fn gaussian_updates_mean_and_log_std_and_preserves_parameter_ids() {
         let mut resumed = build_learner(restored, split);
         update(
             &mut resumed,
-            Tensor::full([2, 1], 2.0, &Device::ndarray().autodiff()),
+            Tensor::full([2, 1], 2.0, &Device::flex().autodiff()),
         );
         assert!(resumed.policy().std().unwrap().unwrap() > trained_std);
         assert_eq!(ids, parameter_ids(resumed.policy()));
@@ -213,7 +213,7 @@ fn nested_composite_updates_and_round_trips_all_distribution_variants() {
         DistributionKind::DiagGaussian(
             DiagGaussian::new(
                 network(1),
-                Param::from_tensor(Tensor::zeros([1, 1], &Device::ndarray().autodiff())),
+                Param::from_tensor(Tensor::zeros([1, 1], &Device::flex().autodiff())),
             )
             .unwrap(),
         ),
@@ -230,11 +230,8 @@ fn nested_composite_updates_and_round_trips_all_distribution_variants() {
     assert_eq!(policy.action_shape().dims(), [5]);
     assert_eq!(Module::num_params(&policy), 28);
     let mut learner: PolicyValueLearner = build_learner(policy, false);
-    let observations = Tensor::<2>::zeros([2, 2], &Device::ndarray().autodiff());
-    let actions = Tensor::from_data(
-        [[0.0, 2.0, 1.0, 0.0, 1.0]; 2],
-        &Device::ndarray().autodiff(),
-    );
+    let observations = Tensor::<2>::zeros([2, 2], &Device::flex().autodiff());
+    let actions = Tensor::from_data([[0.0, 2.0, 1.0, 0.0, 1.0]; 2], &Device::flex().autodiff());
     let before = learner
         .policy()
         .log_probs(observations.clone(), actions.clone())
@@ -257,28 +254,22 @@ fn nested_composite_updates_and_round_trips_all_distribution_variants() {
     assert_eq!(
         after,
         restored
-            .log_probs(Tensor::zeros([2, 2], &Device::ndarray()), actions.inner())
+            .log_probs(Tensor::zeros([2, 2], &Device::flex()), actions.inner())
             .unwrap()
             .to_vec()
             .unwrap()
     );
     let mode = restored
-        .mode_action(Tensor::zeros([1, 2], &Device::ndarray()))
+        .mode_action(Tensor::zeros([1, 2], &Device::flex()))
         .unwrap();
     assert_eq!(mode.dims(), [1, 5]);
     let restored = restore(trainable_template, learner.policy().clone());
     let mut resumed: PolicyValueLearner = build_learner(restored, false);
-    let actions = Tensor::from_data(
-        [[0.0, 2.0, 1.0, 0.0, 1.0]; 2],
-        &Device::ndarray().autodiff(),
-    );
+    let actions = Tensor::from_data([[0.0, 2.0, 1.0, 0.0, 1.0]; 2], &Device::flex().autodiff());
     update(&mut resumed, actions.clone());
     let resumed_log_probs = resumed
         .policy()
-        .log_probs(
-            Tensor::zeros([2, 2], &Device::ndarray().autodiff()),
-            actions,
-        )
+        .log_probs(Tensor::zeros([2, 2], &Device::flex().autodiff()), actions)
         .unwrap()
         .to_vec()
         .unwrap();
@@ -290,39 +281,46 @@ fn network_and_value_function_reject_invalid_batches() {
     let network = network(1);
     assert!(
         network
-            .forward(Tensor::zeros([1, 3], &Device::ndarray().autodiff()))
+            .forward(Tensor::zeros([1, 3], &Device::flex().autodiff()))
             .is_err()
     );
     assert!(
         network
-            .forward(Tensor::zeros([0, 2], &Device::ndarray().autodiff()))
+            .forward(Tensor::zeros([0, 2], &Device::flex().autodiff()))
             .is_err()
     );
     let learner = build_learner(Categorical::new(mlp(2)).unwrap(), false);
     assert!(
         learner
-            .values(Tensor::zeros([1, 3], &Device::ndarray().autodiff()))
+            .values(Tensor::zeros([1, 3], &Device::flex().autodiff()))
             .is_err()
     );
     assert!(
         learner
-            .values(Tensor::zeros([0, 2], &Device::ndarray().autodiff()))
+            .values(Tensor::zeros([0, 2], &Device::flex().autodiff()))
             .is_err()
     );
-    let inference = Tensor::<2>::from_data([[1.0, 2.0]], &Device::ndarray());
-    let lifted = <PolicyValueLearner as OnPolicyLearner>::lifter(&inference);
-    assert_eq!(lifted.dims(), [1, 2]);
-    assert!(lifted.is_autodiff());
-    assert_eq!(lifted.clone().inner().device(), inference.device());
-    assert_eq!(lifted.to_vec().unwrap(), vec![1.0, 2.0]);
+    let inference = Tensor::<2>::from_data([[1.0, 2.0]], &Device::flex());
+    let prepared = <PolicyValueLearner as OnPolicyLearner>::prepare_learning_tensor(&inference);
+    assert_eq!(prepared.dims(), [1, 2]);
+    assert!(prepared.is_autodiff());
+    assert_eq!(prepared.clone().inner().device(), inference.device());
+    assert_eq!(prepared.to_vec().unwrap(), vec![1.0, 2.0]);
+
+    let input = inference.autodiff().require_grad();
+    let rollout = input.clone().mul_scalar(2.0);
+    let prepared =
+        <PolicyValueLearner as OnPolicyLearner>::prepare_learning_tensor(&rollout).require_grad();
+    let gradients = prepared.powf_scalar(2.0).sum().backward();
+    assert!(input.grad(&gradients).is_none());
 }
 
 #[test]
 fn raw_gaussian_preserves_externally_managed_parameter_gradients() {
-    let log_std = Tensor::<2>::zeros([1, 1], &Device::ndarray().autodiff()).require_grad();
+    let log_std = Tensor::<2>::zeros([1, 1], &Device::flex().autodiff()).require_grad();
     let policy: DiagGaussian<Mlp> = DiagGaussian::new(mlp(1), log_std.clone()).unwrap();
     let entropy = policy
-        .entropy(Tensor::zeros([2, 2], &Device::ndarray().autodiff()))
+        .entropy(Tensor::zeros([2, 2], &Device::flex().autodiff()))
         .unwrap();
     let grads = entropy.backward();
     assert_eq!(log_std.grad(&grads).unwrap().to_vec().unwrap(), vec![1.0]);

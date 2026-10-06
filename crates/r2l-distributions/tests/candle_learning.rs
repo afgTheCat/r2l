@@ -81,6 +81,23 @@ fn update<P: Policy<Tensor = Tensor> + Clone>(
 }
 
 #[test]
+fn shared_losses_preserve_gradients_across_single_element_shapes() {
+    let policy = Var::from_tensor(&Tensor::new(&[[2.0f32]], &Device::Cpu).unwrap()).unwrap();
+    let entropy = Var::from_tensor(&Tensor::new(3.0f32, &Device::Cpu).unwrap()).unwrap();
+    let mut losses = PolicyValueLosses::new(policy.as_tensor().clone(), zeros(1, 1));
+    losses
+        .add_entropy_loss(&(entropy.as_tensor() * -0.1).unwrap())
+        .unwrap();
+    let gradients = losses.policy_loss.backward().unwrap();
+    assert_eq!(data(gradients.get(&policy).unwrap()), [1.0]);
+    assert_eq!(data(gradients.get(&entropy).unwrap()), [-0.1]);
+    assert!((data(&losses.policy_loss)[0] - 1.7).abs() < 1e-6);
+
+    assert!(losses.add_entropy_loss(&zeros(2, 1)).is_err());
+    assert!((data(&losses.policy_loss)[0] - 1.7).abs() < 1e-6);
+}
+
+#[test]
 fn categorical_joint_and_split_update_policy_and_value() {
     for split in [false, true] {
         let vm = VarMap::new();
@@ -367,12 +384,13 @@ fn rejects_invalid_shapes_and_overlapping_split_variables() {
     let optimizer = PolicyValueOptimizer::joint(&vm, ParamsAdamW::default(), None).unwrap();
     assert!(PolicyValueLearner::new(policy, invalid_value, optimizer, Device::Cpu).is_err());
     let input = Var::from_tensor(&Tensor::new(&[[1.0f32, 2.0]], &Device::Cpu).unwrap()).unwrap();
-    let lifted = <PolicyValueLearner as OnPolicyLearner>::lifter(input.as_tensor());
-    assert_eq!(lifted.dims(), [1, 2]);
-    assert!(lifted.device().same_device(input.device()));
-    assert_eq!(data(&lifted), vec![1.0, 2.0]);
+    let prepared =
+        <PolicyValueLearner as OnPolicyLearner>::prepare_learning_tensor(input.as_tensor());
+    assert_eq!(prepared.dims(), [1, 2]);
+    assert!(prepared.device().same_device(input.device()));
+    assert_eq!(data(&prepared), vec![1.0, 2.0]);
     assert!(
-        lifted
+        prepared
             .sqr()
             .unwrap()
             .sum_all()

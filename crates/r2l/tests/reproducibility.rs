@@ -74,10 +74,7 @@ fn seeded_builds_and_training_remain_reproducible() {
     let candle = train!(7,);
     assert_eq!(candle, train!(7,));
     assert_ne!(candle.0, train!(8,).0);
-    #[cfg(not(feature = "simd"))]
-    {
-        let burn = train!(7, with_burn);
-        assert_eq!(burn, train!(7, with_burn));
-        assert_ne!(burn.0, train!(8, with_burn).0);
-    }
+    let burn = train!(7, with_burn);
+    assert_eq!(burn, train!(7, with_burn));
+    assert_ne!(burn.0, train!(8, with_burn).0);
 }
