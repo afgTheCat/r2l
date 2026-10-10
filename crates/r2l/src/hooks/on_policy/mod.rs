@@ -110,9 +110,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
 
     fn finish_training_hook(
         &mut self,
-        _runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
+        runtime: &mut OnPolicyRuntime<Self::A, Self::S>,
     ) -> Result<(), Error> {
-        let evaluator_result = self.evaluator.finish_training();
+        let evaluator_result = self.evaluator.finish_training(runtime);
         let notification_result = self.command_handler.notify_stopped();
         match self.error.take() {
             Some(error) => Err(error),

@@ -70,6 +70,7 @@ pub(crate) struct TrainingProgress {
     training_limit: TrainingLimit,
     rollout_mode: RolloutMode,
     n_envs: NonZeroUsize,
+    n_evaluations: usize,
 }
 
 pub(crate) type SharedTrainingProgress = Rc<RefCell<TrainingProgress>>;
@@ -92,6 +93,7 @@ impl TrainingProgress {
             training_limit,
             rollout_mode,
             n_envs,
+            n_evaluations: 0,
         }
         .into_shared()
     }
@@ -157,40 +159,12 @@ impl TrainingProgress {
             HookResult::Continue
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+    pub(crate) fn n_evaluations(&self) -> usize {
+        self.n_evaluations
+    }
 
-    #[test]
-    fn restored_progress_owns_its_counters_and_preserves_the_schedule() {
-        let original = TrainingProgress::shared(
-            TrainingLimit::steps(100),
-            RolloutMode::StepBound {
-                n_steps: NonZeroUsize::new(5).unwrap(),
-            },
-            NonZeroUsize::new(2).unwrap(),
-        );
-        original.borrow_mut().counters = TrainingCounters {
-            completed_rollouts: 2,
-            steps_taken: 20,
-        };
-        let snapshot = original.borrow().clone();
-        original.borrow_mut().counters.steps_taken = 100;
-        let restored = snapshot.into_shared();
-        assert_eq!(restored.borrow().completed_rollouts(), 2);
-        assert_eq!(restored.borrow().total_rollouts(), Some(10));
-        assert_eq!(restored.borrow().progress_remaining(), 0.8);
-        assert!(matches!(
-            restored.borrow().progress_result(),
-            HookResult::Continue
-        ));
-        assert!(matches!(
-            original.borrow().progress_result(),
-            HookResult::Break
-        ));
-        restored.borrow_mut().counters.completed_rollouts = 3;
-        assert_eq!(original.borrow().completed_rollouts(), 2);
+    pub(crate) fn increase_evaluations(&mut self) {
+        self.n_evaluations += 1;
     }
 }

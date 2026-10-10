@@ -231,22 +231,6 @@ impl<A: Actor + ToSafetensors + Clone, E: Env> BestPolicyEvaluator<A, E> {
         }
         Ok(evaluation_result)
     }
-
-    pub(crate) fn finish_training(&self) -> Result<()> {
-        if let Some(Artifacts {
-            best_policy: Some(BestPolicyArtifacts { best_reward, .. }),
-            ..
-        }) = &self.artifacts
-            && best_reward.is_none()
-        {
-            Err(Error::invalid_state(
-                "serializing actor",
-                "no actor was evaluated, serialization is not possible",
-            ))
-        } else {
-            Ok(())
-        }
-    }
 }
 
 /// Configures how policies are evaluated during training.

@@ -1,4 +1,4 @@
-use std::num::NonZeroUsize;
+use std::{num::NonZeroUsize, sync::Arc};
 
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, normalizer::Normalizer},

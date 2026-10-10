@@ -67,6 +67,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
             return Ok(HookResult::Continue);
         }
         let evaluation_result = evaluator.evaluate(runtime)?;
+        progress.borrow_mut().increase_evaluations();
         if avg_reward_threshold.is_some_and(|t| t <= evaluation_result.avg_reward()) {
             Ok(HookResult::Break)
         } else {
@@ -74,10 +75,22 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
         }
     }
 
-    pub(super) fn finish_training(&self) -> Result<(), Error> {
-        let Self::Enabled { evaluator, .. } = self else {
+    pub(super) fn finish_training<AG: Agent<Actor = A>, S: Sampler<Tensor = E::Tensor>>(
+        &mut self,
+        runtime: &mut OnPolicyRuntime<AG, S>,
+    ) -> Result<(), Error> {
+        let Self::Enabled {
+            evaluator,
+            progress,
+            ..
+        } = self
+        else {
             return Ok(());
         };
-        evaluator.finish_training()
+        if progress.borrow().n_evaluations() == 0 {
+            evaluator.evaluate(runtime)?;
+            progress.borrow_mut().increase_evaluations();
+        }
+        Ok(())
     }
 }

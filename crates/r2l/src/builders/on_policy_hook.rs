@@ -18,7 +18,7 @@ use crate::{
             evaluation::ScheduledEvaluator,
             timing::TimingRecorder,
         },
-        progress::{SharedTrainingProgress, TrainingProgress},
+        progress::SharedTrainingProgress,
     },
     inference::{InferenceConfig, InferenceObservationMode},
 };
@@ -122,41 +122,6 @@ impl OnPolicyHookConfig {
                 .training_artifacts
                 .as_ref()
                 .is_some_and(TrainingArtifactsConfig::needs_evaluator)
-    }
-
-    pub(crate) fn validate_evaluation_schedule(
-        &self,
-        progress: &TrainingProgress,
-    ) -> Result<(), Error> {
-        if !self.needs_evaluator() {
-            return Ok(());
-        }
-        let defaults = EvaluationSettings::default();
-        let settings = self
-            .training_artifacts
-            .as_ref()
-            .map_or(&defaults, |config| &config.evaluation_settings);
-        let rollouts_per_evaluation = settings.rollouts_per_evaluation;
-        match progress.total_rollouts() {
-            Some(total_rollouts) if rollouts_per_evaluation.get() > total_rollouts => {
-                Err(Error::invalid_state(
-                    "configuring evaluation",
-                    format!(
-                        "evaluation frequency ({rollouts_per_evaluation} rollouts) exceeds the \
-                     configured training length ({total_rollouts} rollouts)"
-                    ),
-                ))
-            }
-            Some(_) => Ok(()),
-            None if rollouts_per_evaluation.get() == 1 => Ok(()),
-            None => Err(Error::invalid_state(
-                "configuring evaluation",
-                format!(
-                    "evaluation every {rollouts_per_evaluation} rollouts cannot be guaranteed because \
-                 the configured training schedule has no statically known rollout count"
-                ),
-            )),
-        }
     }
 
     pub(crate) fn build<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>, E: Env>(

@@ -59,7 +59,6 @@ impl<E: Env> SnapshotAlgo<E, PolicyValueLearnerSnapshot> {
             algo_config,
         } = self;
         let progress = progress.into_shared();
-        hook_config.validate_evaluation_schedule(&progress.borrow())?;
         let learner = learner_config.build_burn_learner()?;
         let learner = learner.load_snapshot(learner_state);
         let agent = algo_config.build_ppo(
@@ -77,7 +76,7 @@ impl<E: Env> SnapshotAlgo<E, PolicyValueLearnerSnapshot> {
             &Backend::Burn(BurnBackendConfig),
             progress,
         )?;
-        let runtime = OnPolicyRuntime { agent, sampler };
+        let runtime = OnPolicyRuntime::new(agent, sampler);
         Ok(OnPolicyAlgorithm::new(runtime, hooks))
     }
 }

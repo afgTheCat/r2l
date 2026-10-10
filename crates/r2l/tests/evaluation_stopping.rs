@@ -157,26 +157,33 @@ fn stopping_saves_the_normalized_policy_before_finishing() {
 }
 
 #[test]
-fn stopping_validates_evaluation_schedule_before_creating_artifacts() {
-    let output = TempDir::new().unwrap();
-    let folder = output.path().join("unused");
-    for artifacts in [
-        disabled_artifacts(&folder, 5),
-        TrainingArtifactsConfig::new(&folder)
-            .with_evaluation_settings(EvaluationSettings::new().with_rollouts_per_evaluation(5)),
-    ] {
-        let error = ppo_builder()
-            .with_training_limit(TrainingLimit::rollouts(4))
-            .with_avg_reward_threshold(Some(1.0))
+fn training_evaluates_once_when_it_finishes_before_the_first_scheduled_evaluation() {
+    for limit in [TrainingLimit::rollouts(2), TrainingLimit::steps(4)] {
+        let output = TempDir::new().unwrap();
+        let artifacts = TrainingArtifactsConfig::new(output.path())
+            .with_training_timings(false)
+            .with_evaluation_settings(
+                EvaluationSettings::new()
+                    .with_rollouts_per_evaluation(5)
+                    .with_episodes_per_evaluation(1)
+                    .with_execution_mode(SamplerExecutionMode::SingleThreaded),
+            );
+        let mut algorithm = ppo_builder()
+            .with_execution_mode(SamplerExecutionMode::SingleThreaded)
+            .with_rollout_episodes(2)
+            .with_training_limit(limit)
+            .with_policy_hidden_layers(vec![2])
+            .with_value_hidden_layers(vec![2])
+            .with_sample_size(2)
+            .with_log_progress(false)
             .with_training_artifacts(artifacts)
             .build()
-            .err()
-            .expect("an unreachable evaluation interval should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("exceeds the configured training length")
+            .unwrap();
+        algorithm.train().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(output.path().join("evaluations.csv")).unwrap(),
+            "average_reward,total_episodes\n1,1\n"
         );
-        assert!(!folder.exists());
+        InferencePolicy::<VecTensor>::load(output.path()).unwrap();
     }
 }

@@ -70,6 +70,10 @@ pub struct OnPolicyRuntime<A: Agent, S: Sampler> {
 }
 
 impl<A: Agent, S: Sampler> OnPolicyRuntime<A, S> {
+    pub fn new(agent: A, sampler: S) -> Self {
+        Self { agent, sampler }
+    }
+
     /// Collects a fresh set of rollouts using the sampler-facing actor.
     ///
     /// # Errors

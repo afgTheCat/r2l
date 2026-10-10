@@ -657,16 +657,12 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// # Errors
     ///
-    /// Returns an error if the evaluation schedule cannot run before training ends or the
-    /// configured training algorithm cannot be constructed.
+    /// Returns an error if the configured training algorithm cannot be constructed.
     #[allow(clippy::type_complexity)]
     pub fn build(
         mut self,
     ) -> Result<OnPolicyAlgorithm<A, S, OnPolicyTrainingHooks<A, S, E>>, Error> {
         let progress = self.builder.progress();
-        self.builder
-            .hook_config
-            .validate_evaluation_schedule(&progress.borrow())?;
         if let Some(seed) = self.builder.seed {
             self.builder.backend_configuration.seed(seed)?;
         }
@@ -679,10 +675,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
             &self.builder.backend_configuration,
             progress,
         )?;
-        Ok(OnPolicyAlgorithm::new(
-            OnPolicyRuntime { agent, sampler },
-            hooks,
-        ))
+        let runtime = OnPolicyRuntime::new(agent, sampler);
+        Ok(OnPolicyAlgorithm::new(runtime, hooks))
     }
 }
 
