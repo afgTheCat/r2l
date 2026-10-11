@@ -5,9 +5,30 @@ use std::{
     time::Duration,
 };
 
-use r2l_core::{env::EnvBuilder, on_policy::algorithm::Sampler, tensor::R2lTensor};
+use r2l_core::{
+    env::{
+        EnvBuilder,
+        normalizer::{Normalizer, NormalizerMode},
+    },
+    on_policy::algorithm::Sampler,
+    running_mean::RunningMeanStd,
+    tensor::{R2lTensor, VecTensor},
+};
 use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
 use support::{ConstantActor, EpisodeEnd, OneBoundHook, OwnedTrajectory, TestEnv};
+
+fn identity_normalizer() -> Normalizer<VecTensor> {
+    // Fixed statistics preserve observations so lifecycle assertions stay explicit.
+    Normalizer::new(
+        NormalizerMode::ReadOnly,
+        RunningMeanStd::build(
+            VecTensor::from_vec(vec![0.0]),
+            VecTensor::from_vec(vec![1.0]),
+            1.0,
+        ),
+        None,
+    )
+}
 
 fn env_builder(
     episode_len: usize,
@@ -56,7 +77,7 @@ fn staged_trajectories(
         2,
         OneBoundHook::steps(5),
         execution_mode,
-        None,
+        identity_normalizer(),
     )
     .unwrap();
     sampler.collect_rollouts(ConstantActor).unwrap();
@@ -205,7 +226,7 @@ fn dropping_multithreaded_samplers_releases_worker_environments() {
                 2,
                 OneBoundHook::steps(1),
                 SamplerExecutionMode::MultiThreaded,
-                None,
+                identity_normalizer(),
             )
             .unwrap();
             drop(sampler);

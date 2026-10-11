@@ -7,7 +7,10 @@ use std::{
 };
 
 use r2l_core::{
-    env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Snapshot, Space},
+    env::{
+        Env, EnvBuilder, EnvBuilderType, EnvDescription, Snapshot, Space,
+        normalizer::{Normalizer, NormalizerMode},
+    },
     error::Error,
     on_policy::algorithm::Sampler,
     tensor::VecTensor,
@@ -95,9 +98,14 @@ fn samplers_build_from_a_shared_env_builder() {
             DirectSampler::build_from_env_builder(env_builder.clone(), 2, StopHook, execution_mode)
                 .unwrap();
         direct.reset_all_envs().unwrap();
-        let mut staged =
-            StagedSampler::build_from_env_builder(env_builder, 3, StopHook, execution_mode, None)
-                .unwrap();
+        let mut staged = StagedSampler::build_from_env_builder(
+            env_builder,
+            3,
+            StopHook,
+            execution_mode,
+            Normalizer::build(NormalizerMode::Update, None, vec![1]),
+        )
+        .unwrap();
         staged.reset_all_envs().unwrap();
 
         assert_eq!(build_count.load(Ordering::Relaxed), 5);
@@ -145,11 +153,15 @@ fn samplers_build_from_different_factory_types_for_the_same_environment() {
         assert_eq!(first_count.load(Ordering::Relaxed), 0);
         assert!(builders.build_idx(2).is_err());
 
-        let mut direct = DirectSampler::build(builders.clone(), StopHook, execution_mode);
+        let mut direct = DirectSampler::build(builders.clone(), StopHook, execution_mode).unwrap();
         direct.reset_all_envs().unwrap();
-        let mut staged =
-            StagedSampler::build_with_obs_normalizer(&builders, StopHook, execution_mode, None)
-                .unwrap();
+        let mut staged = StagedSampler::build_with_obs_normalizer(
+            &builders,
+            StopHook,
+            execution_mode,
+            Normalizer::build(NormalizerMode::Update, None, vec![1]),
+        )
+        .unwrap();
         staged.reset_all_envs().unwrap();
 
         assert_eq!(first_count.load(Ordering::Relaxed), 2);
