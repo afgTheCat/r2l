@@ -1,17 +1,21 @@
-use bimodal_array::{ArrayHandle, ArrayMap, ElementHandle};
+mod workers;
+
+#[cfg(test)]
+mod tests;
+
+use bimodal_array::{ArrayGuard, ArrayHandle, ArrayMap, ElementHandle, bimodal_array};
+use crossbeam::channel::unbounded;
 use r2l_core::buffers::buffer::TrajectoryView;
 use r2l_core::buffers::{Memory, MultiMemory};
-use r2l_core::env::Snapshot;
 use r2l_core::env::normalizer::{Normalizer, NormalizerMode};
+use r2l_core::env::{EnvBuilderType, Snapshot};
 use r2l_core::error::{Error, Result};
 use r2l_core::on_policy::algorithm::Sampler;
 use r2l_core::rng::sample_u64;
 use r2l_core::{buffers::buffer::TrajectoryBuffer, env::Env, models::Actor, tensor::R2lTensor};
+use workers::{PoolWorker, ThreadWorker, Workers};
 
-use crate::RolloutMode;
-
-// there are two ways of going about this one:
-// workers write to the buffer or they have something that normalizes shit
+use crate::{RolloutMode, SamplerExecutionMode, SamplerHookResult};
 
 struct Worker<E: Env> {
     actor: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
@@ -19,9 +23,15 @@ struct Worker<E: Env> {
 }
 
 impl<E: Env> Worker<E> {
+    fn build(env_builder: &EnvBuilderType<E>, idx: usize) -> Result<(Self, E::Tensor)> {
+        let mut env = env_builder.build_idx(idx)?;
+        let state = env.reset(sample_u64())?;
+        Ok((Self { env, actor: None }, state))
+    }
+
     fn get_policy(&mut self) -> Result<&mut Box<dyn Actor<Tensor = E::Tensor>>> {
         self.actor.as_mut().ok_or_else(|| {
-            Error::invalid_state("step staged sampler worker", "no policy has been installed")
+            Error::invalid_state("step sampler worker", "no policy has been installed")
         })
     }
 
@@ -52,14 +62,27 @@ impl<E: Env> Worker<E> {
     }
 }
 
-// State is locally stored, buffer is filled instantly. good for paralell work
+// Direct workers keep their state locally and write whole rollouts to a buffer.
 struct LocalStateWorker<E: Env> {
     state: E::Tensor,
     worker: Worker<E>,
     buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>,
 }
 
-impl<E: Env> LocalStateWorker<E> {
+impl<E: Env> PoolWorker for LocalStateWorker<E> {
+    type Tensor = E::Tensor;
+    type Request = RolloutMode;
+    type Output = ();
+
+    fn set_policy(&mut self, actor: Box<dyn Actor<Tensor = E::Tensor>>) {
+        self.worker.actor = Some(actor);
+    }
+
+    fn reset(&mut self) -> Result<()> {
+        self.state = self.worker.env.reset(sample_u64())?;
+        Ok(())
+    }
+
     fn collect(&mut self, bound: RolloutMode) -> Result<()> {
         let mut buffer = self.buffer.lock().unwrap();
         match bound {
@@ -87,14 +110,27 @@ impl<E: Env> LocalStateWorker<E> {
     }
 }
 
-// States guared with an element guard
+// The coordinator normalizes staged states between worker steps.
 struct StagedWorker<E: Env> {
     state: ElementHandle<E::Tensor>,
     worker: Worker<E>,
 }
 
-impl<E: Env> StagedWorker<E> {
-    fn step(&mut self) -> Result<Memory<E::Tensor>> {
+impl<E: Env> PoolWorker for StagedWorker<E> {
+    type Tensor = E::Tensor;
+    type Request = ();
+    type Output = Memory<E::Tensor>;
+
+    fn set_policy(&mut self, actor: Box<dyn Actor<Tensor = E::Tensor>>) {
+        self.worker.actor = Some(actor);
+    }
+
+    fn reset(&mut self) -> Result<()> {
+        *self.state.lock().unwrap() = self.worker.env.reset(sample_u64())?;
+        Ok(())
+    }
+
+    fn collect(&mut self, (): ()) -> Result<Memory<E::Tensor>> {
         let mut guard = self.state.lock().unwrap();
         self.worker.step(guard.as_mut())
     }
@@ -102,43 +138,201 @@ impl<E: Env> StagedWorker<E> {
 
 struct DirectWorkerPool<E: Env> {
     buffers: ArrayHandle<TrajectoryBuffer<E::Tensor>>,
+    workers: Workers<LocalStateWorker<E>>,
 }
 
-// option a: it has the array handle. It does not even have to be
-// option b
+impl<E: Env + 'static> DirectWorkerPool<E> {
+    fn build(
+        env_builder: &EnvBuilderType<E>,
+        execution_mode: SamplerExecutionMode,
+    ) -> Result<Self> {
+        let (buffers, handles) =
+            bimodal_array(vec![TrajectoryBuffer::default(); env_builder.num_envs()]);
+        let factories = handles.into_iter().enumerate().map(|(idx, buffer)| {
+            let env_builder = env_builder.clone();
+            move || {
+                let (worker, state) = Worker::build(&env_builder, idx)?;
+                Ok(LocalStateWorker {
+                    state,
+                    worker,
+                    buffer,
+                })
+            }
+        });
+        let workers = Workers::build(factories, execution_mode)?;
+        Ok(Self { buffers, workers })
+    }
+
+    fn collect(&mut self, bound: RolloutMode) -> Result<()> {
+        self.workers
+            .collect_into(0..self.workers.len(), bound, |_, ()| {})
+    }
+}
+
 struct StagedWorkerPool<E: Env> {
     states: ArrayHandle<E::Tensor>,
-    workers: Vec<StagedWorker<E>>, // should be vec or thread
+    workers: Workers<StagedWorker<E>>,
     buffers: Vec<TrajectoryBuffer<E::Tensor>>,
     obs_normalizer: Normalizer<E::Tensor>,
 }
 
-impl<E: Env> StagedWorkerPool<E> {
-    // only do Step  bound for now
+impl<E: Env + 'static> StagedWorkerPool<E> {
+    fn build(
+        env_builder: &EnvBuilderType<E>,
+        execution_mode: SamplerExecutionMode,
+        obs_normalizer: Normalizer<E::Tensor>,
+    ) -> Result<Self> {
+        let n_envs = env_builder.num_envs();
+        let (states, workers) = match execution_mode {
+            SamplerExecutionMode::SingleThreaded => Self::build_inline_workers(env_builder)?,
+            SamplerExecutionMode::MultiThreaded => Self::build_thread_workers(env_builder)?,
+        };
+        let mut pool = Self {
+            states,
+            workers,
+            buffers: vec![TrajectoryBuffer::default(); n_envs],
+            obs_normalizer,
+        };
+        pool.normalize_states()?;
+        Ok(pool)
+    }
+
+    fn build_inline_workers(
+        env_builder: &EnvBuilderType<E>,
+    ) -> Result<(ArrayHandle<E::Tensor>, Workers<StagedWorker<E>>)> {
+        let mut workers = Vec::with_capacity(env_builder.num_envs());
+        let mut states = Vec::with_capacity(env_builder.num_envs());
+        for idx in 0..env_builder.num_envs() {
+            let (worker, state) = Worker::build(env_builder, idx)?;
+            workers.push(worker);
+            states.push(state);
+        }
+        let (states, handles) = bimodal_array(states);
+        let workers = workers
+            .into_iter()
+            .zip(handles)
+            .map(|(worker, state)| StagedWorker { state, worker })
+            .collect();
+        Ok((states, Workers::Inline(workers)))
+    }
+
+    fn build_thread_workers(
+        env_builder: &EnvBuilderType<E>,
+    ) -> Result<(ArrayHandle<E::Tensor>, Workers<StagedWorker<E>>)> {
+        let n_envs = env_builder.num_envs();
+        let mut workers = Vec::with_capacity(n_envs);
+        // On failure, drop these senders before joining workers that may still
+        // be waiting for their state handles.
+        let mut state_senders = Vec::with_capacity(n_envs);
+        let mut initial_states = Vec::with_capacity(n_envs);
+        for idx in 0..n_envs {
+            let (initial_tx, initial_rx) = unbounded();
+            let (state_tx, state_rx) = unbounded();
+            let env_builder = env_builder.clone();
+            let worker = ThreadWorker::spawn(move || {
+                let (worker, initial_state) = Worker::build(&env_builder, idx)?;
+                initial_tx.send(initial_state).map_err(Error::wrap)?;
+                let state = state_rx.recv().map_err(Error::wrap)?;
+                Ok(StagedWorker { state, worker })
+            });
+            workers.push(worker);
+            state_senders.push(state_tx);
+            let state = match initial_rx.recv() {
+                Ok(state) => state,
+                Err(error) => {
+                    // Retrieve the original build/reset error from the worker.
+                    workers.last().unwrap().wait_ready()?;
+                    return Err(Error::wrap(error));
+                }
+            };
+            initial_states.push(state);
+        }
+        let (states, handles) = bimodal_array(initial_states);
+        for (sender, handle) in state_senders.into_iter().zip(handles) {
+            sender.send(handle).map_err(Error::wrap)?;
+        }
+        for worker in &workers {
+            worker.wait_ready()?;
+        }
+        Ok((states, Workers::Threaded(workers)))
+    }
+
+    fn normalize_states(&mut self) -> Result<()> {
+        self.obs_normalizer
+            .apply_slice_in_place(&mut self.states.lock().unwrap())?;
+        Ok(())
+    }
+
+    fn step(&mut self) -> Result<()> {
+        let indices = 0..self.workers.len();
+        let mut memories = MultiMemory::with_capacity(indices.len());
+        self.workers
+            .collect_into(indices.clone(), (), |_, memory| {
+                memories.push_memory(memory)
+            })?;
+        self.normalize_states()?;
+        self.finish_step(indices, memories, |_, _| {})
+    }
+
+    fn step_indexed(&mut self, indices: &[usize], episodes: &mut [usize]) -> Result<()> {
+        let mut memories = MultiMemory::with_capacity(indices.len());
+        self.workers
+            .collect_into(indices.iter().copied(), (), |_, memory| {
+                memories.push_memory(memory)
+            })?;
+        {
+            let mut states = self.states.lock().unwrap();
+            let mut active_states = indices
+                .iter()
+                .map(|&idx| states[idx].clone())
+                .collect::<Vec<_>>();
+            self.obs_normalizer
+                .apply_slice_in_place(&mut active_states)?;
+            for (&idx, state) in indices.iter().zip(active_states) {
+                states[idx] = state;
+            }
+        }
+        self.finish_step(indices.iter().copied(), memories, |idx, done| {
+            episodes[idx] += usize::from(done);
+        })
+    }
+
+    fn finish_step(
+        &mut self,
+        indices: impl Iterator<Item = usize>,
+        mut memories: MultiMemory<E::Tensor>,
+        mut on_done: impl FnMut(usize, bool),
+    ) -> Result<()> {
+        self.obs_normalizer
+            .with_mode(NormalizerMode::ReadOnly)
+            .apply_slice_in_place(memories.next_states_mut())?;
+        for (idx, memory) in indices.zip(memories.into_stored_memories_iter()) {
+            on_done(idx, memory.is_done());
+            self.buffers[idx].push(memory);
+        }
+        Ok(())
+    }
+
     fn collect(&mut self, bound: RolloutMode) -> Result<()> {
         match bound {
             RolloutMode::StepBound { n_steps } => {
-                let n_workers = self.workers.len();
                 for _ in 0..n_steps.get() {
-                    let mut multi_memory = MultiMemory::with_capacity(n_workers);
-                    for worker in &mut self.workers {
-                        let memory = worker.step()?;
-                        multi_memory.push_memory(memory);
-                    }
-                    let mut last_states = self.states.lock().unwrap();
-                    self.obs_normalizer.apply_slice_in_place(&mut last_states)?;
-                    self.obs_normalizer
-                        .with_mode(NormalizerMode::ReadOnly)
-                        .apply_slice_in_place(multi_memory.next_states_mut())?;
-                    let memories = multi_memory.into_stored_memories();
-                    for (idx, memory) in memories.into_iter().enumerate() {
-                        self.buffers[idx].push(memory);
-                    }
+                    self.step()?;
                 }
             }
             RolloutMode::EpisodeBound { n_episodes } => {
-                // something similiar only with the step_indexed variant
-                todo!()
+                let mut episodes = vec![0; self.workers.len()];
+                loop {
+                    let indices = episodes
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(idx, &count)| (count < n_episodes.get()).then_some(idx))
+                        .collect::<Vec<_>>();
+                    if indices.is_empty() {
+                        break;
+                    }
+                    self.step_indexed(&indices, &mut episodes)?;
+                }
             }
         }
         Ok(())
@@ -164,8 +358,60 @@ impl<'a, T: R2lTensor> AsRef<[TrajectoryView<'a, T>]> for TrajectoryViews<'a, T>
     }
 }
 
-impl<E: Env> Pool<E> {
-    fn collect(&mut self) {}
+enum BuffersMut<'a, T: R2lTensor> {
+    Direct(ArrayGuard<'a, TrajectoryBuffer<T>>),
+    Staged(&'a mut [TrajectoryBuffer<T>]),
+}
+
+impl<T: R2lTensor> AsMut<[TrajectoryBuffer<T>]> for BuffersMut<'_, T> {
+    fn as_mut(&mut self) -> &mut [TrajectoryBuffer<T>] {
+        match self {
+            Self::Direct(buffers) => buffers.as_mut(),
+            Self::Staged(buffers) => buffers,
+        }
+    }
+}
+
+impl<E: Env + 'static> Pool<E> {
+    fn collect(&mut self, bound: RolloutMode) -> Result<()> {
+        match self {
+            Self::Direct(pool) => pool.collect(bound),
+            Self::Staged(pool) => pool.collect(bound),
+        }
+    }
+
+    fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: &A) -> Result<()> {
+        match self {
+            Self::Direct(pool) => pool.workers.set_policy(actor),
+            Self::Staged(pool) => pool.workers.set_policy(actor),
+        }
+    }
+
+    fn buffers_mut(&mut self) -> impl AsMut<[TrajectoryBuffer<E::Tensor>]> {
+        match self {
+            Self::Direct(pool) => BuffersMut::Direct(pool.buffers.lock().unwrap()),
+            Self::Staged(pool) => BuffersMut::Staged(&mut pool.buffers),
+        }
+    }
+
+    fn clear_buffers(&mut self) {
+        self.buffers_mut()
+            .as_mut()
+            .iter_mut()
+            .for_each(TrajectoryBuffer::clear);
+    }
+
+    fn reset_all_envs(&mut self) -> Result<()> {
+        match self {
+            Self::Direct(pool) => pool.workers.reset()?,
+            Self::Staged(pool) => {
+                pool.workers.reset()?;
+                pool.normalize_states()?;
+            }
+        }
+        self.clear_buffers();
+        Ok(())
+    }
 
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, E::Tensor>]> {
         match self {
@@ -188,18 +434,75 @@ impl<E: Env> Pool<E> {
     }
 }
 
-struct ReSampler<E: Env> {
-    pool: Pool<E>,
+// Same collection protocol as the existing sampler hooks, with a common core.
+trait ReSamplerHook {
+    type E: Env + 'static;
+
+    fn hook(&mut self, pool: &mut Pool<Self::E>) -> SamplerHookResult;
+
+    fn reset(&mut self) {}
 }
 
-impl<E: Env> Sampler for ReSampler<E> {
+struct ReSampler<E: Env, H: ReSamplerHook<E = E>> {
+    pool: Pool<E>,
+    hook: H,
+}
+
+impl<E: Env + 'static, H: ReSamplerHook<E = E>> ReSampler<E, H> {
+    fn new(pool: Pool<E>, hook: H) -> Self {
+        Self { pool, hook }
+    }
+
+    fn build_direct(
+        env_builder: &EnvBuilderType<E>,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+    ) -> Result<Self> {
+        Ok(Self::new(
+            Pool::Direct(DirectWorkerPool::build(env_builder, execution_mode)?),
+            hook,
+        ))
+    }
+
+    fn build_staged(
+        env_builder: &EnvBuilderType<E>,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+        obs_normalizer: Normalizer<E::Tensor>,
+    ) -> Result<Self> {
+        Ok(Self::new(
+            Pool::Staged(StagedWorkerPool::build(
+                env_builder,
+                execution_mode,
+                obs_normalizer,
+            )?),
+            hook,
+        ))
+    }
+}
+
+impl<E: Env + 'static, H: ReSamplerHook<E = E>> Sampler for ReSampler<E, H> {
     type Tensor = E::Tensor;
+
+    fn reset_all_envs(&mut self) -> Result<()> {
+        self.pool.reset_all_envs()?;
+        self.hook.reset();
+        Ok(())
+    }
 
     fn collect_rollouts<A: Actor<Tensor = Self::Tensor> + Clone>(
         &mut self,
         actor: A,
     ) -> Result<()> {
-        todo!()
+        self.pool.clear_buffers();
+        self.pool.set_policy(&actor)?;
+        loop {
+            match self.hook.hook(&mut self.pool) {
+                SamplerHookResult::Bound(bound) => self.pool.collect(bound)?,
+                SamplerHookResult::Stop => break,
+            }
+        }
+        Ok(())
     }
 
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {

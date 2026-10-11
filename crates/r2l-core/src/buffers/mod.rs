@@ -80,7 +80,11 @@ impl<T: R2lTensor> MultiMemory<T> {
     /// Converts the stored transitions into individual memories.
     #[must_use]
     pub fn into_stored_memories(self) -> Vec<Memory<T>> {
-        let mut memories = Vec::with_capacity(self.last_states.len());
+        self.into_stored_memories_iter().collect()
+    }
+
+    /// Consumes the batch and yields transitions without allocating an output vector.
+    pub fn into_stored_memories_iter(self) -> impl Iterator<Item = Memory<T>> {
         let Self {
             last_states: states,
             next_states,
@@ -89,24 +93,24 @@ impl<T: R2lTensor> MultiMemory<T> {
             terminateds,
             truncateds,
         } = self;
-        for (state, next_state, action, reward, terminated, truncated) in izip!(
+        izip!(
             states,
             next_states,
             actions,
             rewards,
             terminateds,
             truncateds
-        ) {
-            memories.push(Memory {
+        )
+        .map(
+            |(state, next_state, action, reward, terminated, truncated)| Memory {
                 state,
                 next_state,
                 action,
                 reward,
                 terminated,
                 truncated,
-            });
-        }
-        memories
+            },
+        )
     }
 
     /// Completes the stored transitions with their corresponding next states.
