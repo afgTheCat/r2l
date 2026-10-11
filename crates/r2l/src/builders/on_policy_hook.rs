@@ -11,7 +11,7 @@ use super::{policy::PolicyBuilder, sampler::SamplerConfiguration};
 use crate::{
     EvaluationSettings, OnPolicyTrainingHooks,
     backend::Backend,
-    evaluator::BestPolicyEvaluator,
+    evaluator::{BestPolicyEvaluator, EvaluationSampler},
     hooks::{
         on_policy::{
             commands::{OnPolicyCommandHandler, OnPolicyControlEndpoint},
@@ -150,7 +150,8 @@ impl OnPolicyHookConfig {
                 .as_ref()
                 .map_or(&defaults, |config| &config.evaluation_settings);
             let obs_normalizer = obs_normalizer.map(|n| n.with_mode(NormalizerMode::ReadOnly));
-            let sampler = sampler.env_build_plan.build_evaluator_sampler(
+            let sampler = EvaluationSampler::build(
+                sampler.env_builder.clone(),
                 settings.episodes_per_evaluation,
                 settings.evaluation_execution_mode,
                 obs_normalizer,

@@ -72,10 +72,7 @@ impl<E: Env> DirectSamplerCore<E> {
     ///
     /// Panics if an environment cannot be built.
     #[must_use]
-    pub fn build<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
-        execution_mode: SamplerExecutionMode,
-    ) -> Self {
+    pub fn build(env_builder: EnvBuilderType<E>, execution_mode: SamplerExecutionMode) -> Self {
         let num_envs =
             NonZeroUsize::new(env_builder.num_envs()).expect("environment builders are nonempty");
         let buffers: Vec<TrajectoryBuffer<E::Tensor>> =
@@ -135,8 +132,8 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
     }
 
     /// Builds a raw sampler and its environment workers.
-    pub fn build<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+    pub fn build(
+        env_builder: EnvBuilderType<E>,
         hook: H,
         execution_mode: SamplerExecutionMode,
     ) -> Self {
@@ -145,7 +142,9 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
             hook,
         }
     }
+}
 
+impl<E: Env + 'static, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
     /// Builds a homogeneous sampler from a shared environment builder.
     ///
     /// # Errors
@@ -156,13 +155,9 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
-    ) -> Result<Self>
-    where
-        E: 'static,
-    {
-        let env_builder = move || env_builder.build_env();
+    ) -> Result<Self> {
         Ok(Self::build(
-            EnvBuilderType::homogeneous(env_builder, num_envs)?,
+            EnvBuilderType::homogeneous_shared(env_builder, num_envs)?,
             hook,
             execution_mode,
         ))

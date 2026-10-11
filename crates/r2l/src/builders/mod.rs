@@ -1,5 +1,4 @@
 pub(crate) mod algorithm;
-pub(crate) mod environment;
 /// Learner and learning-hook configuration.
 pub mod learner;
 /// Backend-independent network configuration and construction.
@@ -43,7 +42,6 @@ use crate::{
     backend::{Backend, BurnBackendConfig, CandleBackend},
     builders::{
         algorithm::AlgoConfig,
-        environment::TypedEnvBuildPlan,
         learner::{LearnerConfig, LearningHookConfig},
         on_policy_hook::OnPolicyHookConfig,
         sampler::{SamplerConfiguration, SamplerSetup},
@@ -64,7 +62,7 @@ pub type A2CCandle = A2C<CandlePolicyValueLearner, A2CLearningHook<CandlePolicyV
 /// A2C agent produced by a Burn-backed algorithm builder.
 pub type A2CBurn = A2C<BurnPolicyValueLearner, A2CLearningHook<BurnPolicyValueLearner>>;
 
-struct Builder<E: Env> {
+struct Builder<E: Env + 'static> {
     backend_configuration: Backend,
     seed: Option<u64>,
 
@@ -99,7 +97,7 @@ impl<E: Env> Builder<E> {
             sampler_configuration: SamplerConfiguration {
                 setup: sampler_setup,
                 execution_mode: SamplerExecutionMode::MultiThreaded,
-                env_build_plan: Box::new(TypedEnvBuildPlan { env_builder }),
+                env_builder,
             },
             backend_configuration,
             algo_config,
@@ -131,7 +129,7 @@ impl<E: Env> Builder<E> {
         TrainingProgress::shared(
             self.training_limit,
             self.sampler_configuration.rollout_mode(),
-            self.sampler_configuration.env_build_plan.n_envs(),
+            self.sampler_configuration.n_envs(),
         )
     }
 
@@ -143,7 +141,7 @@ impl<E: Env> Builder<E> {
             &self.learner_builder.optimizer,
             progress,
             self.ppo_reporter.take(),
-            self.sampler_configuration.env_build_plan.n_envs(),
+            self.sampler_configuration.n_envs(),
         ))
     }
 
@@ -155,7 +153,7 @@ impl<E: Env> Builder<E> {
             &self.learner_builder.optimizer,
             progress,
             self.ppo_reporter.take(),
-            self.sampler_configuration.env_build_plan.n_envs(),
+            self.sampler_configuration.n_envs(),
         ))
     }
 
@@ -167,7 +165,7 @@ impl<E: Env> Builder<E> {
             &self.learner_builder.optimizer,
             progress,
             self.a2c_reporter.take(),
-            self.sampler_configuration.env_build_plan.n_envs(),
+            self.sampler_configuration.n_envs(),
         ))
     }
 
@@ -179,12 +177,12 @@ impl<E: Env> Builder<E> {
             &self.learner_builder.optimizer,
             progress,
             self.a2c_reporter.take(),
-            self.sampler_configuration.env_build_plan.n_envs(),
+            self.sampler_configuration.n_envs(),
         ))
     }
 }
 
-struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
+struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor> + 'static> {
     build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
     build_sampler: fn(&SamplerConfiguration<E>, SharedTrainingProgress) -> Result<S, Error>,
 }
@@ -202,7 +200,7 @@ struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
 /// minibatches of 64 samples, and a joint Adam optimizer with decoupled weight
 /// decay and a learning rate of `3e-4`.
 #[must_use]
-pub struct OnPolicyBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
+pub struct OnPolicyBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor> + 'static> {
     builder: Builder<E>,
     config: Config<A, S, E>,
 }

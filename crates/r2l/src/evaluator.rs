@@ -10,7 +10,7 @@ use r2l_core::ModeActorWrapper;
 use r2l_core::on_policy::algorithm::{Agent, OnPolicyRuntime};
 use r2l_core::{
     buffers::TrajectoryBatch,
-    env::{Env, EnvBuilder, EnvBuilderType, normalizer::Normalizer},
+    env::{Env, EnvBuilderType, normalizer::Normalizer},
     error::{Error, Result},
     models::{Actor, ToSafetensors},
     on_policy::algorithm::Sampler,
@@ -123,8 +123,8 @@ pub(crate) enum EvaluationSampler<E: Env> {
 }
 
 impl<E: Env> EvaluationSampler<E> {
-    pub(crate) fn build<EB: EnvBuilder<Env = E>>(
-        env_builder: EnvBuilderType<EB>,
+    pub(crate) fn build(
+        env_builder: EnvBuilderType<E>,
         n_episodes: NonZeroUsize,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,

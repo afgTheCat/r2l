@@ -2,14 +2,16 @@ use std::num::NonZeroUsize;
 
 use r2l_core::{
     env::{
-        Env,
+        Env, EnvBuilderType,
         normalizer::{Normalizer, NormalizerMode},
     },
     error::Error,
 };
-use r2l_sampler::{DirectSampler, RolloutMode, SamplerExecutionMode, StagedSampler};
+use r2l_sampler::{
+    DirectSampler, DirectSamplerCore, RolloutMode, SamplerExecutionMode, StagedSampler,
+    StagedSamplerCore,
+};
 
-use super::environment::EnvBuildPlan;
 use crate::{
     EpisodeBoundHook, StepBoundHook, hooks::progress::SharedTrainingProgress,
     utils::RewardNormalizer,
@@ -57,14 +59,19 @@ pub(crate) enum SamplerSetup<E: Env> {
     },
 }
 
-pub(crate) struct SamplerConfiguration<E: Env> {
+pub(crate) struct SamplerConfiguration<E: Env + 'static> {
     pub(crate) setup: SamplerSetup<E>,
     pub(crate) execution_mode: SamplerExecutionMode,
-    pub(crate) env_build_plan: Box<dyn EnvBuildPlan<E>>,
+    pub(crate) env_builder: EnvBuilderType<E>,
 }
 
 impl<E: Env> SamplerConfiguration<E> {
+    pub(crate) fn n_envs(&self) -> NonZeroUsize {
+        NonZeroUsize::new(self.env_builder.num_envs()).expect("environment builders are nonempty")
+    }
+
     pub(crate) fn set_reward_normalizer(&mut self, gamma: f32, clip_reward: f32) {
+        let n_envs = self.n_envs();
         let reward_normalizer = match &mut self.setup {
             SamplerSetup::DirectStep {
                 reward_normalizer, ..
@@ -76,11 +83,7 @@ impl<E: Env> SamplerConfiguration<E> {
                 unreachable!("reward normalization requires step-bound sampling")
             }
         };
-        *reward_normalizer = Some(RewardNormalizer::new(
-            self.env_build_plan.n_envs(),
-            gamma,
-            clip_reward,
-        ));
+        *reward_normalizer = Some(RewardNormalizer::new(n_envs, gamma, clip_reward));
     }
 
     pub(crate) fn with_observation_normalizer(mut self, config: ObsNormalizerConfig) -> Self {
@@ -94,7 +97,7 @@ impl<E: Env> SamplerConfiguration<E> {
         let obs_normalizer = match config {
             ObsNormalizerConfig::Disabled => None,
             ObsNormalizerConfig::Enabled { clip } => {
-                let description = self.env_build_plan.env_description();
+                let description = self.env_builder.env_description().unwrap();
                 let shape = description.observation_space.shape().unwrap();
                 Some(Normalizer::build(NormalizerMode::Update, clip, shape))
             }
@@ -137,9 +140,7 @@ impl<E: Env> SamplerConfiguration<E> {
         else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
-        let sampler_core = self
-            .env_build_plan
-            .build_direct_sampler_core(self.execution_mode);
+        let sampler_core = DirectSamplerCore::build(self.env_builder.clone(), self.execution_mode);
         let step_bound_hook = StepBoundHook::new(progress, reward_normalizer.clone());
         Ok(DirectSampler::new(sampler_core, step_bound_hook))
     }
@@ -152,9 +153,7 @@ impl<E: Env> SamplerConfiguration<E> {
         let SamplerSetup::DirectEpisode { .. } = &self.setup else {
             unreachable!("direct episode-bound sampler type must use matching configuration")
         };
-        let sampler_core = self
-            .env_build_plan
-            .build_direct_sampler_core(self.execution_mode);
+        let sampler_core = DirectSamplerCore::build(self.env_builder.clone(), self.execution_mode);
         let episode_bound_hook = EpisodeBoundHook::new(progress, None);
         Ok(DirectSampler::new(sampler_core, episode_bound_hook))
     }
@@ -174,9 +173,8 @@ impl<E: Env> SamplerConfiguration<E> {
         let obs_normalizer = obs_normalizer
             .as_ref()
             .map(|normalizer| normalizer.with_mode(NormalizerMode::Update));
-        let sampler_core = self
-            .env_build_plan
-            .build_staged_sampler_core(self.execution_mode, obs_normalizer)?;
+        let sampler_core =
+            StagedSamplerCore::build(&self.env_builder, self.execution_mode, obs_normalizer)?;
         let step_bound_hook = StepBoundHook::new(progress, reward_normalizer.clone());
         Ok(StagedSampler::new(sampler_core, step_bound_hook))
     }

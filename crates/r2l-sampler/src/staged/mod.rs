@@ -60,8 +60,8 @@ impl<E: Env> StagedSamplerCore<E> {
     /// # Errors
     ///
     /// Returns an error if the initial observations cannot be normalized.
-    pub fn build<EB: EnvBuilder<Env = E>>(
-        env_builder: &EnvBuilderType<EB>,
+    pub fn build(
+        env_builder: &EnvBuilderType<E>,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
@@ -86,8 +86,8 @@ impl<E: Env> StagedSamplerCore<E> {
         })
     }
 
-    fn build_vec_workers<EB: EnvBuilder<Env = E>>(
-        env_builder: &EnvBuilderType<EB>,
+    fn build_vec_workers(
+        env_builder: &EnvBuilderType<E>,
         num_envs: NonZeroUsize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
         let mut envs = Vec::with_capacity(num_envs.get());
@@ -103,8 +103,8 @@ impl<E: Env> StagedSamplerCore<E> {
         (last_states, WorkerPool::Vec(VecWorkers::new(workers)))
     }
 
-    fn build_thread_workers<EB: EnvBuilder<Env = E>>(
-        env_builder: &EnvBuilderType<EB>,
+    fn build_thread_workers(
+        env_builder: &EnvBuilderType<E>,
         num_envs: NonZeroUsize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
         let mut worker_handles = Vec::with_capacity(num_envs.get());
@@ -247,8 +247,8 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     /// # Errors
     ///
     /// Returns an error if the staged sampler core cannot be initialized.
-    pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
-        env_builder: &EnvBuilderType<EB>,
+    pub fn build_with_obs_normalizer(
+        env_builder: &EnvBuilderType<E>,
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
@@ -258,7 +258,9 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
             hook,
         })
     }
+}
 
+impl<E: Env<Tensor: R2lTensor> + 'static, H: StagedSamplerHook<E = E>> StagedSampler<E, H> {
     /// Builds a homogeneous sampler from a shared environment builder.
     ///
     /// # Errors
@@ -270,13 +272,9 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
         hook: H,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
-    ) -> Result<Self>
-    where
-        E: 'static,
-    {
-        let env_builder = move || env_builder.build_env();
+    ) -> Result<Self> {
         Self::build_with_obs_normalizer(
-            &EnvBuilderType::homogeneous(env_builder, num_envs)?,
+            &EnvBuilderType::homogeneous_shared(env_builder, num_envs)?,
             hook,
             execution_mode,
             obs_normalizer,

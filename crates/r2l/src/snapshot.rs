@@ -27,7 +27,7 @@ use crate::{
 /// `L` carries the backend's model and optimizer snapshot, independently of the
 /// concrete policy type. Snapshot capture and additional restoration paths are
 /// still under construction.
-pub struct SnapshotAlgo<E: Env, L> {
+pub struct SnapshotAlgo<E: Env + 'static, L> {
     algo_config: AlgoConfig,
     learner: LearnerConfig,
     learner_state: L,
@@ -67,7 +67,7 @@ impl<E: Env> SnapshotAlgo<E, PolicyValueLearnerSnapshot> {
             &learner_config.optimizer,
             progress.clone(),
             reporter,
-            sampler_configuration.env_build_plan.n_envs(),
+            sampler_configuration.n_envs(),
         );
         let sampler = sampler_configuration.staged_sampler_step_bound(progress.clone())?;
         let hooks = hook_config.build(

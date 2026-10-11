@@ -262,25 +262,25 @@ where
     }
 }
 
-pub enum EnvBuilderKind<EB: EnvBuilder> {
+pub enum EnvBuilderKind<E: Env + 'static> {
     /// Reuses one builder for `n_envs` homogeneous workers.
     Homogeneous {
         /// Shared environment builder.
-        builder: Arc<EB>,
+        builder: Arc<dyn EnvBuilder<Env = E>>,
         /// Number of environments to construct.
         n_envs: NonZeroUsize,
     },
     /// Uses one builder per worker.
     Heterogeneous {
         /// Builders in worker-index order.
-        builders: Vec<Arc<EB>>,
+        builders: Vec<Arc<dyn EnvBuilder<Env = E>>>,
     },
 }
 
 /// Validated, non-empty collection of environment builders used to create rollout workers.
-pub struct EnvBuilderType<EB: EnvBuilder>(pub EnvBuilderKind<EB>);
+pub struct EnvBuilderType<E: Env + 'static>(pub EnvBuilderKind<E>);
 
-impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
+impl<E: Env> Clone for EnvBuilderType<E> {
     fn clone(&self) -> Self {
         Self(match &self.0 {
             EnvBuilderKind::Homogeneous { builder, n_envs } => EnvBuilderKind::Homogeneous {
@@ -294,8 +294,8 @@ impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
     }
 }
 
-impl<EB: EnvBuilder> EnvBuilderType<EB> {
-    fn from_kind(kind: EnvBuilderKind<EB>) -> Result<Self, Error> {
+impl<E: Env> EnvBuilderType<E> {
+    fn from_kind(kind: EnvBuilderKind<E>) -> Result<Self, Error> {
         match &kind {
             EnvBuilderKind::Heterogeneous { builders } if builders.is_empty() => {
                 return Err(Error::invalid_parameter(
@@ -314,13 +314,22 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if `n_envs` is zero.
-    pub fn homogeneous(builder: EB, n_envs: usize) -> Result<Self, Error> {
+    pub fn homogeneous<EB: EnvBuilder<Env = E>>(builder: EB, n_envs: usize) -> Result<Self, Error> {
+        Self::homogeneous_shared(Arc::new(builder), n_envs)
+    }
+
+    /// Creates a homogeneous collection from an already shared builder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `n_envs` is zero.
+    pub fn homogeneous_shared(
+        builder: Arc<dyn EnvBuilder<Env = E>>,
+        n_envs: usize,
+    ) -> Result<Self, Error> {
         let n_envs = NonZeroUsize::new(n_envs)
             .ok_or_else(|| Error::invalid_parameter("n_envs", "a value greater than zero", "0"))?;
-        Self::from_kind(EnvBuilderKind::Homogeneous {
-            builder: Arc::new(builder),
-            n_envs,
-        })
+        Self::from_kind(EnvBuilderKind::Homogeneous { builder, n_envs })
     }
 
     /// Creates a heterogeneous collection with one environment per builder.
@@ -328,10 +337,26 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if `builders` is empty.
-    pub fn heterogeneous(builders: Vec<EB>) -> Result<Self, Error> {
-        Self::from_kind(EnvBuilderKind::Heterogeneous {
-            builders: builders.into_iter().map(Arc::new).collect(),
-        })
+    pub fn heterogeneous<EB: EnvBuilder<Env = E>>(builders: Vec<EB>) -> Result<Self, Error> {
+        Self::heterogeneous_shared(
+            builders
+                .into_iter()
+                .map(|builder| Arc::new(builder) as Arc<dyn EnvBuilder<Env = E>>)
+                .collect(),
+        )
+    }
+
+    /// Creates a collection of shared builders, which may have different concrete types.
+    ///
+    /// All builders must produce the same environment type with compatible spaces.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `builders` is empty.
+    pub fn heterogeneous_shared(
+        builders: Vec<Arc<dyn EnvBuilder<Env = E>>>,
+    ) -> Result<Self, Error> {
+        Self::from_kind(EnvBuilderKind::Heterogeneous { builders })
     }
 
     /// Builds the environment at `idx`.
@@ -339,7 +364,7 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if the selected builder cannot construct an environment.
-    pub fn build_idx(&self, idx: usize) -> Result<EB::Env, Error> {
+    pub fn build_idx(&self, idx: usize) -> Result<E, Error> {
         let n_envs = self.num_envs();
         if idx >= self.num_envs() {
             return Err(Error::invalid_parameter(
@@ -368,7 +393,7 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if the selected builder cannot provide a description.
-    pub fn env_description(&self) -> Result<EnvDescription<<EB::Env as Env>::Tensor>, Error> {
+    pub fn env_description(&self) -> Result<EnvDescription<E::Tensor>, Error> {
         match &self.0 {
             EnvBuilderKind::Homogeneous { builder, n_envs: _ } => builder.env_description(),
             EnvBuilderKind::Heterogeneous { builders } => builders[0].env_description(),
