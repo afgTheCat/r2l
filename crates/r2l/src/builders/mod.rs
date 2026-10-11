@@ -184,7 +184,7 @@ impl<E: Env> Builder<E> {
 
 struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor> + 'static> {
     build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
-    build_sampler: fn(&SamplerConfiguration<E>, SharedTrainingProgress) -> Result<S, Error>,
+    build_sampler: fn(&SamplerConfiguration<E>) -> Result<S, Error>,
 }
 
 /// Configures and builds a complete PPO or A2C training algorithm.
@@ -216,7 +216,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         sampler_setup: SamplerSetup<E>,
         normalize_advantage: bool,
         build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
-        build_sampler: fn(&SamplerConfiguration<E>, SharedTrainingProgress) -> Result<S, Error>,
+        build_sampler: fn(&SamplerConfiguration<E>) -> Result<S, Error>,
     ) -> Result<Self, Error> {
         Ok(Self {
             builder: Builder::new(
@@ -249,7 +249,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     fn with_sampler<S2: Sampler<Tensor = E::Tensor>>(
         self,
-        build_sampler: fn(&SamplerConfiguration<E>, SharedTrainingProgress) -> Result<S2, Error>,
+        build_sampler: fn(&SamplerConfiguration<E>) -> Result<S2, Error>,
     ) -> OnPolicyBuilder<A, S2, E> {
         OnPolicyBuilder {
             builder: self.builder,
@@ -665,8 +665,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
             self.builder.backend_configuration.seed(seed)?;
         }
         let agent = (self.config.build_agent)(&mut self.builder, progress.clone())?;
-        let sampler =
-            (self.config.build_sampler)(&self.builder.sampler_configuration, progress.clone())?;
+        let sampler = (self.config.build_sampler)(&self.builder.sampler_configuration)?;
         let hooks = self.builder.hook_config.build(
             &self.builder.sampler_configuration,
             &self.builder.learner_builder.policy_config,

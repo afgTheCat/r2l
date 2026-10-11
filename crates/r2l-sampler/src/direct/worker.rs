@@ -29,13 +29,8 @@ pub(crate) type ResultReceiver = Receiver<WorkerResult>;
 pub fn step_env<T: R2lTensor, E: Env<Tensor = T>>(
     env: &mut E,
     actor: &mut Box<dyn Actor<Tensor = T>>,
-    last_state: Option<T>,
+    state: T,
 ) -> Result<Memory<T>> {
-    let state = if let Some(state) = last_state {
-        state
-    } else {
-        env.reset(sample_u64())?
-    };
     let action = actor.action(state.clone())?;
     let Snapshot {
         state: next_state,
@@ -108,17 +103,18 @@ pub struct Worker<E: Env> {
     pub env: E,
     pub buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>,
     pub actor: Option<Box<dyn Actor<Tensor = E::Tensor>>>,
-    pub last_state: Option<E::Tensor>,
+    pub last_state: E::Tensor,
 }
 
 impl<E: Env> Worker<E> {
-    pub fn new(env: E, buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>) -> Self {
-        Self {
+    pub fn new(mut env: E, buffer: ElementHandle<TrajectoryBuffer<E::Tensor>>) -> Result<Self> {
+        let last_state = env.reset(sample_u64())?;
+        Ok(Self {
             env,
             buffer,
             actor: None,
-            last_state: None,
-        }
+            last_state,
+        })
     }
 
     pub fn clear(&mut self) {
@@ -134,14 +130,14 @@ impl<E: Env> Worker<E> {
             RolloutMode::EpisodeBound { n_episodes } => {
                 let mut episodes = 0;
                 loop {
-                    let last_state = self.last_state.take();
+                    let last_state = self.last_state.clone();
                     let memory = step_env(&mut self.env, actor, last_state)?;
                     let terminates = memory.is_done();
                     self.last_state = if terminates {
                         episodes += 1;
-                        Some(self.env.reset(sample_u64())?)
+                        self.env.reset(sample_u64())?
                     } else {
-                        Some(memory.next_state.clone())
+                        memory.next_state.clone()
                     };
                     buffer.push(memory);
                     if episodes >= n_episodes.get() {
@@ -151,12 +147,12 @@ impl<E: Env> Worker<E> {
             }
             RolloutMode::StepBound { n_steps } => {
                 for _ in 0..n_steps.get() {
-                    let last_state = self.last_state.take();
+                    let last_state = self.last_state.clone();
                     let memory = step_env(&mut self.env, actor, last_state)?;
                     self.last_state = if memory.is_done() {
-                        Some(self.env.reset(sample_u64())?)
+                        self.env.reset(sample_u64())?
                     } else {
-                        Some(memory.next_state.clone())
+                        memory.next_state.clone()
                     };
                     buffer.push(memory);
                 }
@@ -168,7 +164,7 @@ impl<E: Env> Worker<E> {
     // resets the initial state and clears the buffer. Used by the Evaluator hook
     pub fn reset(&mut self, seed: u64) -> Result<()> {
         let state = self.env.reset(seed)?;
-        self.last_state = Some(state);
+        self.last_state = state;
         self.buffer.lock().unwrap().clear();
         Ok(())
     }

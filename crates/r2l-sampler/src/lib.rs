@@ -8,8 +8,8 @@
 use std::num::NonZeroUsize;
 
 mod direct;
+mod next_ver;
 mod staged;
-// pub mod staged2;
 
 pub use direct::{DirectSampler, DirectSamplerCore, DirectSamplerHook, SamplerHookResult};
 pub use staged::{StagedSampler, StagedSamplerCore, StagedSamplerHook};

@@ -40,7 +40,7 @@ pub trait StagedSamplerHook {
 /// Mutable staged-sampler state exposed to hook implementations.
 pub struct StagedSamplerCore<E: Env> {
     pool: WorkerPool<E>,
-    obs_normalizer: Option<Normalizer<E::Tensor>>,
+    obs_normalizer: Normalizer<E::Tensor>,
     last_states: ArrayHandle<E::Tensor>,
     buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
@@ -63,7 +63,7 @@ impl<E: Env> StagedSamplerCore<E> {
     pub fn build(
         env_builder: &EnvBuilderType<E>,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<Normalizer<E::Tensor>>,
+        obs_normalizer: Normalizer<E::Tensor>,
     ) -> Result<Self> {
         let num_envs =
             NonZeroUsize::new(env_builder.num_envs()).expect("environment builders are nonempty");
@@ -74,9 +74,9 @@ impl<E: Env> StagedSamplerCore<E> {
                 Self::build_thread_workers(env_builder, num_envs)
             }
         };
-        if let Some(obs_normalizer) = &obs_normalizer {
-            let mut last_states = last_states.lock().unwrap();
-            obs_normalizer.apply_slice_in_place(&mut last_states)?;
+        {
+            let mut last_states_guard = last_states.lock().unwrap();
+            obs_normalizer.apply_slice_in_place(&mut last_states_guard)?;
         }
         Ok(Self {
             pool,
@@ -159,20 +159,18 @@ impl<E: Env> StagedSamplerCore<E> {
 
     fn step_indexed(&mut self, indices: &[usize]) -> Result<Vec<bool>> {
         let mut multi_memory = self.pool.step_indexed(indices)?;
-        if let Some(obs_normalizer) = &self.obs_normalizer {
-            let mut last_states = self.last_states.lock().unwrap();
-            let mut next_states = indices
-                .iter()
-                .map(|idx| last_states[*idx].clone())
-                .collect::<Vec<_>>();
-            obs_normalizer.apply_slice_in_place(&mut next_states)?;
-            for (idx, next_state) in indices.iter().zip(next_states) {
-                last_states[*idx] = next_state;
-            }
-            obs_normalizer
-                .with_mode(NormalizerMode::ReadOnly)
-                .apply_slice_in_place(multi_memory.next_states_mut())?;
+        let mut last_states = self.last_states.lock().unwrap();
+        let mut next_states = indices
+            .iter()
+            .map(|idx| last_states[*idx].clone())
+            .collect::<Vec<_>>();
+        self.obs_normalizer.apply_slice_in_place(&mut next_states)?;
+        for (idx, next_state) in indices.iter().zip(next_states) {
+            last_states[*idx] = next_state;
         }
+        self.obs_normalizer
+            .with_mode(NormalizerMode::ReadOnly)
+            .apply_slice_in_place(multi_memory.next_states_mut())?;
         let memories = multi_memory.into_stored_memories();
         let terminations = memories
             .iter()
@@ -186,13 +184,11 @@ impl<E: Env> StagedSamplerCore<E> {
 
     fn step(&mut self) -> Result<()> {
         let mut multi_memory = self.pool.step()?;
-        if let Some(obs_normalizer) = &self.obs_normalizer {
-            let mut last_states = self.last_states.lock().unwrap();
-            obs_normalizer.apply_slice_in_place(&mut last_states)?;
-            obs_normalizer
-                .with_mode(NormalizerMode::ReadOnly)
-                .apply_slice_in_place(multi_memory.next_states_mut())?;
-        }
+        let mut last_states = self.last_states.lock().unwrap();
+        self.obs_normalizer.apply_slice_in_place(&mut last_states)?;
+        self.obs_normalizer
+            .with_mode(NormalizerMode::ReadOnly)
+            .apply_slice_in_place(multi_memory.next_states_mut())?;
         let memories = multi_memory.into_stored_memories();
         for (idx, memory) in memories.into_iter().enumerate() {
             self.buffers[idx].push(memory);
@@ -238,8 +234,8 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     }
 
     /// Returns the shared observation normalizer, when configured.
-    pub fn obs_normalizer(&self) -> Option<Normalizer<E::Tensor>> {
-        self.core.obs_normalizer.as_ref().cloned()
+    pub fn obs_normalizer(&self) -> Normalizer<E::Tensor> {
+        self.core.obs_normalizer.clone()
     }
 
     /// Builds a sampler with an existing shared observation normalizer.
@@ -251,7 +247,7 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
         env_builder: &EnvBuilderType<E>,
         hook: H,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<Normalizer<E::Tensor>>,
+        obs_normalizer: Normalizer<E::Tensor>,
     ) -> Result<Self> {
         Ok(Self {
             core: StagedSamplerCore::build(env_builder, execution_mode, obs_normalizer)?,
@@ -271,7 +267,7 @@ impl<E: Env<Tensor: R2lTensor> + 'static, H: StagedSamplerHook<E = E>> StagedSam
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<Normalizer<E::Tensor>>,
+        obs_normalizer: Normalizer<E::Tensor>,
     ) -> Result<Self> {
         Self::build_with_obs_normalizer(
             &EnvBuilderType::homogeneous_shared(env_builder, num_envs)?,
@@ -287,9 +283,11 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> Sampler for StagedS
 
     fn reset_all_envs(&mut self) -> Result<()> {
         self.core.pool.reset_all()?;
-        if let Some(obs_normalizer) = &self.core.obs_normalizer {
+        {
             let mut last_states = self.core.last_states.lock().unwrap();
-            obs_normalizer.apply_slice_in_place(&mut last_states)?;
+            self.core
+                .obs_normalizer
+                .apply_slice_in_place(&mut last_states)?;
         }
         self.core.clear_buffers();
         self.hook.reset();

@@ -69,7 +69,7 @@ impl<E: Env> SnapshotAlgo<E, PolicyValueLearnerSnapshot> {
             reporter,
             sampler_configuration.n_envs(),
         );
-        let sampler = sampler_configuration.staged_sampler_step_bound(progress.clone())?;
+        let sampler = sampler_configuration.staged_sampler_step_bound()?;
         let hooks = hook_config.build(
             &sampler_configuration,
             &learner_config.policy_config,

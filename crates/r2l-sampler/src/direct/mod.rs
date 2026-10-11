@@ -72,7 +72,10 @@ impl<E: Env> DirectSamplerCore<E> {
     ///
     /// Panics if an environment cannot be built.
     #[must_use]
-    pub fn build(env_builder: EnvBuilderType<E>, execution_mode: SamplerExecutionMode) -> Self {
+    pub fn build(
+        env_builder: EnvBuilderType<E>,
+        execution_mode: SamplerExecutionMode,
+    ) -> Result<Self> {
         let num_envs =
             NonZeroUsize::new(env_builder.num_envs()).expect("environment builders are nonempty");
         let buffers: Vec<TrajectoryBuffer<E::Tensor>> =
@@ -80,7 +83,7 @@ impl<E: Env> DirectSamplerCore<E> {
         let (buffers, buffer_handlers) = bimodal_array(buffers);
         let worker_pool = match execution_mode {
             SamplerExecutionMode::SingleThreaded => {
-                let workers: Vec<_> = buffer_handlers
+                let workers: Result<Vec<_>> = buffer_handlers
                     .into_iter()
                     .enumerate()
                     .map(|(idx, element_handle)| {
@@ -88,7 +91,7 @@ impl<E: Env> DirectSamplerCore<E> {
                         Worker::new(env, element_handle)
                     })
                     .collect();
-                WorkerPool::Vec(workers)
+                WorkerPool::Vec(workers?)
             }
             SamplerExecutionMode::MultiThreaded => {
                 let env_builder = Arc::new(env_builder);
@@ -103,7 +106,7 @@ impl<E: Env> DirectSamplerCore<E> {
                         let handle = std::thread::spawn(move || {
                             set_seed(worker_seed);
                             let env = env_builder.build_idx(idx).unwrap();
-                            let worker = Worker::new(env, element_handle);
+                            let worker = Worker::new(env, element_handle).unwrap();
                             let mut thread_worker = ThreadWorker::new(worker, command_rx, res_tx);
                             thread_worker.work();
                         });
@@ -113,10 +116,10 @@ impl<E: Env> DirectSamplerCore<E> {
                 WorkerPool::Thread(ThreadWorkers::new(workers))
             }
         };
-        Self {
+        Ok(Self {
             buffers,
             worker_pool,
-        }
+        })
     }
 }
 
@@ -136,11 +139,11 @@ impl<E: Env, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
         env_builder: EnvBuilderType<E>,
         hook: H,
         execution_mode: SamplerExecutionMode,
-    ) -> Self {
-        Self {
-            core: DirectSamplerCore::build(env_builder, execution_mode),
+    ) -> Result<Self> {
+        Ok(Self {
+            core: DirectSamplerCore::build(env_builder, execution_mode)?,
             hook,
-        }
+        })
     }
 }
 
@@ -156,11 +159,11 @@ impl<E: Env + 'static, H: DirectSamplerHook<E = E>> DirectSampler<E, H> {
         hook: H,
         execution_mode: SamplerExecutionMode,
     ) -> Result<Self> {
-        Ok(Self::build(
+        Self::build(
             EnvBuilderType::homogeneous_shared(env_builder, num_envs)?,
             hook,
             execution_mode,
-        ))
+        )
     }
 }
 

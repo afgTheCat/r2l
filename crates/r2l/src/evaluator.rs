@@ -20,9 +20,8 @@ use r2l_sampler::{DirectSampler, RolloutMode, SamplerExecutionMode, StagedSample
 use yaml_serde::to_string;
 
 use crate::{
-    EpisodeBoundHook, TrainingLimit,
+    EpisodeBoundHook,
     constants::{ACTOR_FILE, EVALUATIONS_FILE, NORMALIZER_FILE},
-    hooks::progress::TrainingProgress,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -129,25 +128,18 @@ impl<E: Env> EvaluationSampler<E> {
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
-        let progress = TrainingProgress::shared(
-            TrainingLimit::rollouts(1),
-            RolloutMode::EpisodeBound { n_episodes },
-            NonZeroUsize::new(env_builder.num_envs()).expect("environment builders are nonempty"),
-        );
-        let hook = EpisodeBoundHook::new(progress, None);
+        let hook = EpisodeBoundHook::new(RolloutMode::EpisodeBound { n_episodes }, None);
         if let Some(obs_normalizer) = obs_normalizer {
-            Ok(Self::Staged(StagedSampler::build_with_obs_normalizer(
+            let sampler = StagedSampler::build_with_obs_normalizer(
                 &env_builder,
                 hook,
                 execution_mode,
-                Some(obs_normalizer),
-            )?))
+                obs_normalizer,
+            )?;
+            Ok(Self::Staged(sampler))
         } else {
-            Ok(Self::Direct(DirectSampler::build(
-                env_builder,
-                hook,
-                execution_mode,
-            )))
+            let sampler = DirectSampler::build(env_builder, hook, execution_mode)?;
+            Ok(Self::Direct(sampler))
         }
     }
 
@@ -184,7 +176,7 @@ impl<E: Env> EvaluationSampler<E> {
     fn normalizer(&self) -> Option<Normalizer<E::Tensor>> {
         match self {
             Self::Direct(_) => None,
-            Self::Staged(sampler) => sampler.obs_normalizer(),
+            Self::Staged(sampler) => Some(sampler.obs_normalizer()),
         }
     }
 }

@@ -28,14 +28,14 @@ macro_rules! try_or_break {
     };
 }
 
-/// Lifecycle hooks sharing progress with the sampler and learning hooks.
+/// Lifecycle hooks sharing progress with the learning hooks.
 pub struct OnPolicyTrainingHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
     timing_recorder: TimingRecorder,
     progress: SharedTrainingProgress,
     evaluator: ScheduledEvaluator<A::Actor, E>,
     command_handler: OnPolicyCommandHandler,
     error: Option<Error>,
-    _phantom: PhantomData<(A, S, E)>,
+    _phantom: PhantomData<S>,
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
@@ -45,7 +45,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// # Arguments
     ///
-    /// * `progress` - Progress shared with the agent and sampler hooks.
+    /// * `progress` - Progress shared with the learning, evaluation, and timing hooks.
     /// * `evaluator` - Evaluation cadence and best-policy tracking.
     /// * `command_handler` - Handles control requests between training phases.
     /// * `timing_recorder` - Records durations for each completed training iteration.

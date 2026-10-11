@@ -62,38 +62,44 @@ impl TrainingLimit {
 struct TrainingCounters {
     completed_rollouts: usize,
     steps_taken: usize,
+    n_evaluations: usize,
 }
 
 #[derive(Clone)]
 pub(crate) struct TrainingProgress {
     counters: TrainingCounters,
     training_limit: TrainingLimit,
-    rollout_mode: RolloutMode,
-    n_envs: NonZeroUsize,
-    n_evaluations: usize,
+    total_rollouts: Option<usize>,
 }
 
 pub(crate) type SharedTrainingProgress = Rc<RefCell<TrainingProgress>>;
 
 impl TrainingProgress {
-    /// Creates progress shared by the training, agent, and sampler hooks.
+    /// Creates progress shared by the training and learning hooks.
     ///
     /// # Arguments
     ///
     /// * `training_limit` - Determines when the training loop stops.
-    /// * `rollout_mode` - Collection bound applied to each environment.
-    /// * `n_envs` - Number of training environments, used to estimate rollout count.
+    /// * `rollout_mode` - Collection bound used to calculate the total rollout count once.
+    /// * `n_envs` - Number of training environments used in that calculation.
     pub(crate) fn shared(
         training_limit: TrainingLimit,
         rollout_mode: RolloutMode,
         n_envs: NonZeroUsize,
     ) -> SharedTrainingProgress {
+        let total_rollouts = match training_limit {
+            TrainingLimit::RolloutBound { total_rollouts } => Some(total_rollouts.get()),
+            TrainingLimit::TotalStepBound { total_steps } => match rollout_mode {
+                RolloutMode::StepBound { n_steps } => n_steps
+                    .checked_mul(n_envs)
+                    .map(|steps| total_steps.get().div_ceil(steps.get())),
+                RolloutMode::EpisodeBound { .. } => None,
+            },
+        };
         Self {
             counters: TrainingCounters::default(),
             training_limit,
-            rollout_mode,
-            n_envs,
-            n_evaluations: 0,
+            total_rollouts,
         }
         .into_shared()
     }
@@ -123,20 +129,8 @@ impl TrainingProgress {
         self.counters.completed_rollouts
     }
 
-    pub(super) fn rollout_mode(&self) -> RolloutMode {
-        self.rollout_mode
-    }
-
     pub(crate) fn total_rollouts(&self) -> Option<usize> {
-        match self.training_limit {
-            TrainingLimit::RolloutBound { total_rollouts } => Some(total_rollouts.get()),
-            TrainingLimit::TotalStepBound { total_steps } => match self.rollout_mode {
-                RolloutMode::StepBound { n_steps } => n_steps
-                    .checked_mul(self.n_envs)
-                    .map(|steps| total_steps.get().div_ceil(steps.get())),
-                RolloutMode::EpisodeBound { .. } => None,
-            },
-        }
+        self.total_rollouts
     }
 
     /// Remaining training fraction, including the latest collection even before learning.
@@ -161,10 +155,10 @@ impl TrainingProgress {
     }
 
     pub(crate) fn n_evaluations(&self) -> usize {
-        self.n_evaluations
+        self.counters.n_evaluations
     }
 
     pub(crate) fn increase_evaluations(&mut self) {
-        self.n_evaluations += 1;
+        self.counters.n_evaluations += 1;
     }
 }

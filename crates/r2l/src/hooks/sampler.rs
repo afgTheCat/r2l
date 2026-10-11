@@ -2,10 +2,10 @@ use std::marker::PhantomData;
 
 use r2l_core::env::Env;
 use r2l_sampler::{
-    DirectSamplerCore, DirectSamplerHook, SamplerHookResult, StagedSamplerCore, StagedSamplerHook,
+    DirectSamplerCore, DirectSamplerHook, RolloutMode, SamplerHookResult, StagedSamplerCore,
+    StagedSamplerHook,
 };
 
-use super::progress::SharedTrainingProgress;
 use crate::utils::RewardNormalizer;
 
 enum Phase {
@@ -18,32 +18,32 @@ pub struct Steps;
 /// Marker for a sampler configured to collect a fixed number of episodes.
 pub struct Episodes;
 
-/// Controls collection and optional reward normalization using shared progress.
+/// Controls collection with a fixed rollout mode and optional reward normalization.
 pub struct SamplerHook<E: Env, Bound> {
-    progress: SharedTrainingProgress,
+    rollout_mode: RolloutMode,
     reward_normalizer: Option<RewardNormalizer>,
     phase: Phase,
     _p: PhantomData<(E, Bound)>,
 }
 
-/// Step-bound specialization of the shared sampler hook.
+/// Step-bound specialization of the sampler hook.
 pub type StepBoundHook<E> = SamplerHook<E, Steps>;
-/// Episode-bound specialization of the shared sampler hook.
+/// Episode-bound specialization of the sampler hook.
 pub type EpisodeBoundHook<E> = SamplerHook<E, Episodes>;
 
 impl<E: Env, Bound> SamplerHook<E, Bound> {
-    /// Creates a sampler hook using the shared collection configuration.
+    /// Creates a sampler hook with its own collection bound.
     ///
     /// # Arguments
     ///
-    /// * `progress` - Progress and collection settings shared with the training hooks.
+    /// * `rollout_mode` - Step or episode bound applied to each environment per rollout.
     /// * `reward_normalizer` - Optional normalization for step-bound rollouts.
     pub(crate) fn new(
-        progress: SharedTrainingProgress,
+        rollout_mode: RolloutMode,
         reward_normalizer: Option<RewardNormalizer>,
     ) -> Self {
         Self {
-            progress,
+            rollout_mode,
             reward_normalizer,
             phase: Phase::Collect,
             _p: PhantomData,
@@ -58,15 +58,14 @@ impl<E: Env, Bound> SamplerHook<E, Bound> {
     }
 
     fn next_result(&mut self, normalize: impl FnOnce(&mut RewardNormalizer)) -> SamplerHookResult {
-        let mode = self.progress.borrow().rollout_mode();
         match self.phase {
             Phase::Collect => {
                 self.phase = Phase::Stop;
-                SamplerHookResult::Bound(mode)
+                SamplerHookResult::Bound(self.rollout_mode)
             }
             Phase::Stop => {
                 self.phase = Phase::Collect;
-                if mode.is_step_bound()
+                if self.rollout_mode.is_step_bound()
                     && let Some(normalizer) = &mut self.reward_normalizer
                 {
                     normalize(normalizer);
