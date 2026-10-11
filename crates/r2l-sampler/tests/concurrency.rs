@@ -9,8 +9,7 @@ use r2l_core::{
     tensor::VecTensor,
 };
 use r2l_sampler::{
-    DirectSampler, DirectSamplerCore, DirectSamplerHook, RolloutMode, SamplerExecutionMode,
-    SamplerHookResult,
+    RolloutMode, RolloutSampler, SamplerCore, SamplerExecutionMode, SamplerHook, SamplerHookResult,
 };
 
 struct CoordinatedEnv {
@@ -65,10 +64,10 @@ impl Actor for ActorStub {
 
 struct OneStep(bool);
 
-impl DirectSamplerHook for OneStep {
+impl SamplerHook for OneStep {
     type E = CoordinatedEnv;
 
-    fn hook(&mut self, _core: &mut DirectSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook(&mut self, _core: &mut SamplerCore<Self::E>) -> SamplerHookResult {
         if self.0 {
             SamplerHookResult::Stop
         } else {
@@ -88,7 +87,7 @@ fn multithreaded_workers_enter_environment_steps_concurrently() {
             release: release_rx.clone(),
         })
     });
-    let mut sampler = DirectSampler::build_from_env_builder(
+    let mut sampler = RolloutSampler::build_direct_from_env_builder(
         builder,
         2,
         OneStep(false),

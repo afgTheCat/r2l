@@ -1,18 +1,22 @@
 //! Rollout samplers for `r2l` on-policy algorithms.
 //!
-//! [`DirectSampler`] lets workers write directly to trajectory buffers, while
-//! [`StagedSampler`] receives transitions from workers and can transform them
-//! before writing them. Both support single-threaded and multi-threaded
-//! environment workers.
+//! [`RolloutSampler`] supports direct collection into trajectory buffers and
+//! staged collection with shared observation normalization. Both strategies
+//! support inline and threaded environment workers through the same hook interface.
 
 use std::num::NonZeroUsize;
 
-mod direct;
-mod next_ver;
-mod staged;
+mod sampler;
 
-pub use direct::{DirectSampler, DirectSamplerCore, DirectSamplerHook, SamplerHookResult};
-pub use staged::{StagedSampler, StagedSamplerCore, StagedSamplerHook};
+pub use sampler::{RolloutSampler, SamplerCore, SamplerHook};
+
+/// Instruction returned by a [`SamplerHook`] during rollout collection.
+pub enum SamplerHookResult {
+    /// Finish the current rollout.
+    Stop,
+    /// Collect data up to the supplied bound, then invoke the hook again.
+    Bound(RolloutMode),
+}
 
 /// Execution strategy used by the sampler.
 ///

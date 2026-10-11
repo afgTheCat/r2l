@@ -7,12 +7,11 @@ use r2l_core::{
     },
     error::Error,
 };
-use r2l_sampler::{
-    DirectSampler, DirectSamplerCore, RolloutMode, SamplerExecutionMode, StagedSampler,
-    StagedSamplerCore,
-};
+use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
 
-use crate::{EpisodeBoundHook, StepBoundHook, utils::RewardNormalizer};
+use crate::{
+    EpisodeBoundHook, StepBoundHook, hooks::sampler::SamplerHook, utils::RewardNormalizer,
+};
 
 /// Controls observation normalization and optional clipping after normalization.
 #[derive(Clone, Copy, Debug)]
@@ -42,14 +41,11 @@ impl ObsNormalizerConfig {
 }
 
 pub(crate) enum SamplerSetup<E: Env> {
-    DirectEpisode {
+    Episode {
         rollout_episodes: NonZeroUsize,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     },
-    DirectStep {
-        rollout_steps: NonZeroUsize,
-        reward_normalizer: Option<RewardNormalizer>,
-    },
-    StagedStep {
+    Step {
         rollout_steps: NonZeroUsize,
         reward_normalizer: Option<RewardNormalizer>,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
@@ -69,29 +65,17 @@ impl<E: Env> SamplerConfiguration<E> {
 
     pub(crate) fn set_reward_normalizer(&mut self, gamma: f32, clip_reward: f32) {
         let n_envs = self.n_envs();
-        let reward_normalizer = match &mut self.setup {
-            SamplerSetup::DirectStep {
-                reward_normalizer, ..
-            }
-            | SamplerSetup::StagedStep {
-                reward_normalizer, ..
-            } => reward_normalizer,
-            SamplerSetup::DirectEpisode { .. } => {
-                unreachable!("reward normalization requires step-bound sampling")
-            }
+        let SamplerSetup::Step {
+            reward_normalizer, ..
+        } = &mut self.setup
+        else {
+            unreachable!("reward normalization requires step-bound sampling")
         };
         *reward_normalizer = Some(RewardNormalizer::new(n_envs, gamma, clip_reward));
     }
 
     pub(crate) fn with_observation_normalizer(mut self, config: ObsNormalizerConfig) -> Self {
-        let SamplerSetup::DirectStep {
-            rollout_steps,
-            reward_normalizer,
-        } = self.setup
-        else {
-            unreachable!("direct step-bound sampler type must use matching configuration")
-        };
-        let obs_normalizer = match config {
+        let normalizer = match config {
             ObsNormalizerConfig::Disabled => None,
             ObsNormalizerConfig::Enabled { clip } => {
                 let description = self.env_builder.env_description().unwrap();
@@ -99,21 +83,21 @@ impl<E: Env> SamplerConfiguration<E> {
                 Some(Normalizer::build(NormalizerMode::Update, clip, shape))
             }
         };
-        self.setup = SamplerSetup::StagedStep {
-            rollout_steps,
-            reward_normalizer,
-            obs_normalizer,
-        };
+        match &mut self.setup {
+            SamplerSetup::Step { obs_normalizer, .. }
+            | SamplerSetup::Episode { obs_normalizer, .. } => *obs_normalizer = normalizer,
+        }
         self
     }
 
     pub(crate) fn rollout_mode(&self) -> RolloutMode {
         match &self.setup {
-            SamplerSetup::DirectStep { rollout_steps, .. }
-            | SamplerSetup::StagedStep { rollout_steps, .. } => RolloutMode::StepBound {
+            SamplerSetup::Step { rollout_steps, .. } => RolloutMode::StepBound {
                 n_steps: *rollout_steps,
             },
-            SamplerSetup::DirectEpisode { rollout_episodes } => RolloutMode::EpisodeBound {
+            SamplerSetup::Episode {
+                rollout_episodes, ..
+            } => RolloutMode::EpisodeBound {
                 n_episodes: *rollout_episodes,
             },
         }
@@ -121,53 +105,45 @@ impl<E: Env> SamplerConfiguration<E> {
 
     pub(crate) fn obs_normalizer(&self) -> Option<Normalizer<E::Tensor>> {
         match &self.setup {
-            SamplerSetup::StagedStep { obs_normalizer, .. } => obs_normalizer.clone(),
-            _ => None,
+            SamplerSetup::Step { obs_normalizer, .. }
+            | SamplerSetup::Episode { obs_normalizer, .. } => obs_normalizer.clone(),
         }
     }
 
-    #[allow(clippy::unnecessary_wraps)]
-    pub(crate) fn direct_sampler_step_bound(
+    fn build_sampler<Bound>(
         &self,
-    ) -> Result<DirectSampler<E, StepBoundHook<E>>, Error> {
-        let SamplerSetup::DirectStep {
+        hook: SamplerHook<E, Bound>,
+    ) -> Result<RolloutSampler<E, SamplerHook<E, Bound>>, Error> {
+        match self.obs_normalizer() {
+            Some(normalizer) => RolloutSampler::build_staged(
+                &self.env_builder,
+                hook,
+                self.execution_mode,
+                normalizer.with_mode(NormalizerMode::Update),
+            ),
+            None => RolloutSampler::build_direct(&self.env_builder, hook, self.execution_mode),
+        }
+    }
+
+    pub(crate) fn step_bound_sampler(&self) -> Result<RolloutSampler<E, StepBoundHook<E>>, Error> {
+        let SamplerSetup::Step {
             reward_normalizer, ..
         } = &self.setup
         else {
-            unreachable!("direct step-bound sampler type must use matching configuration")
+            unreachable!("step-bound sampler type must use matching configuration")
         };
-        let sampler_core = DirectSamplerCore::build(self.env_builder.clone(), self.execution_mode)?;
-        let step_bound_hook = StepBoundHook::new(self.rollout_mode(), reward_normalizer.clone());
-        Ok(DirectSampler::new(sampler_core, step_bound_hook))
+        self.build_sampler(StepBoundHook::new(
+            self.rollout_mode(),
+            reward_normalizer.clone(),
+        ))
     }
 
-    #[allow(clippy::unnecessary_wraps)]
-    pub(crate) fn direct_sampler_episode_bound(
+    pub(crate) fn episode_bound_sampler(
         &self,
-    ) -> Result<DirectSampler<E, EpisodeBoundHook<E>>, Error> {
-        let SamplerSetup::DirectEpisode { .. } = &self.setup else {
-            unreachable!("direct episode-bound sampler type must use matching configuration")
+    ) -> Result<RolloutSampler<E, EpisodeBoundHook<E>>, Error> {
+        let SamplerSetup::Episode { .. } = &self.setup else {
+            unreachable!("episode-bound sampler type must use matching configuration")
         };
-        let sampler_core = DirectSamplerCore::build(self.env_builder.clone(), self.execution_mode)?;
-        let episode_bound_hook = EpisodeBoundHook::new(self.rollout_mode(), None);
-        Ok(DirectSampler::new(sampler_core, episode_bound_hook))
-    }
-
-    pub(crate) fn staged_sampler_step_bound(
-        &self,
-    ) -> Result<StagedSampler<E, StepBoundHook<E>>, Error> {
-        let SamplerSetup::StagedStep {
-            reward_normalizer,
-            obs_normalizer: Some(obs_normalizer),
-            ..
-        } = &self.setup
-        else {
-            unreachable!("staged step-bound sampler type must use matching configuration")
-        };
-        let obs_normalizer = obs_normalizer.with_mode(NormalizerMode::Update);
-        let sampler_core =
-            StagedSamplerCore::build(&self.env_builder, self.execution_mode, obs_normalizer)?;
-        let step_bound_hook = StepBoundHook::new(self.rollout_mode(), reward_normalizer.clone());
-        Ok(StagedSampler::new(sampler_core, step_bound_hook))
+        self.build_sampler(EpisodeBoundHook::new(self.rollout_mode(), None))
     }
 }

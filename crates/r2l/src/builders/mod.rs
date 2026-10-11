@@ -33,7 +33,7 @@ use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner as BurnPoli
 use r2l_distributions::learning_modules::candle_lm::PolicyValueLearner as CandlePolicyValueLearner;
 #[cfg(feature = "gym")]
 use r2l_gym::{GymEnv, GymEnvBuilder};
-use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
+use r2l_sampler::{RolloutSampler, SamplerExecutionMode};
 pub use sampler::ObsNormalizerConfig;
 
 use crate::{
@@ -853,7 +853,7 @@ where
 }
 
 impl<A: Agent<Actor: ToSafetensors>, E: Env>
-    OnPolicyBuilder<A, DirectSampler<E, StepBoundHook<E>>, E>
+    OnPolicyBuilder<A, RolloutSampler<E, StepBoundHook<E>>, E>
 {
     /// Sets the number of steps collected per environment and rollout.
     ///
@@ -865,12 +865,12 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     ///
     /// Panics if `rollout_steps` is zero.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
-        let SamplerSetup::DirectStep {
+        let SamplerSetup::Step {
             rollout_steps: configured,
             ..
         } = &mut self.builder.sampler_configuration.setup
         else {
-            unreachable!("direct step-bound sampler type must use matching configuration")
+            unreachable!("step-bound sampler type must use matching configuration")
         };
         *configured =
             NonZeroUsize::new(rollout_steps).expect("rollout steps must be greater than zero");
@@ -890,10 +890,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
         self
     }
 
-    /// Selects staged sampling and configures observation normalization.
+    /// Configures observation normalization and selects the collection strategy.
     ///
     /// Enabled normalization can optionally clip the normalized values. Disabled
-    /// normalization retains staged sampling without applying a normalizer.
+    /// normalization selects direct collection without a normalizer.
     ///
     /// # Arguments
     ///
@@ -902,19 +902,15 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     /// # Panics
     ///
     /// Panics if the tensor backend cannot create the normalization statistics.
-    #[allow(clippy::type_complexity)]
-    pub fn with_observation_normalizer(
-        mut self,
-        config: ObsNormalizerConfig,
-    ) -> OnPolicyBuilder<A, StagedSampler<E, StepBoundHook<E>>, E> {
+    pub fn with_observation_normalizer(mut self, config: ObsNormalizerConfig) -> Self {
         self.builder.sampler_configuration = self
             .builder
             .sampler_configuration
             .with_observation_normalizer(config);
-        self.with_sampler(SamplerConfiguration::staged_sampler_step_bound)
+        self
     }
 
-    /// Selects direct sampling bounded by completed episodes per environment.
+    /// Collects complete episodes per environment, retaining observation normalization.
     ///
     /// # Arguments
     ///
@@ -927,61 +923,25 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     pub fn with_rollout_episodes(
         mut self,
         rollout_episodes: usize,
-    ) -> OnPolicyBuilder<A, DirectSampler<E, EpisodeBoundHook<E>>, E> {
-        let SamplerSetup::DirectStep { .. } = self.builder.sampler_configuration.setup else {
-            unreachable!("direct step-bound sampler type must use matching configuration")
+    ) -> OnPolicyBuilder<A, RolloutSampler<E, EpisodeBoundHook<E>>, E> {
+        let SamplerSetup::Step { .. } = self.builder.sampler_configuration.setup else {
+            unreachable!("step-bound sampler type must use matching configuration")
         };
         let rollout_episodes = NonZeroUsize::new(rollout_episodes)
             .expect("rollout episodes must be greater than zero");
-        self.builder.sampler_configuration.setup = SamplerSetup::DirectEpisode { rollout_episodes };
-        self.with_sampler(SamplerConfiguration::direct_sampler_episode_bound)
-    }
-}
-
-impl<A: Agent<Actor: ToSafetensors>, E: Env>
-    OnPolicyBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>
-{
-    /// Sets the number of steps collected per environment and rollout.
-    ///
-    /// # Arguments
-    ///
-    /// * `rollout_steps` - Number of steps collected from each environment per rollout.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `rollout_steps` is zero.
-    pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
-        let SamplerSetup::StagedStep {
-            rollout_steps: configured,
-            ..
-        } = &mut self.builder.sampler_configuration.setup
-        else {
-            unreachable!("staged step-bound sampler type must use matching configuration")
+        self.builder.sampler_configuration.setup = SamplerSetup::Episode {
+            rollout_episodes,
+            obs_normalizer: self.builder.sampler_configuration.obs_normalizer(),
         };
-        *configured =
-            NonZeroUsize::new(rollout_steps).expect("rollout steps must be greater than zero");
-        self
-    }
-
-    /// Normalizes discounted rewards and clips them to `clip_reward`.
-    ///
-    /// # Arguments
-    ///
-    /// * `gamma` - Discount factor used to track discounted returns.
-    /// * `clip_reward` - Absolute limit applied to normalized rewards.
-    pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
-        self.builder
-            .sampler_configuration
-            .set_reward_normalizer(gamma, clip_reward);
-        self
+        self.with_sampler(SamplerConfiguration::episode_bound_sampler)
     }
 }
 
 /// Default PPO builder using Candle and direct, step-bounded sampling.
-pub type PPOBuilder<E> = OnPolicyBuilder<PPOCandle, DirectSampler<E, StepBoundHook<E>>, E>;
+pub type PPOBuilder<E> = OnPolicyBuilder<PPOCandle, RolloutSampler<E, StepBoundHook<E>>, E>;
 
 /// Default A2C builder using Candle and direct, step-bounded sampling.
-pub type A2CBuilder<E> = OnPolicyBuilder<A2CCandle, DirectSampler<E, StepBoundHook<E>>, E>;
+pub type A2CBuilder<E> = OnPolicyBuilder<A2CCandle, RolloutSampler<E, StepBoundHook<E>>, E>;
 
 impl<E: Env> PPOBuilder<E> {
     /// Creates a PPO builder using homogeneous environments.
@@ -1012,13 +972,14 @@ impl<E: Env> PPOBuilder<E> {
             Backend::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
-            SamplerSetup::DirectStep {
+            SamplerSetup::Step {
                 rollout_steps: NonZeroUsize::new(1024).unwrap(),
                 reward_normalizer: None,
+                obs_normalizer: None,
             },
             true,
             Builder::ppo_candle_agent,
-            SamplerConfiguration::direct_sampler_step_bound,
+            SamplerConfiguration::step_bound_sampler,
         )
     }
 }
@@ -1049,13 +1010,14 @@ impl<E: Env> A2CBuilder<E> {
             Backend::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
-            SamplerSetup::DirectStep {
+            SamplerSetup::Step {
                 rollout_steps: NonZeroUsize::new(1024).unwrap(),
                 reward_normalizer: None,
+                obs_normalizer: None,
             },
             true,
             Builder::a2c_candle_agent,
-            SamplerConfiguration::direct_sampler_step_bound,
+            SamplerConfiguration::step_bound_sampler,
         )
     }
 }

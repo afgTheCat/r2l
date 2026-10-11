@@ -16,8 +16,7 @@ use r2l_core::{
     tensor::VecTensor,
 };
 use r2l_sampler::{
-    DirectSampler, DirectSamplerCore, DirectSamplerHook, SamplerExecutionMode, SamplerHookResult,
-    StagedSampler, StagedSamplerCore, StagedSamplerHook,
+    RolloutSampler, SamplerCore, SamplerExecutionMode, SamplerHook, SamplerHookResult,
 };
 
 // Environments are constructed on their worker threads and need not be Send or Clone.
@@ -63,18 +62,10 @@ impl Env for TestEnv {
 
 struct StopHook;
 
-impl DirectSamplerHook for StopHook {
+impl SamplerHook for StopHook {
     type E = TestEnv;
 
-    fn hook(&mut self, _core: &mut DirectSamplerCore<Self::E>) -> SamplerHookResult {
-        SamplerHookResult::Stop
-    }
-}
-
-impl StagedSamplerHook for StopHook {
-    type E = TestEnv;
-
-    fn hook(&mut self, _core: &mut StagedSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook(&mut self, _core: &mut SamplerCore<Self::E>) -> SamplerHookResult {
         SamplerHookResult::Stop
     }
 }
@@ -94,11 +85,15 @@ fn samplers_build_from_a_shared_env_builder() {
             })
         };
 
-        let mut direct =
-            DirectSampler::build_from_env_builder(env_builder.clone(), 2, StopHook, execution_mode)
-                .unwrap();
+        let mut direct = RolloutSampler::build_direct_from_env_builder(
+            env_builder.clone(),
+            2,
+            StopHook,
+            execution_mode,
+        )
+        .unwrap();
         direct.reset_all_envs().unwrap();
-        let mut staged = StagedSampler::build_from_env_builder(
+        let mut staged = RolloutSampler::build_staged_from_env_builder(
             env_builder,
             3,
             StopHook,
@@ -153,9 +148,9 @@ fn samplers_build_from_different_factory_types_for_the_same_environment() {
         assert_eq!(first_count.load(Ordering::Relaxed), 0);
         assert!(builders.build_idx(2).is_err());
 
-        let mut direct = DirectSampler::build(builders.clone(), StopHook, execution_mode).unwrap();
+        let mut direct = RolloutSampler::build_direct(&builders, StopHook, execution_mode).unwrap();
         direct.reset_all_envs().unwrap();
-        let mut staged = StagedSampler::build_with_obs_normalizer(
+        let mut staged = RolloutSampler::build_staged(
             &builders,
             StopHook,
             execution_mode,

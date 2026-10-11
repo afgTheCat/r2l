@@ -1,10 +1,7 @@
 use std::marker::PhantomData;
 
 use r2l_core::env::Env;
-use r2l_sampler::{
-    DirectSamplerCore, DirectSamplerHook, RolloutMode, SamplerHookResult, StagedSamplerCore,
-    StagedSamplerHook,
-};
+use r2l_sampler::{RolloutMode, SamplerCore, SamplerHook as SamplerHookTrait, SamplerHookResult};
 
 use crate::utils::RewardNormalizer;
 
@@ -76,29 +73,14 @@ impl<E: Env, Bound> SamplerHook<E, Bound> {
     }
 }
 
-impl<E: Env, Bound> DirectSamplerHook for SamplerHook<E, Bound> {
+impl<E: Env + 'static, Bound> SamplerHookTrait for SamplerHook<E, Bound> {
     type E = E;
 
     fn reset(&mut self) {
         self.reset_state();
     }
 
-    fn hook(&mut self, core: &mut DirectSamplerCore<Self::E>) -> SamplerHookResult {
-        self.next_result(|normalizer| {
-            let mut buffers = core.buffers_mut().lock().unwrap();
-            normalizer.normalize(&mut buffers);
-        })
-    }
-}
-
-impl<E: Env, Bound> StagedSamplerHook for SamplerHook<E, Bound> {
-    type E = E;
-
-    fn reset(&mut self) {
-        self.reset_state();
-    }
-
-    fn hook(&mut self, core: &mut StagedSamplerCore<Self::E>) -> SamplerHookResult {
-        self.next_result(|normalizer| normalizer.normalize(core.buffers_mut()))
+    fn hook(&mut self, core: &mut SamplerCore<Self::E>) -> SamplerHookResult {
+        self.next_result(|normalizer| normalizer.normalize(core.buffers_mut().as_mut()))
     }
 }

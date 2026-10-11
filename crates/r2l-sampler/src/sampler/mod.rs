@@ -1,5 +1,7 @@
 mod workers;
 
+use std::sync::Arc;
+
 #[cfg(test)]
 mod tests;
 
@@ -8,7 +10,7 @@ use crossbeam::channel::unbounded;
 use r2l_core::buffers::buffer::TrajectoryView;
 use r2l_core::buffers::{Memory, MultiMemory};
 use r2l_core::env::normalizer::{Normalizer, NormalizerMode};
-use r2l_core::env::{EnvBuilderType, Snapshot};
+use r2l_core::env::{EnvBuilder, EnvBuilderType, Snapshot};
 use r2l_core::error::{Error, Result};
 use r2l_core::on_policy::algorithm::Sampler;
 use r2l_core::rng::sample_u64;
@@ -176,6 +178,8 @@ struct StagedWorkerPool<E: Env> {
     obs_normalizer: Normalizer<E::Tensor>,
 }
 
+type StagedWorkers<E> = (ArrayHandle<<E as Env>::Tensor>, Workers<StagedWorker<E>>);
+
 impl<E: Env + 'static> StagedWorkerPool<E> {
     fn build(
         env_builder: &EnvBuilderType<E>,
@@ -197,9 +201,7 @@ impl<E: Env + 'static> StagedWorkerPool<E> {
         Ok(pool)
     }
 
-    fn build_inline_workers(
-        env_builder: &EnvBuilderType<E>,
-    ) -> Result<(ArrayHandle<E::Tensor>, Workers<StagedWorker<E>>)> {
+    fn build_inline_workers(env_builder: &EnvBuilderType<E>) -> Result<StagedWorkers<E>> {
         let mut workers = Vec::with_capacity(env_builder.num_envs());
         let mut states = Vec::with_capacity(env_builder.num_envs());
         for idx in 0..env_builder.num_envs() {
@@ -216,9 +218,7 @@ impl<E: Env + 'static> StagedWorkerPool<E> {
         Ok((states, Workers::Inline(workers)))
     }
 
-    fn build_thread_workers(
-        env_builder: &EnvBuilderType<E>,
-    ) -> Result<(ArrayHandle<E::Tensor>, Workers<StagedWorker<E>>)> {
+    fn build_thread_workers(env_builder: &EnvBuilderType<E>) -> Result<StagedWorkers<E>> {
         let n_envs = env_builder.num_envs();
         let mut workers = Vec::with_capacity(n_envs);
         // On failure, drop these senders before joining workers that may still
@@ -268,7 +268,7 @@ impl<E: Env + 'static> StagedWorkerPool<E> {
         let mut memories = MultiMemory::with_capacity(indices.len());
         self.workers
             .collect_into(indices.clone(), (), |_, memory| {
-                memories.push_memory(memory)
+                memories.push_memory(memory);
             })?;
         self.normalize_states()?;
         self.finish_step(indices, memories, |_, _| {})
@@ -278,7 +278,7 @@ impl<E: Env + 'static> StagedWorkerPool<E> {
         let mut memories = MultiMemory::with_capacity(indices.len());
         self.workers
             .collect_into(indices.iter().copied(), (), |_, memory| {
-                memories.push_memory(memory)
+                memories.push_memory(memory);
             })?;
         {
             let mut states = self.states.lock().unwrap();
@@ -372,39 +372,69 @@ impl<T: R2lTensor> AsMut<[TrajectoryBuffer<T>]> for BuffersMut<'_, T> {
     }
 }
 
-impl<E: Env + 'static> Pool<E> {
-    fn collect(&mut self, bound: RolloutMode) -> Result<()> {
-        match self {
-            Self::Direct(pool) => pool.collect(bound),
-            Self::Staged(pool) => pool.collect(bound),
+/// Mutable sampler state exposed to collection hooks.
+pub struct SamplerCore<E: Env + 'static> {
+    pool: Pool<E>,
+}
+
+impl<E: Env + 'static> SamplerCore<E> {
+    /// Collects a bounded rollout, appending to the current buffers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an environment, normalization, or worker operation fails.
+    pub fn collect(&mut self, bound: RolloutMode) -> Result<()> {
+        match &mut self.pool {
+            Pool::Direct(pool) => pool.collect(bound),
+            Pool::Staged(pool) => pool.collect(bound),
         }
     }
 
-    fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: &A) -> Result<()> {
-        match self {
-            Self::Direct(pool) => pool.workers.set_policy(actor),
-            Self::Staged(pool) => pool.workers.set_policy(actor),
+    /// Installs a clone of the actor on each worker.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a worker is interrupted.
+    pub fn set_policy<A: Actor<Tensor = E::Tensor> + Clone>(&mut self, actor: &A) -> Result<()> {
+        match &mut self.pool {
+            Pool::Direct(pool) => pool.workers.set_policy(actor),
+            Pool::Staged(pool) => pool.workers.set_policy(actor),
         }
     }
 
-    fn buffers_mut(&mut self) -> impl AsMut<[TrajectoryBuffer<E::Tensor>]> {
-        match self {
-            Self::Direct(pool) => BuffersMut::Direct(pool.buffers.lock().unwrap()),
-            Self::Staged(pool) => BuffersMut::Staged(&mut pool.buffers),
+    /// Borrows the output buffers, holding the array lock for direct collection.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a direct worker still holds a buffer lock.
+    pub fn buffers_mut(&mut self) -> impl AsMut<[TrajectoryBuffer<E::Tensor>]> {
+        match &mut self.pool {
+            Pool::Direct(pool) => BuffersMut::Direct(pool.buffers.lock().unwrap()),
+            Pool::Staged(pool) => BuffersMut::Staged(&mut pool.buffers),
         }
     }
 
-    fn clear_buffers(&mut self) {
+    /// Clears trajectories while retaining their allocated storage.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a direct worker still holds a buffer lock.
+    pub fn clear_buffers(&mut self) {
         self.buffers_mut()
             .as_mut()
             .iter_mut()
             .for_each(TrajectoryBuffer::clear);
     }
 
-    fn reset_all_envs(&mut self) -> Result<()> {
-        match self {
-            Self::Direct(pool) => pool.workers.reset()?,
-            Self::Staged(pool) => {
+    /// Resets environments, normalizes initial observations, and clears trajectories.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if resetting, normalization, or worker communication fails.
+    pub fn reset_all_envs(&mut self) -> Result<()> {
+        match &mut self.pool {
+            Pool::Direct(pool) => pool.workers.reset()?,
+            Pool::Staged(pool) => {
                 pool.workers.reset()?;
                 pool.normalize_states()?;
             }
@@ -413,16 +443,21 @@ impl<E: Env + 'static> Pool<E> {
         Ok(())
     }
 
-    fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, E::Tensor>]> {
-        match self {
-            Self::Direct(direct) => {
+    /// Borrows collected trajectories in environment order.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a direct worker still holds a buffer lock.
+    pub fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, E::Tensor>]> {
+        match &mut self.pool {
+            Pool::Direct(direct) => {
                 let trajectory_views = direct
                     .buffers
                     .lock_map(|buffer| buffer.to_trajectory_view())
                     .unwrap();
                 TrajectoryViews::Direct(trajectory_views)
             }
-            Self::Staged(staged) => {
+            Pool::Staged(staged) => {
                 let trajectory_views = staged
                     .buffers
                     .iter()
@@ -434,26 +469,38 @@ impl<E: Env + 'static> Pool<E> {
     }
 }
 
-// Same collection protocol as the existing sampler hooks, with a common core.
-trait ReSamplerHook {
+/// Controls collection bounds and can inspect or transform the output buffers.
+pub trait SamplerHook {
+    /// Environment type sampled by the hook's sampler.
     type E: Env + 'static;
 
-    fn hook(&mut self, pool: &mut Pool<Self::E>) -> SamplerHookResult;
+    /// Returns the next collection instruction.
+    fn hook(&mut self, core: &mut SamplerCore<Self::E>) -> SamplerHookResult;
 
+    /// Resets hook state before a new training or evaluation run.
     fn reset(&mut self) {}
 }
 
-struct ReSampler<E: Env, H: ReSamplerHook<E = E>> {
-    pool: Pool<E>,
+/// Hook-controlled rollout collector with direct or observation-normalizing workers.
+pub struct RolloutSampler<E: Env + 'static, H: SamplerHook<E = E>> {
+    core: SamplerCore<E>,
     hook: H,
 }
 
-impl<E: Env + 'static, H: ReSamplerHook<E = E>> ReSampler<E, H> {
+impl<E: Env + 'static, H: SamplerHook<E = E>> RolloutSampler<E, H> {
     fn new(pool: Pool<E>, hook: H) -> Self {
-        Self { pool, hook }
+        Self {
+            core: SamplerCore { pool },
+            hook,
+        }
     }
 
-    fn build_direct(
+    /// Builds workers that collect directly into trajectory buffers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an environment cannot be built or reset, or a worker is interrupted.
+    pub fn build_direct(
         env_builder: &EnvBuilderType<E>,
         hook: H,
         execution_mode: SamplerExecutionMode,
@@ -464,7 +511,14 @@ impl<E: Env + 'static, H: ReSamplerHook<E = E>> ReSampler<E, H> {
         ))
     }
 
-    fn build_staged(
+    /// Builds workers whose observations are normalized between steps.
+    ///
+    /// The supplied normalizer's update/read-only mode is preserved.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if environment initialization, normalization, or worker startup fails.
+    pub fn build_staged(
         env_builder: &EnvBuilderType<E>,
         hook: H,
         execution_mode: SamplerExecutionMode,
@@ -479,13 +533,60 @@ impl<E: Env + 'static, H: ReSamplerHook<E = E>> ReSampler<E, H> {
             hook,
         ))
     }
+
+    /// Returns a handle to shared observation statistics, or `None` for direct collection.
+    pub fn obs_normalizer(&self) -> Option<Normalizer<E::Tensor>> {
+        match &self.core.pool {
+            Pool::Direct(_) => None,
+            Pool::Staged(pool) => Some(pool.obs_normalizer.clone()),
+        }
+    }
+
+    /// Builds a homogeneous direct sampler from a shared environment factory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `num_envs` is zero or worker initialization fails.
+    pub fn build_direct_from_env_builder(
+        env_builder: Arc<dyn EnvBuilder<Env = E>>,
+        num_envs: usize,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+    ) -> Result<Self> {
+        Self::build_direct(
+            &EnvBuilderType::homogeneous_shared(env_builder, num_envs)?,
+            hook,
+            execution_mode,
+        )
+    }
+
+    /// Builds a homogeneous staged sampler from a shared environment factory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `num_envs` is zero, worker initialization fails, or observations
+    /// cannot be normalized.
+    pub fn build_staged_from_env_builder(
+        env_builder: Arc<dyn EnvBuilder<Env = E>>,
+        num_envs: usize,
+        hook: H,
+        execution_mode: SamplerExecutionMode,
+        obs_normalizer: Normalizer<E::Tensor>,
+    ) -> Result<Self> {
+        Self::build_staged(
+            &EnvBuilderType::homogeneous_shared(env_builder, num_envs)?,
+            hook,
+            execution_mode,
+            obs_normalizer,
+        )
+    }
 }
 
-impl<E: Env + 'static, H: ReSamplerHook<E = E>> Sampler for ReSampler<E, H> {
+impl<E: Env + 'static, H: SamplerHook<E = E>> Sampler for RolloutSampler<E, H> {
     type Tensor = E::Tensor;
 
     fn reset_all_envs(&mut self) -> Result<()> {
-        self.pool.reset_all_envs()?;
+        self.core.reset_all_envs()?;
         self.hook.reset();
         Ok(())
     }
@@ -494,18 +595,15 @@ impl<E: Env + 'static, H: ReSamplerHook<E = E>> Sampler for ReSampler<E, H> {
         &mut self,
         actor: A,
     ) -> Result<()> {
-        self.pool.clear_buffers();
-        self.pool.set_policy(&actor)?;
-        loop {
-            match self.hook.hook(&mut self.pool) {
-                SamplerHookResult::Bound(bound) => self.pool.collect(bound)?,
-                SamplerHookResult::Stop => break,
-            }
+        self.core.clear_buffers();
+        self.core.set_policy(&actor)?;
+        while let SamplerHookResult::Bound(bound) = self.hook.hook(&mut self.core) {
+            self.core.collect(bound)?;
         }
         Ok(())
     }
 
     fn trajectory_views(&mut self) -> impl AsRef<[TrajectoryView<'_, Self::Tensor>]> {
-        self.pool.trajectory_views()
+        self.core.trajectory_views()
     }
 }

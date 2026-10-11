@@ -10,10 +10,7 @@ use r2l_core::{
     models::Actor,
     tensor::{R2lTensor, VecTensor},
 };
-use r2l_sampler::{
-    DirectSamplerCore, DirectSamplerHook, RolloutMode, SamplerHookResult, StagedSamplerCore,
-    StagedSamplerHook,
-};
+use r2l_sampler::{RolloutMode, SamplerCore, SamplerHook, SamplerHookResult};
 
 #[derive(Clone, Copy)]
 pub enum EpisodeEnd {
@@ -149,22 +146,10 @@ impl OneBoundHook {
     }
 }
 
-impl DirectSamplerHook for OneBoundHook {
+impl SamplerHook for OneBoundHook {
     type E = TestEnv;
 
-    fn hook(&mut self, _core: &mut DirectSamplerCore<Self::E>) -> SamplerHookResult {
-        self.next()
-    }
-
-    fn reset(&mut self) {
-        self.scheduled = false;
-    }
-}
-
-impl StagedSamplerHook for OneBoundHook {
-    type E = TestEnv;
-
-    fn hook(&mut self, _core: &mut StagedSamplerCore<Self::E>) -> SamplerHookResult {
+    fn hook(&mut self, _core: &mut SamplerCore<Self::E>) -> SamplerHookResult {
         self.next()
     }
 

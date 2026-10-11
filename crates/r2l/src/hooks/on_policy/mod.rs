@@ -29,7 +29,7 @@ macro_rules! try_or_break {
 }
 
 /// Lifecycle hooks sharing progress with the learning hooks.
-pub struct OnPolicyTrainingHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
+pub struct OnPolicyTrainingHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor> + 'static> {
     timing_recorder: TimingRecorder,
     progress: SharedTrainingProgress,
     evaluator: ScheduledEvaluator<A::Actor, E>,

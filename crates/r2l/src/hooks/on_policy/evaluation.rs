@@ -11,7 +11,7 @@ use r2l_core::{
 
 use crate::{evaluator::BestPolicyEvaluator, hooks::progress::SharedTrainingProgress};
 
-pub(crate) enum ScheduledEvaluator<A: Actor, E: Env> {
+pub(crate) enum ScheduledEvaluator<A: Actor, E: Env + 'static> {
     Disabled,
     Enabled {
         evaluator: BestPolicyEvaluator<A, E>,

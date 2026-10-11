@@ -142,3 +142,54 @@ fn stop_training_command_breaks_the_loop_without_destroying_the_algorithm() {
     control.stop_training().unwrap();
     training.join().unwrap();
 }
+
+#[test]
+fn sampler_strategy_tracks_normalization_across_builder_changes() {
+    for execution_mode in [
+        SamplerExecutionMode::SingleThreaded,
+        SamplerExecutionMode::MultiThreaded,
+    ] {
+        let builder = || {
+            PPOBuilder::new(
+                || {
+                    Ok(DropTrackedEnv {
+                        drops: Arc::default(),
+                    })
+                },
+                2,
+            )
+            .unwrap()
+            .with_execution_mode(execution_mode)
+            .with_policy_hidden_layers(vec![2])
+            .with_value_hidden_layers(vec![2])
+            .with_observation_normalizer(ObsNormalizerConfig::Enabled { clip: Some(10.0) })
+        };
+        let mut direct = builder()
+            .with_observation_normalizer(ObsNormalizerConfig::Disabled)
+            .with_rollout_steps(2)
+            .build()
+            .unwrap();
+        assert!(direct.runtime.sampler.obs_normalizer().is_none());
+        direct.runtime.collect().unwrap();
+        assert!(
+            direct
+                .runtime
+                .trajectory_containers()
+                .as_ref()
+                .iter()
+                .all(|view| view.len() == 2)
+        );
+
+        let mut staged = builder().with_rollout_episodes(3).build().unwrap();
+        assert!(staged.runtime.sampler.obs_normalizer().is_some());
+        staged.runtime.collect().unwrap();
+        assert!(
+            staged
+                .runtime
+                .trajectory_containers()
+                .as_ref()
+                .iter()
+                .all(|view| view.episode_terminations() == 3)
+        );
+    }
+}

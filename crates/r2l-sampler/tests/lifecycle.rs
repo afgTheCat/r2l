@@ -14,7 +14,7 @@ use r2l_core::{
     running_mean::RunningMeanStd,
     tensor::{R2lTensor, VecTensor},
 };
-use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
+use r2l_sampler::{RolloutSampler, SamplerExecutionMode};
 use support::{ConstantActor, EpisodeEnd, OneBoundHook, OwnedTrajectory, TestEnv};
 
 fn identity_normalizer() -> Normalizer<VecTensor> {
@@ -51,7 +51,7 @@ fn direct_trajectories(
     episode_end: EpisodeEnd,
 ) -> Vec<OwnedTrajectory> {
     let resets = Arc::new(AtomicUsize::new(0));
-    let mut sampler = DirectSampler::build_from_env_builder(
+    let mut sampler = RolloutSampler::build_direct_from_env_builder(
         env_builder(2, episode_end, None, resets),
         2,
         OneBoundHook::steps(5),
@@ -72,7 +72,7 @@ fn staged_trajectories(
     episode_end: EpisodeEnd,
 ) -> Vec<OwnedTrajectory> {
     let resets = Arc::new(AtomicUsize::new(0));
-    let mut sampler = StagedSampler::build_from_env_builder(
+    let mut sampler = RolloutSampler::build_staged_from_env_builder(
         env_builder(2, episode_end, None, resets),
         2,
         OneBoundHook::steps(5),
@@ -154,7 +154,7 @@ fn episode_bounds_collect_the_requested_number_of_complete_episodes() {
         SamplerExecutionMode::MultiThreaded,
     ] {
         let resets = Arc::new(AtomicUsize::new(0));
-        let mut sampler = DirectSampler::build_from_env_builder(
+        let mut sampler = RolloutSampler::build_direct_from_env_builder(
             env_builder(3, EpisodeEnd::Terminated, None, resets),
             2,
             OneBoundHook::episodes(2),
@@ -174,7 +174,7 @@ fn episode_bounds_collect_the_requested_number_of_complete_episodes() {
 #[test]
 fn reset_all_envs_clears_active_episode_state() {
     let resets = Arc::new(AtomicUsize::new(0));
-    let mut sampler = DirectSampler::build_from_env_builder(
+    let mut sampler = RolloutSampler::build_direct_from_env_builder(
         env_builder(10, EpisodeEnd::Terminated, None, resets),
         1,
         OneBoundHook::steps(1),
@@ -197,7 +197,7 @@ fn environment_errors_propagate_instead_of_being_silently_ignored() {
         SamplerExecutionMode::MultiThreaded,
     ] {
         let resets = Arc::new(AtomicUsize::new(0));
-        let mut sampler = DirectSampler::build_from_env_builder(
+        let mut sampler = RolloutSampler::build_direct_from_env_builder(
             env_builder(10, EpisodeEnd::Terminated, Some(2), resets),
             2,
             OneBoundHook::steps(3),
@@ -221,7 +221,7 @@ fn dropping_multithreaded_samplers_releases_worker_environments() {
         });
 
         if staged {
-            let sampler = StagedSampler::build_from_env_builder(
+            let sampler = RolloutSampler::build_staged_from_env_builder(
                 builder,
                 2,
                 OneBoundHook::steps(1),
@@ -231,7 +231,7 @@ fn dropping_multithreaded_samplers_releases_worker_environments() {
             .unwrap();
             drop(sampler);
         } else {
-            let sampler = DirectSampler::build_from_env_builder(
+            let sampler = RolloutSampler::build_direct_from_env_builder(
                 builder,
                 2,
                 OneBoundHook::steps(1),

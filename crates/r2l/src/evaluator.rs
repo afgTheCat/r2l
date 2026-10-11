@@ -16,7 +16,7 @@ use r2l_core::{
     on_policy::algorithm::Sampler,
     tensor::R2lTensor,
 };
-use r2l_sampler::{DirectSampler, RolloutMode, SamplerExecutionMode, StagedSampler};
+use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
 use yaml_serde::to_string;
 
 use crate::{
@@ -116,9 +116,8 @@ impl<T: R2lTensor> Artifacts<T> {
     }
 }
 
-pub(crate) enum EvaluationSampler<E: Env> {
-    Direct(DirectSampler<E, EpisodeBoundHook<E>>),
-    Staged(StagedSampler<E, EpisodeBoundHook<E>>),
+pub(crate) struct EvaluationSampler<E: Env + 'static> {
+    sampler: RolloutSampler<E, EpisodeBoundHook<E>>,
 }
 
 impl<E: Env> EvaluationSampler<E> {
@@ -129,37 +128,22 @@ impl<E: Env> EvaluationSampler<E> {
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
         let hook = EpisodeBoundHook::new(RolloutMode::EpisodeBound { n_episodes }, None);
-        if let Some(obs_normalizer) = obs_normalizer {
-            let sampler = StagedSampler::build_with_obs_normalizer(
-                &env_builder,
-                hook,
-                execution_mode,
-                obs_normalizer,
-            )?;
-            Ok(Self::Staged(sampler))
-        } else {
-            let sampler = DirectSampler::build(env_builder, hook, execution_mode)?;
-            Ok(Self::Direct(sampler))
-        }
+        let sampler = match obs_normalizer {
+            Some(normalizer) => {
+                RolloutSampler::build_staged(&env_builder, hook, execution_mode, normalizer)?
+            }
+            None => RolloutSampler::build_direct(&env_builder, hook, execution_mode)?,
+        };
+        Ok(Self { sampler })
     }
 
     fn evaluate<A: Actor<Tensor = E::Tensor> + Clone>(
         &mut self,
         actor: A,
     ) -> Result<EvaluationResult> {
-        match self {
-            Self::Direct(sampler) => Self::evaluate_with_sampler(sampler, actor),
-            Self::Staged(sampler) => Self::evaluate_with_sampler(sampler, actor),
-        }
-    }
-
-    fn evaluate_with_sampler<S: Sampler<Tensor = E::Tensor>>(
-        sampler: &mut S,
-        actor: impl Actor<Tensor = E::Tensor> + Clone,
-    ) -> Result<EvaluationResult> {
-        sampler.reset_all_envs()?;
-        sampler.collect_rollouts(actor)?;
-        let trajectories = sampler.trajectory_views();
+        self.sampler.reset_all_envs()?;
+        self.sampler.collect_rollouts(actor)?;
+        let trajectories = self.sampler.trajectory_views();
         let total_reward = trajectories
             .as_ref()
             .iter()
@@ -174,14 +158,11 @@ impl<E: Env> EvaluationSampler<E> {
     }
 
     fn normalizer(&self) -> Option<Normalizer<E::Tensor>> {
-        match self {
-            Self::Direct(_) => None,
-            Self::Staged(sampler) => Some(sampler.obs_normalizer()),
-        }
+        self.sampler.obs_normalizer()
     }
 }
 
-pub(crate) struct BestPolicyEvaluator<A: Actor, E: Env> {
+pub(crate) struct BestPolicyEvaluator<A: Actor, E: Env + 'static> {
     sampler: EvaluationSampler<E>,
     artifacts: Option<Artifacts<E::Tensor>>,
     _actor: PhantomData<A>,

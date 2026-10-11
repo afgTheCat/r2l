@@ -99,22 +99,22 @@ impl TestHook {
     }
 }
 
-impl ReSamplerHook for TestHook {
+impl SamplerHook for TestHook {
     type E = TestEnv;
 
-    fn hook(&mut self, pool: &mut Pool<TestEnv>) -> SamplerHookResult {
-        if !self.collected {
-            self.collected = true;
-            SamplerHookResult::Bound(self.bound)
-        } else {
+    fn hook(&mut self, core: &mut SamplerCore<TestEnv>) -> SamplerHookResult {
+        if self.collected {
             self.collected = false;
-            for buffer in pool.buffers_mut().as_mut() {
+            for buffer in core.buffers_mut().as_mut() {
                 buffer
                     .rewards_mut()
                     .iter_mut()
                     .for_each(|reward| *reward *= 2.0);
             }
             SamplerHookResult::Stop
+        } else {
+            self.collected = true;
+            SamplerHookResult::Bound(self.bound)
         }
     }
 
@@ -124,14 +124,14 @@ impl ReSamplerHook for TestHook {
     }
 }
 
-impl ReSampler<TestEnv, TestHook> {
+impl RolloutSampler<TestEnv, TestHook> {
     fn for_test(
         staged: bool,
         execution_mode: SamplerExecutionMode,
         bound: RolloutMode,
         fail_reset: bool,
         fail_step: bool,
-        drops: Arc<AtomicUsize>,
+        drops: &Arc<AtomicUsize>,
     ) -> Result<Self> {
         let builders = EnvBuilderType::heterogeneous(
             (2..=3)
@@ -179,13 +179,13 @@ fn collection_preserves_state_and_reset_restores_hook_and_observations() {
     for staged in [false, true] {
         for execution_mode in EXECUTION_MODES {
             let drops = Arc::new(AtomicUsize::new(0));
-            let mut sampler = ReSampler::for_test(
+            let mut sampler = RolloutSampler::for_test(
                 staged,
                 execution_mode,
                 RolloutMode::step_bound(1),
                 false,
                 false,
-                drops.clone(),
+                &drops,
             )
             .unwrap();
             let initial = if staged { -1.0 } else { 0.0 };
@@ -225,13 +225,13 @@ fn collection_preserves_state_and_reset_restores_hook_and_observations() {
 fn episode_bounds_preserve_terminal_observations_and_stop_completed_workers() {
     for staged in [false, true] {
         for execution_mode in EXECUTION_MODES {
-            let mut sampler = ReSampler::for_test(
+            let mut sampler = RolloutSampler::for_test(
                 staged,
                 execution_mode,
                 RolloutMode::episode_bound(2),
                 false,
                 false,
-                Arc::default(),
+                &Arc::default(),
             )
             .unwrap();
             sampler.collect_rollouts(TestActor).unwrap();
@@ -257,13 +257,13 @@ fn initialization_errors_propagate_and_release_started_workers() {
     for staged in [false, true] {
         for execution_mode in EXECUTION_MODES {
             let drops = Arc::new(AtomicUsize::new(0));
-            let result = ReSampler::for_test(
+            let result = RolloutSampler::for_test(
                 staged,
                 execution_mode,
                 RolloutMode::step_bound(1),
                 true,
                 false,
-                drops.clone(),
+                &drops,
             );
             let error = result.err().expect("initial reset should fail");
             assert!(error.to_string().contains("reset failed"));
@@ -276,13 +276,13 @@ fn initialization_errors_propagate_and_release_started_workers() {
 fn collection_errors_allow_an_explicit_reset_and_retry() {
     for staged in [false, true] {
         for execution_mode in EXECUTION_MODES {
-            let mut sampler = ReSampler::for_test(
+            let mut sampler = RolloutSampler::for_test(
                 staged,
                 execution_mode,
                 RolloutMode::step_bound(2),
                 false,
                 true,
-                Arc::default(),
+                &Arc::default(),
             )
             .unwrap();
             let error = sampler.collect_rollouts(TestActor).unwrap_err();
@@ -304,25 +304,26 @@ fn collection_errors_allow_an_explicit_reset_and_retry() {
 fn full_and_indexed_steps_apply_the_same_running_normalization() {
     for execution_mode in EXECUTION_MODES {
         let mut samplers = [(); 2].map(|()| {
-            let mut sampler = ReSampler::for_test(
+            let mut sampler = RolloutSampler::for_test(
                 true,
                 execution_mode,
                 RolloutMode::step_bound(5),
                 false,
                 false,
-                Arc::default(),
+                &Arc::default(),
             )
             .unwrap();
-            let Pool::Staged(pool) = &mut sampler.pool else {
+            let Pool::Staged(pool) = &mut sampler.core.pool else {
                 unreachable!()
             };
             pool.obs_normalizer = pool.obs_normalizer.with_mode(NormalizerMode::Update);
             sampler.reset_all_envs().unwrap();
-            sampler.pool.set_policy(&TestActor).unwrap();
+            sampler.core.set_policy(&TestActor).unwrap();
             sampler
         });
         let [full, indexed] = &mut samplers;
-        let (Pool::Staged(full), Pool::Staged(indexed)) = (&mut full.pool, &mut indexed.pool)
+        let (Pool::Staged(full), Pool::Staged(indexed)) =
+            (&mut full.core.pool, &mut indexed.core.pool)
         else {
             unreachable!()
         };

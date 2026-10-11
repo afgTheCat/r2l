@@ -94,4 +94,4 @@ pub use r2l_core::{
 pub use r2l_distributions::distributions::sde::SdeConfig;
 #[cfg(feature = "gym")]
 pub use r2l_gym::{GymEnv, GymEnvBuilder};
-pub use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
+pub use r2l_sampler::{RolloutSampler, SamplerExecutionMode};
