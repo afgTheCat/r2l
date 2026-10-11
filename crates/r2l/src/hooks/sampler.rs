@@ -1,148 +1,105 @@
 use std::marker::PhantomData;
 
-use r2l_core::{env::Env, tensor::R2lTensor};
+use r2l_core::env::Env;
 use r2l_sampler::{
-    DirectSamplerCore, DirectSamplerHook, RolloutMode, SamplerHookResult, StagedSamplerCore,
-    StagedSamplerHook,
+    DirectSamplerCore, DirectSamplerHook, SamplerHookResult, StagedSamplerCore, StagedSamplerHook,
 };
 
+use super::progress::SharedTrainingProgress;
 use crate::utils::RewardNormalizer;
 
-/// Sampler hook that requests rollout collection until a fixed number of
-/// episodes has been scheduled.
-///
-/// The hook returns an episode-bound rollout mode once, then returns
-/// [`SamplerHookResult::Stop`] on the next call so the outer sampler loop can
-/// hand the collected data off for training.
-pub struct EpisodeBoundHook<E: Env> {
-    num_episodes: usize,
-    episodes_scheduled: usize,
-    _p: PhantomData<E>,
+enum Phase {
+    Collect,
+    Stop,
 }
 
-impl<E: Env> EpisodeBoundHook<E> {
-    /// Creates an episode-bound sampler hook.
-    ///
-    /// # Arguments
-    ///
-    /// * `num_episodes` - Number of completed episodes requested from each environment.
-    #[must_use]
-    pub fn new(num_episodes: usize) -> Self {
-        Self {
-            num_episodes,
-            episodes_scheduled: 0,
-            _p: PhantomData,
-        }
-    }
+/// Marker for a sampler configured to collect a fixed number of steps.
+pub struct Steps;
+/// Marker for a sampler configured to collect a fixed number of episodes.
+pub struct Episodes;
 
-    fn next_result(&mut self) -> SamplerHookResult {
-        if self.episodes_scheduled == self.num_episodes {
-            self.episodes_scheduled = 0;
-            SamplerHookResult::Stop
-        } else {
-            self.episodes_scheduled = self.num_episodes;
-            SamplerHookResult::Bound(RolloutMode::EpisodeBound {
-                n_episodes: self.num_episodes,
-            })
-        }
-    }
-}
-
-impl<E: Env> DirectSamplerHook for EpisodeBoundHook<E> {
-    type E = E;
-
-    fn hook(&mut self, _core: &mut DirectSamplerCore<Self::E>) -> SamplerHookResult {
-        self.next_result()
-    }
-}
-
-impl<E: Env<Tensor: R2lTensor>> StagedSamplerHook for EpisodeBoundHook<E> {
-    type E = E;
-
-    fn hook(&mut self, _core: &mut StagedSamplerCore<Self::E>) -> SamplerHookResult {
-        self.next_result()
-    }
-}
-
-/// Sampler hook that requests rollout collection until a fixed number of steps
-/// has been scheduled.
-///
-/// When configured with a reward normalizer, the hook normalizes a completed
-/// rollout before handing it to the agent.
-pub struct StepBoundHook<E: Env<Tensor: R2lTensor>> {
-    num_steps: usize,
-    steps_scheduled: usize,
+/// Controls collection and optional reward normalization using shared progress.
+pub struct SamplerHook<E: Env, Bound> {
+    progress: SharedTrainingProgress,
     reward_normalizer: Option<RewardNormalizer>,
-    _p: PhantomData<E>,
+    phase: Phase,
+    _p: PhantomData<(E, Bound)>,
 }
 
-impl<E: Env<Tensor: R2lTensor>> StepBoundHook<E> {
-    /// Creates a step-bound sampler hook.
+/// Step-bound specialization of the shared sampler hook.
+pub type StepBoundHook<E> = SamplerHook<E, Steps>;
+/// Episode-bound specialization of the shared sampler hook.
+pub type EpisodeBoundHook<E> = SamplerHook<E, Episodes>;
+
+impl<E: Env, Bound> SamplerHook<E, Bound> {
+    /// Creates a sampler hook using the shared collection configuration.
     ///
     /// # Arguments
     ///
-    /// * `num_steps` - Number of steps requested from each environment.
-    /// * `reward_normalizer` - Optional normalizer applied after rollout collection.
-    #[must_use]
-    pub fn new(num_steps: usize, reward_normalizer: Option<RewardNormalizer>) -> Self {
+    /// * `progress` - Progress and collection settings shared with the training hooks.
+    /// * `reward_normalizer` - Optional normalization for step-bound rollouts.
+    pub(crate) fn new(
+        progress: SharedTrainingProgress,
+        reward_normalizer: Option<RewardNormalizer>,
+    ) -> Self {
         Self {
-            num_steps,
-            steps_scheduled: 0,
+            progress,
             reward_normalizer,
+            phase: Phase::Collect,
             _p: PhantomData,
         }
     }
 
-    fn next_result(&mut self) -> SamplerHookResult {
-        if self.steps_scheduled == self.num_steps {
-            self.steps_scheduled = 0;
-            SamplerHookResult::Stop
-        } else {
-            self.steps_scheduled = self.num_steps;
-            SamplerHookResult::Bound(RolloutMode::StepBound {
-                n_steps: self.num_steps,
-            })
+    fn reset_state(&mut self) {
+        self.phase = Phase::Collect;
+        if let Some(normalizer) = &mut self.reward_normalizer {
+            normalizer.reset_returns();
+        }
+    }
+
+    fn next_result(&mut self, normalize: impl FnOnce(&mut RewardNormalizer)) -> SamplerHookResult {
+        let mode = self.progress.borrow().rollout_mode();
+        match self.phase {
+            Phase::Collect => {
+                self.phase = Phase::Stop;
+                SamplerHookResult::Bound(mode)
+            }
+            Phase::Stop => {
+                self.phase = Phase::Collect;
+                if mode.is_step_bound()
+                    && let Some(normalizer) = &mut self.reward_normalizer
+                {
+                    normalize(normalizer);
+                }
+                SamplerHookResult::Stop
+            }
         }
     }
 }
 
-impl<E: Env<Tensor: R2lTensor>> DirectSamplerHook for StepBoundHook<E> {
+impl<E: Env, Bound> DirectSamplerHook for SamplerHook<E, Bound> {
     type E = E;
+
+    fn reset(&mut self) {
+        self.reset_state();
+    }
 
     fn hook(&mut self, core: &mut DirectSamplerCore<Self::E>) -> SamplerHookResult {
-        if self.steps_scheduled == self.num_steps
-            && let Some(normalizer) = &mut self.reward_normalizer
-        {
+        self.next_result(|normalizer| {
             let mut buffers = core.buffers_mut().lock().unwrap();
             normalizer.normalize(&mut buffers);
-        }
-        self.next_result()
-    }
-
-    fn reset(&mut self) {
-        self.steps_scheduled = 0;
-        if let Some(normalizer) = &mut self.reward_normalizer {
-            normalizer.reset_returns();
-        }
+        })
     }
 }
 
-impl<E: Env<Tensor: R2lTensor>> StagedSamplerHook for StepBoundHook<E> {
+impl<E: Env, Bound> StagedSamplerHook for SamplerHook<E, Bound> {
     type E = E;
 
-    fn hook(&mut self, core: &mut StagedSamplerCore<Self::E>) -> SamplerHookResult {
-        if self.steps_scheduled == self.num_steps
-            && let Some(normalizer) = &mut self.reward_normalizer
-        {
-            normalizer.normalize(core.buffers_mut());
-        }
-        self.next_result()
+    fn reset(&mut self) {
+        self.reset_state();
     }
 
-    fn reset(&mut self) {
-        self.steps_scheduled = 0;
-        if let Some(normalizer) = &mut self.reward_normalizer {
-            normalizer.reset_returns();
-        }
+    fn hook(&mut self, core: &mut StagedSamplerCore<Self::E>) -> SamplerHookResult {
+        self.next_result(|normalizer| normalizer.normalize(core.buffers_mut()))
     }
 }

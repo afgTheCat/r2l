@@ -1,10 +1,12 @@
+use crate::Shape;
+
 pub mod normalizer;
 
-use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
+use std::{collections::BTreeMap, fmt::Debug, num::NonZeroUsize, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, InvalidParameterError};
+use crate::error::Error;
 use crate::tensor::R2lTensor;
 
 /// Description of an observation or action space.
@@ -19,19 +21,19 @@ pub enum Space<T: R2lTensor> {
         /// Optional maximum values.
         max: Option<T>,
         /// Tensor shape of the space.
-        shape: Vec<usize>,
+        shape: Shape,
     },
     /// Multiple discrete spaces packed into one tensor.
     MultiDiscrete {
         /// Number of categories for each discrete dimension.
         nvec: T,
         /// Tensor shape of the discrete dimensions.
-        shape: Vec<usize>,
+        shape: Shape,
     },
     /// Binary tensor space.
     MultiBinary {
         /// Tensor shape of the binary dimensions.
-        shape: Vec<usize>,
+        shape: Shape,
     },
     /// Ordered collection of spaces.
     Tuple(Vec<Space<T>>),
@@ -73,13 +75,30 @@ impl<T: R2lTensor> Space<T> {
     }
 
     /// Returns the Gymnasium shape when the space has one.
-    pub fn shape(&self) -> Option<&[usize]> {
+    pub fn shape(&self) -> Option<Shape> {
         match self {
-            Self::Discrete(_) => Some(&[]),
+            Self::Discrete(_) => Some(Shape::default()),
             Self::Box { shape, .. }
             | Self::MultiDiscrete { shape, .. }
-            | Self::MultiBinary { shape } => Some(shape),
+            | Self::MultiBinary { shape } => Some(shape.clone()),
             Self::Tuple(_) | Self::Dict(_) => None,
+        }
+    }
+
+    /// Returns the encoded shape of one observation, excluding the batch dimension.
+    ///
+    /// Discrete observations are one-hot vectors. Tuple and dictionary observations
+    /// concatenate their encoded fields into a flat vector. Other spaces preserve
+    /// their declared dimensions and axis order, including an empty shape for scalars.
+    /// This describes the logical shape even when observations are stored flat;
+    /// it does not imply an image channel layout or transpose the observation.
+    #[must_use]
+    pub fn observation_shape(&self) -> Shape {
+        match self {
+            Self::Discrete(_) | Self::Tuple(_) | Self::Dict(_) => Shape::from([self.size()]),
+            Self::Box { shape, .. }
+            | Self::MultiDiscrete { shape, .. }
+            | Self::MultiBinary { shape } => shape.clone(),
         }
     }
 
@@ -93,7 +112,7 @@ impl<T: R2lTensor> Space<T> {
             Self::Discrete(size) => *size,
             Self::Box { shape, .. }
             | Self::MultiDiscrete { shape, .. }
-            | Self::MultiBinary { shape, .. } => shape.iter().product(),
+            | Self::MultiBinary { shape, .. } => shape.num_elements(),
             Self::Tuple(spaces) => spaces.iter().map(Self::size).sum(),
             Self::Dict(spaces) => spaces.values().map(Self::size).sum(),
         }
@@ -109,7 +128,7 @@ impl<T: R2lTensor> Space<T> {
             Self::Discrete(_) => 1,
             Self::Box { shape, .. }
             | Self::MultiDiscrete { shape, .. }
-            | Self::MultiBinary { shape } => shape.iter().product(),
+            | Self::MultiBinary { shape } => shape.num_elements(),
             Self::Tuple(spaces) => spaces.iter().map(Self::action_size).sum(),
             Self::Dict(spaces) => spaces.values().map(Self::action_size).sum(),
         }
@@ -137,6 +156,14 @@ impl<T: R2lTensor> EnvDescription<T> {
     /// Returns the flattened action-space size.
     pub fn action_size(&self) -> usize {
         self.action_space.action_size()
+    }
+
+    /// Returns the encoded shape of one observation, excluding the batch dimension.
+    ///
+    /// See [`Space::observation_shape`] for the encoding of each space variant.
+    #[must_use]
+    pub fn observation_shape(&self) -> Shape {
+        self.observation_space.observation_shape()
     }
 
     /// Returns the flattened observation-space size.
@@ -235,25 +262,25 @@ where
     }
 }
 
-/// Validated, non-empty collection of environment builders used to create rollout workers.
-pub struct EnvBuilderType<EB: EnvBuilder>(EnvBuilderKind<EB>);
-
-enum EnvBuilderKind<EB: EnvBuilder> {
+pub enum EnvBuilderKind<E: Env + 'static> {
     /// Reuses one builder for `n_envs` homogeneous workers.
     Homogeneous {
         /// Shared environment builder.
-        builder: Arc<EB>,
+        builder: Arc<dyn EnvBuilder<Env = E>>,
         /// Number of environments to construct.
-        n_envs: usize,
+        n_envs: NonZeroUsize,
     },
     /// Uses one builder per worker.
     Heterogeneous {
         /// Builders in worker-index order.
-        builders: Vec<Arc<EB>>,
+        builders: Vec<Arc<dyn EnvBuilder<Env = E>>>,
     },
 }
 
-impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
+/// Validated, non-empty collection of environment builders used to create rollout workers.
+pub struct EnvBuilderType<E: Env + 'static>(pub EnvBuilderKind<E>);
+
+impl<E: Env> Clone for EnvBuilderType<E> {
     fn clone(&self) -> Self {
         Self(match &self.0 {
             EnvBuilderKind::Homogeneous { builder, n_envs } => EnvBuilderKind::Homogeneous {
@@ -267,26 +294,15 @@ impl<EB: EnvBuilder> Clone for EnvBuilderType<EB> {
     }
 }
 
-impl<EB: EnvBuilder> EnvBuilderType<EB> {
-    fn from_kind(kind: EnvBuilderKind<EB>) -> Result<Self, Error> {
+impl<E: Env> EnvBuilderType<E> {
+    fn from_kind(kind: EnvBuilderKind<E>) -> Result<Self, Error> {
         match &kind {
-            EnvBuilderKind::Homogeneous { n_envs: 0, .. } => {
-                return Err(Error::InvalidParameter(Box::new(
-                    InvalidParameterError::InvalidValue {
-                        name: "n_envs".into(),
-                        expected: "a value greater than zero".into(),
-                        value: "0".into(),
-                    },
-                )));
-            }
             EnvBuilderKind::Heterogeneous { builders } if builders.is_empty() => {
-                return Err(Error::InvalidParameter(Box::new(
-                    InvalidParameterError::InvalidValue {
-                        name: "builders".into(),
-                        expected: "at least one environment builder".into(),
-                        value: "empty".into(),
-                    },
-                )));
+                return Err(Error::invalid_parameter(
+                    "builders",
+                    "at least one environment builder",
+                    "empty",
+                ));
             }
             _ => {}
         }
@@ -298,11 +314,22 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if `n_envs` is zero.
-    pub fn homogeneous(builder: EB, n_envs: usize) -> Result<Self, Error> {
-        Self::from_kind(EnvBuilderKind::Homogeneous {
-            builder: Arc::new(builder),
-            n_envs,
-        })
+    pub fn homogeneous<EB: EnvBuilder<Env = E>>(builder: EB, n_envs: usize) -> Result<Self, Error> {
+        Self::homogeneous_shared(Arc::new(builder), n_envs)
+    }
+
+    /// Creates a homogeneous collection from an already shared builder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `n_envs` is zero.
+    pub fn homogeneous_shared(
+        builder: Arc<dyn EnvBuilder<Env = E>>,
+        n_envs: usize,
+    ) -> Result<Self, Error> {
+        let n_envs = NonZeroUsize::new(n_envs)
+            .ok_or_else(|| Error::invalid_parameter("n_envs", "a value greater than zero", "0"))?;
+        Self::from_kind(EnvBuilderKind::Homogeneous { builder, n_envs })
     }
 
     /// Creates a heterogeneous collection with one environment per builder.
@@ -310,10 +337,26 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if `builders` is empty.
-    pub fn heterogeneous(builders: Vec<EB>) -> Result<Self, Error> {
-        Self::from_kind(EnvBuilderKind::Heterogeneous {
-            builders: builders.into_iter().map(Arc::new).collect(),
-        })
+    pub fn heterogeneous<EB: EnvBuilder<Env = E>>(builders: Vec<EB>) -> Result<Self, Error> {
+        Self::heterogeneous_shared(
+            builders
+                .into_iter()
+                .map(|builder| Arc::new(builder) as Arc<dyn EnvBuilder<Env = E>>)
+                .collect(),
+        )
+    }
+
+    /// Creates a collection of shared builders, which may have different concrete types.
+    ///
+    /// All builders must produce the same environment type with compatible spaces.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `builders` is empty.
+    pub fn heterogeneous_shared(
+        builders: Vec<Arc<dyn EnvBuilder<Env = E>>>,
+    ) -> Result<Self, Error> {
+        Self::from_kind(EnvBuilderKind::Heterogeneous { builders })
     }
 
     /// Builds the environment at `idx`.
@@ -321,16 +364,14 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if the selected builder cannot construct an environment.
-    pub fn build_idx(&self, idx: usize) -> Result<EB::Env, Error> {
+    pub fn build_idx(&self, idx: usize) -> Result<E, Error> {
         let n_envs = self.num_envs();
         if idx >= self.num_envs() {
-            return Err(Error::InvalidParameter(Box::new(
-                InvalidParameterError::InvalidValue {
-                    name: "environment index".into(),
-                    expected: format!("an index below {n_envs}"),
-                    value: idx.to_string(),
-                },
-            )));
+            return Err(Error::invalid_parameter(
+                "environment index",
+                format!("an index below {n_envs}"),
+                idx.to_string(),
+            ));
         }
         match &self.0 {
             EnvBuilderKind::Homogeneous { builder, .. } => builder.build_env(),
@@ -342,7 +383,7 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     #[must_use]
     pub fn num_envs(&self) -> usize {
         match &self.0 {
-            EnvBuilderKind::Homogeneous { n_envs, .. } => *n_envs,
+            EnvBuilderKind::Homogeneous { n_envs, .. } => n_envs.get(),
             EnvBuilderKind::Heterogeneous { builders } => builders.len(),
         }
     }
@@ -352,7 +393,7 @@ impl<EB: EnvBuilder> EnvBuilderType<EB> {
     /// # Errors
     ///
     /// Returns an error if the selected builder cannot provide a description.
-    pub fn env_description(&self) -> Result<EnvDescription<<EB::Env as Env>::Tensor>, Error> {
+    pub fn env_description(&self) -> Result<EnvDescription<E::Tensor>, Error> {
         match &self.0 {
             EnvBuilderKind::Homogeneous { builder, n_envs: _ } => builder.env_description(),
             EnvBuilderKind::Heterogeneous { builders } => builders[0].env_description(),

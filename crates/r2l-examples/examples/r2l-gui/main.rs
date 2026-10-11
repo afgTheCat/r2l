@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l::{PPOBuilder, PPORolloutStats, TrainingLimit};
+use r2l::{GradientClippingConfig, PPOBuilder, PPORolloutStats, TrainingLimit};
 use r2l_examples::EventBox;
 use r2l_sampler::SamplerExecutionMode;
 
@@ -117,7 +117,7 @@ fn train_ppo(
         .with_burn()
         .with_seed(0)
         .with_entropy_coefficient(ENT_COEFF)
-        .with_gradient_clipping(Some(MAX_GRAD_NORM))
+        .with_gradient_clipping(GradientClippingConfig::Norm(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
         .with_rollout_steps(2048)
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)

@@ -11,12 +11,8 @@ struct IdentityValueFunction;
 impl ValueFunction for IdentityValueFunction {
     type Tensor = VecTensor;
 
-    fn values(&self, observations: &[Self::Tensor]) -> Result<Self::Tensor> {
-        let values = observations
-            .iter()
-            .map(|observation| observation.to_vec().map(|values| values[0]))
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(VecTensor::from_vec(values))
+    fn values(&self, observations: Self::Tensor) -> Result<Self::Tensor> {
+        Ok(observations.narrow(1, 0, 1)?)
     }
 }
 
@@ -28,9 +24,9 @@ fn transition(
     truncated: bool,
 ) -> Memory<VecTensor> {
     Memory {
-        state: VecTensor::from_vec(vec![state_value]),
-        next_state: VecTensor::from_vec(vec![next_value]),
-        action: VecTensor::from_vec(vec![0.0]),
+        state: VecTensor::new(vec![state_value], [1, 1]).unwrap(),
+        next_state: VecTensor::new(vec![next_value], [1, 1]).unwrap(),
+        action: VecTensor::new(vec![0.0], [1, 1]).unwrap(),
         reward,
         terminated,
         truncated,

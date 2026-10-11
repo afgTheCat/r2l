@@ -73,10 +73,10 @@ impl Env for TestEnv {
     fn step(&mut self, _action: Self::Tensor) -> Result<Snapshot<Self::Tensor>, Error> {
         self.step += 1;
         if self.fail_at_step == Some(self.step) {
-            return Err(Error::InvalidState {
-                operation: "test environment step".into(),
-                details: "configured failure".into(),
-            });
+            return Err(Error::invalid_state(
+                "test environment step",
+                "configured failure",
+            ));
         }
         let done = self.step == self.episode_len;
         let (terminated, truncated) = match self.episode_end {
@@ -96,7 +96,7 @@ impl Env for TestEnv {
             Space::Box {
                 min: None,
                 max: None,
-                shape: vec![1],
+                shape: vec![1].into(),
             },
             Space::Discrete(1),
         )
@@ -126,14 +126,14 @@ pub struct OneBoundHook {
 impl OneBoundHook {
     pub fn steps(n_steps: usize) -> Self {
         Self {
-            bound: RolloutMode::StepBound { n_steps },
+            bound: RolloutMode::step_bound(n_steps),
             scheduled: false,
         }
     }
 
     pub fn episodes(n_episodes: usize) -> Self {
         Self {
-            bound: RolloutMode::EpisodeBound { n_episodes },
+            bound: RolloutMode::episode_bound(n_episodes),
             scheduled: false,
         }
     }

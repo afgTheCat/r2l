@@ -168,4 +168,20 @@ pub trait TrajectoryBatch<T: R2lTensor> {
 
     /// Returns truncation flags for each step.
     fn truncated(&self) -> &[bool];
+
+    fn iter_rewards(&self) -> impl Iterator<Item = f32> {
+        self.rewards().iter().copied()
+    }
+
+    fn iter_terminated(&self) -> impl Iterator<Item = bool> {
+        self.terminated().iter().copied()
+    }
+
+    fn iter_truncated(&self) -> impl Iterator<Item = bool> {
+        self.truncated().iter().copied()
+    }
+
+    fn iter_dones(&self) -> impl Iterator<Item = bool> {
+        izip!(self.iter_terminated(), self.iter_truncated()).map(|(te, tr)| te || tr)
+    }
 }

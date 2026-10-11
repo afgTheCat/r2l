@@ -1,23 +1,25 @@
-pub(crate) mod normalizer;
+pub(crate) mod algorithm;
+/// Learner and learning-hook configuration.
+pub mod learner;
+/// Backend-independent network configuration and construction.
+pub mod networks;
+/// Training lifecycle and artifact configuration.
+pub mod on_policy_hook;
+/// Adam optimizer settings, learning-rate schedules, and clipping.
+pub mod optimizer;
 pub(crate) mod policy;
+pub(crate) mod sampler;
 
-use std::{marker::PhantomData, path::PathBuf, sync::mpsc::Sender};
+use std::{num::NonZeroUsize, sync::mpsc::Sender};
 
-use burn::{
-    backend::ndarray::NdArrayDevice, grad_clipping::GradientClippingConfig, optim::AdamWConfig,
-    prelude::Backend, tensor::backend::AutodiffBackend,
-};
-use candle_core::{Device, DeviceLocation};
-use candle_nn::ParamsAdamW;
-use policy::PolicyBuilder;
+use candle_core::Device;
+use networks::NetworkConfig;
+pub use on_policy_hook::TrainingArtifactsConfig;
+pub use optimizer::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
 use r2l_agents::on_policy_algorithms::{
-    a2c::{A2C, A2CHook, A2CParams},
-    ppo::{PPO, PPOHook, PPOParams},
+    a2c::{A2C, A2CHook},
+    ppo::{PPO, PPOHook},
 };
-use r2l_burn::learning_module::PolicyValueLearner as BurnPolicyValueLearner;
-use r2l_candle::learning_module::PolicyValueLearner as CandlePolicyValueLearner;
-use r2l_core::env::EnvDescription;
-use r2l_core::env::normalizer::{ClippedNormalizer, NormalizerMode};
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     error::Error,
@@ -26,404 +28,56 @@ use r2l_core::{
         algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime, Sampler},
         learning_module::OnPolicyLearner,
     },
-    rng::set_seed,
 };
+use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner as BurnPolicyValueLearner;
+use r2l_distributions::learning_modules::candle_lm::PolicyValueLearner as CandlePolicyValueLearner;
 #[cfg(feature = "gym")]
 use r2l_gym::{GymEnv, GymEnvBuilder};
-use r2l_sampler::{
-    DirectSampler, DirectSamplerCore, SamplerExecutionMode, StagedSampler, StagedSamplerCore,
-};
-use serde::{Deserialize, Serialize, de::Error as _};
+use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
+pub use sampler::ObsNormalizerConfig;
 
-use crate::hooks::on_policy::OnPolicyTrainingHooks;
-use crate::inference::{InferenceBackend, InferenceConfig, InferenceObservationMode};
 use crate::{
-    A2CRolloutStats, PPORolloutStats,
-    evaluator::{EvaluationSampler, EvaluationSettings},
+    A2CRolloutStats, EpisodeBoundHook, OnPolicyControlHandle, PPORolloutStats, StepBoundHook,
+    TrainingLimit,
+    backend::{Backend, BurnBackendConfig, CandleBackend},
+    builders::{
+        algorithm::AlgoConfig,
+        learner::{LearnerConfig, LearningHookConfig},
+        on_policy_hook::OnPolicyHookConfig,
+        sampler::{SamplerConfiguration, SamplerSetup},
+    },
     hooks::{
-        a2c::A2CRolloutReporter,
-        on_policy::{
-            OnPolicyCommandHandler, OnPolicyControlEndpoint, ScheduledEvaluator,
-            TrainingTimingRecorder, on_policy_control_channel,
-        },
-        ppo::{ClipRangeSchedule, TargetKl},
+        learning::{A2CLearningHook, ClipRangeSchedule, PPOLearningHook},
+        on_policy::{OnPolicyTrainingHooks, commands::on_policy_control_channel},
+        progress::{SharedTrainingProgress, TrainingProgress},
     },
 };
-use crate::{BurnBackend, LearningRateSchedule, OnPolicyControlHandle, TrainingLimit};
-use crate::{EpisodeBoundHook, StepBoundHook};
-use crate::{
-    evaluator::BestPolicyEvaluator,
-    hooks::{a2c::A2CLearningHook, ppo::PPOLearningHook},
-};
-use crate::{hooks::ppo::PPORolloutReporter, utils::RewardNormalizer};
 
 /// PPO agent produced by a Candle-backed algorithm builder.
 pub type PPOCandle = PPO<CandlePolicyValueLearner, PPOLearningHook<CandlePolicyValueLearner>>;
 /// PPO agent produced by a Burn-backed algorithm builder.
-pub type PPOBurn<B> = PPO<BurnPolicyValueLearner<B>, PPOLearningHook<BurnPolicyValueLearner<B>>>;
+pub type PPOBurn = PPO<BurnPolicyValueLearner, PPOLearningHook<BurnPolicyValueLearner>>;
 /// A2C agent produced by a Candle-backed algorithm builder.
 pub type A2CCandle = A2C<CandlePolicyValueLearner, A2CLearningHook<CandlePolicyValueLearner>>;
 /// A2C agent produced by a Burn-backed algorithm builder.
-pub type A2CBurn<B> = A2C<BurnPolicyValueLearner<B>, A2CLearningHook<BurnPolicyValueLearner<B>>>;
+pub type A2CBurn = A2C<BurnPolicyValueLearner, A2CLearningHook<BurnPolicyValueLearner>>;
 
-/// Hyperparameters for Adam optimization with decoupled weight decay.
-#[derive(Clone, Debug)]
-pub struct AdamWParams {
-    /// Learning rate.
-    pub lr: f64,
-    /// First-moment decay coefficient.
-    pub beta1: f64,
-    /// Second-moment decay coefficient.
-    pub beta2: f64,
-    /// Numerical-stability term.
-    pub eps: f64,
-    /// Weight-decay coefficient.
-    pub weight_decay: f64,
-}
-
-/// Selects the artifacts produced during training and where they are written.
-pub struct TrainingArtifactsConfig {
-    pub(crate) output_dir: PathBuf,
-    pub(crate) evaluation_results: bool,
-    pub(crate) training_timings: bool,
-    pub(crate) inference_artifacts: bool,
-    pub(crate) evaluation_settings: EvaluationSettings,
-}
-
-impl TrainingArtifactsConfig {
-    /// Creates a configuration that writes all supported training artifacts.
-    ///
-    /// # Arguments
-    ///
-    /// * `output_dir` - Directory in which training artifacts will be written.
-    pub fn new(output_dir: impl Into<PathBuf>) -> Self {
-        Self {
-            output_dir: resolve_and_validate_output_dir(output_dir.into()),
-            evaluation_results: true,
-            training_timings: true,
-            inference_artifacts: true,
-            evaluation_settings: EvaluationSettings::default(),
-        }
-    }
-
-    /// Sets whether evaluation results are written during training.
-    ///
-    /// # Arguments
-    ///
-    /// * `enabled` - Whether to write evaluation results.
-    #[must_use]
-    pub fn with_evaluation_results(mut self, enabled: bool) -> Self {
-        self.evaluation_results = enabled;
-        self
-    }
-
-    /// Sets whether training timing measurements are written.
-    ///
-    /// # Arguments
-    ///
-    /// * `enabled` - Whether to write training timing measurements.
-    #[must_use]
-    pub fn with_training_timings(mut self, enabled: bool) -> Self {
-        self.training_timings = enabled;
-        self
-    }
-
-    /// Sets whether the best policy is saved as inference-ready artifacts.
-    ///
-    /// # Arguments
-    ///
-    /// * `enabled` - Whether to save inference-ready artifacts for the best policy.
-    #[must_use]
-    pub fn with_inference_artifacts(mut self, enabled: bool) -> Self {
-        self.inference_artifacts = enabled;
-        self
-    }
-
-    /// Sets the evaluation behavior used by evaluation results and inference artifacts.
-    ///
-    /// # Arguments
-    ///
-    /// * `evaluation_settings` - Settings that control evaluation frequency and execution.
-    #[must_use]
-    pub fn with_evaluation_settings(mut self, evaluation_settings: EvaluationSettings) -> Self {
-        self.evaluation_settings = evaluation_settings;
-        self
-    }
-
-    fn needs_evaluator(&self) -> bool {
-        self.evaluation_results || self.inference_artifacts
-    }
-
-    fn needs_timing_recorder(&self) -> bool {
-        self.training_timings
-    }
-}
-
-fn resolve_and_validate_output_dir(path: PathBuf) -> PathBuf {
-    let path = if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir().unwrap().join(path)
-    };
-    assert!(!path.is_file());
-    path
-}
-
-/// Optimizer arrangement for the policy and value networks.
-#[derive(Clone, Debug)]
-pub(crate) enum OnPolicyOptimizerLayout {
-    /// One optimizer updates both networks.
-    Joint {
-        /// Optional maximum gradient norm.
-        max_grad_norm: Option<f32>,
-        /// Shared Adam optimizer parameters with decoupled weight decay.
-        params: AdamWParams,
-    },
-    /// Policy and value networks use independent optimizers.
-    Split {
-        /// Optional maximum policy gradient norm.
-        policy_max_grad_norm: Option<f32>,
-        /// Policy optimizer parameters.
-        policy_params: AdamWParams,
-        /// Optional maximum value gradient norm.
-        value_max_grad_norm: Option<f32>,
-        /// Value optimizer parameters.
-        value_params: AdamWParams,
-    },
-}
-
-impl OnPolicyOptimizerLayout {
-    fn map_params(mut self, mut update: impl FnMut(&mut AdamWParams)) -> Self {
-        match &mut self {
-            Self::Joint { params, .. } => update(params),
-            Self::Split {
-                policy_params,
-                value_params,
-                ..
-            } => {
-                update(policy_params);
-                update(value_params);
-            }
-        }
-        self
-    }
-
-    /// Sets the learning rate of every optimizer in the layout.
-    #[must_use]
-    fn with_lr(self, lr: f64) -> Self {
-        self.map_params(|params| params.lr = lr)
-    }
-
-    /// Sets the first-moment decay of every optimizer in the layout.
-    #[must_use]
-    fn with_beta1(self, beta1: f64) -> Self {
-        self.map_params(|params| params.beta1 = beta1)
-    }
-
-    /// Sets the second-moment decay of every optimizer in the layout.
-    #[must_use]
-    fn with_beta2(self, beta2: f64) -> Self {
-        self.map_params(|params| params.beta2 = beta2)
-    }
-
-    /// Sets the numerical-stability term of every optimizer in the layout.
-    #[must_use]
-    fn with_epsilon(self, epsilon: f64) -> Self {
-        self.map_params(|params| params.eps = epsilon)
-    }
-
-    /// Sets the weight decay of every optimizer in the layout.
-    #[must_use]
-    fn with_weight_decay(self, weight_decay: f64) -> Self {
-        self.map_params(|params| params.weight_decay = weight_decay)
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub(crate) struct BurnBackendConfig;
-
-#[derive(Debug, Clone)]
-pub(crate) struct CandleBackend {
-    pub(crate) device: Device,
-}
-
-#[derive(Serialize, Deserialize)]
-enum CandleDeviceConfig {
-    Cpu,
-    Cuda { ordinal: usize },
-    Metal { ordinal: usize },
-}
-
-impl Serialize for CandleBackend {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let device = match self.device.location() {
-            DeviceLocation::Cpu => CandleDeviceConfig::Cpu,
-            DeviceLocation::Cuda { gpu_id } => CandleDeviceConfig::Cuda { ordinal: gpu_id },
-            DeviceLocation::Metal { gpu_id } => CandleDeviceConfig::Metal { ordinal: gpu_id },
-        };
-        device.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for CandleBackend {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let device = match CandleDeviceConfig::deserialize(deserializer)? {
-            CandleDeviceConfig::Cpu => Device::Cpu,
-            CandleDeviceConfig::Cuda { ordinal } => {
-                Device::new_cuda(ordinal).map_err(D::Error::custom)?
-            }
-            CandleDeviceConfig::Metal { ordinal } => {
-                Device::new_metal(ordinal).map_err(D::Error::custom)?
-            }
-        };
-        Ok(Self { device })
-    }
-}
-
-impl CandleBackend {
-    fn seed(&self, seed: u64) -> Result<(), Error> {
-        if !matches!(&self.device, Device::Cpu) {
-            self.device.set_seed(seed).map_err(Error::wrap)?;
-        }
-        Ok(())
-    }
-}
-
-enum SamplerConfiguration<E: Env> {
-    DirectStep {
-        rollout_steps: usize,
-        reward_normalizer: Option<RewardNormalizer>,
-    },
-    DirectEpisode {
-        rollout_episodes: usize,
-    },
-    StagedStep {
-        rollout_steps: usize,
-        reward_normalizer: Option<RewardNormalizer>,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    },
-}
-
-impl<E: Env> SamplerConfiguration<E> {
-    fn obs_normalizer(&self) -> Option<ClippedNormalizer<E::Tensor>> {
-        match self {
-            Self::StagedStep {
-                obs_normalizer: Some(obs_normalizer),
-                ..
-            } => Some(obs_normalizer.clone()),
-            _ => None,
-        }
-    }
-}
-
-enum BackendConfiguration {
-    Candle(CandleBackend),
-    Burn(BurnBackendConfig),
-}
-
-enum AlgorithmConfiguration {
-    Ppo {
-        normalize_advantage: Option<bool>,
-        total_epochs: usize,
-        target_kl: Option<f32>,
-        clip_range_schedule: ClipRangeSchedule,
-        reporter: Option<Sender<PPORolloutStats>>,
-    },
-    A2C {
-        normalize_advantage: Option<bool>,
-        reporter: Option<Sender<A2CRolloutStats>>,
-    },
-}
-
-trait EnvBuildPlan<E: Env>: Send {
-    fn build_evaluator_sampler(
-        &self,
-        episodes_per_evaluation: usize,
-        evaluation_execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Result<EvaluationSampler<E>, Error>;
-
-    fn build_direct_sampler_core(
-        &self,
-        execution_mode: SamplerExecutionMode,
-    ) -> DirectSamplerCore<E>;
-
-    fn build_staged_sampler_core(
-        &self,
-        execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Result<StagedSamplerCore<E>, Error>;
-}
-
-struct TypedEnvBuildPlan<EB: EnvBuilder> {
-    env_builder: EnvBuilderType<EB>,
-}
-
-impl<EB: EnvBuilder<Env: Env>> EnvBuildPlan<EB::Env> for TypedEnvBuildPlan<EB> {
-    fn build_evaluator_sampler(
-        &self,
-        episodes_per_evaluation: usize,
-        evaluation_execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
-    ) -> Result<EvaluationSampler<EB::Env>, Error> {
-        EvaluationSampler::build(
-            self.env_builder.clone(),
-            episodes_per_evaluation,
-            evaluation_execution_mode,
-            obs_normalizer,
-        )
-    }
-
-    fn build_direct_sampler_core(
-        &self,
-        execution_mode: SamplerExecutionMode,
-    ) -> DirectSamplerCore<EB::Env> {
-        DirectSamplerCore::build(self.env_builder.clone(), execution_mode)
-    }
-
-    fn build_staged_sampler_core(
-        &self,
-        execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<<EB::Env as Env>::Tensor>>,
-    ) -> Result<StagedSamplerCore<EB::Env>, Error> {
-        StagedSamplerCore::build(&self.env_builder, execution_mode, obs_normalizer)
-    }
-}
-
-struct Builder<E: Env> {
-    env_build_plan: Box<dyn EnvBuildPlan<E>>,
-    env_desription: EnvDescription<E::Tensor>,
-    n_envs: usize,
-    backend_configuration: BackendConfiguration,
-    algorithm_configuration: AlgorithmConfiguration,
+struct Builder<E: Env + 'static> {
+    backend_configuration: Backend,
+    seed: Option<u64>,
 
     // for the hooks
     training_limit: TrainingLimit,
-    learning_rate_schedule: Option<LearningRateSchedule>,
-    training_artifacts: Option<TrainingArtifactsConfig>,
-    control_endpoint: Option<OnPolicyControlEndpoint>,
+    hook_config: OnPolicyHookConfig,
 
     // for the agent
-    policy_config: PolicyBuilder,
-    value_hidden_layers: Vec<usize>,
-    optimizer_layout: OnPolicyOptimizerLayout,
-    log_progress: bool,
-    entropy_coeff: f32,
-    vf_coeff: Option<f32>,
-    gradient_clipping: Option<f32>,
-    gamma: f32,
-    lambda: f32,
-    sample_size: usize,
-    seed: Option<u64>,
+    learner_builder: LearnerConfig,
+    algo_config: AlgoConfig,
+    learning_hook: LearningHookConfig,
+    ppo_reporter: Option<Sender<PPORolloutStats>>,
+    a2c_reporter: Option<Sender<A2CRolloutStats>>,
 
     // for the sampler
-    sampler_execution_mode: SamplerExecutionMode,
     sampler_configuration: SamplerConfiguration<E>,
 }
 
@@ -431,490 +85,106 @@ impl<E: Env> Builder<E> {
     fn new<EB: EnvBuilder<Env = E>>(
         env_builder: EB,
         n_envs: usize,
-        algorithm_configuration: AlgorithmConfiguration,
-        backend_configuration: BackendConfiguration,
-        sampler_configuration: SamplerConfiguration<E>,
+        algo_config: AlgoConfig,
+        backend_configuration: Backend,
+        sampler_setup: SamplerSetup<E>,
+        normalize_advantage: bool,
     ) -> Result<Self, Error> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
-        let env_desription = env_builder.env_description()?;
-        let policy_config = PolicyBuilder::new(&env_desription)?;
+        let env_description = env_builder.env_description()?;
+        let learner_builder = LearnerConfig::new(&env_description)?;
         Ok(Self {
-            env_build_plan: Box::new(TypedEnvBuildPlan { env_builder }),
-            env_desription,
-            n_envs,
-            sampler_configuration,
-            backend_configuration,
-            algorithm_configuration,
-            training_limit: TrainingLimit::rollouts(50),
-            learning_rate_schedule: None,
-            training_artifacts: None,
-            control_endpoint: None,
-            policy_config,
-            value_hidden_layers: vec![64, 64],
-            optimizer_layout: OnPolicyOptimizerLayout::Joint {
-                params: AdamWParams {
-                    lr: 3e-4,
-                    beta1: 0.9,
-                    beta2: 0.999,
-                    eps: 1e-5,
-                    weight_decay: 1e-4,
-                },
-                max_grad_norm: None,
+            sampler_configuration: SamplerConfiguration {
+                setup: sampler_setup,
+                execution_mode: SamplerExecutionMode::MultiThreaded,
+                env_builder,
             },
-            log_progress: true,
-            entropy_coeff: 0.0,
-            vf_coeff: None,
-            gradient_clipping: None,
-            gamma: 0.98,
-            lambda: 0.8,
-            sample_size: 64,
+            backend_configuration,
+            algo_config,
+            training_limit: TrainingLimit::rollouts(50),
+            hook_config: OnPolicyHookConfig::default(),
+            learner_builder,
+            learning_hook: LearningHookConfig::new(normalize_advantage),
+            ppo_reporter: None,
+            a2c_reporter: None,
             seed: None,
-            sampler_execution_mode: SamplerExecutionMode::MultiThreaded,
         })
     }
 
-    fn update_optimizer_layout(
-        &mut self,
-        update: impl FnOnce(OnPolicyOptimizerLayout) -> OnPolicyOptimizerLayout,
-    ) {
-        self.optimizer_layout = update(self.optimizer_layout.clone());
-    }
-
-    fn validate_evaluation_schedule(&self) -> Result<(), Error> {
-        let Some(config) = &self.training_artifacts else {
-            return Ok(());
+    fn build_candle_learner(&self) -> Result<CandlePolicyValueLearner, Error> {
+        let Backend::Candle(backend) = &self.backend_configuration else {
+            unreachable!("Candle agent type must use Candle backend configuration")
         };
-        if !config.needs_evaluator() {
-            return Ok(());
-        }
-        let rollouts_per_evaluation = config.evaluation_settings.rollouts_per_evaluation;
-        match self.total_rollouts() {
-            Some(total_rollouts) if rollouts_per_evaluation > total_rollouts => {
-                Err(Error::InvalidState {
-                    operation: "configuring evaluation".into(),
-                    details: format!(
-                        "evaluation frequency ({rollouts_per_evaluation} rollouts) exceeds the \
-                     configured training length ({total_rollouts} rollouts)"
-                    ),
-                })
-            }
-            Some(_) => Ok(()),
-            None if rollouts_per_evaluation == 1 => Ok(()),
-            None => Err(Error::InvalidState {
-                operation: "configuring evaluation".into(),
-                details: format!(
-                    "evaluation every {rollouts_per_evaluation} rollouts cannot be guaranteed because \
-                 the configured training schedule has no statically known rollout count"
-                ),
-            }),
-        }
+        self.learner_builder.build_candle_learner(&backend.device)
     }
 
-    fn validate_clip_range_schedule(&self) -> Result<(), Error> {
-        if matches!(
-            self.algorithm_configuration,
-            AlgorithmConfiguration::Ppo {
-                clip_range_schedule: ClipRangeSchedule::Linear(_),
-                ..
-            }
-        ) && self.total_rollouts().is_none()
-        {
-            return Err(Error::InvalidState {
-                operation: "configuring PPO clip range".into(),
-                details: "a linear clip-range schedule requires a statically known rollout count"
-                    .into(),
-            });
-        }
-        Ok(())
-    }
-
-    fn build_candle_learner(&self, device: &Device) -> Result<CandlePolicyValueLearner, Error> {
-        let (policy, policy_varmap) = self
-            .policy_config
-            .build_candle_with_varmap::<E::Tensor>(device)?;
-        let activation_function = self.policy_config.activation_function;
-        match &self.optimizer_layout {
-            OnPolicyOptimizerLayout::Joint {
-                max_grad_norm,
-                params,
-            } => CandlePolicyValueLearner::build_joint(
-                policy,
-                &self.value_hidden_layers,
-                policy_varmap,
-                *max_grad_norm,
-                Self::candle_optimizer_params(params),
-                activation_function,
-            ),
-            OnPolicyOptimizerLayout::Split {
-                policy_max_grad_norm,
-                policy_params,
-                value_max_grad_norm,
-                value_params,
-            } => CandlePolicyValueLearner::build_split(
-                policy,
-                &self.value_hidden_layers,
-                policy_varmap,
-                *policy_max_grad_norm,
-                *value_max_grad_norm,
-                Self::candle_optimizer_params(policy_params),
-                Self::candle_optimizer_params(value_params),
-                activation_function,
-            ),
-        }
-    }
-
-    fn build_burn_learner<B: AutodiffBackend>(&self) -> Result<BurnPolicyValueLearner<B>, Error> {
-        let observation_size = self.env_desription.observation_size();
-        let policy = self.policy_config.build_burn::<B, E::Tensor>()?;
-        let activation_function = self.policy_config.activation_function;
-        let value_layers = &[&[observation_size][..], &self.value_hidden_layers[..], &[1]].concat();
-        Ok(match &self.optimizer_layout {
-            OnPolicyOptimizerLayout::Joint {
-                max_grad_norm,
-                params,
-            } => {
-                let optimizer_config = Self::burn_optimizer_config(params, *max_grad_norm);
-                BurnPolicyValueLearner::joint(
-                    policy,
-                    value_layers,
-                    activation_function,
-                    &optimizer_config,
-                    params.lr,
-                )
-            }
-            OnPolicyOptimizerLayout::Split {
-                policy_max_grad_norm,
-                policy_params,
-                value_max_grad_norm,
-                value_params,
-            } => {
-                let optimizer_config =
-                    Self::burn_optimizer_config(policy_params, *policy_max_grad_norm);
-                let value_optimizer_config =
-                    Self::burn_optimizer_config(value_params, *value_max_grad_norm);
-                BurnPolicyValueLearner::split(
-                    policy,
-                    value_layers,
-                    activation_function,
-                    &optimizer_config,
-                    policy_params.lr,
-                    &value_optimizer_config,
-                    value_params.lr,
-                )
-            }
-        })
-    }
-
-    fn candle_optimizer_params(params: &AdamWParams) -> ParamsAdamW {
-        ParamsAdamW {
-            lr: params.lr,
-            beta1: params.beta1,
-            beta2: params.beta2,
-            eps: params.eps,
-            weight_decay: params.weight_decay,
-        }
-    }
-
-    fn burn_optimizer_config(params: &AdamWParams, max_grad_norm: Option<f32>) -> AdamWConfig {
-        let optimizer_config = AdamWConfig::new()
-            .with_beta_1(params.beta1 as f32)
-            .with_beta_2(params.beta2 as f32)
-            .with_epsilon(params.eps as f32)
-            .with_weight_decay(params.weight_decay as f32);
-        match max_grad_norm {
-            Some(max_grad_norm) => optimizer_config
-                .with_grad_clipping(Some(GradientClippingConfig::Norm(max_grad_norm))),
-            None => optimizer_config,
-        }
-    }
-
-    fn default_on_policy_hook<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>>(
-        self,
-    ) -> Result<OnPolicyTrainingHooks<A, S, E>, Error> {
-        let (evaluator, timing_recorder) = if let Some(config) = self.training_artifacts {
-            let evaluator = if config.needs_evaluator() {
-                let obs_normalizer = self
-                    .sampler_configuration
-                    .obs_normalizer()
-                    .map(|n| n.with_mode(NormalizerMode::ReadOnly));
-                let sampler = self.env_build_plan.build_evaluator_sampler(
-                    config.evaluation_settings.episodes_per_evaluation,
-                    config.evaluation_settings.evaluation_execution_mode,
-                    obs_normalizer,
-                )?;
-                ScheduledEvaluator::new(
-                    BestPolicyEvaluator::new(
-                        sampler,
-                        config.output_dir.clone(),
-                        config.evaluation_results,
-                        config.inference_artifacts,
-                    )?,
-                    config.evaluation_settings.rollouts_per_evaluation,
-                )
-            } else {
-                ScheduledEvaluator::disabled()
-            };
-            let timing_recorder = if config.needs_timing_recorder() {
-                TrainingTimingRecorder::create(&config.output_dir)?
-            } else {
-                TrainingTimingRecorder::disabled()
-            };
-            (evaluator, timing_recorder)
-        } else {
-            (
-                ScheduledEvaluator::disabled(),
-                TrainingTimingRecorder::disabled(),
-            )
+    fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner, Error> {
+        let Backend::Burn(_) = self.backend_configuration else {
+            unreachable!("Burn agent type must use Burn backend configuration")
         };
-        Ok(OnPolicyTrainingHooks::new(
+        self.learner_builder.build_burn_learner()
+    }
+
+    fn progress(&self) -> SharedTrainingProgress {
+        TrainingProgress::shared(
             self.training_limit,
-            self.learning_rate_schedule,
-            evaluator,
-            OnPolicyCommandHandler::new(self.control_endpoint),
-            timing_recorder,
+            self.sampler_configuration.rollout_mode(),
+            self.sampler_configuration.n_envs(),
+        )
+    }
+
+    fn ppo_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<PPOCandle, Error> {
+        let learner = self.build_candle_learner()?;
+        Ok(self.algo_config.build_ppo(
+            learner,
+            &self.learning_hook,
+            &self.learner_builder.optimizer,
+            progress,
+            self.ppo_reporter.take(),
+            self.sampler_configuration.n_envs(),
         ))
     }
 
-    #[allow(clippy::unnecessary_wraps)]
-    fn direct_sampler_step_bound(&self) -> Result<DirectSampler<E, StepBoundHook<E>>, Error> {
-        let SamplerConfiguration::DirectStep {
-            rollout_steps,
-            reward_normalizer,
-        } = &self.sampler_configuration
-        else {
-            unreachable!("direct step-bound sampler type must use matching configuration")
-        };
-        let sampler_core = self
-            .env_build_plan
-            .build_direct_sampler_core(self.sampler_execution_mode);
-        let step_bound_hook = StepBoundHook::new(*rollout_steps, reward_normalizer.clone());
-        Ok(DirectSampler::new(sampler_core, step_bound_hook))
+    fn ppo_burn_agent(&mut self, progress: SharedTrainingProgress) -> Result<PPOBurn, Error> {
+        let learner = self.build_burn_learner()?;
+        Ok(self.algo_config.build_ppo(
+            learner,
+            &self.learning_hook,
+            &self.learner_builder.optimizer,
+            progress,
+            self.ppo_reporter.take(),
+            self.sampler_configuration.n_envs(),
+        ))
     }
 
-    #[allow(clippy::unnecessary_wraps)]
-    fn direct_sampler_episode_bound(&self) -> Result<DirectSampler<E, EpisodeBoundHook<E>>, Error> {
-        let SamplerConfiguration::DirectEpisode { rollout_episodes } = &self.sampler_configuration
-        else {
-            unreachable!("direct episode-bound sampler type must use matching configuration")
-        };
-        let sampler_core = self
-            .env_build_plan
-            .build_direct_sampler_core(self.sampler_execution_mode);
-        let episode_bound_hook = EpisodeBoundHook::new(*rollout_episodes);
-        Ok(DirectSampler::new(sampler_core, episode_bound_hook))
+    fn a2c_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<A2CCandle, Error> {
+        let learner = self.build_candle_learner()?;
+        Ok(self.algo_config.build_a2c(
+            learner,
+            &self.learning_hook,
+            &self.learner_builder.optimizer,
+            progress,
+            self.a2c_reporter.take(),
+            self.sampler_configuration.n_envs(),
+        ))
     }
 
-    fn staged_sampler_step_bound(&self) -> Result<StagedSampler<E, StepBoundHook<E>>, Error> {
-        let SamplerConfiguration::StagedStep {
-            rollout_steps,
-            reward_normalizer,
-            obs_normalizer,
-        } = &self.sampler_configuration
-        else {
-            unreachable!("staged step-bound sampler type must use matching configuration")
-        };
-        let obs_normalizer = obs_normalizer
-            .as_ref()
-            .map(|normalizer| normalizer.with_mode(NormalizerMode::Update));
-        let sampler_core = self
-            .env_build_plan
-            .build_staged_sampler_core(self.sampler_execution_mode, obs_normalizer)?;
-        let step_bound_hook = StepBoundHook::new(*rollout_steps, reward_normalizer.clone());
-        Ok(StagedSampler::new(sampler_core, step_bound_hook))
-    }
-
-    fn write_inference_config(&self, backend: InferenceBackend) -> Result<(), Error> {
-        if let Some(config) = &self.training_artifacts
-            && config.inference_artifacts
-        {
-            let observation_mode = match &self.sampler_configuration {
-                SamplerConfiguration::StagedStep {
-                    obs_normalizer: Some(_),
-                    ..
-                } => InferenceObservationMode::Normalized,
-                _ => InferenceObservationMode::Raw,
-            };
-            let policy_builder = self.policy_config.clone();
-            InferenceConfig::new(policy_builder, observation_mode, backend)
-                .write_to_dir(&config.output_dir)?;
-        }
-        Ok(())
-    }
-
-    fn total_rollouts(&self) -> Option<usize> {
-        match self.training_limit {
-            TrainingLimit::RolloutBound { total_rollouts } => Some(total_rollouts),
-            TrainingLimit::TotalStepBound { total_steps } => match &self.sampler_configuration {
-                SamplerConfiguration::DirectStep { rollout_steps, .. }
-                | SamplerConfiguration::StagedStep { rollout_steps, .. } => rollout_steps
-                    .checked_mul(self.n_envs)
-                    .filter(|steps_per_rollout| *steps_per_rollout > 0)
-                    .map(|steps_per_rollout| total_steps.div_ceil(steps_per_rollout)),
-                SamplerConfiguration::DirectEpisode { .. } => None,
-            },
-        }
-    }
-
-    fn ppo_hook<M>(&mut self) -> PPOLearningHook<M> {
-        let total_rollouts = self.total_rollouts();
-        let AlgorithmConfiguration::Ppo {
-            normalize_advantage,
-            total_epochs,
-            target_kl,
-            reporter,
-            clip_range_schedule,
-            ..
-        } = &mut self.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        PPOLearningHook {
-            normalize_advantage: normalize_advantage.unwrap_or(true),
-            total_epochs: *total_epochs,
-            entropy_coeff: self.entropy_coeff,
-            vf_coeff: self.vf_coeff,
-            target_kl: target_kl.map(|target| TargetKl {
-                target,
-                target_exceeded: false,
-            }),
-            gradient_clipping: self.gradient_clipping,
-            current_epoch: 0,
-            reporter: PPORolloutReporter::new(
-                reporter.take(),
-                self.log_progress,
-                self.n_envs,
-                total_rollouts,
-            ),
-            rollout_idx: 0,
-            total_rollouts,
-            clip_range_schedule: *clip_range_schedule,
-            _lm: PhantomData,
-        }
-    }
-
-    fn a2c_hook<M>(&mut self) -> A2CLearningHook<M> {
-        let total_rollouts = self.total_rollouts();
-        let AlgorithmConfiguration::A2C {
-            normalize_advantage,
-            reporter,
-        } = &mut self.algorithm_configuration
-        else {
-            unreachable!("A2C agent type must use A2C configuration")
-        };
-        A2CLearningHook {
-            normalize_advantage: normalize_advantage.unwrap_or(false),
-            entropy_coeff: self.entropy_coeff,
-            vf_coeff: self.vf_coeff,
-            gradient_clipping: self.gradient_clipping,
-            reporter: A2CRolloutReporter::new(
-                reporter.take(),
-                self.log_progress,
-                self.n_envs,
-                total_rollouts,
-            ),
-            total_rollouts,
-            _lm: PhantomData,
-        }
-    }
-
-    fn ppo_params(&self) -> PPOParams {
-        let AlgorithmConfiguration::Ppo {
-            clip_range_schedule,
-            ..
-        } = &self.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        PPOParams {
-            clip_range: clip_range_schedule.initial_value(),
-            gamma: self.gamma,
-            lambda: self.lambda,
-            sample_size: self.sample_size,
-        }
-    }
-
-    fn a2c_params(&self) -> A2CParams {
-        A2CParams {
-            gamma: self.gamma,
-            lambda: self.lambda,
-            sample_size: self.sample_size,
-        }
-    }
-
-    fn ppo_candle_agent(&mut self) -> Result<PPOCandle, Error> {
-        let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
-            unreachable!("Candle agent type must use Candle backend configuration")
-        };
-        let backend = backend.clone();
-        self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
-        if let Some(seed) = self.seed {
-            backend.seed(seed)?;
-        }
-        let learner = self.build_candle_learner(&backend.device)?;
-        let hooks = self.ppo_hook();
-        Ok(PPO {
-            lm: learner,
-            hooks,
-            params: self.ppo_params(),
-        })
-    }
-
-    fn ppo_burn_agent(&mut self) -> Result<PPOBurn<BurnBackend>, Error> {
-        let BackendConfiguration::Burn(backend) = self.backend_configuration else {
-            unreachable!("Burn agent type must use Burn backend configuration")
-        };
-        self.write_inference_config(InferenceBackend::Burn(backend))?;
-        if let Some(seed) = self.seed {
-            BurnBackend::seed(&NdArrayDevice::default(), seed);
-        }
-        let learner = self.build_burn_learner::<BurnBackend>()?;
-        let hooks = self.ppo_hook();
-        Ok(PPO {
-            lm: learner,
-            hooks,
-            params: self.ppo_params(),
-        })
-    }
-
-    fn a2c_candle_agent(&mut self) -> Result<A2CCandle, Error> {
-        let BackendConfiguration::Candle(backend) = &self.backend_configuration else {
-            unreachable!("Candle agent type must use Candle backend configuration")
-        };
-        let backend = backend.clone();
-        self.write_inference_config(InferenceBackend::Candle(backend.clone()))?;
-        if let Some(seed) = self.seed {
-            backend.seed(seed)?;
-        }
-        let learner = self.build_candle_learner(&backend.device)?;
-        let hooks = self.a2c_hook();
-        Ok(A2C {
-            lm: learner,
-            hooks,
-            params: self.a2c_params(),
-        })
-    }
-
-    fn a2c_burn_agent(&mut self) -> Result<A2CBurn<BurnBackend>, Error> {
-        let BackendConfiguration::Burn(backend) = self.backend_configuration else {
-            unreachable!("Burn agent type must use Burn backend configuration")
-        };
-        self.write_inference_config(InferenceBackend::Burn(backend))?;
-        if let Some(seed) = self.seed {
-            BurnBackend::seed(&NdArrayDevice::default(), seed);
-        }
-        let learner = self.build_burn_learner::<BurnBackend>()?;
-        let hooks = self.a2c_hook();
-        Ok(A2C {
-            lm: learner,
-            hooks,
-            params: self.a2c_params(),
-        })
+    fn a2c_burn_agent(&mut self, progress: SharedTrainingProgress) -> Result<A2CBurn, Error> {
+        let learner = self.build_burn_learner()?;
+        Ok(self.algo_config.build_a2c(
+            learner,
+            &self.learning_hook,
+            &self.learner_builder.optimizer,
+            progress,
+            self.a2c_reporter.take(),
+            self.sampler_configuration.n_envs(),
+        ))
     }
 }
 
-struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
-    build_agent: fn(&mut Builder<E>) -> Result<A, Error>,
-    build_sampler: fn(&Builder<E>) -> Result<S, Error>,
+struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor> + 'static> {
+    build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
+    build_sampler: fn(&SamplerConfiguration<E>, SharedTrainingProgress) -> Result<S, Error>,
 }
 
 /// Configures and builds a complete PPO or A2C training algorithm.
@@ -930,7 +200,7 @@ struct Config<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
 /// minibatches of 64 samples, and a joint Adam optimizer with decoupled weight
 /// decay and a learning rate of `3e-4`.
 #[must_use]
-pub struct OnPolicyBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor>> {
+pub struct OnPolicyBuilder<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor> + 'static> {
     builder: Builder<E>,
     config: Config<A, S, E>,
 }
@@ -941,19 +211,21 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     fn configured<EB: EnvBuilder<Env = E>>(
         env_builder: EB,
         n_envs: usize,
-        algorithm_configuration: AlgorithmConfiguration,
-        backend_configuration: BackendConfiguration,
-        sampler_configuration: SamplerConfiguration<E>,
-        build_agent: fn(&mut Builder<E>) -> Result<A, Error>,
-        build_sampler: fn(&Builder<E>) -> Result<S, Error>,
+        algo_config: AlgoConfig,
+        backend_configuration: Backend,
+        sampler_setup: SamplerSetup<E>,
+        normalize_advantage: bool,
+        build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
+        build_sampler: fn(&SamplerConfiguration<E>, SharedTrainingProgress) -> Result<S, Error>,
     ) -> Result<Self, Error> {
         Ok(Self {
             builder: Builder::new(
                 env_builder,
                 n_envs,
-                algorithm_configuration,
+                algo_config,
                 backend_configuration,
-                sampler_configuration,
+                sampler_setup,
+                normalize_advantage,
             )?,
             config: Config {
                 build_agent,
@@ -964,7 +236,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     fn with_agent<A2: Agent>(
         self,
-        build_agent: fn(&mut Builder<E>) -> Result<A2, Error>,
+        build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A2, Error>,
     ) -> OnPolicyBuilder<A2, S, E> {
         OnPolicyBuilder {
             builder: self.builder,
@@ -977,7 +249,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
 
     fn with_sampler<S2: Sampler<Tensor = E::Tensor>>(
         self,
-        build_sampler: fn(&Builder<E>) -> Result<S2, Error>,
+        build_sampler: fn(&SamplerConfiguration<E>, SharedTrainingProgress) -> Result<S2, Error>,
     ) -> OnPolicyBuilder<A, S2, E> {
         OnPolicyBuilder {
             builder: self.builder,
@@ -994,7 +266,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `config` - The artifact output directory and the artifacts to produce.
     pub fn with_training_artifacts(mut self, config: TrainingArtifactsConfig) -> Self {
-        self.builder.training_artifacts = Some(config);
+        self.builder.hook_config.training_artifacts = Some(config);
         self
     }
 
@@ -1008,25 +280,55 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         self
     }
 
+    /// Stops training when an evaluation's average episode reward reaches the threshold.
+    ///
+    /// Enabling this condition also enables evaluation without requiring training artifacts.
+    /// By default, evaluation uses modal actions for five episodes per environment after every
+    /// training rollout. If training artifacts are configured, their evaluation settings apply.
+    /// The configured training limit still applies when the threshold has not been reached.
+    ///
+    /// # Arguments
+    ///
+    /// * `avg_reward_threshold` - Stop when the mean episode reward is at least this value, or
+    ///   `None` to disable reward-based stopping. Evaluation uses unnormalized environment rewards.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a supplied threshold is not finite.
+    pub fn with_avg_reward_threshold(mut self, avg_reward_threshold: Option<f32>) -> Self {
+        assert!(
+            avg_reward_threshold.is_none_or(f32::is_finite),
+            "average reward threshold must be finite"
+        );
+        self.builder.hook_config.avg_reward_threshold = avg_reward_threshold;
+        self
+    }
+
     /// Enables external control of the configured training algorithm.
     pub fn with_control(mut self) -> (Self, OnPolicyControlHandle) {
         let (control_endpoint, control_handle) = on_policy_control_channel();
-        self.builder.control_endpoint = Some(control_endpoint);
+        self.builder.hook_config.control_endpoint = Some(control_endpoint);
         (self, control_handle)
     }
 
     /// Sets the learning-rate schedule applied as training progresses.
     ///
-    /// Passing `None` leaves the optimizer at its configured learning rate.
+    /// Defaults to `Constant(3e-4)`. Updates every optimizer configuration, including
+    /// both policy and value configurations in split mode.
     ///
     /// # Arguments
     ///
-    /// * `learning_rate_schedule` - The schedule to apply, or `None` to disable scheduling.
+    /// * `learning_rate_schedule` - Schedule applied to every optimizer before learning.
     pub fn with_learning_rate_schedule(
         mut self,
-        learning_rate_schedule: Option<LearningRateSchedule>,
+        learning_rate_schedule: LearningRateSchedule,
     ) -> Self {
-        self.builder.learning_rate_schedule = learning_rate_schedule;
+        self.builder
+            .learner_builder
+            .optimizer
+            .for_each_mut(|config| {
+                config.learning_rate = learning_rate_schedule;
+            });
         self
     }
 
@@ -1035,7 +337,6 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Arguments
     ///
     /// * `seed` - Seed used to initialize the random number generators.
-    #[cfg(not(feature = "simd"))]
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.builder.seed = Some(seed);
         self
@@ -1047,7 +348,29 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `execution_mode` - How sampler environment workers should be executed.
     pub fn with_execution_mode(mut self, execution_mode: SamplerExecutionMode) -> Self {
-        self.builder.sampler_execution_mode = execution_mode;
+        self.builder.sampler_configuration.execution_mode = execution_mode;
+        self
+    }
+
+    /// Selects the policy architecture. CNN construction currently requires Burn.
+    /// CNNs reshape flat observations using the environment's `[channels, height, width]` shape.
+    ///
+    /// # Arguments
+    ///
+    /// * `network` - Hidden architecture; observation shape and action-space outputs are inferred.
+    pub fn with_policy_network(mut self, network: NetworkConfig) -> Self {
+        self.builder.learner_builder.policy_config.network = network;
+        self
+    }
+
+    /// Selects the value architecture independently of the policy. CNNs currently require Burn.
+    /// CNNs reshape flat observations using the environment's `[channels, height, width]` shape.
+    ///
+    /// # Arguments
+    ///
+    /// * `network` - Hidden architecture; observation shape is inferred and output width is one.
+    pub fn with_value_network(mut self, network: NetworkConfig) -> Self {
+        self.builder.learner_builder.value_network = network;
         self
     }
 
@@ -1055,19 +378,34 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// # Arguments
     ///
-    /// * `policy_hidden_layers` - Hidden-layer widths in network order.
+    /// * `policy_hidden_layers` - Dense hidden-layer widths, including the dense layers after a CNN.
     pub fn with_policy_hidden_layers(mut self, policy_hidden_layers: Vec<usize>) -> Self {
-        self.builder.policy_config.hidden_layers = policy_hidden_layers;
+        self.builder
+            .learner_builder
+            .policy_config
+            .network
+            .mlp_config_mut()
+            .hidden_layers = policy_hidden_layers;
         self
     }
 
-    /// Sets the hidden-layer activation used by the policy and value networks.
+    /// Sets dense hidden-layer activation for both networks, preserving explicit CNN activations.
     ///
     /// # Arguments
     ///
     /// * `activation_function` - Activation function applied by hidden layers.
     pub fn with_activation_function(mut self, activation_function: ActivationFunction) -> Self {
-        self.builder.policy_config.activation_function = activation_function;
+        self.builder
+            .learner_builder
+            .policy_config
+            .network
+            .mlp_config_mut()
+            .activation = activation_function;
+        self.builder
+            .learner_builder
+            .value_network
+            .mlp_config_mut()
+            .activation = activation_function;
         self
     }
 
@@ -1077,7 +415,21 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `log_std_init` - Initial logarithm of the action distribution's standard deviation.
     pub fn with_log_std_init(mut self, log_std_init: f32) -> Self {
-        self.builder.policy_config.log_std_init = log_std_init;
+        self.builder.learner_builder.policy_config.log_std_init = log_std_init;
+        self
+    }
+
+    /// Enables generalized state-dependent exploration for continuous Box actions.
+    ///
+    /// Each environment gets independent noise at each rollout boundary. Evaluation
+    /// uses the policy mean. With gSDE, `log_std_init` initializes the noise weights
+    /// for each hidden feature and action, rather than the action's marginal scale.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Controls additional noise refreshes within a rollout.
+    pub fn with_sde(mut self, config: crate::SdeConfig) -> Self {
+        self.builder.learner_builder.policy_config.sde = Some(config);
         self
     }
 
@@ -1086,11 +438,8 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Arguments
     ///
     /// * `learning_rate` - Constant learning rate applied to every optimizer.
-    pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
-        self.builder
-            .update_optimizer_layout(|layout| layout.with_lr(learning_rate));
-        self.builder.learning_rate_schedule = Some(LearningRateSchedule::Constant(learning_rate));
-        self
+    pub fn with_learning_rate(self, learning_rate: f64) -> Self {
+        self.with_learning_rate_schedule(LearningRateSchedule::Constant(learning_rate))
     }
 
     /// Sets the Adam first-moment decay for every optimizer.
@@ -1100,7 +449,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `beta1` - First-moment exponential decay coefficient.
     pub fn with_beta1(mut self, beta1: f64) -> Self {
         self.builder
-            .update_optimizer_layout(|layout| layout.with_beta1(beta1));
+            .learner_builder
+            .optimizer
+            .for_each_mut(|config| config.beta1 = beta1);
         self
     }
 
@@ -1111,7 +462,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `beta2` - Second-moment exponential decay coefficient.
     pub fn with_beta2(mut self, beta2: f64) -> Self {
         self.builder
-            .update_optimizer_layout(|layout| layout.with_beta2(beta2));
+            .learner_builder
+            .optimizer
+            .for_each_mut(|config| config.beta2 = beta2);
         self
     }
 
@@ -1122,7 +475,9 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `epsilon` - Small value added to the optimizer denominator for numerical stability.
     pub fn with_epsilon(mut self, epsilon: f64) -> Self {
         self.builder
-            .update_optimizer_layout(|layout| layout.with_epsilon(epsilon));
+            .learner_builder
+            .optimizer
+            .for_each_mut(|config| config.eps = epsilon);
         self
     }
 
@@ -1133,50 +488,22 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `weight_decay` - Decoupled weight-decay coefficient.
     pub fn with_weight_decay(mut self, weight_decay: f64) -> Self {
         self.builder
-            .update_optimizer_layout(|layout| layout.with_weight_decay(weight_decay));
+            .learner_builder
+            .optimizer
+            .for_each_mut(|config| config.weight_decay = weight_decay);
         self
     }
 
-    /// Uses one optimizer for the policy and value networks.
+    /// Replaces the complete optimizer configuration.
+    ///
+    /// Later optimizer setters update this configuration. In split mode, shared
+    /// setters update both optimizers; use `OptimizerConfig::Split` for independent settings.
     ///
     /// # Arguments
     ///
-    /// * `max_grad_norm` - Optional maximum gradient norm applied before each update.
-    /// * `params` - Adam optimizer parameters with decoupled weight decay shared by the policy
-    ///   and value networks.
-    pub fn with_joint(mut self, max_grad_norm: Option<f32>, params: AdamWParams) -> Self {
-        self.builder
-            .update_optimizer_layout(|_| OnPolicyOptimizerLayout::Joint {
-                max_grad_norm,
-                params,
-            });
-        self
-    }
-
-    /// Uses independent optimizers for the policy and value networks.
-    ///
-    /// # Arguments
-    ///
-    /// * `policy_max_grad_norm` - Optional maximum norm for policy gradients.
-    /// * `policy_params` - Adam optimizer parameters with decoupled weight decay for the policy
-    ///   network.
-    /// * `value_max_grad_norm` - Optional maximum norm for value-network gradients.
-    /// * `value_params` - Adam optimizer parameters with decoupled weight decay for the value
-    ///   network.
-    pub fn with_split(
-        mut self,
-        policy_max_grad_norm: Option<f32>,
-        policy_params: AdamWParams,
-        value_max_grad_norm: Option<f32>,
-        value_params: AdamWParams,
-    ) -> Self {
-        self.builder
-            .update_optimizer_layout(|_| OnPolicyOptimizerLayout::Split {
-                policy_max_grad_norm,
-                policy_params,
-                value_max_grad_norm,
-                value_params,
-            });
+    /// * `config` - Joint or split Adam optimizers, including schedules and gradient clipping.
+    pub fn with_optimizer(mut self, config: OptimizerConfig) -> Self {
+        self.builder.learner_builder.optimizer = config;
         self
     }
 
@@ -1184,9 +511,13 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// # Arguments
     ///
-    /// * `value_hidden_layers` - Hidden-layer widths in network order.
+    /// * `value_hidden_layers` - Dense hidden-layer widths, including the dense layers after a CNN.
     pub fn with_value_hidden_layers(mut self, value_hidden_layers: Vec<usize>) -> Self {
-        self.builder.value_hidden_layers = value_hidden_layers;
+        self.builder
+            .learner_builder
+            .value_network
+            .mlp_config_mut()
+            .hidden_layers = value_hidden_layers;
         self
     }
 
@@ -1196,16 +527,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `normalize_advantage` - Whether to normalize advantages before optimizer updates.
     pub fn with_normalize_advantage(mut self, normalize_advantage: bool) -> Self {
-        match &mut self.builder.algorithm_configuration {
-            AlgorithmConfiguration::Ppo {
-                normalize_advantage: configured,
-                ..
-            }
-            | AlgorithmConfiguration::A2C {
-                normalize_advantage: configured,
-                ..
-            } => *configured = Some(normalize_advantage),
-        }
+        self.builder.learning_hook.normalize_advantage = normalize_advantage;
         self
     }
 
@@ -1215,27 +537,36 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `entropy_coeff` - Multiplier applied to the entropy term.
     pub fn with_entropy_coefficient(mut self, entropy_coeff: f32) -> Self {
-        self.builder.entropy_coeff = entropy_coeff;
+        self.builder.learning_hook.entropy_coeff = entropy_coeff;
         self
     }
 
-    /// Sets the optional value-function loss coefficient.
+    /// Sets the value-function loss coefficient, which defaults to `1.0`.
     ///
     /// # Arguments
     ///
-    /// * `vf_coeff` - Value-loss multiplier, or `None` to use the unscaled loss.
-    pub fn with_value_loss_coefficient(mut self, vf_coeff: Option<f32>) -> Self {
-        self.builder.vf_coeff = vf_coeff;
+    /// * `vf_coeff` - Value-loss multiplier; `1.0` uses the unscaled loss.
+    pub fn with_value_loss_coefficient(mut self, vf_coeff: f32) -> Self {
+        self.builder.learning_hook.vf_coeff = vf_coeff;
         self
     }
 
-    /// Sets optional gradient-norm clipping in the algorithm hook.
+    /// Sets gradient clipping for every optimizer.
+    ///
+    /// Clipping is configured at build time and applied to gradients during updates.
+    /// In split mode, both optimizers receive this setting and clip independently.
+    /// The default is [`GradientClippingConfig::Disabled`].
     ///
     /// # Arguments
     ///
-    /// * `gradient_clipping` - Maximum gradient norm, or `None` to disable clipping.
-    pub fn with_gradient_clipping(mut self, gradient_clipping: Option<f32>) -> Self {
-        self.builder.gradient_clipping = gradient_clipping;
+    /// * `gradient_clipping` - Clipping mode; `Disabled` clears the optimizer's clipping.
+    pub fn with_gradient_clipping(mut self, gradient_clipping: GradientClippingConfig) -> Self {
+        self.builder
+            .learner_builder
+            .optimizer
+            .for_each_mut(|config| {
+                config.gradient_clipping = gradient_clipping;
+            });
         self
     }
 
@@ -1245,7 +576,16 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `log_progress` - Whether to print training progress.
     pub fn with_log_progress(mut self, log_progress: bool) -> Self {
-        self.builder.log_progress = log_progress;
+        match &mut self.builder.algo_config {
+            AlgoConfig::PPO {
+                log_progress: configured,
+                ..
+            }
+            | AlgoConfig::A2C {
+                log_progress: configured,
+                ..
+            } => *configured = log_progress,
+        }
         self
     }
 
@@ -1255,7 +595,14 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `gamma` - Discount factor used to compute returns.
     pub fn with_gamma(mut self, gamma: f32) -> Self {
-        self.builder.gamma = gamma;
+        match &mut self.builder.algo_config {
+            AlgoConfig::PPO {
+                gamma: configured, ..
+            }
+            | AlgoConfig::A2C {
+                gamma: configured, ..
+            } => *configured = gamma,
+        }
         self
     }
 
@@ -1265,7 +612,14 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     ///
     /// * `lambda` - Bias-variance tradeoff used by generalized advantage estimation.
     pub fn with_lambda(mut self, lambda: f32) -> Self {
-        self.builder.lambda = lambda;
+        match &mut self.builder.algo_config {
+            AlgoConfig::PPO {
+                lambda: configured, ..
+            }
+            | AlgoConfig::A2C {
+                lambda: configured, ..
+            } => *configured = lambda,
+        }
         self
     }
 
@@ -1274,91 +628,88 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// # Arguments
     ///
     /// * `sample_size` - Maximum number of transitions in each learning minibatch.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `sample_size` is zero.
     pub fn with_sample_size(mut self, sample_size: usize) -> Self {
-        self.builder.sample_size = sample_size;
+        let sample_size =
+            NonZeroUsize::new(sample_size).expect("sample size must be greater than zero");
+        match &mut self.builder.algo_config {
+            AlgoConfig::PPO {
+                sample_size: configured,
+                ..
+            }
+            | AlgoConfig::A2C {
+                sample_size: configured,
+                ..
+            } => *configured = sample_size,
+        }
         self
     }
 
     /// Builds the configured agent, sampler, and training lifecycle hooks.
     ///
+    /// The algorithm shares progress on its owning thread and is not `Send`.
+    /// For background training, move the builder to that thread before calling `build`.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the evaluation schedule cannot run before training ends or the
-    /// configured training algorithm cannot be constructed.
+    /// Returns an error if the configured training algorithm cannot be constructed.
     #[allow(clippy::type_complexity)]
     pub fn build(
         mut self,
     ) -> Result<OnPolicyAlgorithm<A, S, OnPolicyTrainingHooks<A, S, E>>, Error> {
-        self.builder.validate_evaluation_schedule()?;
-        self.builder.validate_clip_range_schedule()?;
-        #[cfg(feature = "simd")]
-        if self.builder.seed.is_some()
-            && matches!(
-                self.builder.backend_configuration,
-                BackendConfiguration::Burn(_)
-            )
-        {
-            return Err(Error::Unsupported {
-                operation: "seeded Burn training".into(),
-                details: "the `simd` feature does not provide bitwise reproducibility".into(),
-            });
-        }
+        let progress = self.builder.progress();
         if let Some(seed) = self.builder.seed {
-            set_seed(seed);
+            self.builder.backend_configuration.seed(seed)?;
         }
-        let agent = (self.config.build_agent)(&mut self.builder)?;
-        let sampler = (self.config.build_sampler)(&self.builder)?;
-        let hooks = self.builder.default_on_policy_hook()?;
-        Ok(OnPolicyAlgorithm::new(
-            OnPolicyRuntime { agent, sampler },
-            hooks,
-        ))
+        let agent = (self.config.build_agent)(&mut self.builder, progress.clone())?;
+        let sampler =
+            (self.config.build_sampler)(&self.builder.sampler_configuration, progress.clone())?;
+        let hooks = self.builder.hook_config.build(
+            &self.builder.sampler_configuration,
+            &self.builder.learner_builder.policy_config,
+            &self.builder.backend_configuration,
+            progress,
+        )?;
+        let runtime = OnPolicyRuntime::new(agent, sampler);
+        Ok(OnPolicyAlgorithm::new(runtime, hooks))
     }
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOCandle, S, E> {
-    /// Sets the random seed used when the algorithm is built.
-    ///
-    /// # Arguments
-    ///
-    /// * `seed` - Seed used to initialize the random number generators.
-    #[cfg(feature = "simd")]
-    pub fn with_seed(mut self, seed: u64) -> Self {
-        self.builder.seed = Some(seed);
-        self
-    }
-
     /// Uses Candle on `device` for PPO learning.
     ///
     /// # Arguments
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> Self {
-        self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
+        self.builder.backend_configuration = Backend::Candle(CandleBackend { device });
         self
     }
 
     /// Switches PPO learning to the default Burn backend.
-    pub fn with_burn(mut self) -> OnPolicyBuilder<PPOBurn<BurnBackend>, S, E> {
-        self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
+    pub fn with_burn(mut self) -> OnPolicyBuilder<PPOBurn, S, E> {
+        self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self.with_agent(Builder::ppo_burn_agent)
     }
 }
 
-impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOBurn<BurnBackend>, S, E> {
+impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOBurn, S, E> {
     /// Switches PPO learning to Candle on `device`.
     ///
     /// # Arguments
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<PPOCandle, S, E> {
-        self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
+        self.builder.backend_configuration = Backend::Candle(CandleBackend { device });
         self.with_agent(Builder::ppo_candle_agent)
     }
 
     /// Keeps PPO learning on the default Burn backend.
     pub fn with_burn(mut self) -> Self {
-        self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
+        self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self
     }
 }
@@ -1366,7 +717,7 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<PPOBurn<BurnBackend
 impl<M, S, E> OnPolicyBuilder<PPO<M, PPOLearningHook<M>>, S, E>
 where
     M: OnPolicyLearner,
-    M::InferencePolicy: ToSafetensors,
+    M::Policy: ToSafetensors,
     PPOLearningHook<M>: PPOHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
@@ -1377,12 +728,7 @@ where
     ///
     /// * `tx` - Channel sender that receives rollout statistics, or `None` to disable reporting.
     pub fn with_rollout_reporter(mut self, tx: Option<Sender<PPORolloutStats>>) -> Self {
-        let AlgorithmConfiguration::Ppo { reporter, .. } =
-            &mut self.builder.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        *reporter = tx;
+        self.builder.ppo_reporter = tx;
         self
     }
 
@@ -1391,15 +737,20 @@ where
     /// # Arguments
     ///
     /// * `total_epochs` - Maximum optimization epochs performed over each rollout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `total_epochs` is zero.
     pub fn with_total_epochs(mut self, total_epochs: usize) -> Self {
-        let AlgorithmConfiguration::Ppo {
+        let AlgoConfig::PPO {
             total_epochs: configured,
             ..
-        } = &mut self.builder.algorithm_configuration
+        } = &mut self.builder.algo_config
         else {
             unreachable!("PPO agent type must use PPO configuration")
         };
-        *configured = total_epochs;
+        *configured =
+            NonZeroUsize::new(total_epochs).expect("total epochs must be greater than zero");
         self
     }
 
@@ -1409,10 +760,10 @@ where
     ///
     /// * `target_kl` - KL-divergence threshold, or `None` to disable early stopping.
     pub fn with_target_kl(mut self, target_kl: Option<f32>) -> Self {
-        let AlgorithmConfiguration::Ppo {
+        let AlgoConfig::PPO {
             target_kl: configured,
             ..
-        } = &mut self.builder.algorithm_configuration
+        } = &mut self.builder.algo_config
         else {
             unreachable!("PPO agent type must use PPO configuration")
         };
@@ -1425,16 +776,8 @@ where
     /// # Arguments
     ///
     /// * `clip_range` - Maximum allowed deviation of the policy ratio from `1.0`.
-    pub fn with_clip_range(mut self, clip_range: f32) -> Self {
-        let AlgorithmConfiguration::Ppo {
-            clip_range_schedule,
-            ..
-        } = &mut self.builder.algorithm_configuration
-        else {
-            unreachable!("PPO agent type must use PPO configuration")
-        };
-        *clip_range_schedule = ClipRangeSchedule::Constant(clip_range);
-        self
+    pub fn with_clip_range(self, clip_range: f32) -> Self {
+        self.with_clip_range_schedule(ClipRangeSchedule::Constant(clip_range))
     }
 
     /// Sets the PPO policy-ratio clipping schedule.
@@ -1443,10 +786,10 @@ where
     ///
     /// * `clip_range_schedule` - Schedule applied to the clipping range as training progresses.
     pub fn with_clip_range_schedule(mut self, clip_range_schedule: ClipRangeSchedule) -> Self {
-        let AlgorithmConfiguration::Ppo {
+        let AlgoConfig::PPO {
             clip_range_schedule: configured,
             ..
-        } = &mut self.builder.algorithm_configuration
+        } = &mut self.builder.algo_config
         else {
             unreachable!("PPO agent type must use PPO configuration")
         };
@@ -1456,48 +799,37 @@ where
 }
 
 impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CCandle, S, E> {
-    /// Sets the random seed used when the algorithm is built.
-    ///
-    /// # Arguments
-    ///
-    /// * `seed` - Seed used to initialize the random number generators.
-    #[cfg(feature = "simd")]
-    pub fn with_seed(mut self, seed: u64) -> Self {
-        self.builder.seed = Some(seed);
-        self
-    }
-
     /// Uses Candle on `device` for A2C learning.
     ///
     /// # Arguments
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> Self {
-        self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
+        self.builder.backend_configuration = Backend::Candle(CandleBackend { device });
         self
     }
 
     /// Switches A2C learning to the default Burn backend.
-    pub fn with_burn(mut self) -> OnPolicyBuilder<A2CBurn<BurnBackend>, S, E> {
-        self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
+    pub fn with_burn(mut self) -> OnPolicyBuilder<A2CBurn, S, E> {
+        self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self.with_agent(Builder::a2c_burn_agent)
     }
 }
 
-impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CBurn<BurnBackend>, S, E> {
+impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CBurn, S, E> {
     /// Switches A2C learning to Candle on `device`.
     ///
     /// # Arguments
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<A2CCandle, S, E> {
-        self.builder.backend_configuration = BackendConfiguration::Candle(CandleBackend { device });
+        self.builder.backend_configuration = Backend::Candle(CandleBackend { device });
         self.with_agent(Builder::a2c_candle_agent)
     }
 
     /// Keeps A2C learning on the default Burn backend.
     pub fn with_burn(mut self) -> Self {
-        self.builder.backend_configuration = BackendConfiguration::Burn(BurnBackendConfig);
+        self.builder.backend_configuration = Backend::Burn(BurnBackendConfig);
         self
     }
 }
@@ -1505,7 +837,7 @@ impl<S: Sampler, E: Env<Tensor = S::Tensor>> OnPolicyBuilder<A2CBurn<BurnBackend
 impl<M, S, E> OnPolicyBuilder<A2C<M, A2CLearningHook<M>>, S, E>
 where
     M: OnPolicyLearner,
-    M::InferencePolicy: ToSafetensors,
+    M::Policy: ToSafetensors,
     A2CLearningHook<M>: A2CHook<M>,
     S: Sampler,
     E: Env<Tensor = S::Tensor>,
@@ -1516,12 +848,7 @@ where
     ///
     /// * `tx` - Channel sender that receives rollout statistics, or `None` to disable reporting.
     pub fn with_rollout_reporter(mut self, tx: Option<Sender<A2CRolloutStats>>) -> Self {
-        let AlgorithmConfiguration::A2C { reporter, .. } =
-            &mut self.builder.algorithm_configuration
-        else {
-            unreachable!("A2C agent type must use A2C configuration")
-        };
-        *reporter = tx;
+        self.builder.a2c_reporter = tx;
         self
     }
 }
@@ -1534,15 +861,20 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     /// # Arguments
     ///
     /// * `rollout_steps` - Number of steps collected from each environment per rollout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rollout_steps` is zero.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
-        let SamplerConfiguration::DirectStep {
+        let SamplerSetup::DirectStep {
             rollout_steps: configured,
             ..
-        } = &mut self.builder.sampler_configuration
+        } = &mut self.builder.sampler_configuration.setup
         else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
-        *configured = rollout_steps;
+        *configured =
+            NonZeroUsize::new(rollout_steps).expect("rollout steps must be greater than zero");
         self
     }
 
@@ -1553,59 +885,34 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     /// * `gamma` - Discount factor used to track discounted returns.
     /// * `clip_reward` - Absolute limit applied to normalized rewards.
     pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
-        let SamplerConfiguration::DirectStep {
-            reward_normalizer, ..
-        } = &mut self.builder.sampler_configuration
-        else {
-            unreachable!("direct step-bound sampler type must use matching configuration")
-        };
-        *reward_normalizer = Some(RewardNormalizer::new(
-            self.builder.n_envs,
-            gamma,
-            clip_reward,
-        ));
+        self.builder
+            .sampler_configuration
+            .set_reward_normalizer(gamma, clip_reward);
         self
     }
 
-    /// Selects staged sampling and optionally enables clipped observation normalization.
+    /// Selects staged sampling and configures observation normalization.
     ///
-    /// `Some(clip)` enables normalization with that clipping limit. `None`
-    /// retains staged sampling without applying an observation normalizer.
+    /// Enabled normalization can optionally clip the normalized values. Disabled
+    /// normalization retains staged sampling without applying a normalizer.
     ///
     /// # Arguments
     ///
-    /// * `obs_clip` - Absolute clipping limit, or `None` to keep observations unnormalized.
+    /// * `config` - Whether to normalize observations and the optional absolute clipping limit.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an error if an observation normalizer cannot be constructed.
+    /// Panics if the tensor backend cannot create the normalization statistics.
     #[allow(clippy::type_complexity)]
     pub fn with_observation_normalizer(
         mut self,
-        obs_clip: Option<f32>,
-    ) -> Result<OnPolicyBuilder<A, StagedSampler<E, StepBoundHook<E>>, E>, Error> {
-        let obs_normalizer = obs_clip
-            .map(|clip| {
-                ClippedNormalizer::build(
-                    NormalizerMode::Update,
-                    clip,
-                    vec![self.builder.env_desription.observation_space.size()],
-                )
-            })
-            .transpose()?;
-        let SamplerConfiguration::DirectStep {
-            rollout_steps,
-            reward_normalizer,
-        } = self.builder.sampler_configuration
-        else {
-            unreachable!("direct step-bound sampler type must use matching configuration")
-        };
-        self.builder.sampler_configuration = SamplerConfiguration::StagedStep {
-            rollout_steps,
-            reward_normalizer,
-            obs_normalizer,
-        };
-        Ok(self.with_sampler(Builder::staged_sampler_step_bound))
+        config: ObsNormalizerConfig,
+    ) -> OnPolicyBuilder<A, StagedSampler<E, StepBoundHook<E>>, E> {
+        self.builder.sampler_configuration = self
+            .builder
+            .sampler_configuration
+            .with_observation_normalizer(config);
+        self.with_sampler(SamplerConfiguration::staged_sampler_step_bound)
     }
 
     /// Selects direct sampling bounded by completed episodes per environment.
@@ -1614,16 +921,21 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     ///
     /// * `rollout_episodes` - Number of completed episodes collected from each environment per
     ///   rollout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rollout_episodes` is zero.
     pub fn with_rollout_episodes(
         mut self,
         rollout_episodes: usize,
     ) -> OnPolicyBuilder<A, DirectSampler<E, EpisodeBoundHook<E>>, E> {
-        let SamplerConfiguration::DirectStep { .. } = self.builder.sampler_configuration else {
+        let SamplerSetup::DirectStep { .. } = self.builder.sampler_configuration.setup else {
             unreachable!("direct step-bound sampler type must use matching configuration")
         };
-        self.builder.sampler_configuration =
-            SamplerConfiguration::DirectEpisode { rollout_episodes };
-        self.with_sampler(Builder::direct_sampler_episode_bound)
+        let rollout_episodes = NonZeroUsize::new(rollout_episodes)
+            .expect("rollout episodes must be greater than zero");
+        self.builder.sampler_configuration.setup = SamplerSetup::DirectEpisode { rollout_episodes };
+        self.with_sampler(SamplerConfiguration::direct_sampler_episode_bound)
     }
 }
 
@@ -1635,15 +947,20 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     /// # Arguments
     ///
     /// * `rollout_steps` - Number of steps collected from each environment per rollout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rollout_steps` is zero.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
-        let SamplerConfiguration::StagedStep {
+        let SamplerSetup::StagedStep {
             rollout_steps: configured,
             ..
-        } = &mut self.builder.sampler_configuration
+        } = &mut self.builder.sampler_configuration.setup
         else {
             unreachable!("staged step-bound sampler type must use matching configuration")
         };
-        *configured = rollout_steps;
+        *configured =
+            NonZeroUsize::new(rollout_steps).expect("rollout steps must be greater than zero");
         self
     }
 
@@ -1654,17 +971,9 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env>
     /// * `gamma` - Discount factor used to track discounted returns.
     /// * `clip_reward` - Absolute limit applied to normalized rewards.
     pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
-        let SamplerConfiguration::StagedStep {
-            reward_normalizer, ..
-        } = &mut self.builder.sampler_configuration
-        else {
-            unreachable!("staged step-bound sampler type must use matching configuration")
-        };
-        *reward_normalizer = Some(RewardNormalizer::new(
-            self.builder.n_envs,
-            gamma,
-            clip_reward,
-        ));
+        self.builder
+            .sampler_configuration
+            .set_reward_normalizer(gamma, clip_reward);
         self
     }
 }
@@ -1692,22 +1001,25 @@ impl<E: Env> PPOBuilder<E> {
         Self::configured(
             env_builder,
             num_envs,
-            AlgorithmConfiguration::Ppo {
-                normalize_advantage: None,
-                total_epochs: 10,
+            AlgoConfig::PPO {
+                gamma: 0.98,
+                lambda: 0.8,
+                sample_size: NonZeroUsize::new(64).unwrap(),
+                total_epochs: NonZeroUsize::new(10).unwrap(),
                 target_kl: None,
                 clip_range_schedule: ClipRangeSchedule::Constant(0.2),
-                reporter: None,
+                log_progress: true,
             },
-            BackendConfiguration::Candle(CandleBackend {
+            Backend::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
-            SamplerConfiguration::DirectStep {
-                rollout_steps: 1024,
+            SamplerSetup::DirectStep {
+                rollout_steps: NonZeroUsize::new(1024).unwrap(),
                 reward_normalizer: None,
             },
+            true,
             Builder::ppo_candle_agent,
-            Builder::direct_sampler_step_bound,
+            SamplerConfiguration::direct_sampler_step_bound,
         )
     }
 }
@@ -1729,19 +1041,22 @@ impl<E: Env> A2CBuilder<E> {
         Self::configured(
             env_builder,
             num_envs,
-            AlgorithmConfiguration::A2C {
-                normalize_advantage: None,
-                reporter: None,
+            AlgoConfig::A2C {
+                gamma: 0.98,
+                lambda: 0.8,
+                sample_size: NonZeroUsize::new(64).unwrap(),
+                log_progress: true,
             },
-            BackendConfiguration::Candle(CandleBackend {
+            Backend::Candle(CandleBackend {
                 device: Device::Cpu,
             }),
-            SamplerConfiguration::DirectStep {
-                rollout_steps: 1024,
+            SamplerSetup::DirectStep {
+                rollout_steps: NonZeroUsize::new(1024).unwrap(),
                 reward_normalizer: None,
             },
+            true,
             Builder::a2c_candle_agent,
-            Builder::direct_sampler_step_bound,
+            SamplerConfiguration::direct_sampler_step_bound,
         )
     }
 }

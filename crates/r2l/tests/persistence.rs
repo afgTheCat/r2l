@@ -2,8 +2,8 @@ use std::path::Path;
 
 use r2l::{
     Env, EnvDescription, EvaluationSettings, InferenceEnv, InferencePolicy, InferenceRunner,
-    PPOBuilder, SamplerExecutionMode, Snapshot, Space, TrainingArtifactsConfig, TrainingLimit,
-    VecTensor,
+    ObsNormalizerConfig, PPOBuilder, SamplerExecutionMode, Snapshot, Space,
+    TrainingArtifactsConfig, TrainingLimit, VecTensor,
 };
 use r2l_core::{error::Error, tensor::R2lTensor};
 use tempfile::TempDir;
@@ -33,7 +33,8 @@ impl Env for TinyEnv {
             Space::Box {
                 min: None,
                 max: None,
-                shape: vec![2],
+                // Keep flat storage while exercising multidimensional network metadata.
+                shape: vec![1, 2].into(),
             },
             Space::Discrete(2),
         )
@@ -63,6 +64,12 @@ fn artifact_config(path: &Path) -> TrainingArtifactsConfig {
 
 fn assert_artifacts_exist(path: &Path, normalized: bool) {
     assert!(path.join("inference.yaml").is_file());
+    let config: yaml_serde::Value =
+        yaml_serde::from_str(&std::fs::read_to_string(path.join("inference.yaml")).unwrap())
+            .unwrap();
+    let space: Space<VecTensor> =
+        yaml_serde::from_value(config["policy_builder"]["observation_space"].clone()).unwrap();
+    assert_eq!(space.observation_shape().dims(), &[1, 2]);
     assert!(path.join("actor.safetensors").is_file());
     assert_eq!(path.join("normalizer.yaml").is_file(), normalized);
 }
@@ -139,8 +146,7 @@ fn observation_normalizer_round_trips_with_policy() {
         .unwrap()
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_rollout_steps(4)
-        .with_observation_normalizer(Some(10.0))
-        .unwrap()
+        .with_observation_normalizer(ObsNormalizerConfig::Enabled { clip: Some(10.0) })
         .with_training_limit(TrainingLimit::rollouts(1))
         .with_policy_hidden_layers(vec![4])
         .with_sample_size(4)

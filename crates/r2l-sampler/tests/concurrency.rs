@@ -41,7 +41,7 @@ impl Env for CoordinatedEnv {
             Space::Box {
                 min: None,
                 max: None,
-                shape: vec![1],
+                shape: vec![1].into(),
             },
             Space::Discrete(1),
         )
@@ -73,7 +73,7 @@ impl DirectSamplerHook for OneStep {
             SamplerHookResult::Stop
         } else {
             self.0 = true;
-            SamplerHookResult::Bound(RolloutMode::StepBound { n_steps: 1 })
+            SamplerHookResult::Bound(RolloutMode::step_bound(1))
         }
     }
 }

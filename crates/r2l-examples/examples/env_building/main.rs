@@ -26,7 +26,7 @@ impl Env for MyEnv {
         let observation_space = Space::Box {
             min: None,
             max: None,
-            shape: vec![2],
+            shape: vec![2].into(),
         };
         let action_space = Space::Discrete(2);
         EnvDescription::new(observation_space, action_space)

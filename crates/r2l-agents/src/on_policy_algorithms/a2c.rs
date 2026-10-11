@@ -4,9 +4,7 @@ use r2l_core::{
     buffers::TrajectoryBatch,
     error::Result,
     models::{Learner, Policy},
-    on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
-    },
+    on_policy::{algorithm::Agent, learning_module::OnPolicyLearner, losses::PolicyValueLosses},
     tensor::R2lTensor,
 };
 
@@ -40,9 +38,9 @@ impl Default for A2CParams {
 /// Per-minibatch data exposed to [`A2CHook::batch_hook`].
 pub struct A2CBatchData<T: R2lTensor> {
     /// Sampled observations in the minibatch.
-    pub observations: Vec<T>,
+    pub observations: T,
     /// Sampled actions in the minibatch.
-    pub actions: Vec<T>,
+    pub actions: T,
     /// Policy log-probabilities for the sampled actions.
     pub logp: T,
     /// Value-function predictions for the sampled observations.
@@ -56,7 +54,7 @@ pub trait A2CHook<M: OnPolicyLearner> {
     /// # Errors
     ///
     /// Returns an error if the hook cannot complete.
-    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn before_learning_hook<B: TrajectoryBatch<M::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
         _module: &mut M,
@@ -77,7 +75,7 @@ pub trait A2CHook<M: OnPolicyLearner> {
         _params: &mut A2CParams,
         _module: &mut M,
         _losses: &mut <M as Learner>::Losses,
-        _data: &A2CBatchData<M::LearningTensor>,
+        _data: &A2CBatchData<M::Tensor>,
     ) -> Result<HookResult> {
         Ok(HookResult::Continue)
     }
@@ -87,7 +85,7 @@ pub trait A2CHook<M: OnPolicyLearner> {
     /// # Errors
     ///
     /// Returns an error if the hook cannot complete.
-    fn after_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn after_learning_hook<B: TrajectoryBatch<M::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
         _module: &mut M,
@@ -120,7 +118,7 @@ impl A2CObjective {
 }
 
 impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
-    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::Tensor>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -132,14 +130,17 @@ impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
             let Some(indices) = batch_indices.next_batch() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(batches, &indices, Module::lifter);
+            let (observations, actions) =
+                sample(batches, &indices, Module::prepare_learning_tensor)?;
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
             let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
-            let logp = lm.policy().log_probs(&observations, &actions)?;
-            let values_pred = lm.values(&observations)?;
+            let logp = lm
+                .policy()
+                .log_probs(observations.clone(), actions.clone())?;
+            let values_pred = lm.values(observations.clone())?;
             let policy_loss = A2CObjective::policy_loss(&advantages, &logp)?;
             let value_loss = A2CObjective::value_loss(&returns, &values_pred)?;
-            let mut losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
+            let mut losses = PolicyValueLosses::new(policy_loss, value_loss);
             let a2c_data = A2CBatchData {
                 observations,
                 actions,
@@ -161,16 +162,13 @@ impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
     /// # Errors
     ///
     /// Returns an error if tensor computation, a hook, or the optimizer update fails.
-    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
-        &mut self,
-        batches: &[B],
-    ) -> Result<()> {
+    pub fn learn<B: TrajectoryBatch<Module::Tensor>>(&mut self, batches: &[B]) -> Result<()> {
         let (mut advantages, mut returns) = batches_advantages_and_returns(
             batches,
             &self.lm,
             self.params.gamma,
             self.params.lambda,
-            Module::lifter,
+            Module::prepare_learning_tensor,
         )?;
         r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
             &mut self.params,
@@ -190,8 +188,8 @@ impl<Module: OnPolicyLearner, Hooks: A2CHook<Module>> A2C<Module, Hooks> {
 }
 
 impl<M: OnPolicyLearner, H: A2CHook<M>> Agent for A2C<M, H> {
-    type Tensor = M::InferenceTensor;
-    type Actor = M::InferencePolicy;
+    type Tensor = M::Tensor;
+    type Actor = M::Policy;
 
     fn actor(&self) -> Self::Actor {
         self.lm.inference_policy()

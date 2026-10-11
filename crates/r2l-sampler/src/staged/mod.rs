@@ -1,6 +1,6 @@
 mod worker;
 
-use std::sync::Arc;
+use std::{num::NonZeroUsize, sync::Arc};
 
 use bimodal_array::{ArrayHandle, bimodal_array, bimodal_array_with_factory};
 use itertools::Itertools;
@@ -8,7 +8,7 @@ use r2l_core::{
     buffers::buffer::{TrajectoryBuffer, TrajectoryView},
     env::{
         Env, EnvBuilder, EnvBuilderType,
-        normalizer::{ClippedNormalizer, NormalizerMode},
+        normalizer::{Normalizer, NormalizerMode},
     },
     error::Result,
     models::Actor,
@@ -40,7 +40,7 @@ pub trait StagedSamplerHook {
 /// Mutable staged-sampler state exposed to hook implementations.
 pub struct StagedSamplerCore<E: Env> {
     pool: WorkerPool<E>,
-    obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+    obs_normalizer: Option<Normalizer<E::Tensor>>,
     last_states: ArrayHandle<E::Tensor>,
     buffers: Vec<TrajectoryBuffer<E::Tensor>>,
 }
@@ -60,13 +60,14 @@ impl<E: Env> StagedSamplerCore<E> {
     /// # Errors
     ///
     /// Returns an error if the initial observations cannot be normalized.
-    pub fn build<EB: EnvBuilder<Env = E>>(
-        env_builder: &EnvBuilderType<EB>,
+    pub fn build(
+        env_builder: &EnvBuilderType<E>,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
-        let num_envs = env_builder.num_envs();
-        let buffers = vec![TrajectoryBuffer::default(); num_envs];
+        let num_envs =
+            NonZeroUsize::new(env_builder.num_envs()).expect("environment builders are nonempty");
+        let buffers = vec![TrajectoryBuffer::default(); num_envs.get()];
         let (mut last_states, pool) = match execution_mode {
             SamplerExecutionMode::SingleThreaded => Self::build_vec_workers(env_builder, num_envs),
             SamplerExecutionMode::MultiThreaded => {
@@ -85,13 +86,13 @@ impl<E: Env> StagedSamplerCore<E> {
         })
     }
 
-    fn build_vec_workers<EB: EnvBuilder<Env = E>>(
-        env_builder: &EnvBuilderType<EB>,
-        num_envs: usize,
+    fn build_vec_workers(
+        env_builder: &EnvBuilderType<E>,
+        num_envs: NonZeroUsize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
-        let mut envs = Vec::with_capacity(num_envs);
-        let mut initial_states = Vec::with_capacity(num_envs);
-        for env_idx in 0..num_envs {
+        let mut envs = Vec::with_capacity(num_envs.get());
+        let mut initial_states = Vec::with_capacity(num_envs.get());
+        for env_idx in 0..num_envs.get() {
             let mut env = env_builder.build_idx(env_idx).unwrap();
             let state = env.reset(sample_u64()).unwrap();
             initial_states.push(state.clone());
@@ -102,12 +103,12 @@ impl<E: Env> StagedSamplerCore<E> {
         (last_states, WorkerPool::Vec(VecWorkers::new(workers)))
     }
 
-    fn build_thread_workers<EB: EnvBuilder<Env = E>>(
-        env_builder: &EnvBuilderType<EB>,
-        num_envs: usize,
+    fn build_thread_workers(
+        env_builder: &EnvBuilderType<E>,
+        num_envs: NonZeroUsize,
     ) -> (ArrayHandle<E::Tensor>, WorkerPool<E>) {
-        let mut worker_handles = Vec::with_capacity(num_envs);
-        let factories = (0..num_envs)
+        let mut worker_handles = Vec::with_capacity(num_envs.get());
+        let factories = (0..num_envs.get())
             .map(|idx| {
                 let (command_tx, command_rx) = crossbeam::channel::unbounded();
                 let (result_tx, result_rx) = crossbeam::channel::unbounded();
@@ -130,7 +131,7 @@ impl<E: Env> StagedSamplerCore<E> {
     pub fn collect(&mut self, bound: RolloutMode) -> Result<()> {
         match bound {
             RolloutMode::StepBound { n_steps } => {
-                for _ in 0..n_steps {
+                for _ in 0..n_steps.get() {
                     self.step()?;
                 }
             }
@@ -139,7 +140,7 @@ impl<E: Env> StagedSamplerCore<E> {
                 loop {
                     let worker_idxs = episode_counts
                         .iter()
-                        .positions(|count| *count < n_episodes)
+                        .positions(|count| *count < n_episodes.get())
                         .collect::<Vec<_>>();
                     if worker_idxs.is_empty() {
                         break;
@@ -237,8 +238,8 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     }
 
     /// Returns the shared observation normalizer, when configured.
-    pub fn obs_normalizer(&self) -> Option<&ClippedNormalizer<E::Tensor>> {
-        self.core.obs_normalizer.as_ref()
+    pub fn obs_normalizer(&self) -> Option<Normalizer<E::Tensor>> {
+        self.core.obs_normalizer.as_ref().cloned()
     }
 
     /// Builds a sampler with an existing shared observation normalizer.
@@ -246,18 +247,20 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
     /// # Errors
     ///
     /// Returns an error if the staged sampler core cannot be initialized.
-    pub fn build_with_obs_normalizer<EB: EnvBuilder<Env = E>>(
-        env_builder: &EnvBuilderType<EB>,
+    pub fn build_with_obs_normalizer(
+        env_builder: &EnvBuilderType<E>,
         hook: H,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
         Ok(Self {
             core: StagedSamplerCore::build(env_builder, execution_mode, obs_normalizer)?,
             hook,
         })
     }
+}
 
+impl<E: Env<Tensor: R2lTensor> + 'static, H: StagedSamplerHook<E = E>> StagedSampler<E, H> {
     /// Builds a homogeneous sampler from a shared environment builder.
     ///
     /// # Errors
@@ -268,14 +271,10 @@ impl<E: Env<Tensor: R2lTensor>, H: StagedSamplerHook<E = E>> StagedSampler<E, H>
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Option<ClippedNormalizer<E::Tensor>>,
-    ) -> Result<Self>
-    where
-        E: 'static,
-    {
-        let env_builder = move || env_builder.build_env();
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
+    ) -> Result<Self> {
         Self::build_with_obs_normalizer(
-            &EnvBuilderType::homogeneous(env_builder, num_envs)?,
+            &EnvBuilderType::homogeneous_shared(env_builder, num_envs)?,
             hook,
             execution_mode,
             obs_normalizer,

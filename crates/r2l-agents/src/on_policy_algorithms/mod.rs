@@ -13,6 +13,8 @@ pub mod ppo;
 /// Vanilla Policy Gradient implementation.
 pub mod vpg;
 
+use std::num::NonZeroUsize;
+
 use derive_more::Deref;
 use r2l_core::{
     buffers::TrajectoryBatch,
@@ -89,17 +91,12 @@ impl Logps {
     }
 }
 
-fn batch_advantages_and_returns<
-    T1: R2lTensor,
-    T2: R2lTensor,
-    B: TrajectoryBatch<T1>,
-    L: Fn(&T1) -> T2,
->(
+fn batch_advantages_and_returns<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
     batch: &B,
-    value_func: &impl ValueFunction<Tensor = T2>,
+    value_func: &impl ValueFunction<Tensor = T>,
     gamma: f32,
     lambda: f32,
-    lifter: L,
+    prepare_tensor: L,
 ) -> Result<(Vec<f32>, Vec<f32>)> {
     if batch.is_empty() {
         return Err(TensorError::EmptyInput {
@@ -107,10 +104,18 @@ fn batch_advantages_and_returns<
         }
         .into());
     }
-    let states = batch.states().iter().map(&lifter).collect::<Vec<_>>();
-    let next_states = batch.next_states().iter().map(&lifter).collect::<Vec<_>>();
-    let values: Vec<f32> = value_func.values(&states)?.to_vec()?;
-    let next_values: Vec<f32> = value_func.values(&next_states)?.to_vec()?;
+    let states = batch
+        .states()
+        .iter()
+        .map(&prepare_tensor)
+        .collect::<Vec<_>>();
+    let next_states = batch
+        .next_states()
+        .iter()
+        .map(&prepare_tensor)
+        .collect::<Vec<_>>();
+    let values: Vec<f32> = value_func.values(T::cat(&states, 0)?)?.to_vec()?;
+    let next_values: Vec<f32> = value_func.values(T::cat(&next_states, 0)?)?.to_vec()?;
     let total_steps = batch.rewards().len();
     let mut advantages: Vec<f32> = vec![0.; total_steps];
     let mut returns: Vec<f32> = vec![0.; total_steps];
@@ -134,42 +139,40 @@ fn batch_advantages_and_returns<
 /// # Errors
 ///
 /// Returns an error if value inference fails.
-pub fn batches_advantages_and_returns<
-    T1: R2lTensor,
-    T2: R2lTensor,
-    B: TrajectoryBatch<T1>,
-    L: Fn(&T1) -> T2,
->(
+pub fn batches_advantages_and_returns<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
     batches: &[B],
-    value_func: &impl ValueFunction<Tensor = T2>,
+    value_func: &impl ValueFunction<Tensor = T>,
     gamma: f32,
     lambda: f32,
-    lifter: L,
+    prepare_tensor: L,
 ) -> Result<(Advantages, Returns)> {
     let mut advantage_vec = vec![];
     let mut returns_vec = vec![];
     for batch in batches {
         let (advantages, returns) =
-            batch_advantages_and_returns(batch, value_func, gamma, lambda, &lifter)?;
+            batch_advantages_and_returns(batch, value_func, gamma, lambda, &prepare_tensor)?;
         advantage_vec.push(advantages);
         returns_vec.push(returns);
     }
     Ok((Advantages(advantage_vec), Returns(returns_vec)))
 }
 
-/// Samples and converts observations and actions at the supplied batch indices.
-pub fn sample<T1: R2lTensor, T2: R2lTensor, B: TrajectoryBatch<T1>, L: Fn(&T1) -> T2>(
+/// Samples and concatenates observation/action rows at the supplied batch indices.
+///
+/// # Errors
+/// Returns an error if rows cannot be concatenated into nonempty batches.
+pub fn sample<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
     batches: &[B],
     indices: &[(usize, usize)],
-    lifter: L,
-) -> (Vec<T2>, Vec<T2>) {
+    prepare_tensor: L,
+) -> Result<(T, T)> {
     let mut observations = vec![];
     let mut actions = vec![];
     for (batch_idx, idx) in indices {
-        observations.push(lifter(&batches[*batch_idx].states()[*idx]));
-        actions.push(lifter(&batches[*batch_idx].actions()[*idx]));
+        observations.push(prepare_tensor(&batches[*batch_idx].states()[*idx]));
+        actions.push(prepare_tensor(&batches[*batch_idx].actions()[*idx]));
     }
-    (observations, actions)
+    Ok((T::cat(&observations, 0)?, T::cat(&actions, 0)?))
 }
 
 /// Computes action log-probabilities for every transition in each batch.
@@ -184,7 +187,7 @@ pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
     let mut logps = vec![];
     for batch in batches {
         let logp = policy
-            .log_probs(batch.states(), batch.actions())?
+            .log_probs(T::cat(batch.states(), 0)?, T::cat(batch.actions(), 0)?)?
             .to_vec()?;
         logps.push(logp);
     }
@@ -194,13 +197,19 @@ pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
 /// Shuffled minibatch-index cursor spanning multiple trajectory batches.
 pub struct ShuffledBatchIndices {
     indices: Vec<(usize, usize)>,
-    sample_size: usize,
+    sample_size: NonZeroUsize,
     current: usize,
 }
 
 impl ShuffledBatchIndices {
     /// Creates a shuffled index cursor whose chunks contain at most `sample_size` items.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `sample_size` is zero.
     pub fn new<T: R2lTensor, B: TrajectoryBatch<T>>(batches: &[B], sample_size: usize) -> Self {
+        let sample_size =
+            NonZeroUsize::new(sample_size).expect("sample size must be greater than zero");
         let mut indices = (0..batches.len())
             .flat_map(|i| {
                 let batch = &batches[i];
@@ -221,7 +230,7 @@ impl ShuffledBatchIndices {
         if self.current >= total_size {
             return None;
         }
-        let batch_end = (self.current + self.sample_size).min(total_size);
+        let batch_end = (self.current + self.sample_size.get()).min(total_size);
         let batch_indices = &self.indices[self.current..batch_end];
         self.current = batch_end;
         Some(batch_indices.to_owned())

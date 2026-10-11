@@ -4,9 +4,7 @@ use r2l_core::{
     buffers::TrajectoryBatch,
     error::Result,
     models::Policy,
-    on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
-    },
+    on_policy::{algorithm::Agent, learning_module::OnPolicyLearner, losses::PolicyValueLosses},
     tensor::R2lTensor,
 };
 
@@ -43,7 +41,7 @@ pub struct VPG<Module: OnPolicyLearner> {
 }
 
 impl<Module: OnPolicyLearner> VPG<Module> {
-    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::Tensor>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -55,14 +53,17 @@ impl<Module: OnPolicyLearner> VPG<Module> {
             let Some(indices) = batch_indices.next_batch() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(batches, &indices, Module::lifter);
+            let (observations, actions) =
+                sample(batches, &indices, Module::prepare_learning_tensor)?;
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
             let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
-            let logp = lm.policy().log_probs(&observations, &actions)?;
-            let values_pred = lm.values(&observations)?;
+            let logp = lm
+                .policy()
+                .log_probs(observations.clone(), actions.clone())?;
+            let values_pred = lm.values(observations.clone())?;
             let policy_loss = advantages.mul(&logp)?.neg()?.mean()?;
             let value_loss = returns.sub(&values_pred)?.sqr()?.mean()?;
-            let losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
+            let losses = PolicyValueLosses::new(policy_loss, value_loss);
             lm.update(losses)?;
         }
     }
@@ -72,16 +73,13 @@ impl<Module: OnPolicyLearner> VPG<Module> {
     /// # Errors
     ///
     /// Returns an error if tensor computation or the optimizer update fails.
-    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
-        &mut self,
-        batches: &[B],
-    ) -> Result<()> {
+    pub fn learn<B: TrajectoryBatch<Module::Tensor>>(&mut self, batches: &[B]) -> Result<()> {
         let (advantages, returns) = batches_advantages_and_returns(
             batches,
             &self.lm,
             self.params.gamma,
             self.params.lambda,
-            Module::lifter,
+            Module::prepare_learning_tensor,
         )?;
         self.batch_loop(batches, &advantages, &returns)?;
         Ok(())
@@ -89,8 +87,8 @@ impl<Module: OnPolicyLearner> VPG<Module> {
 }
 
 impl<M: OnPolicyLearner> Agent for VPG<M> {
-    type Tensor = M::InferenceTensor;
-    type Actor = M::InferencePolicy;
+    type Tensor = M::Tensor;
+    type Actor = M::Policy;
 
     fn actor(&self) -> Self::Actor {
         self.lm.inference_policy()
