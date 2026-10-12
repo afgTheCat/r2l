@@ -9,6 +9,9 @@
 //!
 //! The Gymnasium integration is available through the opt-in `gym` feature. It
 //! requires Python 3.11 or newer with the `gymnasium` package installed.
+//! For custom Python integrations, the `python` feature enables conversion of
+//! PyO3 errors into [`Error`] via `?`, without enabling Gymnasium. Applications
+//! choose their own Python initialization and ABI settings.
 //!
 //! ```no_run
 //! use r2l::PPOBuilder;

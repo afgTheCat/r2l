@@ -149,6 +149,11 @@ pub struct EnvironmentError {
 /// Reason a tensor operation failed.
 #[derive(Debug, thiserror::Error)]
 pub enum TensorError {
+    /// A failure reported by the Candle backend.
+    #[cfg(feature = "candle")]
+    #[error(transparent)]
+    Candle(#[from] candle_core::Error),
+
     /// An operation received an invalid axis, range, or dimension.
     #[error("invalid argument for tensor operation `{operation}`: {details}")]
     InvalidArgument {
@@ -236,6 +241,15 @@ pub struct ResourceInterrupted {
 /// Errors shared by the `r2l` workspace.
 #[derive(thiserror::Error)]
 pub enum Error {
+    /// An input or output operation failed.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    /// A failure reported by Python.
+    #[cfg(feature = "python")]
+    #[error(transparent)]
+    Python(#[from] pyo3::PyErr),
+
     /// A supplied parameter is invalid.
     #[error("invalid parameter: {0}")]
     InvalidParameter(#[source] Box<InvalidParameterError>),

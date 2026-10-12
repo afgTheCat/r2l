@@ -1,14 +1,13 @@
 use pyo3::{
-    Bound, FromPyObject, IntoPyObjectExt, PyResult, Python,
-    exceptions::PyValueError,
+    Bound, FromPyObject, IntoPyObjectExt, Python,
     types::{PyAny, PyAnyMethods, PyDict, PyDictMethods, PyModule, PyTuple},
 };
-use r2l_core::{env::Space, tensor::VecTensor};
+use r2l_core::{env::Space, error::Result, tensor::VecTensor};
 
 pub(crate) fn parse_gym_space(
     space: &Bound<'_, PyAny>,
     gym_spaces: &Bound<'_, PyModule>,
-) -> PyResult<Space<VecTensor>> {
+) -> Result<Space<VecTensor>> {
     let is_space = |name| space.is_instance(&gym_spaces.getattr(name)?);
     if is_space("Discrete")? {
         let size = space.getattr("n")?.extract()?;
@@ -18,14 +17,8 @@ pub(crate) fn parse_gym_space(
         let low = flatten_extract(&space.getattr("low")?)?;
         let high = flatten_extract(&space.getattr("high")?)?;
         Ok(Space::Box {
-            min: Some(
-                VecTensor::new(low, shape.clone())
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            ),
-            max: Some(
-                VecTensor::new(high, shape.clone())
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            ),
+            min: Some(VecTensor::new(low, shape.clone())?),
+            max: Some(VecTensor::new(high, shape.clone())?),
             shape: shape.into(),
         })
     } else if is_space("MultiDiscrete")? {
@@ -34,8 +27,7 @@ pub(crate) fn parse_gym_space(
         let nvec: Vec<usize> = flatten_extract(&nvec)?;
         let nvec = nvec.into_iter().map(|n| n as f32).collect();
         Ok(Space::MultiDiscrete {
-            nvec: VecTensor::new(nvec, shape.clone())
-                .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            nvec: VecTensor::new(nvec, shape.clone())?,
             shape: shape.into(),
         })
     } else if is_space("MultiBinary")? {
@@ -69,7 +61,7 @@ pub(crate) fn parse_action<'py>(
     py: Python<'py>,
     action: &[f32],
     space: &Space<VecTensor>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> Result<Bound<'py, PyAny>> {
     match space {
         Space::Box {
             min: Some(min),
@@ -78,16 +70,14 @@ pub(crate) fn parse_action<'py>(
             ..
         } => action_array(
             py,
-            VecTensor::new(action.to_vec(), shape.clone())
-                .map_err(|error| PyValueError::new_err(error.to_string()))?
-                .clamp(min, max)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?
+            VecTensor::new(action.to_vec(), shape.clone())?
+                .clamp(min, max)?
                 .into_vec(),
             shape,
             "float32",
         ),
         Space::Box { shape, .. } => action_array(py, action.to_vec(), shape, "float32"),
-        Space::Discrete(_) => (action[0] as usize).into_bound_py_any(py),
+        Space::Discrete(_) => Ok((action[0] as usize).into_bound_py_any(py)?),
         Space::MultiDiscrete { shape, .. } => action_array(py, action.to_vec(), shape, "int64"),
         Space::MultiBinary { shape } => action_array(
             py,
@@ -118,18 +108,19 @@ fn action_array<'py>(
     action: Vec<f32>,
     shape: &[usize],
     dtype: &str,
-) -> PyResult<Bound<'py, PyAny>> {
-    py.import("numpy")?
+) -> Result<Bound<'py, PyAny>> {
+    Ok(py
+        .import("numpy")?
         .call_method1("asarray", (action,))?
         .call_method1("astype", (dtype,))?
-        .call_method1("reshape", (shape,))
+        .call_method1("reshape", (shape,))?)
 }
 
 fn parse_child_actions<'py, 'space>(
     py: Python<'py>,
     action: &[f32],
     spaces: impl IntoIterator<Item = &'space Space<VecTensor>>,
-) -> PyResult<Vec<Bound<'py, PyAny>>> {
+) -> Result<Vec<Bound<'py, PyAny>>> {
     let mut offset = 0;
     let mut actions = Vec::new();
     for space in spaces {
@@ -140,31 +131,29 @@ fn parse_child_actions<'py, 'space>(
     Ok(actions)
 }
 
-fn flatten_extract<'py, T: FromPyObject<'py>>(value: &Bound<'py, PyAny>) -> PyResult<Vec<T>> {
-    value
+fn flatten_extract<'py, T: FromPyObject<'py>>(value: &Bound<'py, PyAny>) -> Result<Vec<T>> {
+    Ok(value
         .call_method0("flatten")?
         .call_method0("tolist")?
-        .extract()
+        .extract()?)
 }
 
 pub(crate) fn parse_obs(
     observation: &Bound<'_, PyAny>,
     space: &Space<VecTensor>,
-) -> PyResult<VecTensor> {
+) -> Result<VecTensor> {
     match space {
         Space::Discrete(size) => {
             let idx: usize = observation.extract()?;
             let mut values = vec![0.; *size];
             values[idx] = 1.;
-            VecTensor::new(values, vec![*size])
-                .map_err(|error| PyValueError::new_err(error.to_string()))
+            Ok(VecTensor::new(values, vec![*size])?)
         }
         Space::Box { shape, .. }
         | Space::MultiDiscrete { shape, .. }
         | Space::MultiBinary { shape } => {
             let values = flatten_extract(observation)?;
-            VecTensor::new(values, shape.clone())
-                .map_err(|error| PyValueError::new_err(error.to_string()))
+            Ok(VecTensor::new(values, shape.clone())?)
         }
         Space::Tuple(spaces) => parse_obs_fields(
             spaces
@@ -181,8 +170,8 @@ pub(crate) fn parse_obs(
 }
 
 fn parse_obs_fields<'py>(
-    fields: impl IntoIterator<Item = PyResult<(Bound<'py, PyAny>, &'py Space<VecTensor>)>>,
-) -> PyResult<VecTensor> {
+    fields: impl IntoIterator<Item = Result<(Bound<'py, PyAny>, &'py Space<VecTensor>)>>,
+) -> Result<VecTensor> {
     let mut data = Vec::new();
     for field in fields {
         let (value, space) = field?;
@@ -193,12 +182,13 @@ fn parse_obs_fields<'py>(
 
 #[cfg(test)]
 mod tests {
-    use pyo3::{PyResult, Python, types::PyAnyMethods};
+    use pyo3::{Python, types::PyAnyMethods};
+    use r2l_core::error::Result;
 
     use super::{parse_action, parse_gym_space};
 
     #[test]
-    fn fundamental_space_shapes_match_gymnasium() -> PyResult<()> {
+    fn fundamental_space_shapes_match_gymnasium() -> Result<()> {
         Python::with_gil(|py| {
             let spaces = py.import("gymnasium.spaces")?;
             let gym_spaces = [
@@ -218,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn multi_binary_actions_keep_gymnasium_shape() -> PyResult<()> {
+    fn multi_binary_actions_keep_gymnasium_shape() -> Result<()> {
         Python::with_gil(|py| {
             let spaces = py.import("gymnasium.spaces")?;
             let gym_space = spaces.getattr("MultiBinary")?.call1(((2, 3),))?;

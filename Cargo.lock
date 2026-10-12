@@ -6393,6 +6393,7 @@ dependencies = [
  "derive_more",
  "either",
  "itertools 0.15.0",
+ "pyo3",
  "rand 0.10.3",
  "rayon",
  "serde",

@@ -37,7 +37,7 @@ impl CandleBackend {
     /// Returns an error if the device cannot set its RNG seed.
     pub(crate) fn seed(&self, seed: u64) -> Result<(), Error> {
         if !matches!(&self.device, Device::Cpu) {
-            self.device.set_seed(seed).map_err(Error::wrap)?;
+            self.device.set_seed(seed)?;
         }
         Ok(())
     }

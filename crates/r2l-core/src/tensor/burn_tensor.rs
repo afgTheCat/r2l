@@ -32,22 +32,9 @@ impl<const D: usize> R2lTensor for Tensor<D> {
         self.shape().to_vec().into()
     }
 
-    fn from_slice_and_shape(data: &[f32], shape: impl Into<Shape>) -> Result<Self> {
-        let shape = shape.into();
-        validate_shape(data.len(), &shape)?;
-        if shape.rank() != D {
-            return Err(TensorError::InvalidRank {
-                expected: D,
-                actual: shape.rank(),
-            });
-        }
-        let data = BurnTensorData::new(data.to_vec(), shape.dims());
-        Ok(Tensor::from_data(data, &Device::default()))
-    }
-
     fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
         let shape = shape.into();
-        validate_shape(data.len(), &shape)?;
+        shape.validate_len(data.len())?;
         if shape.rank() != D {
             return Err(TensorError::InvalidRank {
                 expected: D,
@@ -60,7 +47,7 @@ impl<const D: usize> R2lTensor for Tensor<D> {
 
     fn from_vec_like(data: Vec<f32>, shape: impl Into<Shape>, like: &Self) -> Result<Self> {
         let shape = shape.into();
-        validate_shape(data.len(), &shape)?;
+        shape.validate_len(data.len())?;
         if shape.rank() != D {
             return Err(TensorError::InvalidRank {
                 expected: D,
@@ -103,17 +90,19 @@ impl<const D: usize> R2lTensor for Tensor<D> {
     }
 
     fn add(&self, other: &Self) -> Result<Self> {
-        ensure_same_shape(self, other, "add")?;
+        self.to_shape().ensure_equal(&other.to_shape(), "add")?;
         Ok(self.clone() + other.clone())
     }
 
     fn sub(&self, other: &Self) -> Result<Self> {
-        ensure_same_shape(self, other, "subtract")?;
+        self.to_shape()
+            .ensure_equal(&other.to_shape(), "subtract")?;
         Ok(self.clone() - other.clone())
     }
 
     fn mul(&self, other: &Self) -> Result<Self> {
-        ensure_same_shape(self, other, "multiply")?;
+        self.to_shape()
+            .ensure_equal(&other.to_shape(), "multiply")?;
         Ok(self.clone() * other.clone())
     }
 
@@ -131,7 +120,7 @@ impl<const D: usize> R2lTensor for Tensor<D> {
     }
 
     fn minimum(&self, other: &Self) -> Result<Self> {
-        ensure_same_shape(self, other, "minimum")?;
+        self.to_shape().ensure_equal(&other.to_shape(), "minimum")?;
         Ok(self.clone().min_pair(other.clone()))
     }
 
@@ -164,33 +153,4 @@ impl<const D: usize> R2lTensor for Tensor<D> {
     fn log_softmax(&self, dim: usize) -> super::Result<Self> {
         Ok(log_softmax(self.clone(), dim))
     }
-}
-
-fn validate_shape(data_len: usize, shape: &Shape) -> Result<()> {
-    let expected = shape.num_elements();
-    if expected != data_len {
-        return Err(TensorError::InvalidShape {
-            shape: shape.clone(),
-            expected,
-            actual: data_len,
-        });
-    }
-    Ok(())
-}
-
-fn ensure_same_shape<const D: usize>(
-    left: &Tensor<D>,
-    right: &Tensor<D>,
-    operation: &str,
-) -> Result<()> {
-    let left = left.shape().to_vec();
-    let right = right.shape().to_vec();
-    if left != right {
-        return Err(TensorError::ShapeMismatch {
-            operation: operation.into(),
-            left: left.into(),
-            right: right.into(),
-        });
-    }
-    Ok(())
 }

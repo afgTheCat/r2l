@@ -73,8 +73,8 @@ impl EnabledTimingRecorder {
             timings.training.as_secs_f64() * 1000.0,
             timings.evaluation.as_secs_f64() * 1000.0,
             self.training_started.elapsed().as_secs_f64() * 1000.0,
-        )
-        .map_err(Error::wrap)
+        )?;
+        Ok(())
     }
 }
 
@@ -98,9 +98,9 @@ impl TimingRecorder {
         output_dir: &Path,
         progress: SharedTrainingProgress,
     ) -> Result<Self, Error> {
-        std::fs::create_dir_all(output_dir).map_err(Error::wrap)?;
-        let mut file = File::create(output_dir.join(TRAINING_TIMINGS_FILE)).map_err(Error::wrap)?;
-        writeln!(file, "rollout,collect_ms,learn_ms,evaluate_ms,total_ms").map_err(Error::wrap)?;
+        std::fs::create_dir_all(output_dir)?;
+        let mut file = File::create(output_dir.join(TRAINING_TIMINGS_FILE))?;
+        writeln!(file, "rollout,collect_ms,learn_ms,evaluate_ms,total_ms")?;
         Ok(Self::Enabled(EnabledTimingRecorder {
             file,
             progress,

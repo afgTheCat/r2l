@@ -6,6 +6,10 @@
 //! `r2l-distributions`; concrete algorithms and builders live outside
 //! this crate as well.
 //!
+//! The optional `python` feature lets functions returning [`error::Result`]
+//! propagate PyO3 errors with `?`. It does not enable Python auto-initialization
+//! or select an ABI version.
+//!
 //! Most downstream code should start with the prelude:
 //!
 //! ```

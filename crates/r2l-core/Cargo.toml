@@ -19,8 +19,10 @@ burn-core = { version = "0.22.0", default-features = false, features = ["flex"],
 itertools = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+pyo3 = { workspace = true, optional = true }
 
 [features]
+python = ["dep:pyo3"]
 candle = ["dep:candle-core", "dep:candle-nn"]
 burn = ["dep:burn", "dep:burn-core"]
 cuda = ["candle", "candle-core/cuda"]

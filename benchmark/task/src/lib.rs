@@ -87,8 +87,7 @@ impl<'de> Deserialize<'de> for RlZooSchedule {
             return Ok(Self::Constant(value));
         }
 
-        let value = yaml_serde::from_value::<String>(value)
-            .map_err(|err| de::Error::custom(err.to_string()))?;
+        let value = yaml_serde::from_value::<String>(value).map_err(de::Error::custom)?;
         if let Some(value) = value.strip_prefix("lin_") {
             let value = value.parse().map_err(de::Error::custom)?;
             return Ok(Self::Linear(value));
@@ -162,8 +161,7 @@ impl<'de> Deserialize<'de> for RlZooNormalize {
         if let Ok(enabled) = yaml_serde::from_value::<bool>(value.clone()) {
             return Ok(Self::Enabled(enabled));
         }
-        let value = yaml_serde::from_value::<String>(value)
-            .map_err(|err| de::Error::custom(err.to_string()))?;
+        let value = yaml_serde::from_value::<String>(value).map_err(de::Error::custom)?;
         let norm_obs = parse_python_bool_option(&value, "norm_obs").ok_or_else(|| {
             de::Error::custom(format!(
                 "missing norm_obs in RL Zoo normalize value: {value}"

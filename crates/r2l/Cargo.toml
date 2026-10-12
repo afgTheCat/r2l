@@ -25,6 +25,7 @@ itertools = { workspace = true }
 [features]
 default = []
 gym = ["dep:r2l-gym"]
+python = ["r2l-core/python"]
 test-utils = []
 cuda = [
   "r2l-core/cuda",

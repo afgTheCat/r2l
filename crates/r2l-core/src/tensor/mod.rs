@@ -8,6 +8,7 @@ mod candle_tensor;
 
 use std::fmt::Debug;
 
+use itertools::izip;
 use serde::{Deserialize, Serialize};
 
 use crate::{error::TensorError, utils::slice_mean};
@@ -51,16 +52,16 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// # Errors
     ///
     /// Returns an error if the values and shape cannot form a backend tensor.
-    fn from_slice_and_shape(data: &[f32], shape: impl Into<Shape>) -> Result<Self>;
+    fn from_slice_and_shape(data: &[f32], shape: impl Into<Shape>) -> Result<Self> {
+        Self::from_vec_and_shape(data.to_vec(), shape)
+    }
 
     /// Creates a tensor from owned flat values and a shape.
     ///
     /// # Errors
     ///
     /// Returns an error if the values and shape cannot form a backend tensor.
-    fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
-        Self::from_slice_and_shape(&data, shape)
-    }
+    fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self>;
 
     /// Creates values on the same device as `like`, without connecting them to its gradient graph.
     ///
@@ -164,7 +165,9 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// # Errors
     ///
     /// Returns an error if the tensor backend cannot perform the operation.
-    fn neg(&self) -> Result<Self>;
+    fn neg(&self) -> Result<Self> {
+        self.mul_scalar(-1.0)
+    }
 
     /// Mean reduction over all elements.
     ///
@@ -178,7 +181,9 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// # Errors
     ///
     /// Returns an error if the tensor backend cannot perform the operation.
-    fn sqr(&self) -> Result<Self>;
+    fn sqr(&self) -> Result<Self> {
+        self.mul(self)
+    }
 
     /// Normalizes values into probabilities along `dim`, preserving the shape.
     ///
@@ -288,17 +293,17 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     ///
     /// Returns an error if `tensors` is empty or a backend operation fails.
     fn var_tensors(tensors: &[Self]) -> Result<Self> {
-        if tensors.is_empty() {
-            return Err(TensorError::EmptyInput {
+        let (first, rest) = tensors
+            .split_first()
+            .ok_or_else(|| TensorError::EmptyInput {
                 operation: "variance".into(),
-            });
-        }
+            })?;
         let mean = Self::mean_tensors(tensors)?;
-        let diffs_sqr = tensors
+        let diffs_sqr_sum = rest
             .iter()
-            .map(|tensor| tensor.sub(&mean)?.sqr())
-            .collect::<Result<Vec<_>>>()?;
-        let diffs_sqr_sum = Self::add_multiple(&diffs_sqr)?;
+            .try_fold(first.sub(&mean)?.sqr()?, |sum, tensor| {
+                sum.add(&tensor.sub(&mean)?.sqr()?)
+            })?;
         diffs_sqr_sum.mul_scalar(1f32 / tensors.len() as f32)
     }
 }
@@ -314,6 +319,20 @@ pub struct VecTensor {
 }
 
 impl VecTensor {
+    /// Clamps each element between the corresponding values in `min` and `max`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor shapes differ or the result cannot be constructed.
+    pub fn clamp(&self, min: &Self, max: &Self) -> Result<Self> {
+        self.shape.ensure_equal(&min.shape, "clamp minimum")?;
+        self.shape.ensure_equal(&max.shape, "clamp maximum")?;
+        let data = izip!(&self.data, &min.data, &max.data)
+            .map(|(value, min, max)| value.clamp(*min, *max))
+            .collect();
+        Self::new(data, self.shape.clone())
+    }
+
     fn normalized_exp(&self, dim: usize, logarithmic: bool) -> Result<Self> {
         let Some(&width) = self.shape.get(dim).filter(|&&width| width > 0) else {
             return Err(TensorError::operation(
@@ -351,15 +370,27 @@ impl VecTensor {
         Self::new(data, self.shape.clone())
     }
 
-    fn ensure_same_shape(&self, other: &Self, operation: &str) -> Result<()> {
-        if self.shape != other.shape {
-            return Err(TensorError::ShapeMismatch {
-                operation: operation.into(),
-                left: self.shape.clone(),
-                right: other.shape.clone(),
-            });
-        }
-        Ok(())
+    fn map(&self, f: impl FnMut(f32) -> f32) -> Result<Self> {
+        Self::new(
+            self.data.iter().copied().map(f).collect(),
+            self.shape.clone(),
+        )
+    }
+
+    fn zip_map(
+        &self,
+        other: &Self,
+        operation: &str,
+        mut f: impl FnMut(f32, f32) -> f32,
+    ) -> Result<Self> {
+        self.shape.ensure_equal(&other.shape, operation)?;
+        let data = self
+            .data
+            .iter()
+            .zip(&other.data)
+            .map(|(&a, &b)| f(a, b))
+            .collect();
+        Self::new(data, self.shape.clone())
     }
 
     /// Creates a one-dimensional tensor from a vector.
@@ -376,14 +407,7 @@ impl VecTensor {
     /// Returns an error if `shape` does not describe exactly `data.len()` values.
     pub fn new(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
         let shape = shape.into();
-        let expected = shape.num_elements();
-        if expected != data.len() {
-            return Err(TensorError::InvalidShape {
-                shape,
-                expected,
-                actual: data.len(),
-            });
-        }
+        shape.validate_len(data.len())?;
         Ok(Self { data, shape })
     }
 
@@ -410,10 +434,7 @@ impl R2lTensor for VecTensor {
     }
 
     fn log(&self) -> Result<Self> {
-        Self::new(
-            self.data.iter().map(|value| value.ln()).collect(),
-            self.shape.clone(),
-        )
+        self.map(f32::ln)
     }
 
     fn detach(&self) -> Self {
@@ -428,10 +449,6 @@ impl R2lTensor for VecTensor {
         self.shape.clone()
     }
 
-    fn from_slice_and_shape(data: &[f32], shape: impl Into<Shape>) -> Result<Self> {
-        Self::new(data.to_vec(), shape)
-    }
-
     fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
         Self::new(data, shape)
     }
@@ -441,10 +458,7 @@ impl R2lTensor for VecTensor {
     }
 
     fn add_scalar(&self, scalar: f32) -> Result<Self> {
-        Self::new(
-            self.data.iter().map(|value| value + scalar).collect(),
-            self.shape.clone(),
-        )
+        self.map(|value| value + scalar)
     }
 
     fn sum_dim(&self, dim: usize) -> Result<Self> {
@@ -517,51 +531,25 @@ impl R2lTensor for VecTensor {
     }
 
     fn log_sigmoid(&self) -> Result<Self> {
-        let data = self
-            .data
-            .iter()
-            .map(|&value| {
-                if value >= 0. {
-                    -(-value).exp().ln_1p()
-                } else {
-                    value - value.exp().ln_1p()
-                }
-            })
-            .collect();
-        Self::new(data, self.shape.clone())
+        self.map(|value| {
+            if value >= 0. {
+                -(-value).exp().ln_1p()
+            } else {
+                value - value.exp().ln_1p()
+            }
+        })
     }
 
     fn add(&self, other: &Self) -> Result<Self> {
-        self.ensure_same_shape(other, "add")?;
-        let data = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a + b)
-            .collect();
-        Self::new(data, self.shape.clone())
+        self.zip_map(other, "add", |a, b| a + b)
     }
 
     fn sub(&self, other: &Self) -> Result<Self> {
-        self.ensure_same_shape(other, "subtract")?;
-        let data = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a - b)
-            .collect();
-        Self::new(data, self.shape.clone())
+        self.zip_map(other, "subtract", |a, b| a - b)
     }
 
     fn mul(&self, other: &Self) -> Result<Self> {
-        self.ensure_same_shape(other, "multiply")?;
-        let data = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a * b)
-            .collect();
-        Self::new(data, self.shape.clone())
+        self.zip_map(other, "multiply", |a, b| a * b)
     }
 
     fn gather(&self, dim: usize, indices: &Self) -> Result<Self> {
@@ -594,38 +582,15 @@ impl R2lTensor for VecTensor {
     }
 
     fn exp(&self) -> Result<Self> {
-        Self::new(
-            self.data.iter().map(|value| value.exp()).collect(),
-            self.shape.clone(),
-        )
+        self.map(f32::exp)
     }
 
     fn clamp(&self, min: f32, max: f32) -> Result<Self> {
-        Self::new(
-            self.data
-                .iter()
-                .map(|value| value.clamp(min, max))
-                .collect(),
-            self.shape.clone(),
-        )
+        self.map(|value| value.clamp(min, max))
     }
 
     fn minimum(&self, other: &Self) -> Result<Self> {
-        self.ensure_same_shape(other, "minimum")?;
-        let data = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a.min(*b))
-            .collect();
-        Self::new(data, self.shape.clone())
-    }
-
-    fn neg(&self) -> Result<Self> {
-        Self::new(
-            self.data.iter().map(|value| -value).collect(),
-            self.shape.clone(),
-        )
+        self.zip_map(other, "minimum", f32::min)
     }
 
     fn mean(&self) -> Result<Self> {
@@ -638,18 +603,8 @@ impl R2lTensor for VecTensor {
         Ok(Self::from_vec(vec![mean]))
     }
 
-    fn sqr(&self) -> Result<Self> {
-        Self::new(
-            self.data.iter().map(|value| value * value).collect(),
-            self.shape.clone(),
-        )
-    }
-
     fn mul_scalar(&self, scalar: f32) -> Result<Self> {
-        Self::new(
-            self.data.iter().map(|value| value * scalar).collect(),
-            self.shape.clone(),
-        )
+        self.map(|value| value * scalar)
     }
 
     fn softmax(&self, dim: usize) -> Result<Self> {

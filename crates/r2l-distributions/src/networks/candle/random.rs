@@ -55,13 +55,11 @@ fn initialized_var(shape: &Shape, init: Init, dtype: DType, device: &Device) -> 
         Init::Const(_) => return init.var(shape.clone(), dtype, device),
         Init::Uniform { lo, up } => random_values(
             count,
-            Uniform::new(lo as f32, up as f32)
-                .map_err(|error| candle_core::Error::Msg(error.to_string()))?,
+            Uniform::new(lo as f32, up as f32).map_err(candle_core::Error::wrap)?,
         ),
         Init::Randn { mean, stdev } => random_values(
             count,
-            Normal::new(mean as f32, stdev as f32)
-                .map_err(|error| candle_core::Error::Msg(error.to_string()))?,
+            Normal::new(mean as f32, stdev as f32).map_err(candle_core::Error::wrap)?,
         ),
         Init::Kaiming {
             dist,
@@ -72,15 +70,13 @@ fn initialized_var(shape: &Shape, init: Init, dtype: DType, device: &Device) -> 
             match dist {
                 NormalOrUniform::Normal => random_values(
                     count,
-                    Normal::new(0.0, std as f32)
-                        .map_err(|error| candle_core::Error::Msg(error.to_string()))?,
+                    Normal::new(0.0, std as f32).map_err(candle_core::Error::wrap)?,
                 ),
                 NormalOrUniform::Uniform => {
                     let bound = (3f64.sqrt() * std) as f32;
                     random_values(
                         count,
-                        Uniform::new(-bound, bound)
-                            .map_err(|error| candle_core::Error::Msg(error.to_string()))?,
+                        Uniform::new(-bound, bound).map_err(candle_core::Error::wrap)?,
                     )
                 }
             }

@@ -65,9 +65,9 @@ impl<T: R2lTensor> BestPolicyArtifacts<T> {
             } else {
                 None
             };
-            std::fs::write(folder.join(ACTOR_FILE), bytes).map_err(Error::wrap)?;
+            std::fs::write(folder.join(ACTOR_FILE), bytes)?;
             if let Some(normalizer) = normalizer {
-                std::fs::write(folder.join(NORMALIZER_FILE), normalizer).map_err(Error::wrap)?;
+                std::fs::write(folder.join(NORMALIZER_FILE), normalizer)?;
             }
             self.best_reward = Some(avg_reward);
         }
@@ -88,10 +88,10 @@ impl<T: R2lTensor> Artifacts<T> {
         inference_artifacts: bool,
         normalizer: Option<Normalizer<T>>,
     ) -> Result<Self> {
-        std::fs::create_dir_all(&folder).map_err(Error::wrap)?;
+        std::fs::create_dir_all(&folder)?;
         if evaluation_results {
-            let mut file = File::create(folder.join(EVALUATIONS_FILE)).map_err(Error::wrap)?;
-            writeln!(file, "average_reward,total_episodes").map_err(Error::wrap)?;
+            let mut file = File::create(folder.join(EVALUATIONS_FILE))?;
+            writeln!(file, "average_reward,total_episodes")?;
         }
         let best_policy = inference_artifacts.then_some(BestPolicyArtifacts::new(normalizer));
         Ok(Self {
@@ -105,9 +105,8 @@ impl<T: R2lTensor> Artifacts<T> {
         let avg_reward = eval_result.avg_reward();
         if self.evaluation_results {
             let path = self.folder.join(EVALUATIONS_FILE);
-            let file = OpenOptions::new().append(true).open(path);
-            let mut file = file.map_err(Error::wrap)?;
-            writeln!(file, "{avg_reward},{}", eval_result.num_episodes).map_err(Error::wrap)?;
+            let mut file = OpenOptions::new().append(true).open(path)?;
+            writeln!(file, "{avg_reward},{}", eval_result.num_episodes)?;
         }
         if let Some(best_policy) = &mut self.best_policy {
             best_policy.write(&self.folder, actor, avg_reward)?;

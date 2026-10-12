@@ -4,6 +4,8 @@ use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::TensorError;
+
 /// Ordered dimensions. An empty dimension list denotes a scalar; a zero dimension
 /// denotes an empty tensor. Every left-to-right partial product fits in `usize`.
 /// Other validity requirements are checked by each operation.
@@ -47,6 +49,29 @@ impl Shape {
     #[must_use]
     pub fn num_elements(&self) -> usize {
         self.0.iter().product()
+    }
+
+    pub(crate) fn validate_len(&self, actual: usize) -> Result<(), TensorError> {
+        let expected = self.num_elements();
+        if expected != actual {
+            return Err(TensorError::InvalidShape {
+                shape: self.clone(),
+                expected,
+                actual,
+            });
+        }
+        Ok(())
+    }
+
+    pub(crate) fn ensure_equal(&self, other: &Self, operation: &str) -> Result<(), TensorError> {
+        if self != other {
+            return Err(TensorError::ShapeMismatch {
+                operation: operation.into(),
+                left: self.clone(),
+                right: other.clone(),
+            });
+        }
+        Ok(())
     }
 }
 

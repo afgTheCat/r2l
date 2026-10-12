@@ -18,72 +18,40 @@ mod parse;
 
 use parse::{parse_action, parse_gym_space, parse_obs};
 use pyo3::{
-    PyErr, PyObject, PyResult, Python,
-    exceptions::PyModuleNotFoundError,
+    PyObject, Python,
     types::{PyAnyMethods, PyDict},
 };
 use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
-    error::{EnvironmentError, Error, MissingDependency},
+    error::Error,
     tensor::VecTensor,
 };
-
-fn map_py_error_to_r2l(py: Python<'_>, operation: &str, error: PyErr) -> Error {
-    if error.is_instance_of::<PyModuleNotFoundError>(py) {
-        let name = error
-            .value(py)
-            .getattr("name")
-            .and_then(|name| name.extract::<String>())
-            .unwrap_or_else(|_| error.to_string());
-        Error::MissingDependency(MissingDependency {
-            name,
-            dependency_type: "Python module".into(),
-        })
-    } else {
-        Error::Environment(EnvironmentError {
-            operation: operation.into(),
-            source: Box::new(error),
-        })
-    }
-}
 
 // Just a wrapper around the loaded env
 struct GymEnvPyhon(PyObject);
 
 impl GymEnvPyhon {
     fn new(py: Python<'_>, name: &str, render_mode: Option<String>) -> Result<Self, Error> {
-        let new = || {
-            let gym = py.import("gymnasium")?;
-            let kwargs = PyDict::new(py);
-            if let Some(render_mode) = render_mode {
-                kwargs.set_item("render_mode", render_mode)?;
-            }
-            let make = gym.getattr("make")?;
-            let env = make.call((name,), Some(&kwargs))?;
-            PyResult::Ok(GymEnvPyhon(env.into()))
-        };
-        new().map_err(|error| map_py_error_to_r2l(py, "build", error))
+        let gym = py.import("gymnasium")?;
+        let kwargs = PyDict::new(py);
+        if let Some(render_mode) = render_mode {
+            kwargs.set_item("render_mode", render_mode)?;
+        }
+        let make = gym.getattr("make")?;
+        let env = make.call((name,), Some(&kwargs))?;
+        Ok(GymEnvPyhon(env.into()))
     }
 
     fn observation_space(&self, py: Python<'_>) -> Result<Space<VecTensor>, Error> {
-        let observation_space = || {
-            let gym_spaces = py.import("gymnasium.spaces")?;
-            let observation_space = self.0.getattr(py, "observation_space")?.into_bound(py);
-            let observation_space = parse_gym_space(&observation_space, &gym_spaces)?;
-            PyResult::Ok(observation_space)
-        };
-        observation_space()
-            .map_err(|error| map_py_error_to_r2l(py, "inspect observation space", error))
+        let gym_spaces = py.import("gymnasium.spaces")?;
+        let observation_space = self.0.getattr(py, "observation_space")?.into_bound(py);
+        parse_gym_space(&observation_space, &gym_spaces)
     }
 
     fn action_space(&self, py: Python<'_>) -> Result<Space<VecTensor>, Error> {
-        let action_space = || {
-            let gym_spaces = py.import("gymnasium.spaces")?;
-            let action_space = self.0.getattr(py, "action_space")?.into_bound(py);
-            let action_space = parse_gym_space(&action_space, &gym_spaces)?;
-            PyResult::Ok(action_space)
-        };
-        action_space().map_err(|error| map_py_error_to_r2l(py, "inspect action space", error))
+        let gym_spaces = py.import("gymnasium.spaces")?;
+        let action_space = self.0.getattr(py, "action_space")?.into_bound(py);
+        parse_gym_space(&action_space, &gym_spaces)
     }
 
     fn reset(
@@ -92,14 +60,11 @@ impl GymEnvPyhon {
         seed: u64,
         observation_space: &Space<VecTensor>,
     ) -> Result<VecTensor, Error> {
-        let reset = || {
-            let kwargs = PyDict::new(py);
-            kwargs.set_item("seed", seed)?;
-            let state = self.0.call_method(py, "reset", (), Some(&kwargs))?;
-            let step = state.bind(py);
-            parse_obs(&step.get_item(0)?, observation_space)
-        };
-        reset().map_err(|error| map_py_error_to_r2l(py, "reset", error))
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("seed", seed)?;
+        let state = self.0.call_method(py, "reset", (), Some(&kwargs))?;
+        let step = state.bind(py);
+        parse_obs(&step.get_item(0)?, observation_space)
     }
 
     fn step(
@@ -109,18 +74,14 @@ impl GymEnvPyhon {
         action_space: &Space<VecTensor>,
         observation_space: &Space<VecTensor>,
     ) -> Result<Snapshot<VecTensor>, Error> {
-        let step = || {
-            let action = parse_action(py, &action.into_vec(), action_space)?;
-            let step = self.0.call_method(py, "step", (action,), None)?;
-            let step = step.bind(py);
-            let next_state = parse_obs(&step.get_item(0)?, observation_space)?;
-            let reward: f32 = step.get_item(1)?.extract()?;
-            let terminated: bool = step.get_item(2)?.extract()?;
-            let truncated: bool = step.get_item(3)?.extract()?;
-            let snapshot = Snapshot::new(next_state, reward, terminated, truncated);
-            PyResult::Ok(snapshot)
-        };
-        step().map_err(|error| map_py_error_to_r2l(py, "step", error))
+        let action = parse_action(py, &action.into_vec(), action_space)?;
+        let step = self.0.call_method(py, "step", (action,), None)?;
+        let step = step.bind(py);
+        let next_state = parse_obs(&step.get_item(0)?, observation_space)?;
+        let reward: f32 = step.get_item(1)?.extract()?;
+        let terminated: bool = step.get_item(2)?.extract()?;
+        let truncated: bool = step.get_item(3)?.extract()?;
+        Ok(Snapshot::new(next_state, reward, terminated, truncated))
     }
 }
 

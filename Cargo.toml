@@ -26,6 +26,7 @@ burn = { version = "0.22.0", default-features = false, features = ["std", "rayon
 burn-store = { version = "0.22.0" }
 candle-core = { version = "0.11.0" }
 candle-nn = { version = "0.11.0" }
+pyo3 = { version = "0.24.1" }
 either = "1.17.0"
 crossbeam = "0.8.4"
 rand = "0.10.2"

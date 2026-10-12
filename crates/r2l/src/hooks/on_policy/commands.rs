@@ -150,7 +150,7 @@ impl OnPolicyCommandHandler {
                 }
                 OnPolicyCommand::SerializeCurrentPolicy(path) => {
                     let bytes = runtime.actor().to_safetensors()?;
-                    let result = std::fs::write(path, bytes).map_err(Error::wrap);
+                    let result = std::fs::write(path, bytes).map_err(Error::from);
                     Self::send_result(
                         endpoint,
                         OnPolicyCommandResult::CurrentPolicySerialized(result),

@@ -53,7 +53,7 @@ impl ArtifactFile {
             }
             .into()
         } else {
-            Error::wrap(error)
+            error.into()
         }
     }
 
@@ -101,10 +101,9 @@ impl InferenceConfig {
     /// Writes this configuration to `inference.yaml` in `inference_dir`.
     pub(crate) fn write_to_dir(&self, inference_dir: impl AsRef<Path>) -> Result<(), Error> {
         let inference_dir = inference_dir.as_ref();
-        std::fs::create_dir_all(inference_dir).map_err(Error::wrap)?;
+        std::fs::create_dir_all(inference_dir)?;
         let serialized = yaml_serde::to_string(self).map_err(Error::wrap)?;
-        std::fs::write(inference_dir.join(INFERENCE_CONFIG_FILE), serialized)
-            .map_err(Error::wrap)?;
+        std::fs::write(inference_dir.join(INFERENCE_CONFIG_FILE), serialized)?;
         Ok(())
     }
 
