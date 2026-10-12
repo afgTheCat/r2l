@@ -20,7 +20,7 @@ use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
 use yaml_serde::to_string;
 
 use crate::{
-    EpisodeBoundHook,
+    SamplerHook,
     constants::{ACTOR_FILE, EVALUATIONS_FILE, NORMALIZER_FILE},
 };
 
@@ -116,7 +116,7 @@ impl<T: R2lTensor> Artifacts<T> {
 }
 
 pub(crate) struct EvaluationSampler<E: Env + 'static> {
-    sampler: RolloutSampler<E, EpisodeBoundHook<E>>,
+    sampler: RolloutSampler<E, SamplerHook<E>>,
 }
 
 impl<E: Env> EvaluationSampler<E> {
@@ -126,7 +126,7 @@ impl<E: Env> EvaluationSampler<E> {
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<Self> {
-        let hook = EpisodeBoundHook::new(RolloutMode::EpisodeBound { n_episodes }, None);
+        let hook = SamplerHook::new(RolloutMode::EpisodeBound { n_episodes }, None);
         let sampler = match obs_normalizer {
             Some(normalizer) => {
                 RolloutSampler::build_staged(&env_builder, hook, execution_mode, normalizer)?

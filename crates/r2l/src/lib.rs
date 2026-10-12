@@ -84,7 +84,7 @@ pub use hooks::learning::{
 };
 pub use hooks::on_policy::{OnPolicyTrainingHooks, commands::OnPolicyControlHandle};
 pub use hooks::progress::TrainingLimit;
-pub use hooks::sampler::{EpisodeBoundHook, Episodes, SamplerHook, StepBoundHook, Steps};
+pub use hooks::sampler::SamplerHook;
 pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};
 pub use r2l_core::error::{self, Error};
 pub use r2l_core::{

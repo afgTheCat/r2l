@@ -10,31 +10,21 @@ enum Phase {
     Stop,
 }
 
-/// Marker for a sampler configured to collect a fixed number of steps.
-pub struct Steps;
-/// Marker for a sampler configured to collect a fixed number of episodes.
-pub struct Episodes;
-
 /// Controls collection with a fixed rollout mode and optional reward normalization.
-pub struct SamplerHook<E: Env, Bound> {
+pub struct SamplerHook<E: Env> {
     rollout_mode: RolloutMode,
-    reward_normalizer: Option<RewardNormalizer>,
     phase: Phase,
-    _p: PhantomData<(E, Bound)>,
+    reward_normalizer: Option<RewardNormalizer>,
+    _p: PhantomData<E>,
 }
 
-/// Step-bound specialization of the sampler hook.
-pub type StepBoundHook<E> = SamplerHook<E, Steps>;
-/// Episode-bound specialization of the sampler hook.
-pub type EpisodeBoundHook<E> = SamplerHook<E, Episodes>;
-
-impl<E: Env, Bound> SamplerHook<E, Bound> {
+impl<E: Env> SamplerHook<E> {
     /// Creates a sampler hook with its own collection bound.
     ///
     /// # Arguments
     ///
     /// * `rollout_mode` - Step or episode bound applied to each environment per rollout.
-    /// * `reward_normalizer` - Optional normalization for step-bound rollouts.
+    /// * `reward_normalizer` - Optional normalization applied to collected training rewards.
     pub(crate) fn new(
         rollout_mode: RolloutMode,
         reward_normalizer: Option<RewardNormalizer>,
@@ -46,15 +36,19 @@ impl<E: Env, Bound> SamplerHook<E, Bound> {
             _p: PhantomData,
         }
     }
+}
 
-    fn reset_state(&mut self) {
+impl<E: Env + 'static> SamplerHookTrait for SamplerHook<E> {
+    type E = E;
+
+    fn reset(&mut self) {
         self.phase = Phase::Collect;
         if let Some(normalizer) = &mut self.reward_normalizer {
             normalizer.reset_returns();
         }
     }
 
-    fn next_result(&mut self, normalize: impl FnOnce(&mut RewardNormalizer)) -> SamplerHookResult {
+    fn hook(&mut self, core: &mut SamplerCore<Self::E>) -> SamplerHookResult {
         match self.phase {
             Phase::Collect => {
                 self.phase = Phase::Stop;
@@ -62,25 +56,11 @@ impl<E: Env, Bound> SamplerHook<E, Bound> {
             }
             Phase::Stop => {
                 self.phase = Phase::Collect;
-                if self.rollout_mode.is_step_bound()
-                    && let Some(normalizer) = &mut self.reward_normalizer
-                {
-                    normalize(normalizer);
+                if let Some(normalizer) = &mut self.reward_normalizer {
+                    normalizer.normalize(core.buffers_mut().as_mut());
                 }
                 SamplerHookResult::Stop
             }
         }
-    }
-}
-
-impl<E: Env + 'static, Bound> SamplerHookTrait for SamplerHook<E, Bound> {
-    type E = E;
-
-    fn reset(&mut self) {
-        self.reset_state();
-    }
-
-    fn hook(&mut self, core: &mut SamplerCore<Self::E>) -> SamplerHookResult {
-        self.next_result(|normalizer| normalizer.normalize(core.buffers_mut().as_mut()))
     }
 }

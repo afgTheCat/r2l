@@ -50,17 +50,27 @@ impl RewardNormalizer {
         }
     }
 
+    /// Normalizes rewards in step order, updating statistics only from active environments.
+    /// Buffers must remain in environment order across calls; their lengths may differ.
     pub(crate) fn normalize<T: R2lTensor>(&mut self, buffers: &mut [TrajectoryBuffer<T>]) {
-        let n_steps = buffers[0].len();
+        let n_steps = buffers.iter().map(TrajectoryBuffer::len).max().unwrap_or(0);
+        let mut active_returns = Vec::with_capacity(buffers.len());
         for step in 0..n_steps {
+            active_returns.clear();
             for (discounted_return, buffer) in
                 self.reward_accumulator.iter_mut().zip(buffers.iter())
             {
-                *discounted_return = *discounted_return * self.gamma + buffer.rewards()[step];
+                if let Some(&reward) = buffer.rewards().get(step) {
+                    *discounted_return = *discounted_return * self.gamma + reward;
+                    active_returns.push(*discounted_return);
+                }
             }
-            self.return_rms.update(&self.reward_accumulator);
+            self.return_rms.update(&active_returns);
             let reward_scale = (self.return_rms.var + EPSILON).sqrt();
             for (env_idx, buffer) in buffers.iter_mut().enumerate() {
+                if step >= buffer.len() {
+                    continue;
+                }
                 let done = buffer.terminated()[step] || buffer.truncated()[step];
                 let reward = buffer.rewards()[step];
                 buffer.rewards_mut()[step] =

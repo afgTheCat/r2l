@@ -11,7 +11,7 @@ use r2l_distributions::learning_modules::burn_lm::PolicyValueLearnerSnapshot;
 use r2l_sampler::RolloutSampler;
 
 use crate::{
-    OnPolicyTrainingHooks, PPOBurn, PPORolloutStats, StepBoundHook,
+    OnPolicyTrainingHooks, PPOBurn, PPORolloutStats, SamplerHook,
     backend::{Backend, BurnBackendConfig},
     builders::{
         algorithm::AlgoConfig,
@@ -44,8 +44,8 @@ impl<E: Env> SnapshotAlgo<E, PolicyValueLearnerSnapshot> {
     ) -> Result<
         OnPolicyAlgorithm<
             PPOBurn,
-            RolloutSampler<E, StepBoundHook<E>>,
-            OnPolicyTrainingHooks<PPOBurn, RolloutSampler<E, StepBoundHook<E>>, E>,
+            RolloutSampler<E, SamplerHook<E>>,
+            OnPolicyTrainingHooks<PPOBurn, RolloutSampler<E, SamplerHook<E>>, E>,
         >,
         Error,
     > {
@@ -69,7 +69,7 @@ impl<E: Env> SnapshotAlgo<E, PolicyValueLearnerSnapshot> {
             reporter,
             sampler_configuration.n_envs(),
         );
-        let sampler = sampler_configuration.step_bound_sampler()?;
+        let sampler = sampler_configuration.build_sampler()?;
         let hooks = hook_config.build(
             &sampler_configuration,
             &learner_config.policy_config,
