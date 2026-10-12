@@ -15,8 +15,8 @@ candle-core = { workspace = true }
 candle-nn = { workspace = true }
 burn = { workspace = true }
 r2l-distributions = { workspace = true }
-rand = "0.10.0"
-derive_more = "2.0.1"
+rand = "0.10.3"
+derive_more = "2.1.1"
 bimodal-array = { workspace = true }
 serde = { workspace = true }
 yaml_serde = { workspace = true } 

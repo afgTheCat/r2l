@@ -26,18 +26,18 @@ burn = { version = "0.22.0", default-features = false, features = ["std", "rayon
 burn-store = { version = "0.22.0" }
 candle-core = { version = "0.11.0" }
 candle-nn = { version = "0.11.0" }
-pyo3 = { version = "0.24.1" }
-either = "1.17.0"
-crossbeam = "0.8.4"
-rand = "0.10.2"
+pyo3 = { version = "0.29.3" }
+either = "1.19.0"
+crossbeam = "0.8.5"
+rand = "0.10.3"
 rand_distr = "0.6.0"
-anyhow = { version = "1.0.102" }
+anyhow = { version = "1.0.104" }
 bimodal-array = { version = "0.1.4" }
 safetensors = { version = "0.8.0" }
 serde = { version = "1.0.229", features = ["derive"] }
-yaml_serde = "0.10.4"
+yaml_serde = "0.10.7"
 itertools = "0.15.0"
-thiserror = { version = "2.0.20" } 
+thiserror = { version = "2.0.21" }
 
 [workspace.package]
 version = "0.0.3"

@@ -42,8 +42,9 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.request_repaint_after(Duration::from_secs_f64(0.25));
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        ui.ctx()
+            .request_repaint_after(Duration::from_secs_f64(0.25));
         loop {
             let event = self.rx.try_recv();
             let Ok(event) = event else {
@@ -64,7 +65,7 @@ impl eframe::App for App {
             }
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             let available_rect = Rect::from_min_max(
                 Pos2::new(0., 0.),
                 Pos2::new(ui.available_width(), ui.available_height()),

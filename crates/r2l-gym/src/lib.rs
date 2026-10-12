@@ -18,8 +18,8 @@ mod parse;
 
 use parse::{parse_action, parse_gym_space, parse_obs};
 use pyo3::{
-    PyObject, Python,
-    types::{PyAnyMethods, PyDict},
+    Py, Python,
+    types::{PyAny, PyAnyMethods, PyDict},
 };
 use r2l_core::{
     env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
@@ -28,7 +28,7 @@ use r2l_core::{
 };
 
 // Just a wrapper around the loaded env
-struct GymEnvPyhon(PyObject);
+struct GymEnvPyhon(Py<PyAny>);
 
 impl GymEnvPyhon {
     fn new(py: Python<'_>, name: &str, render_mode: Option<String>) -> Result<Self, Error> {
@@ -115,7 +115,7 @@ impl GymEnv {
     ///
     /// Returns an error if Gymnasium cannot create or inspect the environment.
     pub fn new(name: &str, render_mode: Option<String>) -> Result<GymEnv, Error> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let gym_env_inner = GymEnvPyhon::new(py, name, render_mode)?;
             let observation_space = gym_env_inner.observation_space(py)?;
             let action_space = gym_env_inner.action_space(py)?;
@@ -132,11 +132,11 @@ impl Env for GymEnv {
     type Tensor = VecTensor;
 
     fn reset(&mut self, seed: u64) -> Result<Self::Tensor, Error> {
-        Python::with_gil(|py| self.env.reset(py, seed, &self.observation_space))
+        Python::attach(|py| self.env.reset(py, seed, &self.observation_space))
     }
 
     fn step(&mut self, action: Self::Tensor) -> Result<Snapshot<Self::Tensor>, Error> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.env
                 .step(py, action, &self.action_space, &self.observation_space)
         })

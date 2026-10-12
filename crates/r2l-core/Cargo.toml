@@ -8,8 +8,8 @@ license.workspace = true
 
 [dependencies]
 rand = { workspace = true }
-rayon = "1.10.0"
-derive_more = { version = "2.0.1", features = ["full"] }
+rayon = "1.12.0"
+derive_more = { version = "2.1.1", features = ["full"] }
 either = {workspace = true}
 candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }

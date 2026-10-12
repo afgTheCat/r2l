@@ -1,5 +1,6 @@
 use pyo3::{
-    Bound, FromPyObject, IntoPyObjectExt, Python,
+    Bound, IntoPyObjectExt, Python,
+    conversion::FromPyObjectOwned,
     types::{PyAny, PyAnyMethods, PyDict, PyDictMethods, PyModule, PyTuple},
 };
 use r2l_core::{env::Space, error::Result, tensor::VecTensor};
@@ -131,7 +132,7 @@ fn parse_child_actions<'py, 'space>(
     Ok(actions)
 }
 
-fn flatten_extract<'py, T: FromPyObject<'py>>(value: &Bound<'py, PyAny>) -> Result<Vec<T>> {
+fn flatten_extract<'py, T: FromPyObjectOwned<'py>>(value: &Bound<'py, PyAny>) -> Result<Vec<T>> {
     Ok(value
         .call_method0("flatten")?
         .call_method0("tolist")?
@@ -189,7 +190,7 @@ mod tests {
 
     #[test]
     fn fundamental_space_shapes_match_gymnasium() -> Result<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let spaces = py.import("gymnasium.spaces")?;
             let gym_spaces = [
                 spaces.getattr("Discrete")?.call1((3,))?,
@@ -209,7 +210,7 @@ mod tests {
 
     #[test]
     fn multi_binary_actions_keep_gymnasium_shape() -> Result<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let spaces = py.import("gymnasium.spaces")?;
             let gym_space = spaces.getattr("MultiBinary")?.call1(((2, 3),))?;
             let space = parse_gym_space(&gym_space, &spaces)?;
