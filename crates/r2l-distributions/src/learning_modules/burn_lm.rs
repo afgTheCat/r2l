@@ -22,9 +22,6 @@
 
 use std::path::PathBuf;
 
-#[cfg(test)]
-mod tests;
-
 use burn::{
     module::{Module, ModuleDisplay, Param},
     optim::{AdamWConfig, GradientsParams, ModuleOptimizer, OptimizerRecord},

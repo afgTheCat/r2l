@@ -6409,7 +6409,6 @@ dependencies = [
  "candle-core",
  "candle-nn",
  "itertools 0.15.0",
- "r2l-agents",
  "r2l-core",
  "rand 0.10.3",
  "rand_distr 0.6.0",

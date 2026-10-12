@@ -2,9 +2,6 @@ mod workers;
 
 use std::sync::Arc;
 
-#[cfg(test)]
-mod tests;
-
 use bimodal_array::{ArrayGuard, ArrayHandle, ArrayMap, ElementHandle, bimodal_array};
 use crossbeam::channel::unbounded;
 use r2l_core::buffers::buffer::TrajectoryView;

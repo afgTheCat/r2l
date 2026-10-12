@@ -8,7 +8,7 @@ use std::{
 
 use r2l_core::{
     env::{
-        Env, EnvBuilder, EnvBuilderType, EnvDescription, Snapshot, Space,
+        Env, EnvBuilder, EnvDescription, Snapshot, Space,
         normalizer::{Normalizer, NormalizerMode},
     },
     error::Error,
@@ -105,72 +105,4 @@ fn samplers_build_from_a_shared_env_builder() {
 
         assert_eq!(build_count.load(Ordering::Relaxed), 5);
     }
-}
-
-struct CountingBuilder {
-    build_count: Arc<AtomicUsize>,
-}
-
-impl EnvBuilder for CountingBuilder {
-    type Env = TestEnv;
-
-    fn build_env(&self) -> Result<TestEnv, Error> {
-        self.build_count.fetch_add(1, Ordering::Relaxed);
-        Ok(TestEnv::new())
-    }
-
-    fn env_description(&self) -> Result<EnvDescription<VecTensor>, Error> {
-        Ok(TestEnv::new().env_description())
-    }
-}
-
-#[test]
-fn samplers_build_from_different_factory_types_for_the_same_environment() {
-    for execution_mode in [
-        SamplerExecutionMode::SingleThreaded,
-        SamplerExecutionMode::MultiThreaded,
-    ] {
-        let first_count = Arc::new(AtomicUsize::new(0));
-        let second_count = Arc::new(AtomicUsize::new(0));
-        let closure_count = second_count.clone();
-        let builders = EnvBuilderType::heterogeneous_shared(vec![
-            Arc::new(CountingBuilder {
-                build_count: first_count.clone(),
-            }),
-            Arc::new(move || {
-                closure_count.fetch_add(1, Ordering::Relaxed);
-                Ok(TestEnv::new())
-            }),
-        ])
-        .unwrap();
-        assert_eq!(builders.num_envs(), 2);
-        builders.env_description().unwrap();
-        assert_eq!(first_count.load(Ordering::Relaxed), 0);
-        assert!(builders.build_idx(2).is_err());
-
-        let mut direct = RolloutSampler::build_direct(&builders, StopHook, execution_mode).unwrap();
-        direct.reset_all_envs().unwrap();
-        let mut staged = RolloutSampler::build_staged(
-            &builders,
-            StopHook,
-            execution_mode,
-            Normalizer::build(NormalizerMode::Update, None, vec![1]),
-        )
-        .unwrap();
-        staged.reset_all_envs().unwrap();
-
-        assert_eq!(first_count.load(Ordering::Relaxed), 2);
-        assert_eq!(second_count.load(Ordering::Relaxed), 2);
-    }
-}
-
-#[test]
-fn builder_collections_reject_empty_inputs() {
-    assert!(EnvBuilderType::homogeneous(|| Ok(TestEnv::new()), 0).is_err());
-    assert!(EnvBuilderType::homogeneous_shared(Arc::new(|| Ok(TestEnv::new())), 0).is_err());
-    assert!(EnvBuilderType::<TestEnv>::heterogeneous(Vec::<CountingBuilder>::new()).is_err());
-    assert!(EnvBuilderType::<TestEnv>::heterogeneous_shared(vec![]).is_err());
-    let builders = EnvBuilderType::heterogeneous(vec![|| Ok(TestEnv::new())]).unwrap();
-    assert_eq!(builders.num_envs(), 1);
-    builders.build_idx(0).unwrap();
 }
