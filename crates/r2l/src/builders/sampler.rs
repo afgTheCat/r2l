@@ -45,20 +45,27 @@ pub(crate) struct RewardNormalizerConfig {
     pub(crate) clip_reward: f32,
 }
 
-pub(crate) struct SamplerSetup {
+pub(crate) struct SamplerConfiguration {
     pub(crate) rollout_mode: RolloutMode,
+    pub(crate) execution_mode: SamplerExecutionMode,
     pub(crate) reward_normalizer: Option<RewardNormalizerConfig>,
     pub(crate) obs_normalizer: ObsNormalizerConfig,
 }
 
-pub(crate) struct SamplerConfiguration {
-    pub(crate) setup: SamplerSetup,
-    pub(crate) execution_mode: SamplerExecutionMode,
+impl Default for SamplerConfiguration {
+    fn default() -> Self {
+        Self {
+            rollout_mode: RolloutMode::step_bound(1024),
+            execution_mode: SamplerExecutionMode::MultiThreaded,
+            reward_normalizer: None,
+            obs_normalizer: ObsNormalizerConfig::Disabled,
+        }
+    }
 }
 
 impl SamplerConfiguration {
     pub(crate) fn build_obs_normalizer<T: R2lTensor>(&self, shape: Shape) -> Option<Normalizer<T>> {
-        match self.setup.obs_normalizer {
+        match self.obs_normalizer {
             ObsNormalizerConfig::Disabled => None,
             ObsNormalizerConfig::Enabled { clip } => {
                 Some(Normalizer::build(NormalizerMode::Update, clip, shape))
@@ -71,7 +78,7 @@ impl SamplerConfiguration {
         env_builder: &EnvBuilderType<E>,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<RolloutSampler<SamplerHook<E>>, Error> {
-        let reward_normalizer = self.setup.reward_normalizer.as_ref().map(|config| {
+        let reward_normalizer = self.reward_normalizer.as_ref().map(|config| {
             RewardNormalizer::new(
                 NonZeroUsize::new(env_builder.num_envs())
                     .expect("environment builders are nonempty"),
@@ -79,7 +86,7 @@ impl SamplerConfiguration {
                 config.clip_reward,
             )
         });
-        let hook = SamplerHook::new(self.setup.rollout_mode, reward_normalizer);
+        let hook = SamplerHook::new(self.rollout_mode, reward_normalizer);
         match obs_normalizer {
             Some(normalizer) => {
                 RolloutSampler::build_staged(env_builder, hook, self.execution_mode, normalizer)

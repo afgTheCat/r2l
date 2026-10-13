@@ -16,10 +16,7 @@ use candle_core::Device;
 use networks::NetworkConfig;
 pub use on_policy_hook::TrainingArtifactsConfig;
 pub use optimizer::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
-use r2l_agents::on_policy_algorithms::{
-    a2c::{A2C, A2CHook},
-    ppo::{PPO, PPOHook},
-};
+use r2l_agents::on_policy_algorithms::{a2c::A2C, ppo::PPO};
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
     error::Error,
@@ -43,7 +40,7 @@ use crate::{
         algorithm::AlgoConfig,
         learner::{LearnerConfig, LearningHookConfig},
         on_policy_hook::OnPolicyHookConfig,
-        sampler::{RewardNormalizerConfig, SamplerConfiguration, SamplerSetup},
+        sampler::{RewardNormalizerConfig, SamplerConfiguration},
     },
     hooks::{
         learning::{A2CLearningHook, ClipRangeSchedule, PPOLearningHook},
@@ -94,27 +91,23 @@ impl<E: Env> Builder<E> {
         env_builder: EB,
         n_envs: usize,
         algo_config: AlgoConfig,
-        backend_configuration: Backend,
-        sampler_setup: SamplerSetup,
-        normalize_advantage: bool,
     ) -> Result<Self, Error> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
         let env_description = env_builder.env_description()?;
         let learner_builder = LearnerConfig::new(&env_description)?;
         Ok(Self {
             config: BuilderConfig {
-                sampler_configuration: SamplerConfiguration {
-                    setup: sampler_setup,
-                    execution_mode: SamplerExecutionMode::MultiThreaded,
-                },
+                sampler_configuration: SamplerConfiguration::default(),
                 algo_config,
                 hook_config: OnPolicyHookConfig::default(),
                 learner_builder,
-                learning_hook: LearningHookConfig::new(normalize_advantage),
+                learning_hook: LearningHookConfig::new(true),
                 seed: None,
             },
             resources: BuilderResources {
-                backend: backend_configuration,
+                backend: Backend::Candle(CandleBackend {
+                    device: Device::Cpu,
+                }),
                 env_builder,
                 control_endpoint: None,
                 ppo_reporter: None,
@@ -142,7 +135,7 @@ impl<E: Env> Builder<E> {
     fn progress(&self) -> SharedTrainingProgress {
         TrainingProgress::shared(
             self.config.hook_config.training_limit,
-            self.config.sampler_configuration.setup.rollout_mode,
+            self.config.sampler_configuration.rollout_mode,
             self.resources.n_envs(),
         )
     }
@@ -219,20 +212,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
         env_builder: EB,
         n_envs: usize,
         algo_config: AlgoConfig,
-        backend_configuration: Backend,
-        sampler_setup: SamplerSetup,
-        normalize_advantage: bool,
         build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
     ) -> Result<Self, Error> {
         Ok(Self {
-            builder: Builder::new(
-                env_builder,
-                n_envs,
-                algo_config,
-                backend_configuration,
-                sampler_setup,
-                normalize_advantage,
-            )?,
+            builder: Builder::new(env_builder, n_envs, algo_config)?,
             build_agent,
         })
     }
@@ -691,26 +674,10 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
     }
 }
 
-impl<E: Env> OnPolicyBuilder<PPOCandle, E> {
+impl<M: OnPolicyLearner<Policy: ToSafetensors>, E: Env>
+    OnPolicyBuilder<PPO<M, PPOLearningHook>, E>
+{
     /// Uses Candle on `device` for PPO learning.
-    ///
-    /// # Arguments
-    ///
-    /// * `device` - Candle device on which policy and value learning will run.
-    pub fn with_candle(mut self, device: Device) -> Self {
-        self.builder.resources.backend = Backend::Candle(CandleBackend { device });
-        self
-    }
-
-    /// Switches PPO learning to the default Burn backend.
-    pub fn with_burn(mut self) -> OnPolicyBuilder<PPOBurn, E> {
-        self.builder.resources.backend = Backend::Burn(BurnBackendConfig);
-        self.with_agent(Builder::ppo_burn_agent)
-    }
-}
-
-impl<E: Env> OnPolicyBuilder<PPOBurn, E> {
-    /// Switches PPO learning to Candle on `device`.
     ///
     /// # Arguments
     ///
@@ -720,19 +687,12 @@ impl<E: Env> OnPolicyBuilder<PPOBurn, E> {
         self.with_agent(Builder::ppo_candle_agent)
     }
 
-    /// Keeps PPO learning on the default Burn backend.
-    pub fn with_burn(mut self) -> Self {
+    /// Uses the default Burn backend for PPO learning.
+    pub fn with_burn(mut self) -> OnPolicyBuilder<PPOBurn, E> {
         self.builder.resources.backend = Backend::Burn(BurnBackendConfig);
-        self
+        self.with_agent(Builder::ppo_burn_agent)
     }
-}
 
-impl<M, E: Env> OnPolicyBuilder<PPO<M, PPOLearningHook>, E>
-where
-    M: OnPolicyLearner,
-    M::Policy: ToSafetensors,
-    PPOLearningHook: PPOHook<M>,
-{
     /// Installs an optional channel for reporting PPO training statistics.
     ///
     /// # Arguments
@@ -809,26 +769,10 @@ where
     }
 }
 
-impl<E: Env> OnPolicyBuilder<A2CCandle, E> {
+impl<M: OnPolicyLearner<Policy: ToSafetensors>, E: Env>
+    OnPolicyBuilder<A2C<M, A2CLearningHook>, E>
+{
     /// Uses Candle on `device` for A2C learning.
-    ///
-    /// # Arguments
-    ///
-    /// * `device` - Candle device on which policy and value learning will run.
-    pub fn with_candle(mut self, device: Device) -> Self {
-        self.builder.resources.backend = Backend::Candle(CandleBackend { device });
-        self
-    }
-
-    /// Switches A2C learning to the default Burn backend.
-    pub fn with_burn(mut self) -> OnPolicyBuilder<A2CBurn, E> {
-        self.builder.resources.backend = Backend::Burn(BurnBackendConfig);
-        self.with_agent(Builder::a2c_burn_agent)
-    }
-}
-
-impl<E: Env> OnPolicyBuilder<A2CBurn, E> {
-    /// Switches A2C learning to Candle on `device`.
     ///
     /// # Arguments
     ///
@@ -838,19 +782,12 @@ impl<E: Env> OnPolicyBuilder<A2CBurn, E> {
         self.with_agent(Builder::a2c_candle_agent)
     }
 
-    /// Keeps A2C learning on the default Burn backend.
-    pub fn with_burn(mut self) -> Self {
+    /// Uses the default Burn backend for A2C learning.
+    pub fn with_burn(mut self) -> OnPolicyBuilder<A2CBurn, E> {
         self.builder.resources.backend = Backend::Burn(BurnBackendConfig);
-        self
+        self.with_agent(Builder::a2c_burn_agent)
     }
-}
 
-impl<M, E: Env> OnPolicyBuilder<A2C<M, A2CLearningHook>, E>
-where
-    M: OnPolicyLearner,
-    M::Policy: ToSafetensors,
-    A2CLearningHook: A2CHook<M>,
-{
     /// Installs an optional channel for reporting A2C training statistics.
     ///
     /// # Arguments
@@ -873,7 +810,7 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
     ///
     /// Panics if `rollout_steps` is zero.
     pub fn with_rollout_steps(mut self, rollout_steps: usize) -> Self {
-        self.builder.config.sampler_configuration.setup.rollout_mode = RolloutMode::StepBound {
+        self.builder.config.sampler_configuration.rollout_mode = RolloutMode::StepBound {
             n_steps: NonZeroUsize::new(rollout_steps)
                 .expect("rollout steps must be greater than zero"),
         };
@@ -888,11 +825,8 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
     /// * `gamma` - Discount factor used to track discounted returns.
     /// * `clip_reward` - Absolute limit applied to normalized rewards.
     pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
-        self.builder
-            .config
-            .sampler_configuration
-            .setup
-            .reward_normalizer = Some(RewardNormalizerConfig { gamma, clip_reward });
+        self.builder.config.sampler_configuration.reward_normalizer =
+            Some(RewardNormalizerConfig { gamma, clip_reward });
         self
     }
 
@@ -905,11 +839,7 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
     ///
     /// * `config` - Whether to normalize observations and the optional absolute clipping limit.
     pub fn with_observation_normalizer(mut self, config: ObsNormalizerConfig) -> Self {
-        self.builder
-            .config
-            .sampler_configuration
-            .setup
-            .obs_normalizer = config;
+        self.builder.config.sampler_configuration.obs_normalizer = config;
         self
     }
 
@@ -924,7 +854,7 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
     ///
     /// Panics if `rollout_episodes` is zero.
     pub fn with_rollout_episodes(mut self, rollout_episodes: usize) -> Self {
-        self.builder.config.sampler_configuration.setup.rollout_mode = RolloutMode::EpisodeBound {
+        self.builder.config.sampler_configuration.rollout_mode = RolloutMode::EpisodeBound {
             n_episodes: NonZeroUsize::new(rollout_episodes)
                 .expect("rollout episodes must be greater than zero"),
         };
@@ -964,17 +894,6 @@ impl<E: Env> PPOBuilder<E> {
                 clip_range_schedule: ClipRangeSchedule::Constant(0.2),
                 log_progress: true,
             },
-            Backend::Candle(CandleBackend {
-                device: Device::Cpu,
-            }),
-            SamplerSetup {
-                rollout_mode: RolloutMode::StepBound {
-                    n_steps: NonZeroUsize::new(1024).unwrap(),
-                },
-                reward_normalizer: None,
-                obs_normalizer: ObsNormalizerConfig::Disabled,
-            },
-            true,
             Builder::ppo_candle_agent,
         )
     }
@@ -1003,17 +922,6 @@ impl<E: Env> A2CBuilder<E> {
                 sample_size: NonZeroUsize::new(64).unwrap(),
                 log_progress: true,
             },
-            Backend::Candle(CandleBackend {
-                device: Device::Cpu,
-            }),
-            SamplerSetup {
-                rollout_mode: RolloutMode::StepBound {
-                    n_steps: NonZeroUsize::new(1024).unwrap(),
-                },
-                reward_normalizer: None,
-                obs_normalizer: ObsNormalizerConfig::Disabled,
-            },
-            true,
             Builder::a2c_candle_agent,
         )
     }

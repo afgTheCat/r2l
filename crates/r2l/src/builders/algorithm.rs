@@ -1,8 +1,8 @@
 use std::{num::NonZeroUsize, sync::mpsc::Sender};
 
 use r2l_agents::on_policy_algorithms::{
-    a2c::{A2C, A2CHook, A2CParams},
-    ppo::{PPO, PPOHook, PPOParams},
+    a2c::{A2C, A2CParams},
+    ppo::{PPO, PPOParams},
 };
 use r2l_core::on_policy::learning_module::OnPolicyLearner;
 
@@ -34,7 +34,7 @@ pub(crate) enum AlgoConfig {
 }
 
 impl AlgoConfig {
-    pub(crate) fn build_ppo<M>(
+    pub(crate) fn build_ppo<M: OnPolicyLearner>(
         &self,
         learner: M,
         learning_hook: &LearningHookConfig,
@@ -42,11 +42,7 @@ impl AlgoConfig {
         progress: SharedTrainingProgress,
         reporter: Option<Sender<PPORolloutStats>>,
         n_envs: NonZeroUsize,
-    ) -> PPO<M, PPOLearningHook>
-    where
-        M: OnPolicyLearner,
-        PPOLearningHook: PPOHook<M>,
-    {
+    ) -> PPO<M, PPOLearningHook> {
         let (params, settings) = self.ppo_parts(reporter, n_envs);
         let hooks = learning_hook.build(settings, optimizer, progress);
         PPO {
@@ -56,7 +52,7 @@ impl AlgoConfig {
         }
     }
 
-    pub(crate) fn build_a2c<M>(
+    pub(crate) fn build_a2c<M: OnPolicyLearner>(
         &self,
         learner: M,
         learning_hook: &LearningHookConfig,
@@ -64,11 +60,7 @@ impl AlgoConfig {
         progress: SharedTrainingProgress,
         reporter: Option<Sender<A2CRolloutStats>>,
         n_envs: NonZeroUsize,
-    ) -> A2C<M, A2CLearningHook>
-    where
-        M: OnPolicyLearner,
-        A2CLearningHook: A2CHook<M>,
-    {
+    ) -> A2C<M, A2CLearningHook> {
         let (params, settings) = self.a2c_parts(reporter, n_envs);
         let hooks = learning_hook.build(settings, optimizer, progress);
         A2C {
