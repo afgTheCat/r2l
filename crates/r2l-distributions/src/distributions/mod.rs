@@ -1,6 +1,6 @@
 use r2l_core::{
     error::{Error, Result},
-    tensor::R2lTensor,
+    tensor::{R2lTensor, TensorOps},
 };
 
 use crate::Network;
@@ -25,7 +25,7 @@ pub trait TensorParameter<T: R2lTensor>: Clone + std::fmt::Debug + Send + 'stati
     fn for_inference(&self) -> Self;
 }
 
-impl<T: R2lTensor> TensorParameter<T> for T {
+impl<T: TensorOps> TensorParameter<T> for T {
     fn value(&self) -> T {
         self.clone()
     }

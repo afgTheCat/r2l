@@ -11,15 +11,15 @@ use std::fmt::Debug;
 use itertools::izip;
 use serde::{Deserialize, Serialize};
 
-use crate::{error::TensorError, utils::slice_mean};
+use crate::error::TensorError;
 
 type Result<T> = std::result::Result<T, TensorError>;
 
 // NOTE: we might want to add int_vec_and_shape method for less allocations, since to_vec_and_shape
 // usually clones the inner vector. Would be useful in ActorWrapper.
 //
-/// Tensor contract shared by environments, policies, buffers, agents, and
-/// built-in algorithm utilities.
+/// Tensor data and arithmetic shared by environments, buffers, and normalization.
+/// Backend learning and distribution operations are provided by extension traits.
 ///
 /// Implementors should be cheap enough to clone for rollout storage and safe to
 /// move across worker threads. `to_vec` is mainly for inspection, logging, and
@@ -63,12 +63,6 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns an error if the values and shape cannot form a backend tensor.
     fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self>;
 
-    /// Creates values on the same device as `like`, without connecting them to its gradient graph.
-    ///
-    /// # Errors
-    /// Returns an error if values and dimensions are incompatible or allocation fails.
-    fn from_vec_like(data: Vec<f32>, shape: impl Into<Shape>, like: &Self) -> Result<Self>;
-
     /// Converts a tensor from another backend.
     ///
     /// # Errors
@@ -111,71 +105,6 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     /// Returns an error if the tensor backend cannot perform the operation.
     fn mul(&self, other: &Self) -> Result<Self>;
 
-    /// Multiplies rank-two matrices, preserving gradients through both operands.
-    ///
-    /// # Errors
-    /// Returns an error unless the inner dimensions match.
-    fn matmul(&self, other: &Self) -> Result<Self>;
-
-    /// Elementwise natural logarithm.
-    ///
-    /// # Errors
-    /// Returns an error if the backend cannot evaluate the logarithm.
-    fn log(&self) -> Result<Self>;
-
-    /// Returns the same values without a connection to the gradient graph.
-    #[must_use]
-    fn detach(&self) -> Self;
-
-    /// Selects values along `dim` using category indices stored in `indices`.
-    ///
-    /// The tensors must have the same rank and match in every dimension except
-    /// `dim`. The result has the shape of `indices`. Index values must be
-    /// non-negative integers smaller than the size of `dim`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the shapes are incompatible or the backend cannot
-    /// perform the operation.
-    fn gather(&self, dim: usize, indices: &Self) -> Result<Self>;
-
-    /// Elementwise exponential.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the tensor backend cannot perform the operation.
-    fn exp(&self) -> Result<Self>;
-
-    /// Clamps each element to the inclusive range `[min, max]`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the tensor backend cannot perform the operation.
-    fn clamp(&self, min: f32, max: f32) -> Result<Self>;
-
-    /// Elementwise minimum between two tensors.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the tensor backend cannot perform the operation.
-    fn minimum(&self, other: &Self) -> Result<Self>;
-
-    /// Elementwise negation.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the tensor backend cannot perform the operation.
-    fn neg(&self) -> Result<Self> {
-        self.mul_scalar(-1.0)
-    }
-
-    /// Mean reduction over all elements.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the tensor backend cannot perform the reduction.
-    fn mean(&self) -> Result<Self>;
-
     /// Elementwise square.
     ///
     /// # Errors
@@ -184,20 +113,6 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     fn sqr(&self) -> Result<Self> {
         self.mul(self)
     }
-
-    /// Normalizes values into probabilities along `dim`, preserving the shape.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the backend cannot perform the operation.
-    fn softmax(&self, dim: usize) -> Result<Self>;
-
-    /// Computes log probabilities along `dim`, preserving the shape.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the backend cannot perform the operation.
-    fn log_softmax(&self, dim: usize) -> Result<Self>;
 
     /// Creates a zero-filled tensor with `shape`.
     ///
@@ -218,42 +133,6 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     ///
     /// Returns an error if the tensor backend cannot perform the operation.
     fn mul_scalar(&self, scalar: f32) -> Result<Self>;
-
-    /// Adds `scalar` to every element.
-    ///
-    /// # Errors
-    /// Returns an error if the backend cannot perform the operation.
-    fn add_scalar(&self, scalar: f32) -> Result<Self>;
-
-    /// Sums an axis, retaining it with length one.
-    ///
-    /// # Errors
-    /// Returns an error for an invalid axis or failed reduction.
-    fn sum_dim(&self, dim: usize) -> Result<Self>;
-
-    /// Selects a contiguous range along an axis, preserving rank.
-    ///
-    /// # Errors
-    /// Returns an error if the axis or range is invalid.
-    fn narrow(&self, dim: usize, start: usize, length: usize) -> Result<Self>;
-
-    /// Concatenates a nonempty sequence of tensors along an axis.
-    ///
-    /// # Errors
-    /// Returns an error if ranks or non-concatenated dimensions differ.
-    fn cat(tensors: &[Self], dim: usize) -> Result<Self>;
-
-    /// Expands singleton axes to a target shape of the same rank.
-    ///
-    /// # Errors
-    /// Returns an error if dimensions cannot be broadcast.
-    fn broadcast_as(&self, shape: impl Into<Shape>) -> Result<Self>;
-
-    /// Computes elementwise log-sigmoid without overflowing for large finite logits.
-    ///
-    /// # Errors
-    /// Returns an error if the backend cannot perform the operation.
-    fn log_sigmoid(&self) -> Result<Self>;
 
     /// Adds a non-empty slice of equally shaped tensors.
     ///
@@ -308,6 +187,137 @@ pub trait R2lTensor: Clone + Send + Sync + Debug + 'static {
     }
 }
 
+/// Backend operations shared by distributions and on-policy learning.
+/// Operations must preserve gradient connections unless explicitly detaching values.
+pub trait TensorOps: R2lTensor {
+    /// Returns the same values without a connection to the gradient graph.
+    #[must_use]
+    fn detach(&self) -> Self;
+
+    /// Elementwise exponential.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
+    fn exp(&self) -> Result<Self>;
+
+    /// Elementwise negation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
+    fn neg(&self) -> Result<Self> {
+        self.mul_scalar(-1.0)
+    }
+
+    /// Mean reduction over all elements.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the reduction.
+    fn mean(&self) -> Result<Self>;
+
+    /// Adds `scalar` to every element.
+    ///
+    /// # Errors
+    /// Returns an error if the backend cannot perform the operation.
+    fn add_scalar(&self, scalar: f32) -> Result<Self>;
+
+    /// Concatenates a nonempty sequence of tensors along an axis.
+    ///
+    /// # Errors
+    /// Returns an error if ranks or non-concatenated dimensions differ.
+    fn cat(tensors: &[Self], dim: usize) -> Result<Self>;
+}
+
+/// Additional tensor operations required by built-in on-policy objectives.
+pub trait OnPolicyTensor: TensorOps {
+    /// Clamps each element to the inclusive range `[min, max]`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
+    fn clamp(&self, min: f32, max: f32) -> Result<Self>;
+
+    /// Elementwise minimum between two tensors.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tensor backend cannot perform the operation.
+    fn minimum(&self, other: &Self) -> Result<Self>;
+}
+
+/// Additional tensor operations required by built-in action distributions.
+pub trait DistributionTensor: TensorOps {
+    /// Creates values on the same device as `like`, without connecting them to its gradient graph.
+    ///
+    /// # Errors
+    /// Returns an error if values and dimensions are incompatible or allocation fails.
+    fn from_vec_like(data: Vec<f32>, shape: impl Into<Shape>, like: &Self) -> Result<Self>;
+
+    /// Multiplies rank-two matrices, preserving gradients through both operands.
+    ///
+    /// # Errors
+    /// Returns an error unless the inner dimensions match.
+    fn matmul(&self, other: &Self) -> Result<Self>;
+
+    /// Elementwise natural logarithm.
+    ///
+    /// # Errors
+    /// Returns an error if the backend cannot evaluate the logarithm.
+    fn log(&self) -> Result<Self>;
+
+    /// Selects values along `dim` using category indices stored in `indices`.
+    ///
+    /// The tensors must have the same rank and match in every dimension except
+    /// `dim`. The result has the shape of `indices`. Index values must be
+    /// non-negative integers smaller than the size of `dim`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the shapes are incompatible or the backend cannot
+    /// perform the operation.
+    fn gather(&self, dim: usize, indices: &Self) -> Result<Self>;
+
+    /// Normalizes values into probabilities along `dim`, preserving the shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot perform the operation.
+    fn softmax(&self, dim: usize) -> Result<Self>;
+
+    /// Computes log probabilities along `dim`, preserving the shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot perform the operation.
+    fn log_softmax(&self, dim: usize) -> Result<Self>;
+
+    /// Sums an axis, retaining it with length one.
+    ///
+    /// # Errors
+    /// Returns an error for an invalid axis or failed reduction.
+    fn sum_dim(&self, dim: usize) -> Result<Self>;
+
+    /// Selects a contiguous range along an axis, preserving rank.
+    ///
+    /// # Errors
+    /// Returns an error if the axis or range is invalid.
+    fn narrow(&self, dim: usize, start: usize, length: usize) -> Result<Self>;
+
+    /// Expands singleton axes to a target shape of the same rank.
+    ///
+    /// # Errors
+    /// Returns an error if dimensions cannot be broadcast.
+    fn broadcast_as(&self, shape: impl Into<Shape>) -> Result<Self>;
+
+    /// Computes elementwise log-sigmoid without overflowing for large finite logits.
+    ///
+    /// # Errors
+    /// Returns an error if the backend cannot perform the operation.
+    fn log_sigmoid(&self) -> Result<Self>;
+}
+
 /// Built-in tensor backed by a flat vector and an explicit shape.
 ///
 /// `VecTensor` is useful for environments and for converting between backend
@@ -330,43 +340,6 @@ impl VecTensor {
         let data = izip!(&self.data, &min.data, &max.data)
             .map(|(value, min, max)| value.clamp(*min, *max))
             .collect();
-        Self::new(data, self.shape.clone())
-    }
-
-    fn normalized_exp(&self, dim: usize, logarithmic: bool) -> Result<Self> {
-        let Some(&width) = self.shape.get(dim).filter(|&&width| width > 0) else {
-            return Err(TensorError::operation(
-                "softmax",
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "invalid softmax dimension",
-                ),
-            ));
-        };
-        let stride: usize = self.shape[dim + 1..].iter().product();
-        let outer: usize = self.shape[..dim].iter().product();
-        let mut data = self.data.clone();
-        for batch in 0..outer {
-            for offset in 0..stride {
-                let start = batch * width * stride + offset;
-                let max = (0..width)
-                    .map(|index| self.data[start + index * stride])
-                    .fold(f32::NEG_INFINITY, f32::max);
-                let sum = (0..width)
-                    .map(|index| (self.data[start + index * stride] - max).exp())
-                    .sum::<f32>();
-                let log_sum = sum.ln();
-                for index in 0..width {
-                    let position = start + index * stride;
-                    let shifted = self.data[position] - max;
-                    data[position] = if logarithmic {
-                        shifted - log_sum
-                    } else {
-                        shifted.exp() / sum
-                    };
-                }
-            }
-        }
         Self::new(data, self.shape.clone())
     }
 
@@ -419,28 +392,6 @@ impl VecTensor {
 }
 
 impl R2lTensor for VecTensor {
-    fn matmul(&self, other: &Self) -> Result<Self> {
-        let [rows, inner, columns] = matrix_dimensions(&self.shape, &other.shape)?;
-        let data = (0..rows * columns)
-            .map(|index| {
-                let row = index / columns;
-                let column = index % columns;
-                (0..inner)
-                    .map(|k| self.data[row * inner + k] * other.data[k * columns + column])
-                    .sum()
-            })
-            .collect();
-        Self::new(data, [rows, columns])
-    }
-
-    fn log(&self) -> Result<Self> {
-        self.map(f32::ln)
-    }
-
-    fn detach(&self) -> Self {
-        self.clone()
-    }
-
     fn to_vec(&self) -> Result<Vec<f32>> {
         Ok(self.data.clone())
     }
@@ -451,93 +402,6 @@ impl R2lTensor for VecTensor {
 
     fn from_vec_and_shape(data: Vec<f32>, shape: impl Into<Shape>) -> Result<Self> {
         Self::new(data, shape)
-    }
-
-    fn from_vec_like(data: Vec<f32>, shape: impl Into<Shape>, _like: &Self) -> Result<Self> {
-        Self::new(data, shape)
-    }
-
-    fn add_scalar(&self, scalar: f32) -> Result<Self> {
-        self.map(|value| value + scalar)
-    }
-
-    fn sum_dim(&self, dim: usize) -> Result<Self> {
-        validate_axis(&self.shape, dim)?;
-        let mut shape = self.shape.to_vec();
-        shape[dim] = 1;
-        let shape = Shape::from(shape);
-        let stride: usize = self.shape[dim + 1..].iter().product();
-        let outer: usize = self.shape[..dim].iter().product();
-        let width = self.shape[dim];
-        let mut data = Vec::with_capacity(shape.num_elements());
-        for group in 0..outer {
-            for offset in 0..stride {
-                data.push(
-                    (0..width)
-                        .map(|k| self.data[(group * width + k) * stride + offset])
-                        .sum(),
-                );
-            }
-        }
-        Self::new(data, shape)
-    }
-
-    fn narrow(&self, dim: usize, start: usize, length: usize) -> Result<Self> {
-        let shape = narrow_shape(&self.shape, dim, start, length)?;
-        let stride: usize = self.shape[dim + 1..].iter().product();
-        let outer: usize = self.shape[..dim].iter().product();
-        let mut data = Vec::with_capacity(shape.num_elements());
-        for group in 0..outer {
-            let begin = (group * self.shape[dim] + start) * stride;
-            data.extend_from_slice(&self.data[begin..begin + length * stride]);
-        }
-        Self::new(data, shape)
-    }
-
-    fn cat(tensors: &[Self], dim: usize) -> Result<Self> {
-        let shapes: Vec<_> = tensors.iter().map(Self::to_shape).collect();
-        let shape = concatenated_shape(&shapes, dim)?;
-        let outer: usize = shape[..dim].iter().product();
-        let stride: usize = shape[dim + 1..].iter().product();
-        let mut data = Vec::with_capacity(shape.num_elements());
-        for group in 0..outer {
-            for tensor in tensors {
-                let width = tensor.shape[dim] * stride;
-                data.extend_from_slice(&tensor.data[group * width..(group + 1) * width]);
-            }
-        }
-        Self::new(data, shape)
-    }
-
-    fn broadcast_as(&self, shape: impl Into<Shape>) -> Result<Self> {
-        let shape = shape.into();
-        validate_broadcast(&self.shape, &shape)?;
-        let data = (0..shape.num_elements())
-            .map(|mut index| {
-                let mut source = 0;
-                let mut stride = 1;
-                for (&src, &dst) in self.shape.iter().zip(shape.iter()).rev() {
-                    let coordinate = index % dst;
-                    index /= dst;
-                    if src != 1 {
-                        source += coordinate * stride;
-                    }
-                    stride *= src;
-                }
-                self.data[source]
-            })
-            .collect();
-        Self::new(data, shape)
-    }
-
-    fn log_sigmoid(&self) -> Result<Self> {
-        self.map(|value| {
-            if value >= 0. {
-                -(-value).exp().ln_1p()
-            } else {
-                value - value.exp().ln_1p()
-            }
-        })
     }
 
     fn add(&self, other: &Self) -> Result<Self> {
@@ -552,70 +416,12 @@ impl R2lTensor for VecTensor {
         self.zip_map(other, "multiply", |a, b| a * b)
     }
 
-    fn gather(&self, dim: usize, indices: &Self) -> Result<Self> {
-        validate_gather(&self.shape, &indices.shape, dim)?;
-        let stride: usize = self.shape[dim + 1..].iter().product();
-        let data = indices
-            .data
-            .iter()
-            .enumerate()
-            .map(|(position, &index)| {
-                if !index.is_finite()
-                    || index < 0.0
-                    || index.fract() != 0.0
-                    || index as usize >= self.shape[dim]
-                {
-                    return Err(TensorError::operation(
-                        "gather",
-                        std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
-                            "invalid gather index",
-                        ),
-                    ));
-                }
-                let outer = position / (indices.shape[dim] * stride);
-                let offset = position % stride;
-                Ok(self.data[(outer * self.shape[dim] + index as usize) * stride + offset])
-            })
-            .collect::<Result<Vec<_>>>()?;
-        Self::new(data, indices.shape.clone())
-    }
-
-    fn exp(&self) -> Result<Self> {
-        self.map(f32::exp)
-    }
-
-    fn clamp(&self, min: f32, max: f32) -> Result<Self> {
-        self.map(|value| value.clamp(min, max))
-    }
-
-    fn minimum(&self, other: &Self) -> Result<Self> {
-        self.zip_map(other, "minimum", f32::min)
-    }
-
-    fn mean(&self) -> Result<Self> {
-        if self.data.is_empty() {
-            return Err(TensorError::EmptyInput {
-                operation: "mean".into(),
-            });
-        }
-        let mean = slice_mean(&self.data);
-        Ok(Self::from_vec(vec![mean]))
-    }
-
     fn mul_scalar(&self, scalar: f32) -> Result<Self> {
         self.map(|value| value * scalar)
     }
-
-    fn softmax(&self, dim: usize) -> Result<Self> {
-        self.normalized_exp(dim, false)
-    }
-
-    fn log_softmax(&self, dim: usize) -> Result<Self> {
-        self.normalized_exp(dim, true)
-    }
 }
 
+#[cfg(any(feature = "candle", feature = "burn"))]
 fn matrix_dimensions(left: &Shape, right: &Shape) -> Result<[usize; 3]> {
     match (left.dims(), right.dims()) {
         ([rows, inner], [other_inner, columns]) if inner == other_inner => {
@@ -629,6 +435,7 @@ fn matrix_dimensions(left: &Shape, right: &Shape) -> Result<[usize; 3]> {
     }
 }
 
+#[cfg(any(feature = "candle", feature = "burn"))]
 fn validate_gather(shape: &[usize], indices_shape: &[usize], dim: usize) -> Result<()> {
     if dim >= shape.len()
         || shape.len() != indices_shape.len()
@@ -647,6 +454,7 @@ fn validate_gather(shape: &[usize], indices_shape: &[usize], dim: usize) -> Resu
     Ok(())
 }
 
+#[cfg(any(feature = "candle", feature = "burn"))]
 fn validate_axis(shape: &Shape, dim: usize) -> Result<()> {
     if dim >= shape.rank() {
         return Err(TensorError::invalid_argument(
@@ -657,6 +465,7 @@ fn validate_axis(shape: &Shape, dim: usize) -> Result<()> {
     Ok(())
 }
 
+#[cfg(any(feature = "candle", feature = "burn"))]
 fn narrow_shape(shape: &Shape, dim: usize, start: usize, length: usize) -> Result<Shape> {
     validate_axis(shape, dim)?;
     if start.checked_add(length).is_none_or(|end| end > shape[dim]) {
@@ -670,6 +479,7 @@ fn narrow_shape(shape: &Shape, dim: usize, start: usize, length: usize) -> Resul
     Ok(result.into())
 }
 
+#[cfg(any(feature = "candle", feature = "burn"))]
 fn concatenated_shape(shapes: &[Shape], dim: usize) -> Result<Shape> {
     let first = shapes.first().ok_or_else(|| TensorError::EmptyInput {
         operation: "concatenate".into(),
@@ -698,6 +508,7 @@ fn concatenated_shape(shapes: &[Shape], dim: usize) -> Result<Shape> {
     Ok(result.into())
 }
 
+#[cfg(any(feature = "candle", feature = "burn"))]
 fn validate_broadcast(source: &Shape, target: &Shape) -> Result<()> {
     if source.rank() != target.rank()
         || source

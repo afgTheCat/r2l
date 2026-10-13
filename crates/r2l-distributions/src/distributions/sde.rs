@@ -5,7 +5,7 @@ use std::{num::NonZeroUsize, sync::Mutex};
 use r2l_core::{
     error::{Error, Result},
     rng::with_rng,
-    tensor::R2lTensor,
+    tensor::DistributionTensor,
 };
 use rand_distr::{Distribution, StandardNormal};
 use serde::{Deserialize, Serialize};
@@ -53,7 +53,7 @@ impl<T> Clone for StateDependentNoise<T> {
     }
 }
 
-impl<T: R2lTensor> StateDependentNoise<T> {
+impl<T: DistributionTensor> StateDependentNoise<T> {
     pub fn sample(&self, features: &T, log_std: &T) -> Result<T> {
         let mut noise = self.noise.lock().map_err(|_| {
             Error::invalid_state("sample state-dependent noise", "noise lock was poisoned")

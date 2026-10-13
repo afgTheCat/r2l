@@ -21,7 +21,7 @@ use r2l_core::{
     error::{Result, TensorError},
     models::{Policy, ValueFunction},
     rng::with_rng,
-    tensor::R2lTensor,
+    tensor::{R2lTensor, TensorOps},
 };
 use rand::seq::SliceRandom;
 
@@ -91,7 +91,7 @@ impl Logps {
     }
 }
 
-fn batch_advantages_and_returns<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
+fn batch_advantages_and_returns<T: TensorOps, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
     batch: &B,
     value_func: &impl ValueFunction<Tensor = T>,
     gamma: f32,
@@ -139,7 +139,7 @@ fn batch_advantages_and_returns<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -
 /// # Errors
 ///
 /// Returns an error if value inference fails.
-pub fn batches_advantages_and_returns<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
+pub fn batches_advantages_and_returns<T: TensorOps, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
     batches: &[B],
     value_func: &impl ValueFunction<Tensor = T>,
     gamma: f32,
@@ -161,7 +161,7 @@ pub fn batches_advantages_and_returns<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn
 ///
 /// # Errors
 /// Returns an error if rows cannot be concatenated into nonempty batches.
-pub fn sample<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
+pub fn sample<T: TensorOps, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
     batches: &[B],
     indices: &[(usize, usize)],
     prepare_tensor: L,
@@ -180,7 +180,7 @@ pub fn sample<T: R2lTensor, B: TrajectoryBatch<T>, L: Fn(&T) -> T>(
 /// # Errors
 ///
 /// Returns an error if policy evaluation fails.
-pub fn logps<T: R2lTensor, B: TrajectoryBatch<T>>(
+pub fn logps<T: TensorOps, B: TrajectoryBatch<T>>(
     batches: &[B],
     policy: &impl Policy<Tensor = T>,
 ) -> Result<Logps> {

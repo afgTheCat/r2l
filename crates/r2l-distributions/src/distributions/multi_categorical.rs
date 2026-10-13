@@ -5,7 +5,7 @@ use r2l_core::{
     error::{Error, Result},
     models::Actor,
     rng::with_rng,
-    tensor::R2lTensor,
+    tensor::{DistributionTensor, R2lTensor, TensorOps},
 };
 use rand_distr::{Distribution, weighted::WeightedIndex};
 
@@ -43,7 +43,7 @@ impl<N: Network> MultiCategorical<N> {
     }
 }
 
-impl<N: Network> Actor for MultiCategorical<N> {
+impl<N: Network<Tensor: DistributionTensor>> Actor for MultiCategorical<N> {
     type Tensor = N::Tensor;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -82,7 +82,7 @@ impl<N: Network> Actor for MultiCategorical<N> {
     }
 }
 
-impl<N: Network> Policy for MultiCategorical<N> {
+impl<N: Network<Tensor: DistributionTensor>> Policy for MultiCategorical<N> {
     fn for_inference(&self) -> Self {
         Self {
             logits: self.logits.for_inference(),

@@ -5,7 +5,7 @@ use r2l_core::{
     error::{Error, Result},
     models::Actor,
     rng::with_rng,
-    tensor::R2lTensor,
+    tensor::{DistributionTensor, R2lTensor, TensorOps},
 };
 use rand_distr::{Distribution, StandardNormal};
 
@@ -25,7 +25,7 @@ pub struct DiagGaussian<N: Network, P: TensorParameter<N::Tensor> = <N as Networ
     pub(super) sde: Option<StateDependentNoise<N::Tensor>>,
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> DiagGaussian<N, P> {
+impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> DiagGaussian<N, P> {
     /// Builds a Gaussian policy from a mean network and log-standard-deviation parameter.
     ///
     /// # Arguments
@@ -90,7 +90,9 @@ impl<N: Network, P: TensorParameter<N::Tensor>> DiagGaussian<N, P> {
     }
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DiagGaussian<N, P> {
+impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> Actor
+    for DiagGaussian<N, P>
+{
     type Tensor = N::Tensor;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -115,7 +117,9 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DiagGaussian<N, P> {
     }
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> Policy for DiagGaussian<N, P> {
+impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> Policy
+    for DiagGaussian<N, P>
+{
     fn for_inference(&self) -> Self {
         Self {
             mean: self.mean.for_inference(),

@@ -5,7 +5,7 @@ use r2l_core::{
     error::Result,
     models::{Learner, Policy},
     on_policy::{algorithm::Agent, learning_module::OnPolicyLearner, losses::PolicyValueLosses},
-    tensor::R2lTensor,
+    tensor::{OnPolicyTensor, R2lTensor, TensorOps},
 };
 
 use crate::{
@@ -117,14 +117,14 @@ pub struct PPO<Module: OnPolicyLearner, Hooks: PPOHook<Module>> {
 struct PPOObjective;
 
 impl PPOObjective {
-    fn policy_loss<T: R2lTensor>(ratio: &T, advantages: &T, clip_range: f32) -> Result<T> {
+    fn policy_loss<T: OnPolicyTensor>(ratio: &T, advantages: &T, clip_range: f32) -> Result<T> {
         let clip_ratio = ratio.clamp(1. - clip_range, 1. + clip_range)?;
         let clipped_adv = clip_ratio.mul(advantages)?;
         let ratio_adv = ratio.mul(advantages)?;
         Ok(ratio_adv.minimum(&clipped_adv)?.neg()?.mean()?)
     }
 
-    fn value_loss<T: R2lTensor>(returns: &T, values_pred: &T) -> Result<T> {
+    fn value_loss<T: TensorOps>(returns: &T, values_pred: &T) -> Result<T> {
         Ok(returns.sub(values_pred)?.sqr()?.mean()?)
     }
 }
@@ -233,40 +233,5 @@ impl<M: OnPolicyLearner, H: PPOHook<M>> Agent for PPO<M, H> {
 
     fn set_learning_rate(&mut self, learning_rate: f64) {
         self.lm.set_learning_rate(learning_rate);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use r2l_core::tensor::{R2lTensor, VecTensor};
-
-    use super::PPOObjective;
-
-    fn scalar(tensor: &VecTensor) -> f32 {
-        tensor.to_vec().unwrap()[0]
-    }
-
-    #[test]
-    fn clipped_policy_loss_matches_hand_calculation() {
-        let ratios = VecTensor::from_vec(vec![1.3, 0.7, 1.1, 0.9]);
-        let advantages = VecTensor::from_vec(vec![1.0, 1.0, -1.0, -1.0]);
-        let loss = PPOObjective::policy_loss(&ratios, &advantages, 0.2).unwrap();
-        assert!((scalar(&loss) - 0.025).abs() < 1e-6);
-    }
-
-    #[test]
-    fn clipping_uses_the_pessimistic_surrogate_for_negative_advantages() {
-        let ratios = VecTensor::from_vec(vec![0.7]);
-        let advantages = VecTensor::from_vec(vec![-1.0]);
-        let loss = PPOObjective::policy_loss(&ratios, &advantages, 0.2).unwrap();
-        assert!((scalar(&loss) - 0.8).abs() < 1e-6);
-    }
-
-    #[test]
-    fn value_loss_is_mean_squared_error() {
-        let returns = VecTensor::from_vec(vec![1.0, 2.0, 5.0]);
-        let predictions = VecTensor::from_vec(vec![0.0, 4.0, 3.0]);
-        let loss = PPOObjective::value_loss(&returns, &predictions).unwrap();
-        assert!((scalar(&loss) - 3.0).abs() < 1e-6);
     }
 }

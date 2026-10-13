@@ -5,7 +5,7 @@ use r2l_core::{
     env::action_ranges,
     error::{Error, Result},
     models::Actor,
-    tensor::R2lTensor,
+    tensor::{DistributionTensor, R2lTensor, TensorOps},
 };
 
 use super::TensorParameter;
@@ -21,7 +21,7 @@ pub struct Composite<N: Network, P: TensorParameter<N::Tensor> = <N as Network>:
     pub(super) action_size: NonZeroUsize,
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> Composite<N, P> {
+impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> Composite<N, P> {
     /// Builds a nonempty ordered collection of policies over the same observations.
     ///
     /// # Arguments
@@ -52,7 +52,9 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Composite<N, P> {
     }
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> Actor for Composite<N, P> {
+impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> Actor
+    for Composite<N, P>
+{
     type Tensor = N::Tensor;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -74,7 +76,9 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for Composite<N, P> {
     }
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> Policy for Composite<N, P> {
+impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> Policy
+    for Composite<N, P>
+{
     fn for_inference(&self) -> Self {
         Self {
             policies: self.policies.iter().map(Policy::for_inference).collect(),

@@ -1,6 +1,6 @@
 use crate::{
     error::{Error, Result},
-    tensor::R2lTensor,
+    tensor::TensorOps,
 };
 
 /// Reduced policy/value losses shared by on-policy learners.
@@ -30,7 +30,7 @@ impl<T> PolicyValueLosses<T> {
     }
 }
 
-impl<T: R2lTensor> PolicyValueLosses<T> {
+impl<T: TensorOps> PolicyValueLosses<T> {
     /// Adds an already signed and weighted entropy term to the policy loss.
     ///
     /// # Errors

@@ -11,9 +11,13 @@ use r2l_agents::on_policy_algorithms::{
     ppo::{PPOBatchData, PPOHook, PPOParams},
 };
 use r2l_core::{
-    HookResult, buffers::TrajectoryBatch, error::Result, models::Policy,
-    on_policy::learning_module::OnPolicyLearner, on_policy::losses::PolicyValueLosses,
-    tensor::R2lTensor,
+    HookResult,
+    buffers::TrajectoryBatch,
+    error::Result,
+    models::Policy,
+    on_policy::learning_module::OnPolicyLearner,
+    on_policy::losses::PolicyValueLosses,
+    tensor::{R2lTensor, TensorOps},
 };
 use serde::{Deserialize, Serialize};
 

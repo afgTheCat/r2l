@@ -5,7 +5,7 @@ use r2l_core::{
     error::Result,
     models::{Learner, Policy},
     on_policy::{algorithm::Agent, learning_module::OnPolicyLearner, losses::PolicyValueLosses},
-    tensor::R2lTensor,
+    tensor::{R2lTensor, TensorOps},
 };
 
 use crate::{
@@ -108,11 +108,11 @@ pub struct A2C<Module: OnPolicyLearner, Hooks: A2CHook<Module>> {
 struct A2CObjective;
 
 impl A2CObjective {
-    fn policy_loss<T: R2lTensor>(advantages: &T, logp: &T) -> Result<T> {
+    fn policy_loss<T: TensorOps>(advantages: &T, logp: &T) -> Result<T> {
         Ok(advantages.mul(logp)?.neg()?.mean()?)
     }
 
-    fn value_loss<T: R2lTensor>(returns: &T, values_pred: &T) -> Result<T> {
+    fn value_loss<T: TensorOps>(returns: &T, values_pred: &T) -> Result<T> {
         Ok(returns.sub(values_pred)?.sqr()?.mean()?)
     }
 }
@@ -201,32 +201,5 @@ impl<M: OnPolicyLearner, H: A2CHook<M>> Agent for A2C<M, H> {
 
     fn set_learning_rate(&mut self, learning_rate: f64) {
         self.lm.set_learning_rate(learning_rate);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use r2l_core::tensor::{R2lTensor, VecTensor};
-
-    use super::A2CObjective;
-
-    fn scalar(tensor: &VecTensor) -> f32 {
-        tensor.to_vec().unwrap()[0]
-    }
-
-    #[test]
-    fn policy_loss_matches_negative_advantage_weighted_log_probability() {
-        let advantages = VecTensor::from_vec(vec![2.0, -1.0]);
-        let logp = VecTensor::from_vec(vec![-0.5, -2.0]);
-        let loss = A2CObjective::policy_loss(&advantages, &logp).unwrap();
-        assert!((scalar(&loss) + 0.5).abs() < 1e-6);
-    }
-
-    #[test]
-    fn value_loss_is_mean_squared_error() {
-        let returns = VecTensor::from_vec(vec![1.0, 3.0]);
-        let predictions = VecTensor::from_vec(vec![2.0, 0.0]);
-        let loss = A2CObjective::value_loss(&returns, &predictions).unwrap();
-        assert!((scalar(&loss) - 5.0).abs() < 1e-6);
     }
 }

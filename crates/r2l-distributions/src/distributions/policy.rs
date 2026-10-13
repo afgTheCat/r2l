@@ -3,7 +3,7 @@ use r2l_core::{
     env::Space,
     error::{Error, Result},
     models::Actor,
-    tensor::R2lTensor,
+    tensor::{DistributionTensor, R2lTensor},
 };
 
 use super::TensorParameter;
@@ -23,7 +23,7 @@ pub enum DistributionKind<N: Network, P: TensorParameter<N::Tensor> = <N as Netw
     Composite(Composite<N, P>),
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> DistributionKind<N, P> {
+impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> DistributionKind<N, P> {
     /// Builds distributions for an action space using caller-supplied parameter factories.
     ///
     /// `network` builds one network for each leaf, receiving its parameter prefix
@@ -108,7 +108,9 @@ impl<N: Network, P: TensorParameter<N::Tensor>> DistributionKind<N, P> {
     }
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DistributionKind<N, P> {
+impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> Actor
+    for DistributionKind<N, P>
+{
     type Tensor = N::Tensor;
 
     fn action(&self, observation: Self::Tensor) -> Result<Self::Tensor> {
@@ -119,7 +121,9 @@ impl<N: Network, P: TensorParameter<N::Tensor>> Actor for DistributionKind<N, P>
     }
 }
 
-impl<N: Network, P: TensorParameter<N::Tensor>> Policy for DistributionKind<N, P> {
+impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> Policy
+    for DistributionKind<N, P>
+{
     fn for_inference(&self) -> Self {
         match self {
             Self::Categorical(policy) => Self::Categorical(policy.for_inference()),

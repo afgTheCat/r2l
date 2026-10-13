@@ -2,6 +2,7 @@ use crate::{
     error::Result,
     models::{Learner, Policy, ValueFunction},
     on_policy::losses::PolicyValueLosses,
+    tensor::OnPolicyTensor,
 };
 
 /// Learner contract using batched policies and value functions.
@@ -10,7 +11,7 @@ use crate::{
 /// Training and inference use the same policy and tensor types; inference
 /// preparation controls gradient tracking and training-only behavior.
 pub trait OnPolicyLearner:
-    Learner<Losses = PolicyValueLosses<Self::Tensor>> + ValueFunction
+    Learner<Losses = PolicyValueLosses<Self::Tensor>> + ValueFunction<Tensor: OnPolicyTensor>
 {
     /// Policy type used for both learning and rollout/inference.
     type Policy: Policy<Tensor = Self::Tensor> + Clone;

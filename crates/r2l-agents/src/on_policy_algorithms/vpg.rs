@@ -5,7 +5,7 @@ use r2l_core::{
     error::Result,
     models::Policy,
     on_policy::{algorithm::Agent, learning_module::OnPolicyLearner, losses::PolicyValueLosses},
-    tensor::R2lTensor,
+    tensor::{R2lTensor, TensorOps},
 };
 
 use crate::on_policy_algorithms::{
