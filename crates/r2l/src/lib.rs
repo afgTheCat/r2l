@@ -70,7 +70,7 @@ mod inference;
 mod snapshot;
 mod utils;
 
-pub use backend::BurnBackend;
+pub use backend::{BurnBackend, CandleDevice};
 pub use builders::{
     A2CBuilder, A2CBurn, A2CCandle, AdamWConfig, GradientClippingConfig, LearningRateSchedule,
     ObsNormalizerConfig, OnPolicyBuilder, OptimizerConfig, PPOBuilder, PPOBurn, PPOCandle,

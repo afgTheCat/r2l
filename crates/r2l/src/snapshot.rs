@@ -13,7 +13,7 @@ use crate::{
     backend::{BackendConfig, BurnBackendConfig},
     builders::{
         BuilderResources,
-        algorithm::AlgoConfig,
+        algorithm::{AlgoConfig, PPOConfig},
         learner::{LearnerConfig, LearningHookConfig},
         on_policy_hook::OnPolicyHookConfig,
         sampler::SamplerConfiguration,
@@ -28,6 +28,7 @@ use crate::{
 /// still under construction.
 pub struct SnapshotAlgo<L> {
     algo_config: AlgoConfig,
+    ppo_config: PPOConfig,
     learner: LearnerConfig,
     learner_state: L,
     progress: TrainingProgress,
@@ -52,11 +53,13 @@ impl SnapshotAlgo<PolicyValueLearnerSnapshot> {
             sampler_configuration,
             hook_config,
             algo_config,
+            ppo_config,
         } = self;
         let progress = progress.into_shared();
         let learner = learner_config.build_burn_learner()?;
         let learner = learner.load_snapshot(learner_state);
         let agent = algo_config.build_ppo(
+            &ppo_config,
             learner,
             &learning_hook,
             &learner_config.optimizer,

@@ -4,9 +4,9 @@ use std::{
     thread,
 };
 
-use candle_core::Device;
 use r2l::{
-    A2CBuilder, A2CRolloutStats, GradientClippingConfig, SamplerExecutionMode, TrainingLimit,
+    A2CBuilder, A2CRolloutStats, CandleDevice, GradientClippingConfig, SamplerExecutionMode,
+    TrainingLimit,
 };
 
 fn main() -> anyhow::Result<()> {
@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
         mpsc::channel();
 
     let a2c_builder = A2CBuilder::gym("Pendulum-v1", 10)?
-        .with_candle(Device::Cpu)
+        .with_candle(CandleDevice::Cpu)
         .with_seed(0)
         .with_entropy_coefficient(0.2)
         .with_gradient_clipping(GradientClippingConfig::Norm(0.5))

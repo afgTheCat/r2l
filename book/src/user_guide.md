@@ -172,9 +172,10 @@ tuned.
 
 ## Backends
 
-The algorithm builders default to Candle. Use `with_candle(device)` to choose a
-Candle device explicitly, or `with_burn()` to use the default Burn
-autodifferentiation backend.
+The algorithm builders default to Candle. Use `with_candle(r2l::CandleDevice::Cpu)`
+or select `CandleDevice::Cuda { ordinal: 0 }` or `CandleDevice::Metal { ordinal: 0 }`
+to choose a device. The device is initialized when building the algorithm. Use
+`with_burn()` to use the default Burn autodifferentiation backend.
 
 Backend selection changes the concrete builder type, so call it before methods
 that are specific to a chosen backend when following compiler suggestions.

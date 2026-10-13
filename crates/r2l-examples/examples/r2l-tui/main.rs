@@ -281,7 +281,7 @@ fn train_ppo(ppo_builder: PPOBuilder<GymEnv>) -> anyhow::Result<()> {
 
 fn ppo_builder(tx: Sender<PPORolloutStats>, total_rollouts: usize) -> Result<PPOBuilder<GymEnv>> {
     Ok(PPOBuilder::gym(ENV_NAME, 4)?
-        .with_candle(candle_core::Device::Cpu)
+        .with_candle(r2l::CandleDevice::Cpu)
         .with_execution_mode(r2l::SamplerExecutionMode::MultiThreaded)
         .with_clip_range(0.2)
         .with_entropy_coefficient(0.)

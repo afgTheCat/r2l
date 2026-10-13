@@ -178,7 +178,7 @@ impl<T: R2lTensor> InferencePolicy<T> {
         };
         let actor_artifact = ArtifactFile::new(directory.join(ACTOR_FILE), "actor");
         let actor_bytes = actor_artifact.read()?;
-        let actor = match config.backend.build(None)? {
+        let actor = match config.backend.build()? {
             Backend::Candle(device) => {
                 let var_builder =
                     VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &device)

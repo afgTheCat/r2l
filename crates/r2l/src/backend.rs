@@ -4,28 +4,29 @@ use burn::{
     backend::{Autodiff, Flex},
     tensor::Device as BurnDevice,
 };
-use candle_core::{Device, DeviceLocation};
+use candle_core::Device;
 use r2l_core::error::Error;
 use serde::{Deserialize, Serialize};
 
 /// Serializable Candle device kind and ordinal, without runtime device state.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub(crate) enum CandleDeviceConfig {
+pub enum CandleDevice {
+    /// Uses the CPU.
     Cpu,
-    Cuda { ordinal: usize },
-    Metal { ordinal: usize },
+    /// Uses a CUDA device.
+    Cuda {
+        /// Zero-based CUDA device ordinal.
+        ordinal: usize,
+    },
+    /// Uses a Metal device.
+    Metal {
+        /// Zero-based Metal device ordinal.
+        ordinal: usize,
+    },
 }
 
-impl CandleDeviceConfig {
-    pub(crate) fn from_device(device: &Device) -> Self {
-        match device.location() {
-            DeviceLocation::Cpu => Self::Cpu,
-            DeviceLocation::Cuda { gpu_id } => Self::Cuda { ordinal: gpu_id },
-            DeviceLocation::Metal { gpu_id } => Self::Metal { ordinal: gpu_id },
-        }
-    }
-
-    fn build(self) -> Result<Device, Error> {
+impl CandleDevice {
+    pub(crate) fn build(self) -> Result<Device, Error> {
         Ok(match self {
             Self::Cpu => Device::Cpu,
             Self::Cuda { ordinal } => Device::new_cuda(ordinal)?,
@@ -39,29 +40,26 @@ pub type BurnBackend = Autodiff<Flex>;
 
 /// Configuration marker for the default Burn Flex backend.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub(crate) struct BurnBackendConfig;
+pub struct BurnBackendConfig;
 
 /// Serializable backend selection shared by training and inference recipes.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) enum BackendConfig {
-    Candle(CandleDeviceConfig),
+    Candle(CandleDevice),
     Burn(BurnBackendConfig),
 }
 
 impl Default for BackendConfig {
     fn default() -> Self {
-        Self::Candle(CandleDeviceConfig::Cpu)
+        Self::Candle(CandleDevice::Cpu)
     }
 }
 
 impl BackendConfig {
-    /// Creates the runtime backend, reusing a supplied Candle device when present.
-    pub(crate) fn build(self, candle_device: Option<Device>) -> Result<Backend, Error> {
+    /// Creates the runtime backend from its configuration.
+    pub(crate) fn build(self) -> Result<Backend, Error> {
         Ok(match self {
-            Self::Candle(config) => Backend::Candle(match candle_device {
-                Some(device) => device,
-                None => config.build()?,
-            }),
+            Self::Candle(config) => Backend::Candle(config.build()?),
             Self::Burn(_) => Backend::Burn,
         })
     }
