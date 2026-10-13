@@ -14,7 +14,7 @@ enum Phase {
 pub struct SamplerHook<E: Env> {
     rollout_mode: RolloutMode,
     phase: Phase,
-    reward_normalizer: Option<RewardNormalizer>,
+    pub(crate) reward_normalizer: Option<RewardNormalizer>,
     _p: PhantomData<E>,
 }
 

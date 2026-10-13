@@ -258,6 +258,41 @@ once at build time and applied during parameter updates. Candle clips the norm a
 each optimizer's parameters, combining policy and value gradients in joint mode.
 Burn's native norm clipping operates independently on each parameter tensor.
 
+## Training snapshots
+
+`SnapshotAlgo` currently supports Burn PPO with joint or split optimizers. It holds
+only a snapshot directory; environment factories and runtime channels are supplied
+when restoring.
+
+Save the builder recipe before consuming the builder, then save state between
+completed training iterations (for example, after stopping training through its
+control channel):
+
+```rust
+let snapshot = r2l::SnapshotAlgo::new("checkpoints/rollout-100");
+snapshot.save_builder(&builder)?; // builder must use Burn PPO
+let mut algo = builder.build()?;
+// Run training and stop at a completed iteration.
+snapshot.save_state(&algo)?;
+
+// env_builders is an EnvBuilderType matching the saved spaces and environment count.
+let mut restored = snapshot.restore(env_builders)?;
+restored.hooks.set_control(endpoint);
+restored.runtime.agent.hooks.set_rollout_reporter(Some(reporter));
+restored.train()?;
+```
+
+The directory contains `builder.yaml`, `learner.bpk`, and `state.yaml`, plus the
+best-policy artifacts when available. Use a separate directory for each checkpoint.
+Model parameters, optimizer state, progress counters, normalizer statistics, and
+best-policy tracking are restored. Existing evaluation and timing CSVs are appended
+to; timing totals describe the current run. A completed training limit remains
+completed after restoration.
+
+Environments restart, and random-number generator positions and unfinished episode
+rewards are not saved. Resuming preserves learned state, but does not reproduce the
+exact trajectory of an uninterrupted run.
+
 For the underlying traits and hook points, continue with
 [On-policy algorithms](./on_policy_algorithms.md). For exact builder methods,
 use the [`r2l` reference](https://docs.rs/r2l/0.0.3/r2l/).

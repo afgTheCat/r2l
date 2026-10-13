@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::Shape;
 use crate::{error::TensorError, tensor::R2lTensor, utils::slice_mean};
 
@@ -85,7 +87,7 @@ impl<T: R2lTensor> RunningMeanStd<T> {
 }
 
 /// Running mean and variance for scalar `f32` samples.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RunningMeanStdF32 {
     /// Current scalar mean.
     pub mean: f32,
@@ -101,6 +103,16 @@ impl Default for RunningMeanStdF32 {
 }
 
 impl RunningMeanStdF32 {
+    /// Whether the statistics contain finite moments and a nonnegative count and variance.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.mean.is_finite()
+            && self.var.is_finite()
+            && self.var >= 0.0
+            && self.count.is_finite()
+            && self.count >= 0.0
+    }
+
     /// Creates scalar running statistics with a small initial sample count.
     #[must_use]
     pub fn new() -> Self {

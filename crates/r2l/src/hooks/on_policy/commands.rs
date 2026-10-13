@@ -32,7 +32,7 @@ pub struct OnPolicyControlEndpoint {
 impl OnPolicyControlEndpoint {
     /// Creates paired algorithm-side and caller-side endpoints for training control.
     ///
-    /// Pass the endpoint to the builder's `with_control` method and retain the handle.
+    /// Pass the endpoint to `algorithm.hooks.set_control(endpoint)` and retain the handle.
     #[must_use]
     pub fn channel() -> (Self, OnPolicyControlHandle) {
         let (command_tx, command_rx) = channel();

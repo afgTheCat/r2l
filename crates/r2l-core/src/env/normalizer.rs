@@ -144,6 +144,27 @@ impl<T: R2lTensor> Normalizer<T> {
         self.apply_slice_in_place(std::slice::from_mut(obs))
     }
 
+    /// Restores statistics in place so existing handles observe the restored values.
+    /// The update/read-only mode of each handle is preserved.
+    ///
+    /// # Errors
+    /// Returns an error if the snapshot shape differs or its tensors cannot be reconstructed.
+    ///
+    /// # Panics
+    /// Panics if the shared statistics lock is poisoned.
+    pub fn load_snapshot(&self, snapshot: NormalizerSnapshot) -> Result<()> {
+        let restored = snapshot.into_normalizer::<T>()?;
+        let restored = restored.inner.0.lock().unwrap();
+        let mut inner = self.inner.0.lock().unwrap();
+        inner
+            .rm
+            .mean
+            .to_shape()
+            .ensure_equal(&restored.rm.mean.to_shape(), "restore normalizer")?;
+        *inner = restored.clone();
+        Ok(())
+    }
+
     /// Captures the current statistics in a backend-independent form.
     ///
     /// # Panics
@@ -174,6 +195,17 @@ impl NormalizerSnapshot {
     ///
     /// Returns an error if the snapshot values cannot be converted into backend tensors.
     pub fn into_normalizer<T: R2lTensor>(self) -> Result<Normalizer<T>> {
+        if !self.count.is_finite()
+            || self.count < 0.0
+            || self.mean.iter().any(|v| !v.is_finite())
+            || self.var.iter().any(|v| !v.is_finite() || *v < 0.0)
+            || self.clip.is_some_and(|v| !v.is_finite() || v < 0.0)
+        {
+            return Err(TensorError::invalid_argument(
+                "restore normalizer",
+                "invalid running statistics or clipping limit",
+            ));
+        }
         let mean = T::from_vec_and_shape(self.mean, self.obs_shape.clone())?;
         let var = T::from_vec_and_shape(self.var, self.obs_shape)?;
         let rm = RunningMeanStd::build(mean, var, self.count);

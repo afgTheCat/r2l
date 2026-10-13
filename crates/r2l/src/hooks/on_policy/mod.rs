@@ -13,7 +13,7 @@ use r2l_core::{
 };
 
 use self::{
-    commands::OnPolicyCommandHandler,
+    commands::{OnPolicyCommandHandler, OnPolicyControlEndpoint},
     evaluation::ScheduledEvaluator,
     timing::{Phase, TimingRecorder},
 };
@@ -31,8 +31,8 @@ macro_rules! try_or_break {
 /// Lifecycle hooks sharing progress with the learning hooks.
 pub struct OnPolicyTrainingHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor> + 'static> {
     timing_recorder: TimingRecorder,
-    progress: SharedTrainingProgress,
-    evaluator: ScheduledEvaluator<E>,
+    pub(crate) progress: SharedTrainingProgress,
+    pub(crate) evaluator: ScheduledEvaluator<E>,
     command_handler: OnPolicyCommandHandler,
     error: Option<Error>,
     _phantom: PhantomData<(A, S)>,
@@ -65,6 +65,15 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
         }
     }
 
+    /// Attaches external control to the algorithm, replacing any previous endpoint.
+    ///
+    /// # Arguments
+    ///
+    /// * `endpoint` - Algorithm-side endpoint created by [`OnPolicyControlEndpoint::channel`].
+    pub fn set_control(&mut self, endpoint: OnPolicyControlEndpoint) {
+        self.command_handler = OnPolicyCommandHandler::new(Some(endpoint));
+    }
+
     fn break_with_error(&mut self, error: Error) -> HookResult {
         self.error.get_or_insert(error);
         HookResult::Break
@@ -79,7 +88,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
 
     fn init_hook(&mut self, _runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {
         self.timing_recorder.init();
-        HookResult::Continue
+        self.progress.borrow().progress_result()
     }
 
     fn post_rollout_hook(&mut self, runtime: &mut OnPolicyRuntime<Self::A, Self::S>) -> HookResult {

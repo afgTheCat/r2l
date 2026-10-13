@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::num::NonZeroUsize;
 use std::{
-    fs::{File, OpenOptions},
+    fs::OpenOptions,
     path::{Path, PathBuf},
 };
 
@@ -87,11 +87,19 @@ impl<T: R2lTensor> Artifacts<T> {
         evaluation_results: bool,
         inference_artifacts: bool,
         normalizer: Option<Normalizer<T>>,
+        append: bool,
     ) -> Result<Self> {
         std::fs::create_dir_all(&folder)?;
         if evaluation_results {
-            let mut file = File::create(folder.join(EVALUATIONS_FILE))?;
-            writeln!(file, "average_reward,total_episodes")?;
+            let mut file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(append)
+                .truncate(!append)
+                .open(folder.join(EVALUATIONS_FILE))?;
+            if file.metadata()?.len() == 0 {
+                writeln!(file, "average_reward,total_episodes")?;
+            }
         }
         let best_policy = inference_artifacts.then_some(BestPolicyArtifacts::new(normalizer));
         Ok(Self {
@@ -167,11 +175,22 @@ pub(crate) struct BestPolicyEvaluator<E: Env + 'static> {
 }
 
 impl<E: Env> BestPolicyEvaluator<E> {
+    pub(crate) fn best_reward(&self) -> Option<f32> {
+        self.artifacts.as_ref()?.best_policy.as_ref()?.best_reward
+    }
+
+    pub(crate) fn restore_best_reward(&mut self, best_reward: Option<f32>) {
+        if let Some(best_policy) = self.artifacts.as_mut().and_then(|a| a.best_policy.as_mut()) {
+            best_policy.best_reward = best_reward;
+        }
+    }
+
     pub(crate) fn new(
         sampler: EvaluationSampler<E>,
         output_dir: Option<PathBuf>,
         evaluation_results: bool,
         inference_artifacts: bool,
+        append: bool,
     ) -> Result<Self> {
         let artifacts = output_dir
             .map(|output_dir| {
@@ -180,6 +199,7 @@ impl<E: Env> BestPolicyEvaluator<E> {
                     evaluation_results,
                     inference_artifacts,
                     sampler.normalizer(),
+                    append,
                 )
             })
             .transpose()?;

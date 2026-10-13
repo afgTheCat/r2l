@@ -3,7 +3,7 @@
 pub(crate) mod reporter;
 pub(crate) mod stats;
 
-use std::num::NonZeroUsize;
+use std::{num::NonZeroUsize, sync::mpsc::Sender};
 
 use r2l_agents::on_policy_algorithms::{
     Advantages, Returns,
@@ -290,5 +290,27 @@ impl<M: OnPolicyLearner> PPOHook<M> for LearningHook<PPOSettings> {
             .reporter
             .record_batch(stats, clip_fraction, approx_kl);
         Ok(self.algorithm.check_kl(approx_kl))
+    }
+}
+
+impl PPOLearningHook {
+    /// Attaches a channel for rollout statistics, preserving console logging settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Channel receiving rollout statistics, or `None` to disable channel delivery.
+    pub fn set_rollout_reporter(&mut self, tx: Option<Sender<PPORolloutStats>>) {
+        self.algorithm.reporter.set_sender(tx);
+    }
+}
+
+impl A2CLearningHook {
+    /// Attaches a channel for rollout statistics, preserving console logging settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Channel receiving rollout statistics, or `None` to disable channel delivery.
+    pub fn set_rollout_reporter(&mut self, tx: Option<Sender<A2CRolloutStats>>) {
+        self.algorithm.reporter.set_sender(tx);
     }
 }

@@ -131,9 +131,9 @@ fn stop_training_command_breaks_the_loop_without_destroying_the_algorithm() {
         .with_total_epochs(1)
         .with_seed(5);
     let (control_endpoint, control) = OnPolicyControlEndpoint::channel();
-    let builder = builder.with_control(control_endpoint);
     let training = std::thread::spawn(move || {
         let mut algorithm = builder.build().unwrap();
+        algorithm.hooks.set_control(control_endpoint);
         let drops_after_build = drops.load(Ordering::SeqCst);
         algorithm.train().unwrap();
         assert_eq!(drops.load(Ordering::SeqCst), drops_after_build);

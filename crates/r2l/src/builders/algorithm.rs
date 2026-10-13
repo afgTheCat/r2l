@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, sync::mpsc::Sender};
+use std::num::NonZeroUsize;
 
 use r2l_agents::on_policy_algorithms::{
     a2c::{A2C, A2CParams},
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{learner::LearningHookConfig, optimizer::OptimizerConfig};
 use crate::{
-    A2CRolloutStats, A2CSettings, ClipRangeSchedule, PPORolloutStats, PPOSettings,
+    A2CSettings, ClipRangeSchedule, PPOSettings,
     hooks::{
         learning::{A2CLearningHook, PPOLearningHook, TargetKl, reporter::RolloutReporter},
         progress::SharedTrainingProgress,
@@ -73,7 +73,6 @@ impl AlgoConfig {
         learning_hook: &LearningHookConfig,
         optimizer: &OptimizerConfig,
         progress: SharedTrainingProgress,
-        reporter: Option<Sender<PPORolloutStats>>,
         n_envs: NonZeroUsize,
     ) -> PPO<M, PPOLearningHook> {
         let params = PPOParams {
@@ -90,7 +89,7 @@ impl AlgoConfig {
                 target,
                 target_exceeded: false,
             }),
-            reporter: RolloutReporter::new(reporter, self.log_progress, n_envs),
+            reporter: RolloutReporter::new(None, self.log_progress, n_envs),
         };
         PPO {
             lm: learner,
@@ -105,7 +104,6 @@ impl AlgoConfig {
         learning_hook: &LearningHookConfig,
         optimizer: &OptimizerConfig,
         progress: SharedTrainingProgress,
-        reporter: Option<Sender<A2CRolloutStats>>,
         n_envs: NonZeroUsize,
     ) -> A2C<M, A2CLearningHook> {
         let params = A2CParams {
@@ -114,7 +112,7 @@ impl AlgoConfig {
             sample_size: self.sample_size.get(),
         };
         let settings = A2CSettings {
-            reporter: RolloutReporter::new(reporter, self.log_progress, n_envs),
+            reporter: RolloutReporter::new(None, self.log_progress, n_envs),
         };
         A2C {
             lm: learner,

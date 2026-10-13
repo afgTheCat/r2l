@@ -273,13 +273,19 @@ fn handle_input_events(tx: mpsc::Sender<EventBox>) {
     });
 }
 
-fn train_ppo(ppo_builder: PPOBuilder<GymEnv>) -> anyhow::Result<()> {
+fn train_ppo(
+    ppo_builder: PPOBuilder<GymEnv>,
+    tx: Sender<PPORolloutStats>,
+    control_endpoint: OnPolicyControlEndpoint,
+) -> anyhow::Result<()> {
     let mut ppo = ppo_builder.build()?;
+    ppo.runtime.agent.hooks.set_rollout_reporter(Some(tx));
+    ppo.hooks.set_control(control_endpoint);
     ppo.train()?;
     Ok(())
 }
 
-fn ppo_builder(tx: Sender<PPORolloutStats>, total_rollouts: usize) -> Result<PPOBuilder<GymEnv>> {
+fn ppo_builder(total_rollouts: usize) -> Result<PPOBuilder<GymEnv>> {
     Ok(PPOBuilder::gym(ENV_NAME, 4)?
         .with_candle(r2l::CandleDevice::Cpu)
         .with_execution_mode(r2l::SamplerExecutionMode::MultiThreaded)
@@ -291,8 +297,7 @@ fn ppo_builder(tx: Sender<PPORolloutStats>, total_rollouts: usize) -> Result<PPO
         .with_rollout_steps(1024)
         .with_total_epochs(10)
         .with_training_limit(TrainingLimit::rollouts(total_rollouts))
-        .with_log_progress(false)
-        .with_rollout_reporter(Some(tx)))
+        .with_log_progress(false))
 }
 
 fn adapt_ppo_events(update_rx: Receiver<PPORolloutStats>, tx_to_updates: Sender<EventBox>) {
@@ -312,15 +317,15 @@ fn main() -> io::Result<()> {
     adapt_ppo_events(update_rx, event_tx.clone());
     let total_rollouts = 30;
     let (control_endpoint, control_handle) = OnPolicyControlEndpoint::channel();
-    let ppo_builder = ppo_builder(update_tx, total_rollouts)
-        .map_err(io::Error::other)?
-        .with_control(control_endpoint);
-    std::thread::spawn(move || match train_ppo(ppo_builder) {
-        Ok(()) => {}
-        Err(err) => {
-            eprintln!("ppo was not trained normally, err: {err}");
-        }
-    });
+    let ppo_builder = ppo_builder(total_rollouts).map_err(io::Error::other)?;
+    std::thread::spawn(
+        move || match train_ppo(ppo_builder, update_tx, control_endpoint) {
+            Ok(()) => {}
+            Err(err) => {
+                eprintln!("ppo was not trained normally, err: {err}");
+            }
+        },
+    );
     let mut terminal = ratatui::init();
     let app_result = App::new(total_rollouts, event_rx, control_handle).run(&mut terminal);
     ratatui::restore();

@@ -6,7 +6,7 @@ use bimodal_array::{ArrayGuard, ArrayHandle, ArrayMap, ElementHandle, bimodal_ar
 use crossbeam::channel::unbounded;
 use r2l_core::buffers::buffer::TrajectoryView;
 use r2l_core::buffers::{Memory, MultiMemory};
-use r2l_core::env::normalizer::{Normalizer, NormalizerMode};
+use r2l_core::env::normalizer::{Normalizer, NormalizerMode, NormalizerSnapshot};
 use r2l_core::env::{EnvBuilder, EnvBuilderType, Snapshot};
 use r2l_core::error::{Error, Result};
 use r2l_core::on_policy::algorithm::Sampler;
@@ -529,6 +529,38 @@ impl<H: SamplerHook> RolloutSampler<H> {
             )?),
             hook,
         ))
+    }
+
+    /// Restores shared observation statistics and resets environments for a resumed run.
+    /// Initial observations use the restored statistics without updating them.
+    ///
+    /// # Errors
+    /// Returns an error for direct samplers, incompatible statistics, or a failed environment reset.
+    pub fn restore_obs_normalizer(&mut self, snapshot: NormalizerSnapshot) -> Result<()> {
+        let Pool::Staged(pool) = &mut self.core.pool else {
+            return Err(Error::invalid_state(
+                "restore normalizer",
+                "observation normalization is disabled",
+            ));
+        };
+        pool.obs_normalizer.load_snapshot(snapshot)?;
+        pool.workers.reset()?;
+        pool.obs_normalizer
+            .with_mode(NormalizerMode::ReadOnly)
+            .apply_slice_in_place(&mut pool.states.lock().unwrap())?;
+        self.core.clear_buffers();
+        self.hook.reset();
+        Ok(())
+    }
+
+    /// Borrows the collection hook.
+    pub fn hook(&self) -> &H {
+        &self.hook
+    }
+
+    /// Mutably borrows the collection hook between collection calls.
+    pub fn hook_mut(&mut self) -> &mut H {
+        &mut self.hook
     }
 
     /// Returns a handle to shared observation statistics, or `None` for direct collection.

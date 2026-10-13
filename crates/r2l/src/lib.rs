@@ -101,3 +101,4 @@ pub use r2l_distributions::distributions::sde::SdeConfig;
 #[cfg(feature = "gym")]
 pub use r2l_gym::{GymEnv, GymEnvBuilder};
 pub use r2l_sampler::{RolloutSampler, SamplerExecutionMode};
+pub use snapshot::SnapshotAlgo;

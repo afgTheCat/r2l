@@ -20,9 +20,12 @@ fn main() -> anyhow::Result<()> {
         .with_gradient_clipping(GradientClippingConfig::Norm(0.5))
         .with_rollout_steps(2048)
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
-        .with_training_limit(TrainingLimit::rollouts(300))
-        .with_rollout_reporter(Some(update_tx));
+        .with_training_limit(TrainingLimit::rollouts(300));
     let mut a2c = a2c_builder.build()?;
+    a2c.runtime
+        .agent
+        .hooks
+        .set_rollout_reporter(Some(update_tx));
     let t = thread::spawn(move || {
         while let Ok(stats) = update_rx.recv() {
             println!("avg reward: {}", stats.average_reward);

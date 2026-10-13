@@ -10,7 +10,7 @@ pub mod optimizer;
 pub(crate) mod policy;
 pub(crate) mod sampler;
 
-use std::{num::NonZeroUsize, sync::mpsc::Sender};
+use std::num::NonZeroUsize;
 
 pub use algorithm::{A2CConfig, AlgoBackendConfig, PPOConfig};
 use networks::NetworkConfig;
@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::backend::{BurnBackendConfig, CandleDevice};
 use crate::{
-    A2CRolloutStats, OnPolicyControlEndpoint, OnPolicyHooks, PPORolloutStats, TrainingLimit,
+    OnPolicyHooks, TrainingLimit,
     backend::{Backend, BackendConfig},
     builders::{
         algorithm::AlgoConfig,
@@ -60,30 +60,17 @@ pub type A2CBurn = A2C<BurnPolicyValueLearner, A2CLearningHook>;
 pub(crate) struct BuilderConfig {
     algo_config: AlgoConfig,
     seed: Option<u64>,
-    hook_config: OnPolicyHookConfig,
-    learner_builder: LearnerConfig,
+    pub(crate) hook_config: OnPolicyHookConfig,
+    pub(crate) learner_builder: LearnerConfig,
     learning_hook: LearningHookConfig,
-    sampler_configuration: SamplerConfiguration,
-}
-
-pub(crate) struct BuilderResources<E: Env + 'static> {
-    pub(crate) env_builder: EnvBuilderType<E>,
-    pub(crate) control_endpoint: Option<OnPolicyControlEndpoint>,
-    pub(crate) ppo_reporter: Option<Sender<PPORolloutStats>>,
-    pub(crate) a2c_reporter: Option<Sender<A2CRolloutStats>>,
-}
-
-impl<E: Env> BuilderResources<E> {
-    pub(crate) fn n_envs(&self) -> NonZeroUsize {
-        NonZeroUsize::new(self.env_builder.num_envs()).expect("environment builders are nonempty")
-    }
+    pub(crate) sampler_configuration: SamplerConfiguration,
 }
 
 /// Configures and builds a complete PPO or A2C training algorithm.
 ///
 /// Start with [`PPOBuilder`] or [`A2CBuilder`]. `A` and `B` identify the algorithm
 /// and backend configurations. Backend selection changes the backend type
-/// while retaining all algorithm settings and runtime resources.
+/// while retaining all algorithm settings and environment builders.
 ///
 /// Both entry points default to Candle on the CPU, multi-threaded direct
 /// sampling with 1,024 steps per environment, and a training limit of 50
@@ -92,9 +79,9 @@ impl<E: Env> BuilderResources<E> {
 /// decay and a learning rate of `3e-4`.
 #[must_use]
 pub struct OnPolicyBuilder<A, B, E: Env + 'static> {
-    algo_backend: AlgoBackendConfig<A, B>,
-    config: BuilderConfig,
-    resources: BuilderResources<E>,
+    pub(crate) algo_backend: AlgoBackendConfig<A, B>,
+    pub(crate) config: BuilderConfig,
+    pub(crate) env_builder: EnvBuilderType<E>,
 }
 
 impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
@@ -115,20 +102,19 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
                 learning_hook: LearningHookConfig::new(true),
                 sampler_configuration: SamplerConfiguration::default(),
             },
-            resources: BuilderResources {
-                env_builder,
-                control_endpoint: None,
-                ppo_reporter: None,
-                a2c_reporter: None,
-            },
+            env_builder,
         })
+    }
+
+    fn n_envs(&self) -> NonZeroUsize {
+        NonZeroUsize::new(self.env_builder.num_envs()).expect("environment builders are nonempty")
     }
 
     fn progress(&self) -> SharedTrainingProgress {
         TrainingProgress::shared(
             self.config.hook_config.training_limit,
             self.config.sampler_configuration.rollout_mode,
-            self.resources.n_envs(),
+            self.n_envs(),
         )
     }
 
@@ -173,17 +159,6 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
             "average reward threshold must be finite"
         );
         self.config.hook_config.avg_reward_threshold = avg_reward_threshold;
-        self
-    }
-
-    /// Enables external control of the configured training algorithm.
-    ///
-    /// # Arguments
-    ///
-    /// * `control_endpoint` - Algorithm-side endpoint created by
-    ///   [`OnPolicyControlEndpoint::channel`]. Replaces any previously configured endpoint.
-    pub fn with_control(mut self, control_endpoint: OnPolicyControlEndpoint) -> Self {
-        self.resources.control_endpoint = Some(control_endpoint);
         self
     }
 
@@ -506,9 +481,9 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
         let sampler = self
             .config
             .sampler_configuration
-            .build_sampler(&self.resources.env_builder, obs_normalizer.clone())?;
+            .build_sampler(&self.env_builder, obs_normalizer.clone())?;
         let hooks = self.config.hook_config.build(
-            self.resources,
+            self.env_builder,
             policy,
             backend,
             obs_normalizer,
@@ -541,7 +516,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
                 backend,
             },
             config: self.config,
-            resources: self.resources,
+            env_builder: self.env_builder,
         }
     }
 
@@ -627,16 +602,6 @@ impl<A, E: Env> OnPolicyBuilder<A, BurnBackendConfig, E> {
 }
 
 impl<B, E: Env> OnPolicyBuilder<PPOConfig, B, E> {
-    /// Installs an optional channel for reporting PPO training statistics.
-    ///
-    /// # Arguments
-    ///
-    /// * `tx` - Channel sender that receives rollout statistics, or `None` to disable reporting.
-    pub fn with_rollout_reporter(mut self, tx: Option<Sender<PPORolloutStats>>) -> Self {
-        self.resources.ppo_reporter = tx;
-        self
-    }
-
     /// Sets the maximum PPO epochs performed for each rollout.
     ///
     /// # Arguments
@@ -682,18 +647,6 @@ impl<B, E: Env> OnPolicyBuilder<PPOConfig, B, E> {
     }
 }
 
-impl<B, E: Env> OnPolicyBuilder<A2CConfig, B, E> {
-    /// Installs an optional channel for reporting A2C training statistics.
-    ///
-    /// # Arguments
-    ///
-    /// * `tx` - Channel sender that receives rollout statistics, or `None` to disable reporting.
-    pub fn with_rollout_reporter(mut self, tx: Option<Sender<A2CRolloutStats>>) -> Self {
-        self.resources.a2c_reporter = tx;
-        self
-    }
-}
-
 impl<E: Env> OnPolicyBuilder<PPOConfig, CandleDevice, E> {
     /// Builds the configured Candle PPO training algorithm.
     ///
@@ -706,7 +659,7 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, CandleDevice, E> {
     /// # Panics
     ///
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
-    pub fn build(mut self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<PPOCandle, E>>> {
+    pub fn build(self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<PPOCandle, E>>> {
         let progress = self.progress();
         let learner = self.build_learner()?;
         let agent = self.config.algo_config.build_ppo(
@@ -715,8 +668,7 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, CandleDevice, E> {
             &self.config.learning_hook,
             &self.config.learner_builder.optimizer,
             progress.clone(),
-            self.resources.ppo_reporter.take(),
-            self.resources.n_envs(),
+            self.n_envs(),
         );
         let backend = BackendConfig::Candle(self.algo_backend.backend);
         self.finish_build(agent, backend, progress)
@@ -735,7 +687,7 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, BurnBackendConfig, E> {
     /// # Panics
     ///
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
-    pub fn build(mut self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<PPOBurn, E>>> {
+    pub fn build(self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<PPOBurn, E>>> {
         let progress = self.progress();
         let learner = self.build_learner()?;
         let agent = self.config.algo_config.build_ppo(
@@ -744,8 +696,7 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, BurnBackendConfig, E> {
             &self.config.learning_hook,
             &self.config.learner_builder.optimizer,
             progress.clone(),
-            self.resources.ppo_reporter.take(),
-            self.resources.n_envs(),
+            self.n_envs(),
         );
         let backend = BackendConfig::Burn(self.algo_backend.backend);
         self.finish_build(agent, backend, progress)
@@ -764,7 +715,7 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, CandleDevice, E> {
     /// # Panics
     ///
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
-    pub fn build(mut self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<A2CCandle, E>>> {
+    pub fn build(self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<A2CCandle, E>>> {
         let progress = self.progress();
         let learner = self.build_learner()?;
         let agent = self.config.algo_config.build_a2c(
@@ -772,8 +723,7 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, CandleDevice, E> {
             &self.config.learning_hook,
             &self.config.learner_builder.optimizer,
             progress.clone(),
-            self.resources.a2c_reporter.take(),
-            self.resources.n_envs(),
+            self.n_envs(),
         );
         let backend = BackendConfig::Candle(self.algo_backend.backend);
         self.finish_build(agent, backend, progress)
@@ -792,7 +742,7 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, BurnBackendConfig, E> {
     /// # Panics
     ///
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
-    pub fn build(mut self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<A2CBurn, E>>> {
+    pub fn build(self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<A2CBurn, E>>> {
         let progress = self.progress();
         let learner = self.build_learner()?;
         let agent = self.config.algo_config.build_a2c(
@@ -800,8 +750,7 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, BurnBackendConfig, E> {
             &self.config.learning_hook,
             &self.config.learner_builder.optimizer,
             progress.clone(),
-            self.resources.a2c_reporter.take(),
-            self.resources.n_envs(),
+            self.n_envs(),
         );
         let backend = BackendConfig::Burn(self.algo_backend.backend);
         self.finish_build(agent, backend, progress)

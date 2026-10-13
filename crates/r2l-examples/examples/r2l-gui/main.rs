@@ -123,9 +123,9 @@ fn train_ppo(
         .with_rollout_steps(2048)
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_clip_range(clip_range)
-        .with_training_limit(TrainingLimit::rollouts(total_rollouts))
-        .with_rollout_reporter(Some(tx));
+        .with_training_limit(TrainingLimit::rollouts(total_rollouts));
     let mut ppo = ppo_builder.build()?;
+    ppo.runtime.agent.hooks.set_rollout_reporter(Some(tx));
     ppo.train()?;
     Ok(())
 }

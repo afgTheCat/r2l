@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::{File, OpenOptions},
     io::Write,
     path::Path,
     time::{Duration, Instant},
@@ -94,13 +94,22 @@ impl TimingRecorder {
     ///
     /// * `output_dir` - Directory in which the timings CSV is created.
     /// * `progress` - Training progress used to label each timings row.
+    /// * `append` - Preserve existing rows when resuming training.
     pub(crate) fn create(
         output_dir: &Path,
         progress: SharedTrainingProgress,
+        append: bool,
     ) -> Result<Self, Error> {
         std::fs::create_dir_all(output_dir)?;
-        let mut file = File::create(output_dir.join(TRAINING_TIMINGS_FILE))?;
-        writeln!(file, "rollout,collect_ms,learn_ms,evaluate_ms,total_ms")?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(append)
+            .truncate(!append)
+            .open(output_dir.join(TRAINING_TIMINGS_FILE))?;
+        if file.metadata()?.len() == 0 {
+            writeln!(file, "rollout,collect_ms,learn_ms,evaluate_ms,total_ms")?;
+        }
         Ok(Self::Enabled(EnabledTimingRecorder {
             file,
             progress,

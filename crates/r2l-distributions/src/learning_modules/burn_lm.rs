@@ -20,7 +20,7 @@
 //! # Ok::<(), r2l_core::error::Error>(())
 //! ```
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use burn::{
     module::{Module, ModuleDisplay, Param},
@@ -29,7 +29,7 @@ use burn::{
     tensor::{Bytes, DType, Tensor},
 };
 use r2l_core::{
-    error::Result,
+    error::{Error, Result},
     models::{ActivationFunction, Learner},
 };
 
@@ -184,7 +184,7 @@ impl PolicyValueOptimizer {
         }
     }
 
-    fn load_snapshot(self, snapshot: OptimizerKind<OptimizerRecord>) -> Self {
+    fn load_snapshot(self, snapshot: OptimizerKind<OptimizerRecord>) -> Result<Self> {
         let inner = match (self.inner, snapshot) {
             (
                 OptimizerKind::Joint { optimizer, .. },
@@ -210,9 +210,14 @@ impl PolicyValueOptimizer {
                 value: value.load_record(value_record),
                 value_lr,
             },
-            _ => panic!("snapshot optimizer layout must match the learner"),
+            _ => {
+                return Err(Error::invalid_state(
+                    "restore learner",
+                    "snapshot optimizer layout must match the learner",
+                ));
+            }
         };
-        Self { inner }
+        Ok(Self { inner })
     }
 }
 
@@ -223,18 +228,64 @@ pub struct PolicyValueLearnerSnapshot {
 }
 
 impl PolicyValueLearnerSnapshot {
+    /// Reads model parameters, optimizer records, and learning rates from a Burnpack file.
+    ///
+    /// # Errors
+    /// Returns an error if the file is missing, malformed, or has an invalid optimizer layout.
+    pub fn from_file(file: impl AsRef<Path>) -> Result<Self> {
+        let reader = burn_pack::Reader::from_file(file).map_err(Error::wrap)?;
+        let model = ModuleRecord::from_bytes(Bytes::from_bytes_vec(
+            reader.tensor_data("model").map_err(Error::wrap)?,
+        ))
+        .map_err(Error::wrap)?;
+        let record = |name| {
+            OptimizerRecord::from_bytes(Bytes::from_bytes_vec(
+                reader.tensor_data(name).map_err(Error::wrap)?,
+            ))
+            .map_err(Error::wrap)
+        };
+        let rate = |name| match reader.scalars().get(name) {
+            Some(burn_pack::Scalar::Float(value)) if value.is_finite() && *value >= 0.0 => {
+                Ok(*value)
+            }
+            _ => Err(Error::invalid_state(
+                "read learner snapshot",
+                format!("missing or invalid {name}"),
+            )),
+        };
+        let optimizer = match reader.tensor_names().as_slice() {
+            ["model", "optimizer"] => OptimizerKind::Joint {
+                optimizer: record("optimizer")?,
+                lr: rate("lr")?,
+            },
+            ["model", "policy_optimizer", "value_optimizer"] => OptimizerKind::Split {
+                policy: record("policy_optimizer")?,
+                policy_lr: rate("policy_lr")?,
+                value: record("value_optimizer")?,
+                value_lr: rate("value_lr")?,
+            },
+            _ => {
+                return Err(Error::invalid_state(
+                    "read learner snapshot",
+                    "invalid optimizer records",
+                ));
+            }
+        };
+        Ok(Self { model, optimizer })
+    }
+
     /// Saves model and optimizer records in a Burnpack snapshot file.
     ///
-    /// # Panics
-    /// Panics if a record cannot be serialized or the file cannot be written.
-    pub fn to_file(self, file: PathBuf) {
-        let model = self.model.into_bytes().unwrap();
+    /// # Errors
+    /// Returns an error if a record cannot be serialized or the file cannot be written.
+    pub fn to_file(self, file: PathBuf) -> Result<()> {
+        let model = self.model.into_bytes().map_err(Error::wrap)?;
         match self.optimizer {
             OptimizerKind::Joint { optimizer, lr } => Self::save_records(
                 file,
                 [
                     ("model", model),
-                    ("optimizer", optimizer.into_bytes().unwrap()),
+                    ("optimizer", optimizer.into_bytes().map_err(Error::wrap)?),
                 ],
                 [("lr", lr)],
             ),
@@ -247,8 +298,11 @@ impl PolicyValueLearnerSnapshot {
                 file,
                 [
                     ("model", model),
-                    ("policy_optimizer", policy.into_bytes().unwrap()),
-                    ("value_optimizer", value.into_bytes().unwrap()),
+                    (
+                        "policy_optimizer",
+                        policy.into_bytes().map_err(Error::wrap)?,
+                    ),
+                    ("value_optimizer", value.into_bytes().map_err(Error::wrap)?),
                 ],
                 [("policy_lr", policy_lr), ("value_lr", value_lr)],
             ),
@@ -260,7 +314,7 @@ impl PolicyValueLearnerSnapshot {
         file: PathBuf,
         records: [(&str, Bytes); N],
         learning_rates: [(&str, f64); L],
-    ) {
+    ) -> Result<()> {
         let tensors = records
             .into_iter()
             .map(|(name, bytes)| {
@@ -273,7 +327,7 @@ impl PolicyValueLearnerSnapshot {
             .fold(burn_pack::Writer::new(tensors), |writer, (name, lr)| {
                 writer.with_scalar(name, burn_pack::Scalar::Float(lr))
             });
-        writer.write_to_file(file).unwrap();
+        writer.write_to_file(file).map_err(Error::wrap)
     }
 }
 
@@ -410,14 +464,16 @@ impl<P: BurnPolicy> PolicyValueLearner<P> {
 
     /// Restores a snapshot into matching model and optimizer configurations.
     ///
-    /// # Panics
-    /// Panics if the model parameters or optimizer layout do not match.
-    #[must_use]
-    pub fn load_snapshot(self, snapshot: PolicyValueLearnerSnapshot) -> Self {
-        Self {
-            model: self.model.load_record(snapshot.model),
-            optimizer: self.optimizer.load_snapshot(snapshot.optimizer),
-        }
+    /// # Errors
+    /// Returns an error if the model parameters or optimizer layout do not match.
+    pub fn load_snapshot(self, snapshot: PolicyValueLearnerSnapshot) -> Result<Self> {
+        Ok(Self {
+            model: self
+                .model
+                .try_load_record(snapshot.model)
+                .map_err(Error::wrap)?,
+            optimizer: self.optimizer.load_snapshot(snapshot.optimizer)?,
+        })
     }
 }
 

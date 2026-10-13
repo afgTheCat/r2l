@@ -82,6 +82,15 @@ impl RewardNormalizer {
         }
     }
 
+    pub(crate) fn statistics(&self) -> RunningMeanStdF32 {
+        self.return_rms.clone()
+    }
+
+    pub(crate) fn restore_statistics(&mut self, statistics: RunningMeanStdF32) {
+        self.return_rms = statistics;
+        self.reset_returns();
+    }
+
     /// Clears environment-local discounted returns while preserving running statistics.
     pub(crate) fn reset_returns(&mut self) {
         self.reward_accumulator.fill(0.0);

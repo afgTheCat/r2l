@@ -65,8 +65,8 @@ impl TrainingLimit {
     }
 }
 
-#[derive(Clone, Default)]
-struct TrainingCounters {
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub(crate) struct TrainingCounters {
     completed_rollouts: usize,
     steps_taken: usize,
     n_evaluations: usize,
@@ -82,6 +82,14 @@ pub(crate) struct TrainingProgress {
 pub(crate) type SharedTrainingProgress = Rc<RefCell<TrainingProgress>>;
 
 impl TrainingProgress {
+    pub(crate) fn counters(&self) -> TrainingCounters {
+        self.counters.clone()
+    }
+
+    pub(crate) fn restore_counters(&mut self, counters: TrainingCounters) {
+        self.counters = counters;
+    }
+
     /// Creates progress shared by the training and learning hooks.
     ///
     /// # Arguments
