@@ -17,9 +17,9 @@ use networks::NetworkConfig;
 pub use on_policy_hook::TrainingArtifactsConfig;
 pub use optimizer::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
 use r2l_agents::on_policy_algorithms::{a2c::A2C, ppo::PPO};
+use r2l_core::error::Result;
 use r2l_core::{
     env::{Env, EnvBuilder, EnvBuilderType},
-    error::Error,
     models::{ActivationFunction, ToSafetensors},
     on_policy::algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime},
 };
@@ -27,13 +27,13 @@ use r2l_distributions::learning_modules::burn_lm::PolicyValueLearner as BurnPoli
 use r2l_distributions::learning_modules::candle_lm::PolicyValueLearner as CandlePolicyValueLearner;
 #[cfg(feature = "gym")]
 use r2l_gym::{GymEnv, GymEnvBuilder};
-use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
+use r2l_sampler::{RolloutMode, SamplerExecutionMode};
 pub use sampler::ObsNormalizerConfig;
 use serde::{Deserialize, Serialize};
 
 pub use crate::backend::{BurnBackendConfig, CandleDevice};
 use crate::{
-    A2CRolloutStats, OnPolicyControlEndpoint, PPORolloutStats, SamplerHook, TrainingLimit,
+    A2CRolloutStats, OnPolicyControlEndpoint, OnPolicyHooks, PPORolloutStats, TrainingLimit,
     backend::{Backend, BackendConfig},
     builders::{
         algorithm::AlgoConfig,
@@ -43,7 +43,6 @@ use crate::{
     },
     hooks::{
         learning::{A2CLearningHook, ClipRangeSchedule, PPOLearningHook},
-        on_policy::OnPolicyTrainingHooks,
         progress::{SharedTrainingProgress, TrainingProgress},
     },
 };
@@ -103,7 +102,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
         env_builder: EB,
         n_envs: usize,
         algo_backend: AlgoBackendConfig<A, B>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
         let learner_builder = LearnerConfig::new(&env_builder.env_description()?)?;
         Ok(Self {
@@ -498,10 +497,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
         agent: AG,
         backend: BackendConfig,
         progress: SharedTrainingProgress,
-    ) -> Result<
-        OnPolicyAlgorithm<OnPolicyTrainingHooks<AG, RolloutSampler<SamplerHook<E>>, E>>,
-        Error,
-    > {
+    ) -> Result<OnPolicyAlgorithm<OnPolicyHooks<AG, E>>> {
         let policy = &self.config.learner_builder.policy_config;
         let obs_normalizer = self
             .config
@@ -612,7 +608,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
 }
 
 impl<A, E: Env> OnPolicyBuilder<A, CandleDevice, E> {
-    fn build_learner(&self) -> Result<CandlePolicyValueLearner, Error> {
+    fn build_learner(&self) -> Result<CandlePolicyValueLearner> {
         let device = self.algo_backend.backend.build()?;
         if let Some(seed) = self.config.seed {
             Backend::Candle(device.clone()).seed(seed)?;
@@ -622,7 +618,7 @@ impl<A, E: Env> OnPolicyBuilder<A, CandleDevice, E> {
 }
 
 impl<A, E: Env> OnPolicyBuilder<A, BurnBackendConfig, E> {
-    fn build_learner(&self) -> Result<BurnPolicyValueLearner, Error> {
+    fn build_learner(&self) -> Result<BurnPolicyValueLearner> {
         if let Some(seed) = self.config.seed {
             Backend::Burn.seed(seed)?;
         }
@@ -710,12 +706,7 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, CandleDevice, E> {
     /// # Panics
     ///
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
-    pub fn build(
-        mut self,
-    ) -> Result<
-        OnPolicyAlgorithm<OnPolicyTrainingHooks<PPOCandle, RolloutSampler<SamplerHook<E>>, E>>,
-        Error,
-    > {
+    pub fn build(mut self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<PPOCandle, E>>> {
         let progress = self.progress();
         let learner = self.build_learner()?;
         let agent = self.config.algo_config.build_ppo(
@@ -744,12 +735,7 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, BurnBackendConfig, E> {
     /// # Panics
     ///
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
-    pub fn build(
-        mut self,
-    ) -> Result<
-        OnPolicyAlgorithm<OnPolicyTrainingHooks<PPOBurn, RolloutSampler<SamplerHook<E>>, E>>,
-        Error,
-    > {
+    pub fn build(mut self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<PPOBurn, E>>> {
         let progress = self.progress();
         let learner = self.build_learner()?;
         let agent = self.config.algo_config.build_ppo(
@@ -778,12 +764,7 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, CandleDevice, E> {
     /// # Panics
     ///
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
-    pub fn build(
-        mut self,
-    ) -> Result<
-        OnPolicyAlgorithm<OnPolicyTrainingHooks<A2CCandle, RolloutSampler<SamplerHook<E>>, E>>,
-        Error,
-    > {
+    pub fn build(mut self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<A2CCandle, E>>> {
         let progress = self.progress();
         let learner = self.build_learner()?;
         let agent = self.config.algo_config.build_a2c(
@@ -811,12 +792,7 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, BurnBackendConfig, E> {
     /// # Panics
     ///
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
-    pub fn build(
-        mut self,
-    ) -> Result<
-        OnPolicyAlgorithm<OnPolicyTrainingHooks<A2CBurn, RolloutSampler<SamplerHook<E>>, E>>,
-        Error,
-    > {
+    pub fn build(mut self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<A2CBurn, E>>> {
         let progress = self.progress();
         let learner = self.build_learner()?;
         let agent = self.config.algo_config.build_a2c(
@@ -851,7 +827,7 @@ impl<E: Env> PPOBuilder<E> {
     /// # Errors
     ///
     /// Returns an error if `num_envs` is zero.
-    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, num_envs: usize) -> Result<Self, Error> {
+    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, num_envs: usize) -> Result<Self> {
         Self::configured(
             env_builder,
             num_envs,
@@ -876,7 +852,7 @@ impl<E: Env> A2CBuilder<E> {
     /// # Errors
     ///
     /// Returns an error if `num_envs` is zero.
-    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, num_envs: usize) -> Result<Self, Error> {
+    pub fn new<EB: EnvBuilder<Env = E>>(env_builder: EB, num_envs: usize) -> Result<Self> {
         Self::configured(
             env_builder,
             num_envs,
@@ -903,7 +879,7 @@ impl PPOBuilder<GymEnv> {
     /// # Errors
     ///
     /// Returns an error if `num_envs` is zero.
-    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, num_envs: usize) -> Result<Self, Error> {
+    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, num_envs: usize) -> Result<Self> {
         Self::new(env_builder.into(), num_envs)
     }
 }
@@ -923,7 +899,7 @@ impl A2CBuilder<GymEnv> {
     /// # Errors
     ///
     /// Returns an error if `num_envs` is zero.
-    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, num_envs: usize) -> Result<Self, Error> {
+    pub fn gym<EB: Into<GymEnvBuilder>>(env_builder: EB, num_envs: usize) -> Result<Self> {
         Self::new(env_builder.into(), num_envs)
     }
 }

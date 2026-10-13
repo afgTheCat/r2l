@@ -6,10 +6,9 @@ use r2l_core::{
     on_policy::algorithm::{OnPolicyAlgorithm, OnPolicyRuntime},
 };
 use r2l_distributions::learning_modules::burn_lm::PolicyValueLearnerSnapshot;
-use r2l_sampler::RolloutSampler;
 
 use crate::{
-    OnPolicyTrainingHooks, PPOBurn, SamplerHook,
+    OnPolicyHooks, PPOBurn,
     backend::{BackendConfig, BurnBackendConfig},
     builders::{
         BuilderResources,
@@ -41,10 +40,7 @@ impl SnapshotAlgo<PolicyValueLearnerSnapshot> {
     fn burn_algo<E: Env + 'static>(
         self,
         mut resources: BuilderResources<E>,
-    ) -> Result<
-        OnPolicyAlgorithm<OnPolicyTrainingHooks<PPOBurn, RolloutSampler<SamplerHook<E>>, E>>,
-        Error,
-    > {
+    ) -> Result<OnPolicyAlgorithm<OnPolicyHooks<PPOBurn, E>>, Error> {
         let Self {
             learner: learner_config,
             learner_state,

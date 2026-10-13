@@ -64,3 +64,6 @@ impl<E: Env + 'static> SamplerHookTrait for SamplerHook<E> {
         }
     }
 }
+
+/// Rollout sampler with step or episode bounds and optional reward normalization.
+pub type OnPolicySampler<E> = r2l_sampler::RolloutSampler<SamplerHook<E>>;

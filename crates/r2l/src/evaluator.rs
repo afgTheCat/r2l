@@ -15,12 +15,12 @@ use r2l_core::{
     on_policy::algorithm::Sampler,
     tensor::R2lTensor,
 };
-use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
+use r2l_sampler::{RolloutMode, SamplerExecutionMode};
 use serde::{Deserialize, Serialize};
 use yaml_serde::to_string;
 
 use crate::{
-    SamplerHook,
+    OnPolicySampler, SamplerHook,
     constants::{ACTOR_FILE, EVALUATIONS_FILE, NORMALIZER_FILE},
 };
 
@@ -116,7 +116,7 @@ impl<T: R2lTensor> Artifacts<T> {
 }
 
 pub(crate) struct EvaluationSampler<E: Env + 'static> {
-    sampler: RolloutSampler<SamplerHook<E>>,
+    sampler: OnPolicySampler<E>,
 }
 
 impl<E: Env> EvaluationSampler<E> {
@@ -129,9 +129,9 @@ impl<E: Env> EvaluationSampler<E> {
         let hook = SamplerHook::new(RolloutMode::EpisodeBound { n_episodes }, None);
         let sampler = match obs_normalizer {
             Some(normalizer) => {
-                RolloutSampler::build_staged(&env_builder, hook, execution_mode, normalizer)?
+                OnPolicySampler::build_staged(&env_builder, hook, execution_mode, normalizer)?
             }
-            None => RolloutSampler::build_direct(&env_builder, hook, execution_mode)?,
+            None => OnPolicySampler::build_direct(&env_builder, hook, execution_mode)?,
         };
         Ok(Self { sampler })
     }

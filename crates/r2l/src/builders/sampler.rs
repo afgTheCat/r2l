@@ -9,10 +9,10 @@ use r2l_core::{
     error::Error,
     tensor::R2lTensor,
 };
-use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
+use r2l_sampler::{RolloutMode, SamplerExecutionMode};
 use serde::{Deserialize, Serialize};
 
-use crate::{hooks::sampler::SamplerHook, utils::RewardNormalizer};
+use crate::{OnPolicySampler, SamplerHook, utils::RewardNormalizer};
 
 /// Controls observation normalization and optional clipping after normalization.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -80,7 +80,7 @@ impl SamplerConfiguration {
         &self,
         env_builder: &EnvBuilderType<E>,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
-    ) -> Result<RolloutSampler<SamplerHook<E>>, Error> {
+    ) -> Result<OnPolicySampler<E>, Error> {
         let reward_normalizer = self.reward_normalizer.as_ref().map(|config| {
             RewardNormalizer::new(
                 NonZeroUsize::new(env_builder.num_envs())
@@ -92,9 +92,9 @@ impl SamplerConfiguration {
         let hook = SamplerHook::new(self.rollout_mode, reward_normalizer);
         match obs_normalizer {
             Some(normalizer) => {
-                RolloutSampler::build_staged(env_builder, hook, self.execution_mode, normalizer)
+                OnPolicySampler::build_staged(env_builder, hook, self.execution_mode, normalizer)
             }
-            None => RolloutSampler::build_direct(env_builder, hook, self.execution_mode),
+            None => OnPolicySampler::build_direct(env_builder, hook, self.execution_mode),
         }
     }
 }

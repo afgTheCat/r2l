@@ -120,3 +120,6 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>> OnP
         }
     }
 }
+
+/// Training lifecycle hooks using the standard on-policy sampler.
+pub type OnPolicyHooks<A, E> = OnPolicyTrainingHooks<A, crate::OnPolicySampler<E>, E>;

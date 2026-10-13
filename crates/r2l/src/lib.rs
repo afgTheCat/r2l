@@ -83,11 +83,11 @@ pub use hooks::learning::{
     A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, PPOLearningHook, PPOSettings,
 };
 pub use hooks::on_policy::{
-    OnPolicyTrainingHooks,
+    OnPolicyHooks, OnPolicyTrainingHooks,
     commands::{OnPolicyControlEndpoint, OnPolicyControlHandle},
 };
 pub use hooks::progress::TrainingLimit;
-pub use hooks::sampler::SamplerHook;
+pub use hooks::sampler::{OnPolicySampler, SamplerHook};
 pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};
 pub use r2l_core::error::{self, Error};
 pub use r2l_core::{
