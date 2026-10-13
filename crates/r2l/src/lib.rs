@@ -64,6 +64,7 @@ pub mod backend;
 /// Algorithm and network builders.
 pub mod builders;
 mod constants;
+mod csv_artifact;
 mod evaluator;
 mod hooks;
 mod inference;

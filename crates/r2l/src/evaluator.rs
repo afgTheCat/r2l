@@ -1,9 +1,5 @@
-use std::io::Write;
 use std::num::NonZeroUsize;
-use std::{
-    fs::OpenOptions,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use r2l_core::ModeActorWrapper;
 use r2l_core::on_policy::algorithm::{Agent, OnPolicyRuntime};
@@ -22,11 +18,13 @@ use yaml_serde::to_string;
 use crate::{
     OnPolicySampler, SamplerHook,
     constants::{ACTOR_FILE, EVALUATIONS_FILE, NORMALIZER_FILE},
+    csv_artifact::CsvArtifact,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct EvaluationResult {
-    total_reward: f32,
+    average_reward: f32,
+    #[serde(rename = "total_episodes")]
     num_episodes: NonZeroUsize,
 }
 
@@ -34,13 +32,13 @@ impl EvaluationResult {
     pub(crate) fn new(total_reward: f32, num_episodes: usize) -> Self {
         let num_episodes = NonZeroUsize::new(num_episodes).expect("Results cannot be empty");
         Self {
-            total_reward,
+            average_reward: total_reward / num_episodes.get() as f32,
             num_episodes,
         }
     }
 
     pub(crate) fn avg_reward(&self) -> f32 {
-        self.total_reward / self.num_episodes.get() as f32
+        self.average_reward
     }
 }
 
@@ -77,7 +75,7 @@ impl<T: R2lTensor> BestPolicyArtifacts<T> {
 
 struct Artifacts<T: R2lTensor> {
     folder: PathBuf,
-    evaluation_results: bool,
+    evaluation_results: Option<CsvArtifact<EvaluationResult>>,
     best_policy: Option<BestPolicyArtifacts<T>>,
 }
 
@@ -87,20 +85,11 @@ impl<T: R2lTensor> Artifacts<T> {
         evaluation_results: bool,
         inference_artifacts: bool,
         normalizer: Option<Normalizer<T>>,
-        append: bool,
     ) -> Result<Self> {
         std::fs::create_dir_all(&folder)?;
-        if evaluation_results {
-            let mut file = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(append)
-                .truncate(!append)
-                .open(folder.join(EVALUATIONS_FILE))?;
-            if file.metadata()?.len() == 0 {
-                writeln!(file, "average_reward,total_episodes")?;
-            }
-        }
+        let evaluation_results = evaluation_results
+            .then(|| CsvArtifact::open(&folder.join(EVALUATIONS_FILE)))
+            .transpose()?;
         let best_policy = inference_artifacts.then_some(BestPolicyArtifacts::new(normalizer));
         Ok(Self {
             folder,
@@ -111,10 +100,8 @@ impl<T: R2lTensor> Artifacts<T> {
 
     fn write<A: ToSafetensors>(&mut self, actor: &A, eval_result: EvaluationResult) -> Result<()> {
         let avg_reward = eval_result.avg_reward();
-        if self.evaluation_results {
-            let path = self.folder.join(EVALUATIONS_FILE);
-            let mut file = OpenOptions::new().append(true).open(path)?;
-            writeln!(file, "{avg_reward},{}", eval_result.num_episodes)?;
+        if let Some(file) = &mut self.evaluation_results {
+            file.write(&eval_result)?;
         }
         if let Some(best_policy) = &mut self.best_policy {
             best_policy.write(&self.folder, actor, avg_reward)?;
@@ -190,7 +177,6 @@ impl<E: Env> BestPolicyEvaluator<E> {
         output_dir: Option<PathBuf>,
         evaluation_results: bool,
         inference_artifacts: bool,
-        append: bool,
     ) -> Result<Self> {
         let artifacts = output_dir
             .map(|output_dir| {
@@ -199,7 +185,6 @@ impl<E: Env> BestPolicyEvaluator<E> {
                     evaluation_results,
                     inference_artifacts,
                     sampler.normalizer(),
-                    append,
                 )
             })
             .transpose()?;

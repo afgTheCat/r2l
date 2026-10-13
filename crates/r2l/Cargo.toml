@@ -21,6 +21,7 @@ bimodal-array = { workspace = true }
 serde = { workspace = true }
 yaml_serde = { workspace = true } 
 itertools = { workspace = true }
+csv = "1.4.0"
 
 [features]
 default = []

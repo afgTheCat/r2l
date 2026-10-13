@@ -1,13 +1,15 @@
 use std::{
-    fs::{File, OpenOptions},
-    io::Write,
     path::Path,
     time::{Duration, Instant},
 };
 
 use r2l_core::error::Error;
+use serde::{Deserialize, Serialize, Serializer};
 
-use crate::{constants::TRAINING_TIMINGS_FILE, hooks::progress::SharedTrainingProgress};
+use crate::{
+    constants::TRAINING_TIMINGS_FILE, csv_artifact::CsvArtifact,
+    hooks::progress::SharedTrainingProgress,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Phase {
@@ -37,8 +39,30 @@ struct TrainingLoopTimings {
     evaluation: Duration,
 }
 
+#[derive(Serialize, Deserialize)]
+struct TimingRecord {
+    rollout: usize,
+    #[serde(serialize_with = "TimingRecord::serialize_milliseconds")]
+    collect_ms: f64,
+    #[serde(serialize_with = "TimingRecord::serialize_milliseconds")]
+    learn_ms: f64,
+    #[serde(serialize_with = "TimingRecord::serialize_milliseconds")]
+    evaluate_ms: f64,
+    #[serde(serialize_with = "TimingRecord::serialize_milliseconds")]
+    total_ms: f64,
+}
+
+impl TimingRecord {
+    fn serialize_milliseconds<S: Serializer>(
+        value: &f64,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&format_args!("{value:.3}"))
+    }
+}
+
 pub(crate) struct EnabledTimingRecorder {
-    file: File,
+    file: CsvArtifact<TimingRecord>,
     progress: SharedTrainingProgress,
     timings: TrainingLoopTimings,
     phase_recorder: Option<RecordedPhase>,
@@ -65,16 +89,13 @@ impl EnabledTimingRecorder {
     fn flush(&mut self) -> Result<(), Error> {
         let completed_rollouts = self.progress.borrow().completed_rollouts();
         let timings = std::mem::take(&mut self.timings);
-        writeln!(
-            self.file,
-            "{},{:.3},{:.3},{:.3},{:.3}",
-            completed_rollouts,
-            timings.collection.as_secs_f64() * 1000.0,
-            timings.training.as_secs_f64() * 1000.0,
-            timings.evaluation.as_secs_f64() * 1000.0,
-            self.training_started.elapsed().as_secs_f64() * 1000.0,
-        )?;
-        Ok(())
+        self.file.write(&TimingRecord {
+            rollout: completed_rollouts,
+            collect_ms: timings.collection.as_secs_f64() * 1000.0,
+            learn_ms: timings.training.as_secs_f64() * 1000.0,
+            evaluate_ms: timings.evaluation.as_secs_f64() * 1000.0,
+            total_ms: self.training_started.elapsed().as_secs_f64() * 1000.0,
+        })
     }
 }
 
@@ -94,22 +115,12 @@ impl TimingRecorder {
     ///
     /// * `output_dir` - Directory in which the timings CSV is created.
     /// * `progress` - Training progress used to label each timings row.
-    /// * `append` - Preserve existing rows when resuming training.
     pub(crate) fn create(
         output_dir: &Path,
         progress: SharedTrainingProgress,
-        append: bool,
     ) -> Result<Self, Error> {
         std::fs::create_dir_all(output_dir)?;
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(append)
-            .truncate(!append)
-            .open(output_dir.join(TRAINING_TIMINGS_FILE))?;
-        if file.metadata()?.len() == 0 {
-            writeln!(file, "rollout,collect_ms,learn_ms,evaluate_ms,total_ms")?;
-        }
+        let file = CsvArtifact::open(&output_dir.join(TRAINING_TIMINGS_FILE))?;
         Ok(Self::Enabled(EnabledTimingRecorder {
             file,
             progress,

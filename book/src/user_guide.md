@@ -108,6 +108,11 @@ runs/pendulum
 1 directory, 4 files
 ```
 
+CSV artifacts are created with headers when missing. Existing files are validated
+against the expected headers and row types before new rows are appended. Empty
+files, mismatched headers, and invalid rows cause an error without changing the
+file. Use a new output directory for a separate training run.
+
 ## Running inference
 
 Using the inference artifacts and a new environment, you can create an

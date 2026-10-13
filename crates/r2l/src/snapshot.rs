@@ -103,7 +103,7 @@ impl SnapshotAlgo {
         &self,
         env_builder: EnvBuilderType<E>,
     ) -> Result<PPOBuilder<E, BurnBackendConfig>> {
-        let mut recipe = self.read_builder()?;
+        let recipe = self.read_builder()?;
         if recipe.n_envs != env_builder.num_envs() {
             return Err(Error::invalid_state(
                 "restore builder",
@@ -123,9 +123,6 @@ impl SnapshotAlgo {
                 "restore builder",
                 "environment spaces differ from the snapshot",
             ));
-        }
-        if let Some(artifacts) = &mut recipe.config.hook_config.training_artifacts {
-            artifacts.append = true;
         }
         Ok(OnPolicyBuilder {
             algo_backend: recipe.algo_backend,

@@ -30,8 +30,6 @@ use crate::{
 #[derive(Serialize, Deserialize)]
 pub struct TrainingArtifactsConfig {
     pub(crate) output_dir: PathBuf,
-    #[serde(default)]
-    pub(crate) append: bool,
     pub(crate) evaluation_results: bool,
     pub(crate) training_timings: bool,
     pub(crate) inference_artifacts: bool,
@@ -47,7 +45,6 @@ impl TrainingArtifactsConfig {
     pub fn new(output_dir: impl Into<PathBuf>) -> Self {
         Self {
             output_dir: Self::resolve_and_validate_output_dir(output_dir.into()),
-            append: false,
             evaluation_results: true,
             training_timings: true,
             inference_artifacts: true,
@@ -173,7 +170,6 @@ impl OnPolicyHookConfig {
                     artifacts.map(|config| config.output_dir.clone()),
                     artifacts.is_some_and(|config| config.evaluation_results),
                     artifacts.is_some_and(|config| config.inference_artifacts),
-                    artifacts.is_some_and(|config| config.append),
                 )?,
                 settings.rollouts_per_evaluation,
                 progress.clone(),
@@ -185,7 +181,7 @@ impl OnPolicyHookConfig {
         let timing_recorder = if let Some(config) = &self.training_artifacts
             && config.training_timings
         {
-            TimingRecorder::create(&config.output_dir, progress.clone(), config.append)?
+            TimingRecorder::create(&config.output_dir, progress.clone())?
         } else {
             TimingRecorder::disabled()
         };
