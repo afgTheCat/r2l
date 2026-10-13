@@ -53,13 +53,13 @@ use crate::{
 };
 
 /// PPO agent produced by a Candle-backed algorithm builder.
-pub type PPOCandle = PPO<CandlePolicyValueLearner, PPOLearningHook<CandlePolicyValueLearner>>;
+pub type PPOCandle = PPO<CandlePolicyValueLearner, PPOLearningHook>;
 /// PPO agent produced by a Burn-backed algorithm builder.
-pub type PPOBurn = PPO<BurnPolicyValueLearner, PPOLearningHook<BurnPolicyValueLearner>>;
+pub type PPOBurn = PPO<BurnPolicyValueLearner, PPOLearningHook>;
 /// A2C agent produced by a Candle-backed algorithm builder.
-pub type A2CCandle = A2C<CandlePolicyValueLearner, A2CLearningHook<CandlePolicyValueLearner>>;
+pub type A2CCandle = A2C<CandlePolicyValueLearner, A2CLearningHook>;
 /// A2C agent produced by a Burn-backed algorithm builder.
-pub type A2CBurn = A2C<BurnPolicyValueLearner, A2CLearningHook<BurnPolicyValueLearner>>;
+pub type A2CBurn = A2C<BurnPolicyValueLearner, A2CLearningHook>;
 
 struct BuilderConfig {
     seed: Option<u64>,
@@ -668,14 +668,8 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
     #[allow(clippy::type_complexity)]
     pub fn build(
         mut self,
-    ) -> Result<
-        OnPolicyAlgorithm<
-            A,
-            RolloutSampler<SamplerHook<E>>,
-            OnPolicyTrainingHooks<A, RolloutSampler<SamplerHook<E>>, E>,
-        >,
-        Error,
-    > {
+    ) -> Result<OnPolicyAlgorithm<OnPolicyTrainingHooks<A, RolloutSampler<SamplerHook<E>>, E>>, Error>
+    {
         let progress = self.builder.progress();
         if let Some(seed) = self.builder.config.seed {
             self.builder.resources.backend.seed(seed)?;
@@ -733,11 +727,11 @@ impl<E: Env> OnPolicyBuilder<PPOBurn, E> {
     }
 }
 
-impl<M, E: Env> OnPolicyBuilder<PPO<M, PPOLearningHook<M>>, E>
+impl<M, E: Env> OnPolicyBuilder<PPO<M, PPOLearningHook>, E>
 where
     M: OnPolicyLearner,
     M::Policy: ToSafetensors,
-    PPOLearningHook<M>: PPOHook<M>,
+    PPOLearningHook: PPOHook<M>,
 {
     /// Installs an optional channel for reporting PPO training statistics.
     ///
@@ -851,11 +845,11 @@ impl<E: Env> OnPolicyBuilder<A2CBurn, E> {
     }
 }
 
-impl<M, E: Env> OnPolicyBuilder<A2C<M, A2CLearningHook<M>>, E>
+impl<M, E: Env> OnPolicyBuilder<A2C<M, A2CLearningHook>, E>
 where
     M: OnPolicyLearner,
     M::Policy: ToSafetensors,
-    A2CLearningHook<M>: A2CHook<M>,
+    A2CLearningHook: A2CHook<M>,
 {
     /// Installs an optional channel for reporting A2C training statistics.
     ///

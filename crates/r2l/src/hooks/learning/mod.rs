@@ -3,7 +3,7 @@
 pub(crate) mod reporter;
 pub(crate) mod stats;
 
-use std::{marker::PhantomData, num::NonZeroUsize};
+use std::num::NonZeroUsize;
 
 use r2l_agents::on_policy_algorithms::{
     Advantages, Returns,
@@ -96,7 +96,7 @@ impl PPOSettings {
 }
 
 /// Shared learning configuration with algorithm-specific state in `A`.
-pub struct LearningHook<M, A> {
+pub struct LearningHook<A> {
     pub(crate) normalize_advantage: bool,
     pub(crate) entropy_coeff: f32,
     pub(crate) vf_coeff: f32,
@@ -104,16 +104,19 @@ pub struct LearningHook<M, A> {
     pub(crate) policy_learning_rate_schedule: LearningRateSchedule,
     pub(crate) value_learning_rate_schedule: LearningRateSchedule,
     pub(crate) algorithm: A,
-    pub(crate) _lm: PhantomData<M>,
 }
 
 /// Shared hook specialized for PPO learning.
-pub type PPOLearningHook<M = ()> = LearningHook<M, PPOSettings>;
+pub type PPOLearningHook = LearningHook<PPOSettings>;
 /// Shared hook specialized for A2C learning.
-pub type A2CLearningHook<M = ()> = LearningHook<M, A2CSettings>;
+pub type A2CLearningHook = LearningHook<A2CSettings>;
 
-impl<M: OnPolicyLearner, A> LearningHook<M, A> {
-    fn prepare_learning(&self, module: &mut M, advantages: &mut Advantages) -> f64 {
+impl<A> LearningHook<A> {
+    fn prepare_learning<M: OnPolicyLearner>(
+        &self,
+        module: &mut M,
+        advantages: &mut Advantages,
+    ) -> f64 {
         let progress = self.progress.borrow().progress_remaining();
         module.set_learning_rates(
             self.policy_learning_rate_schedule.value(progress),
@@ -125,7 +128,7 @@ impl<M: OnPolicyLearner, A> LearningHook<M, A> {
         progress
     }
 
-    fn process_batch(
+    fn process_batch<M: OnPolicyLearner>(
         &self,
         module: &mut M,
         losses: &mut PolicyValueLosses<M::Tensor>,
@@ -156,7 +159,7 @@ impl<M: OnPolicyLearner, A> LearningHook<M, A> {
     }
 }
 
-impl<M: OnPolicyLearner> A2CHook<M> for LearningHook<M, A2CSettings> {
+impl<M: OnPolicyLearner> A2CHook<M> for LearningHook<A2CSettings> {
     fn before_learning_hook<T: TrajectoryBatch<M::Tensor>>(
         &mut self,
         _params: &mut A2CParams,
@@ -209,7 +212,7 @@ impl<M: OnPolicyLearner> A2CHook<M> for LearningHook<M, A2CSettings> {
     }
 }
 
-impl<M: OnPolicyLearner> PPOHook<M> for LearningHook<M, PPOSettings> {
+impl<M: OnPolicyLearner> PPOHook<M> for LearningHook<PPOSettings> {
     fn before_learning_hook<T: TrajectoryBatch<M::Tensor>>(
         &mut self,
         params: &mut PPOParams,

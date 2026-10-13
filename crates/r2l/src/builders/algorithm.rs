@@ -42,10 +42,10 @@ impl AlgoConfig {
         progress: SharedTrainingProgress,
         reporter: Option<Sender<PPORolloutStats>>,
         n_envs: NonZeroUsize,
-    ) -> PPO<M, PPOLearningHook<M>>
+    ) -> PPO<M, PPOLearningHook>
     where
         M: OnPolicyLearner,
-        PPOLearningHook<M>: PPOHook<M>,
+        PPOLearningHook: PPOHook<M>,
     {
         let (params, settings) = self.ppo_parts(reporter, n_envs);
         let hooks = learning_hook.build(settings, optimizer, progress);
@@ -64,10 +64,10 @@ impl AlgoConfig {
         progress: SharedTrainingProgress,
         reporter: Option<Sender<A2CRolloutStats>>,
         n_envs: NonZeroUsize,
-    ) -> A2C<M, A2CLearningHook<M>>
+    ) -> A2C<M, A2CLearningHook>
     where
         M: OnPolicyLearner,
-        A2CLearningHook<M>: A2CHook<M>,
+        A2CLearningHook: A2CHook<M>,
     {
         let (params, settings) = self.a2c_parts(reporter, n_envs);
         let hooks = learning_hook.build(settings, optimizer, progress);

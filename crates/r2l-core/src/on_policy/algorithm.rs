@@ -140,14 +140,14 @@ pub trait OnPolicyAlgorithmHooks {
 }
 
 /// Generic on-policy training loop combining a runtime with lifecycle hooks.
-pub struct OnPolicyAlgorithm<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> {
+pub struct OnPolicyAlgorithm<H: OnPolicyAlgorithmHooks> {
     /// Coupled training runtime.
-    pub runtime: OnPolicyRuntime<A, S>,
+    pub runtime: OnPolicyRuntime<H::A, H::S>,
     /// Lifecycle hooks.
     pub hooks: H,
 }
 
-impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgorithm<A, S, H> {
+impl<H: OnPolicyAlgorithmHooks> OnPolicyAlgorithm<H> {
     fn training_loop(&mut self) -> Result<(), Error> {
         return_on_hook_result!(self.hooks.init_hook(&mut self.runtime));
         loop {
@@ -161,9 +161,9 @@ impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgo
     }
 }
 
-impl<A: Agent, S: Sampler, H: OnPolicyAlgorithmHooks<A = A, S = S>> OnPolicyAlgorithm<A, S, H> {
+impl<H: OnPolicyAlgorithmHooks> OnPolicyAlgorithm<H> {
     /// Creates an on-policy algorithm from its runtime and lifecycle hooks.
-    pub fn new(runtime: OnPolicyRuntime<A, S>, hooks: H) -> Self {
+    pub fn new(runtime: OnPolicyRuntime<H::A, H::S>, hooks: H) -> Self {
         Self { runtime, hooks }
     }
 

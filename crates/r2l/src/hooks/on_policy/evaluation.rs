@@ -4,24 +4,23 @@ use r2l_core::{
     HookResult,
     env::Env,
     error::Error,
-    models::{Actor, ToSafetensors},
+    models::ToSafetensors,
     on_policy::algorithm::{Agent, OnPolicyRuntime, Sampler},
-    tensor::R2lTensor,
 };
 
 use crate::{evaluator::BestPolicyEvaluator, hooks::progress::SharedTrainingProgress};
 
-pub(crate) enum ScheduledEvaluator<A: Actor, E: Env + 'static> {
+pub(crate) enum ScheduledEvaluator<E: Env + 'static> {
     Disabled,
     Enabled {
-        evaluator: BestPolicyEvaluator<A, E>,
+        evaluator: BestPolicyEvaluator<E>,
         rollouts_per_evaluation: NonZeroUsize,
         progress: SharedTrainingProgress,
         avg_reward_threshold: Option<f32>,
     },
 }
 
-impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvaluator<A, E> {
+impl<E: Env> ScheduledEvaluator<E> {
     pub(crate) fn disabled() -> Self {
         Self::Disabled
     }
@@ -36,7 +35,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
     /// * `avg_reward_threshold` - Stop when the average episode reward reaches this value, or
     ///   `None` to evaluate without a reward-based stop condition.
     pub(crate) fn new(
-        evaluator: BestPolicyEvaluator<A, E>,
+        evaluator: BestPolicyEvaluator<E>,
         rollouts_per_evaluation: NonZeroUsize,
         progress: SharedTrainingProgress,
         avg_reward_threshold: Option<f32>,
@@ -49,7 +48,7 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
         }
     }
 
-    pub(super) fn evaluate<AG: Agent<Actor = A>, S: Sampler<Tensor = E::Tensor>>(
+    pub(super) fn evaluate<AG: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>>(
         &mut self,
         runtime: &mut OnPolicyRuntime<AG, S>,
     ) -> Result<HookResult, Error> {
@@ -75,7 +74,10 @@ impl<A: Actor + Clone + ToSafetensors, E: Env<Tensor: R2lTensor>> ScheduledEvalu
         }
     }
 
-    pub(super) fn finish_training<AG: Agent<Actor = A>, S: Sampler<Tensor = E::Tensor>>(
+    pub(super) fn finish_training<
+        AG: Agent<Actor: ToSafetensors>,
+        S: Sampler<Tensor = E::Tensor>,
+    >(
         &mut self,
         runtime: &mut OnPolicyRuntime<AG, S>,
     ) -> Result<(), Error> {

@@ -1,5 +1,4 @@
 use std::io::Write;
-use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::{
     fs::{File, OpenOptions},
@@ -161,13 +160,12 @@ impl<E: Env> EvaluationSampler<E> {
     }
 }
 
-pub(crate) struct BestPolicyEvaluator<A: Actor, E: Env + 'static> {
+pub(crate) struct BestPolicyEvaluator<E: Env + 'static> {
     sampler: EvaluationSampler<E>,
     artifacts: Option<Artifacts<E::Tensor>>,
-    _actor: PhantomData<A>,
 }
 
-impl<A: Actor + ToSafetensors + Clone, E: Env> BestPolicyEvaluator<A, E> {
+impl<E: Env> BestPolicyEvaluator<E> {
     pub(crate) fn new(
         sampler: EvaluationSampler<E>,
         output_dir: Option<PathBuf>,
@@ -184,14 +182,10 @@ impl<A: Actor + ToSafetensors + Clone, E: Env> BestPolicyEvaluator<A, E> {
                 )
             })
             .transpose()?;
-        Ok(Self {
-            sampler,
-            artifacts,
-            _actor: PhantomData,
-        })
+        Ok(Self { sampler, artifacts })
     }
 
-    pub(crate) fn evaluate<AG: Agent<Actor = A>, TS: Sampler<Tensor = E::Tensor>>(
+    pub(crate) fn evaluate<AG: Agent<Actor: ToSafetensors>, TS: Sampler<Tensor = E::Tensor>>(
         &mut self,
         rt: &mut OnPolicyRuntime<AG, TS>,
     ) -> Result<EvaluationResult> {

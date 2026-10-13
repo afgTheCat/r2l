@@ -40,11 +40,7 @@ impl SnapshotAlgo<PolicyValueLearnerSnapshot> {
         self,
         mut resources: BuilderResources<E>,
     ) -> Result<
-        OnPolicyAlgorithm<
-            PPOBurn,
-            RolloutSampler<SamplerHook<E>>,
-            OnPolicyTrainingHooks<PPOBurn, RolloutSampler<SamplerHook<E>>, E>,
-        >,
+        OnPolicyAlgorithm<OnPolicyTrainingHooks<PPOBurn, RolloutSampler<SamplerHook<E>>, E>>,
         Error,
     > {
         let Self {

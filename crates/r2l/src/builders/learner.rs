@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use burn::tensor::Device as BurnDevice;
 use candle_core::Device;
 use r2l_core::{
@@ -127,12 +125,12 @@ impl LearningHookConfig {
     /// * `algorithm` - Fresh algorithm-specific learning and reporting state.
     /// * `optimizer` - Supplies the authoritative policy and value learning-rate schedules.
     /// * `progress` - Shared training progress used to evaluate the schedules.
-    pub(crate) fn build<M, A>(
+    pub(crate) fn build<A>(
         &self,
         algorithm: A,
         optimizer: &OptimizerConfig,
         progress: SharedTrainingProgress,
-    ) -> LearningHook<M, A> {
+    ) -> LearningHook<A> {
         let (policy_learning_rate_schedule, value_learning_rate_schedule) =
             optimizer.learning_rate_schedules();
         LearningHook {
@@ -143,7 +141,6 @@ impl LearningHookConfig {
             value_learning_rate_schedule,
             progress,
             algorithm,
-            _lm: PhantomData,
         }
     }
 }

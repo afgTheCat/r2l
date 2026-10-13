@@ -32,10 +32,10 @@ macro_rules! try_or_break {
 pub struct OnPolicyTrainingHooks<A: Agent, S: Sampler, E: Env<Tensor = S::Tensor> + 'static> {
     timing_recorder: TimingRecorder,
     progress: SharedTrainingProgress,
-    evaluator: ScheduledEvaluator<A::Actor, E>,
+    evaluator: ScheduledEvaluator<E>,
     command_handler: OnPolicyCommandHandler,
     error: Option<Error>,
-    _phantom: PhantomData<S>,
+    _phantom: PhantomData<(A, S)>,
 }
 
 impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
@@ -51,7 +51,7 @@ impl<A: Agent<Actor: ToSafetensors>, S: Sampler, E: Env<Tensor = S::Tensor>>
     /// * `timing_recorder` - Records durations for each completed training iteration.
     pub(crate) fn new(
         progress: SharedTrainingProgress,
-        evaluator: ScheduledEvaluator<A::Actor, E>,
+        evaluator: ScheduledEvaluator<E>,
         command_handler: OnPolicyCommandHandler,
         timing_recorder: TimingRecorder,
     ) -> Self {
