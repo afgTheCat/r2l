@@ -2,7 +2,9 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::{io, sync::mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use r2l::{OnPolicyControlHandle, PPOBuilder, PPORolloutStats, TrainingLimit};
+use r2l::{
+    OnPolicyControlEndpoint, OnPolicyControlHandle, PPOBuilder, PPORolloutStats, TrainingLimit,
+};
 use r2l_core::error::Result;
 use r2l_examples::EventBox;
 use r2l_gym::GymEnv;
@@ -309,9 +311,10 @@ fn main() -> io::Result<()> {
     handle_input_events(event_tx.clone());
     adapt_ppo_events(update_rx, event_tx.clone());
     let total_rollouts = 30;
-    let (ppo_builder, control_handle) = ppo_builder(update_tx, total_rollouts)
+    let (control_endpoint, control_handle) = OnPolicyControlEndpoint::channel();
+    let ppo_builder = ppo_builder(update_tx, total_rollouts)
         .map_err(io::Error::other)?
-        .with_control();
+        .with_control(control_endpoint);
     std::thread::spawn(move || match train_ppo(ppo_builder) {
         Ok(()) => {}
         Err(err) => {

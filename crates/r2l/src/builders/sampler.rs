@@ -1,11 +1,13 @@
 use std::num::NonZeroUsize;
 
 use r2l_core::{
+    Shape,
     env::{
         Env, EnvBuilderType,
         normalizer::{Normalizer, NormalizerMode},
     },
     error::Error,
+    tensor::R2lTensor,
 };
 use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
 
@@ -38,59 +40,51 @@ impl ObsNormalizerConfig {
     }
 }
 
-pub(crate) struct SamplerSetup<E: Env> {
+pub(crate) struct RewardNormalizerConfig {
+    pub(crate) gamma: f32,
+    pub(crate) clip_reward: f32,
+}
+
+pub(crate) struct SamplerSetup {
     pub(crate) rollout_mode: RolloutMode,
-    pub(crate) reward_normalizer: Option<RewardNormalizer>,
-    pub(crate) obs_normalizer: Option<Normalizer<E::Tensor>>,
+    pub(crate) reward_normalizer: Option<RewardNormalizerConfig>,
+    pub(crate) obs_normalizer: ObsNormalizerConfig,
 }
 
-pub(crate) struct SamplerConfiguration<E: Env + 'static> {
-    pub(crate) setup: SamplerSetup<E>,
+pub(crate) struct SamplerConfiguration {
+    pub(crate) setup: SamplerSetup,
     pub(crate) execution_mode: SamplerExecutionMode,
-    pub(crate) env_builder: EnvBuilderType<E>,
 }
 
-impl<E: Env> SamplerConfiguration<E> {
-    pub(crate) fn n_envs(&self) -> NonZeroUsize {
-        NonZeroUsize::new(self.env_builder.num_envs()).expect("environment builders are nonempty")
-    }
-
-    pub(crate) fn set_reward_normalizer(&mut self, gamma: f32, clip_reward: f32) {
-        self.setup.reward_normalizer =
-            Some(RewardNormalizer::new(self.n_envs(), gamma, clip_reward));
-    }
-
-    pub(crate) fn with_observation_normalizer(mut self, config: ObsNormalizerConfig) -> Self {
-        let normalizer = match config {
+impl SamplerConfiguration {
+    pub(crate) fn build_obs_normalizer<T: R2lTensor>(&self, shape: Shape) -> Option<Normalizer<T>> {
+        match self.setup.obs_normalizer {
             ObsNormalizerConfig::Disabled => None,
             ObsNormalizerConfig::Enabled { clip } => {
-                let description = self.env_builder.env_description().unwrap();
-                let shape = description.observation_space.shape().unwrap();
                 Some(Normalizer::build(NormalizerMode::Update, clip, shape))
             }
-        };
-        self.setup.obs_normalizer = normalizer;
-        self
+        }
     }
 
-    pub(crate) fn rollout_mode(&self) -> RolloutMode {
-        self.setup.rollout_mode
-    }
-
-    pub(crate) fn obs_normalizer(&self) -> Option<Normalizer<E::Tensor>> {
-        self.setup.obs_normalizer.clone()
-    }
-
-    pub(crate) fn build_sampler(&self) -> Result<RolloutSampler<E, SamplerHook<E>>, Error> {
-        let hook = SamplerHook::new(self.rollout_mode(), self.setup.reward_normalizer.clone());
-        match self.obs_normalizer() {
-            Some(normalizer) => RolloutSampler::build_staged(
-                &self.env_builder,
-                hook,
-                self.execution_mode,
-                normalizer.with_mode(NormalizerMode::Update),
-            ),
-            None => RolloutSampler::build_direct(&self.env_builder, hook, self.execution_mode),
+    pub(crate) fn build_sampler<E: Env + 'static>(
+        &self,
+        env_builder: &EnvBuilderType<E>,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
+    ) -> Result<RolloutSampler<SamplerHook<E>>, Error> {
+        let reward_normalizer = self.setup.reward_normalizer.as_ref().map(|config| {
+            RewardNormalizer::new(
+                NonZeroUsize::new(env_builder.num_envs())
+                    .expect("environment builders are nonempty"),
+                config.gamma,
+                config.clip_reward,
+            )
+        });
+        let hook = SamplerHook::new(self.setup.rollout_mode, reward_normalizer);
+        match obs_normalizer {
+            Some(normalizer) => {
+                RolloutSampler::build_staged(env_builder, hook, self.execution_mode, normalizer)
+            }
+            None => RolloutSampler::build_direct(env_builder, hook, self.execution_mode),
         }
     }
 }

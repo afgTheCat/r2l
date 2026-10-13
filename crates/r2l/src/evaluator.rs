@@ -116,7 +116,7 @@ impl<T: R2lTensor> Artifacts<T> {
 }
 
 pub(crate) struct EvaluationSampler<E: Env + 'static> {
-    sampler: RolloutSampler<E, SamplerHook<E>>,
+    sampler: RolloutSampler<SamplerHook<E>>,
 }
 
 impl<E: Env> EvaluationSampler<E> {

@@ -82,7 +82,10 @@ pub use hooks::learning::stats::{PPOMinibatchStats, PPORolloutStats};
 pub use hooks::learning::{
     A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, PPOLearningHook, PPOSettings,
 };
-pub use hooks::on_policy::{OnPolicyTrainingHooks, commands::OnPolicyControlHandle};
+pub use hooks::on_policy::{
+    OnPolicyTrainingHooks,
+    commands::{OnPolicyControlEndpoint, OnPolicyControlHandle},
+};
 pub use hooks::progress::TrainingLimit;
 pub use hooks::sampler::SamplerHook;
 pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};

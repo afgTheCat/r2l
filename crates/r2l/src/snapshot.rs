@@ -1,7 +1,5 @@
 //! Shared snapshot configuration and progress, with backend-specific learner state.
 
-use std::sync::mpsc::Sender;
-
 use r2l_core::{
     env::Env,
     error::Error,
@@ -11,9 +9,9 @@ use r2l_distributions::learning_modules::burn_lm::PolicyValueLearnerSnapshot;
 use r2l_sampler::RolloutSampler;
 
 use crate::{
-    OnPolicyTrainingHooks, PPOBurn, PPORolloutStats, SamplerHook,
-    backend::{Backend, BurnBackendConfig},
+    OnPolicyTrainingHooks, PPOBurn, SamplerHook,
     builders::{
+        BuilderResources,
         algorithm::AlgoConfig,
         learner::{LearnerConfig, LearningHookConfig},
         on_policy_hook::OnPolicyHookConfig,
@@ -27,25 +25,25 @@ use crate::{
 /// `L` carries the backend's model and optimizer snapshot, independently of the
 /// concrete policy type. Snapshot capture and additional restoration paths are
 /// still under construction.
-pub struct SnapshotAlgo<E: Env + 'static, L> {
+pub struct SnapshotAlgo<L> {
     algo_config: AlgoConfig,
     learner: LearnerConfig,
     learner_state: L,
     progress: TrainingProgress,
     learning_hook: LearningHookConfig,
-    sampler_configuration: SamplerConfiguration<E>,
+    sampler_configuration: SamplerConfiguration,
     hook_config: OnPolicyHookConfig,
 }
 
-impl<E: Env> SnapshotAlgo<E, PolicyValueLearnerSnapshot> {
-    fn burn_algo(
+impl SnapshotAlgo<PolicyValueLearnerSnapshot> {
+    fn burn_algo<E: Env + 'static>(
         self,
-        reporter: Option<Sender<PPORolloutStats>>,
+        mut resources: BuilderResources<E>,
     ) -> Result<
         OnPolicyAlgorithm<
             PPOBurn,
-            RolloutSampler<E, SamplerHook<E>>,
-            OnPolicyTrainingHooks<PPOBurn, RolloutSampler<E, SamplerHook<E>>, E>,
+            RolloutSampler<SamplerHook<E>>,
+            OnPolicyTrainingHooks<PPOBurn, RolloutSampler<SamplerHook<E>>, E>,
         >,
         Error,
     > {
@@ -66,14 +64,21 @@ impl<E: Env> SnapshotAlgo<E, PolicyValueLearnerSnapshot> {
             &learning_hook,
             &learner_config.optimizer,
             progress.clone(),
-            reporter,
-            sampler_configuration.n_envs(),
+            resources.ppo_reporter.take(),
+            resources.n_envs(),
         );
-        let sampler = sampler_configuration.build_sampler()?;
+        let obs_normalizer = sampler_configuration.build_obs_normalizer(
+            learner_config
+                .policy_config
+                .observation_space
+                .observation_shape(),
+        );
+        let sampler =
+            sampler_configuration.build_sampler(&resources.env_builder, obs_normalizer.clone())?;
         let hooks = hook_config.build(
-            &sampler_configuration,
+            resources,
             &learner_config.policy_config,
-            &Backend::Burn(BurnBackendConfig),
+            obs_normalizer,
             progress,
         )?;
         let runtime = OnPolicyRuntime::new(agent, sampler);

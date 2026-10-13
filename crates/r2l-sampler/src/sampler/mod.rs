@@ -479,13 +479,13 @@ pub trait SamplerHook {
 }
 
 /// Hook-controlled rollout collector with direct or observation-normalizing workers.
-pub struct RolloutSampler<E: Env + 'static, H: SamplerHook<E = E>> {
-    core: SamplerCore<E>,
+pub struct RolloutSampler<H: SamplerHook> {
+    core: SamplerCore<H::E>,
     hook: H,
 }
 
-impl<E: Env + 'static, H: SamplerHook<E = E>> RolloutSampler<E, H> {
-    fn new(pool: Pool<E>, hook: H) -> Self {
+impl<H: SamplerHook> RolloutSampler<H> {
+    fn new(pool: Pool<H::E>, hook: H) -> Self {
         Self {
             core: SamplerCore { pool },
             hook,
@@ -498,7 +498,7 @@ impl<E: Env + 'static, H: SamplerHook<E = E>> RolloutSampler<E, H> {
     ///
     /// Returns an error if an environment cannot be built or reset, or a worker is interrupted.
     pub fn build_direct(
-        env_builder: &EnvBuilderType<E>,
+        env_builder: &EnvBuilderType<H::E>,
         hook: H,
         execution_mode: SamplerExecutionMode,
     ) -> Result<Self> {
@@ -516,10 +516,10 @@ impl<E: Env + 'static, H: SamplerHook<E = E>> RolloutSampler<E, H> {
     ///
     /// Returns an error if environment initialization, normalization, or worker startup fails.
     pub fn build_staged(
-        env_builder: &EnvBuilderType<E>,
+        env_builder: &EnvBuilderType<H::E>,
         hook: H,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Normalizer<E::Tensor>,
+        obs_normalizer: Normalizer<<H::E as Env>::Tensor>,
     ) -> Result<Self> {
         Ok(Self::new(
             Pool::Staged(StagedWorkerPool::build(
@@ -532,7 +532,7 @@ impl<E: Env + 'static, H: SamplerHook<E = E>> RolloutSampler<E, H> {
     }
 
     /// Returns a handle to shared observation statistics, or `None` for direct collection.
-    pub fn obs_normalizer(&self) -> Option<Normalizer<E::Tensor>> {
+    pub fn obs_normalizer(&self) -> Option<Normalizer<<H::E as Env>::Tensor>> {
         match &self.core.pool {
             Pool::Direct(_) => None,
             Pool::Staged(pool) => Some(pool.obs_normalizer.clone()),
@@ -545,7 +545,7 @@ impl<E: Env + 'static, H: SamplerHook<E = E>> RolloutSampler<E, H> {
     ///
     /// Returns an error if `num_envs` is zero or worker initialization fails.
     pub fn build_direct_from_env_builder(
-        env_builder: Arc<dyn EnvBuilder<Env = E>>,
+        env_builder: Arc<dyn EnvBuilder<Env = H::E>>,
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
@@ -564,11 +564,11 @@ impl<E: Env + 'static, H: SamplerHook<E = E>> RolloutSampler<E, H> {
     /// Returns an error if `num_envs` is zero, worker initialization fails, or observations
     /// cannot be normalized.
     pub fn build_staged_from_env_builder(
-        env_builder: Arc<dyn EnvBuilder<Env = E>>,
+        env_builder: Arc<dyn EnvBuilder<Env = H::E>>,
         num_envs: usize,
         hook: H,
         execution_mode: SamplerExecutionMode,
-        obs_normalizer: Normalizer<E::Tensor>,
+        obs_normalizer: Normalizer<<H::E as Env>::Tensor>,
     ) -> Result<Self> {
         Self::build_staged(
             &EnvBuilderType::homogeneous_shared(env_builder, num_envs)?,
@@ -579,8 +579,8 @@ impl<E: Env + 'static, H: SamplerHook<E = E>> RolloutSampler<E, H> {
     }
 }
 
-impl<E: Env + 'static, H: SamplerHook<E = E>> Sampler for RolloutSampler<E, H> {
-    type Tensor = E::Tensor;
+impl<H: SamplerHook> Sampler for RolloutSampler<H> {
+    type Tensor = <H::E as Env>::Tensor;
 
     fn reset_all_envs(&mut self) -> Result<()> {
         self.core.reset_all_envs()?;

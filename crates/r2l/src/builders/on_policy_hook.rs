@@ -1,21 +1,22 @@
 use std::path::PathBuf;
 
 use r2l_core::{
-    env::{Env, normalizer::NormalizerMode},
+    env::{
+        Env,
+        normalizer::{Normalizer, NormalizerMode},
+    },
     error::Error,
     models::ToSafetensors,
     on_policy::algorithm::{Agent, Sampler},
 };
 
-use super::{policy::PolicyBuilder, sampler::SamplerConfiguration};
+use super::{BuilderResources, policy::PolicyBuilder};
 use crate::{
-    EvaluationSettings, OnPolicyTrainingHooks,
-    backend::Backend,
+    EvaluationSettings, OnPolicyTrainingHooks, TrainingLimit,
     evaluator::{BestPolicyEvaluator, EvaluationSampler},
     hooks::{
         on_policy::{
-            commands::{OnPolicyCommandHandler, OnPolicyControlEndpoint},
-            evaluation::ScheduledEvaluator,
+            commands::OnPolicyCommandHandler, evaluation::ScheduledEvaluator,
             timing::TimingRecorder,
         },
         progress::SharedTrainingProgress,
@@ -107,12 +108,12 @@ impl TrainingArtifactsConfig {
     }
 }
 
-/// Evaluation, artifact, and external-control settings for training lifecycle hooks.
+/// Evaluation and artifact settings for training lifecycle hooks.
 #[derive(Default)]
 pub struct OnPolicyHookConfig {
+    pub(crate) training_limit: TrainingLimit,
     pub(crate) avg_reward_threshold: Option<f32>,
     pub(crate) training_artifacts: Option<TrainingArtifactsConfig>,
-    pub(crate) control_endpoint: Option<OnPolicyControlEndpoint>,
 }
 
 impl OnPolicyHookConfig {
@@ -126,12 +127,11 @@ impl OnPolicyHookConfig {
 
     pub(crate) fn build<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>, E: Env>(
         self,
-        sampler: &SamplerConfiguration<E>,
+        resources: BuilderResources<E>,
         policy: &PolicyBuilder,
-        backend: &Backend,
+        obs_normalizer: Option<Normalizer<E::Tensor>>,
         progress: SharedTrainingProgress,
     ) -> Result<OnPolicyTrainingHooks<A, S, E>, Error> {
-        let obs_normalizer = sampler.obs_normalizer();
         if let Some(config) = &self.training_artifacts
             && config.inference_artifacts
         {
@@ -140,7 +140,7 @@ impl OnPolicyHookConfig {
             } else {
                 InferenceObservationMode::Raw
             };
-            InferenceConfig::new(policy.clone(), observation_mode, backend.clone())
+            InferenceConfig::new(policy.clone(), observation_mode, resources.backend.clone())
                 .write_to_dir(&config.output_dir)?;
         }
         let evaluator = if self.needs_evaluator() {
@@ -151,7 +151,7 @@ impl OnPolicyHookConfig {
                 .map_or(&defaults, |config| &config.evaluation_settings);
             let obs_normalizer = obs_normalizer.map(|n| n.with_mode(NormalizerMode::ReadOnly));
             let sampler = EvaluationSampler::build(
-                sampler.env_builder.clone(),
+                resources.env_builder.clone(),
                 settings.episodes_per_evaluation,
                 settings.evaluation_execution_mode,
                 obs_normalizer,
@@ -181,11 +181,9 @@ impl OnPolicyHookConfig {
         } else {
             TimingRecorder::disabled()
         };
-        Ok(OnPolicyTrainingHooks::new(
-            progress,
-            evaluator,
-            OnPolicyCommandHandler::new(self.control_endpoint),
-            timing_recorder,
-        ))
+        let command_handler = OnPolicyCommandHandler::new(resources.control_endpoint);
+        let hooks =
+            OnPolicyTrainingHooks::new(progress, evaluator, command_handler, timing_recorder);
+        Ok(hooks)
     }
 }

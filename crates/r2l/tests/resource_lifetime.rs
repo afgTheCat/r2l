@@ -4,8 +4,8 @@ use std::sync::{
 };
 
 use r2l::{
-    Env, EnvDescription, ObsNormalizerConfig, PPOBuilder, SamplerExecutionMode, Snapshot, Space,
-    TrainingLimit, VecTensor,
+    Env, EnvDescription, ObsNormalizerConfig, OnPolicyControlEndpoint, PPOBuilder,
+    SamplerExecutionMode, Snapshot, Space, TrainingLimit, VecTensor,
 };
 use r2l_core::{buffers::TrajectoryBatch, error::Error};
 
@@ -130,7 +130,8 @@ fn stop_training_command_breaks_the_loop_without_destroying_the_algorithm() {
         .with_sample_size(1)
         .with_total_epochs(1)
         .with_seed(5);
-    let (builder, control) = builder.with_control();
+    let (control_endpoint, control) = OnPolicyControlEndpoint::channel();
+    let builder = builder.with_control(control_endpoint);
     let training = std::thread::spawn(move || {
         let mut algorithm = builder.build().unwrap();
         let drops_after_build = drops.load(Ordering::SeqCst);

@@ -22,6 +22,12 @@ pub enum TrainingLimit {
     },
 }
 
+impl Default for TrainingLimit {
+    fn default() -> Self {
+        TrainingLimit::rollouts(50)
+    }
+}
+
 impl TrainingLimit {
     /// Creates a schedule bounded by total sampled environment steps.
     ///
