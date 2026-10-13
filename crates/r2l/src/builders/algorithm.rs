@@ -5,6 +5,7 @@ use r2l_agents::on_policy_algorithms::{
     ppo::{PPO, PPOParams},
 };
 use r2l_core::on_policy::learning_module::OnPolicyLearner;
+use serde::{Deserialize, Serialize};
 
 use super::{learner::LearningHookConfig, optimizer::OptimizerConfig};
 use crate::{
@@ -15,6 +16,7 @@ use crate::{
     },
 };
 
+#[derive(Serialize, Deserialize)]
 pub(crate) enum AlgoConfig {
     PPO {
         gamma: f32,

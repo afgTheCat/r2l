@@ -103,6 +103,7 @@ impl LearnerConfig {
 }
 
 /// Loss settings shared by PPO and A2C learning hooks.
+#[derive(Serialize, Deserialize)]
 pub struct LearningHookConfig {
     pub(super) normalize_advantage: bool,
     pub(super) entropy_coeff: f32,

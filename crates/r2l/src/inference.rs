@@ -19,7 +19,7 @@ use r2l_distributions::learning_modules::candle_lm::CandleDistributionKind;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    backend::Backend,
+    backend::{Backend, BackendConfig},
     builders::policy::PolicyBuilder,
     constants::{ACTOR_FILE, INFERENCE_CONFIG_FILE, NORMALIZER_FILE},
 };
@@ -81,7 +81,7 @@ pub(crate) enum InferenceObservationMode {
 pub(crate) struct InferenceConfig {
     policy_builder: PolicyBuilder,
     observation_mode: InferenceObservationMode,
-    backend: Backend,
+    backend: BackendConfig,
 }
 
 impl InferenceConfig {
@@ -89,7 +89,7 @@ impl InferenceConfig {
     pub(crate) fn new(
         policy_builder: PolicyBuilder,
         observation_mode: InferenceObservationMode,
-        backend: Backend,
+        backend: BackendConfig,
     ) -> Self {
         Self {
             policy_builder,
@@ -178,10 +178,10 @@ impl<T: R2lTensor> InferencePolicy<T> {
         };
         let actor_artifact = ArtifactFile::new(directory.join(ACTOR_FILE), "actor");
         let actor_bytes = actor_artifact.read()?;
-        let actor = match config.backend {
-            Backend::Candle(backend) => {
+        let actor = match config.backend.build(None)? {
+            Backend::Candle(device) => {
                 let var_builder =
-                    VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &backend.device)
+                    VarBuilder::from_buffered_safetensors(actor_bytes, DType::F32, &device)
                         .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 let actor = config
                     .policy_builder
@@ -189,7 +189,7 @@ impl<T: R2lTensor> InferencePolicy<T> {
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
-            Backend::Burn(_) => {
+            Backend::Burn => {
                 let actor = config
                     .policy_builder
                     .build_burn(&BurnDevice::flex())?

@@ -6,9 +6,10 @@ use r2l_core::{
     on_policy::algorithm::{Agent, OnPolicyRuntime, Sampler},
 };
 use r2l_sampler::RolloutMode;
+use serde::{Deserialize, Serialize};
 
 /// Stop policy for the on-policy training loop.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum TrainingLimit {
     /// Stop after `total_rollouts` completed rollouts.
     RolloutBound {

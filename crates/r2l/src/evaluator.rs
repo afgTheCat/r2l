@@ -16,6 +16,7 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
+use serde::{Deserialize, Serialize};
 use yaml_serde::to_string;
 
 use crate::{
@@ -200,6 +201,7 @@ impl<E: Env> BestPolicyEvaluator<E> {
 }
 
 /// Configures how policies are evaluated during training.
+#[derive(Serialize, Deserialize)]
 pub struct EvaluationSettings {
     pub(crate) episodes_per_evaluation: NonZeroUsize,
     pub(crate) evaluation_execution_mode: SamplerExecutionMode,

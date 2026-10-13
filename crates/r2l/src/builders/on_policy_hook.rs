@@ -9,10 +9,12 @@ use r2l_core::{
     models::ToSafetensors,
     on_policy::algorithm::{Agent, Sampler},
 };
+use serde::{Deserialize, Serialize};
 
 use super::{BuilderResources, policy::PolicyBuilder};
 use crate::{
     EvaluationSettings, OnPolicyTrainingHooks, TrainingLimit,
+    backend::BackendConfig,
     evaluator::{BestPolicyEvaluator, EvaluationSampler},
     hooks::{
         on_policy::{
@@ -25,6 +27,7 @@ use crate::{
 };
 
 /// Selects the artifacts produced during training and where they are written.
+#[derive(Serialize, Deserialize)]
 pub struct TrainingArtifactsConfig {
     pub(crate) output_dir: PathBuf,
     pub(crate) evaluation_results: bool,
@@ -109,7 +112,7 @@ impl TrainingArtifactsConfig {
 }
 
 /// Evaluation and artifact settings for training lifecycle hooks.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct OnPolicyHookConfig {
     pub(crate) training_limit: TrainingLimit,
     pub(crate) avg_reward_threshold: Option<f32>,
@@ -129,6 +132,7 @@ impl OnPolicyHookConfig {
         self,
         resources: BuilderResources<E>,
         policy: &PolicyBuilder,
+        backend: BackendConfig,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
         progress: SharedTrainingProgress,
     ) -> Result<OnPolicyTrainingHooks<A, S, E>, Error> {
@@ -140,7 +144,7 @@ impl OnPolicyHookConfig {
             } else {
                 InferenceObservationMode::Raw
             };
-            InferenceConfig::new(policy.clone(), observation_mode, resources.backend.clone())
+            InferenceConfig::new(policy.clone(), observation_mode, backend)
                 .write_to_dir(&config.output_dir)?;
         }
         let evaluator = if self.needs_evaluator() {

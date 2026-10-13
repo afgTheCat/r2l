@@ -6,6 +6,8 @@
 
 use std::num::NonZeroUsize;
 
+use serde::{Deserialize, Serialize};
+
 mod sampler;
 
 pub use sampler::{RolloutSampler, SamplerCore, SamplerHook};
@@ -22,7 +24,7 @@ pub enum SamplerHookResult {
 ///
 /// This controls whether environment workers run inline in the current thread
 /// or in dedicated background threads.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum SamplerExecutionMode {
     /// Run sampler workers inline in a local vector on the current thread.
     SingleThreaded,
@@ -31,7 +33,7 @@ pub enum SamplerExecutionMode {
 }
 
 /// Bound used for one rollout collection request per environment.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum RolloutMode {
     /// Collect until each selected environment completes `n_episodes`.
     EpisodeBound {

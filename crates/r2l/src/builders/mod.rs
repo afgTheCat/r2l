@@ -32,10 +32,11 @@ use r2l_distributions::learning_modules::candle_lm::PolicyValueLearner as Candle
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
 pub use sampler::ObsNormalizerConfig;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     A2CRolloutStats, OnPolicyControlEndpoint, PPORolloutStats, SamplerHook, TrainingLimit,
-    backend::{Backend, BurnBackendConfig, CandleBackend},
+    backend::{Backend, BackendConfig, BurnBackendConfig, CandleDeviceConfig},
     builders::{
         algorithm::AlgoConfig,
         learner::{LearnerConfig, LearningHookConfig},
@@ -58,7 +59,9 @@ pub type A2CCandle = A2C<CandlePolicyValueLearner, A2CLearningHook>;
 /// A2C agent produced by a Burn-backed algorithm builder.
 pub type A2CBurn = A2C<BurnPolicyValueLearner, A2CLearningHook>;
 
+#[derive(Serialize, Deserialize)]
 struct BuilderConfig {
+    backend: BackendConfig,
     seed: Option<u64>,
     hook_config: OnPolicyHookConfig,
     learner_builder: LearnerConfig,
@@ -68,7 +71,7 @@ struct BuilderConfig {
 }
 
 pub(crate) struct BuilderResources<E: Env + 'static> {
-    pub(crate) backend: Backend,
+    pub(crate) candle_device: Option<Device>,
     pub(crate) env_builder: EnvBuilderType<E>,
     pub(crate) control_endpoint: Option<OnPolicyControlEndpoint>,
     pub(crate) ppo_reporter: Option<Sender<PPORolloutStats>>,
@@ -97,6 +100,7 @@ impl<E: Env> Builder<E> {
         let learner_builder = LearnerConfig::new(&env_description)?;
         Ok(Self {
             config: BuilderConfig {
+                backend: BackendConfig::default(),
                 sampler_configuration: SamplerConfiguration::default(),
                 algo_config,
                 hook_config: OnPolicyHookConfig::default(),
@@ -105,9 +109,7 @@ impl<E: Env> Builder<E> {
                 seed: None,
             },
             resources: BuilderResources {
-                backend: Backend::Candle(CandleBackend {
-                    device: Device::Cpu,
-                }),
+                candle_device: None,
                 env_builder,
                 control_endpoint: None,
                 ppo_reporter: None,
@@ -116,17 +118,15 @@ impl<E: Env> Builder<E> {
         })
     }
 
-    fn build_candle_learner(&self) -> Result<CandlePolicyValueLearner, Error> {
-        let Backend::Candle(backend) = &self.resources.backend else {
+    fn build_candle_learner(&self, backend: &Backend) -> Result<CandlePolicyValueLearner, Error> {
+        let Backend::Candle(device) = backend else {
             unreachable!("Candle agent type must use Candle backend configuration")
         };
-        self.config
-            .learner_builder
-            .build_candle_learner(&backend.device)
+        self.config.learner_builder.build_candle_learner(device)
     }
 
-    fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner, Error> {
-        let Backend::Burn(_) = self.resources.backend else {
+    fn build_burn_learner(&self, backend: &Backend) -> Result<BurnPolicyValueLearner, Error> {
+        let Backend::Burn = backend else {
             unreachable!("Burn agent type must use Burn backend configuration")
         };
         self.config.learner_builder.build_burn_learner()
@@ -140,8 +140,12 @@ impl<E: Env> Builder<E> {
         )
     }
 
-    fn ppo_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<PPOCandle, Error> {
-        let learner = self.build_candle_learner()?;
+    fn ppo_candle_agent(
+        &mut self,
+        backend: &Backend,
+        progress: SharedTrainingProgress,
+    ) -> Result<PPOCandle, Error> {
+        let learner = self.build_candle_learner(backend)?;
         Ok(self.config.algo_config.build_ppo(
             learner,
             &self.config.learning_hook,
@@ -152,8 +156,12 @@ impl<E: Env> Builder<E> {
         ))
     }
 
-    fn ppo_burn_agent(&mut self, progress: SharedTrainingProgress) -> Result<PPOBurn, Error> {
-        let learner = self.build_burn_learner()?;
+    fn ppo_burn_agent(
+        &mut self,
+        backend: &Backend,
+        progress: SharedTrainingProgress,
+    ) -> Result<PPOBurn, Error> {
+        let learner = self.build_burn_learner(backend)?;
         Ok(self.config.algo_config.build_ppo(
             learner,
             &self.config.learning_hook,
@@ -164,8 +172,12 @@ impl<E: Env> Builder<E> {
         ))
     }
 
-    fn a2c_candle_agent(&mut self, progress: SharedTrainingProgress) -> Result<A2CCandle, Error> {
-        let learner = self.build_candle_learner()?;
+    fn a2c_candle_agent(
+        &mut self,
+        backend: &Backend,
+        progress: SharedTrainingProgress,
+    ) -> Result<A2CCandle, Error> {
+        let learner = self.build_candle_learner(backend)?;
         Ok(self.config.algo_config.build_a2c(
             learner,
             &self.config.learning_hook,
@@ -176,8 +188,12 @@ impl<E: Env> Builder<E> {
         ))
     }
 
-    fn a2c_burn_agent(&mut self, progress: SharedTrainingProgress) -> Result<A2CBurn, Error> {
-        let learner = self.build_burn_learner()?;
+    fn a2c_burn_agent(
+        &mut self,
+        backend: &Backend,
+        progress: SharedTrainingProgress,
+    ) -> Result<A2CBurn, Error> {
+        let learner = self.build_burn_learner(backend)?;
         Ok(self.config.algo_config.build_a2c(
             learner,
             &self.config.learning_hook,
@@ -204,7 +220,7 @@ impl<E: Env> Builder<E> {
 #[must_use]
 pub struct OnPolicyBuilder<A: Agent, E: Env + 'static> {
     builder: Builder<E>,
-    build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
+    build_agent: fn(&mut Builder<E>, &Backend, SharedTrainingProgress) -> Result<A, Error>,
 }
 
 impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
@@ -212,7 +228,7 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
         env_builder: EB,
         n_envs: usize,
         algo_config: AlgoConfig,
-        build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A, Error>,
+        build_agent: fn(&mut Builder<E>, &Backend, SharedTrainingProgress) -> Result<A, Error>,
     ) -> Result<Self, Error> {
         Ok(Self {
             builder: Builder::new(env_builder, n_envs, algo_config)?,
@@ -222,7 +238,7 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
 
     fn with_agent<A2: Agent>(
         self,
-        build_agent: fn(&mut Builder<E>, SharedTrainingProgress) -> Result<A2, Error>,
+        build_agent: fn(&mut Builder<E>, &Backend, SharedTrainingProgress) -> Result<A2, Error>,
     ) -> OnPolicyBuilder<A2, E> {
         OnPolicyBuilder {
             builder: self.builder,
@@ -654,10 +670,15 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
     ) -> Result<OnPolicyAlgorithm<OnPolicyTrainingHooks<A, RolloutSampler<SamplerHook<E>>, E>>, Error>
     {
         let progress = self.builder.progress();
+        let backend = self
+            .builder
+            .config
+            .backend
+            .build(self.builder.resources.candle_device.take())?;
         if let Some(seed) = self.builder.config.seed {
-            self.builder.resources.backend.seed(seed)?;
+            backend.seed(seed)?;
         }
-        let agent = (self.build_agent)(&mut self.builder, progress.clone())?;
+        let agent = (self.build_agent)(&mut self.builder, &backend, progress.clone())?;
         let Builder { config, resources } = self.builder;
         let policy = &config.learner_builder.policy_config;
         let obs_normalizer = config
@@ -666,9 +687,13 @@ impl<A: Agent<Actor: ToSafetensors>, E: Env> OnPolicyBuilder<A, E> {
         let sampler = config
             .sampler_configuration
             .build_sampler(&resources.env_builder, obs_normalizer.clone())?;
-        let hooks = config
-            .hook_config
-            .build(resources, policy, obs_normalizer, progress)?;
+        let hooks = config.hook_config.build(
+            resources,
+            policy,
+            config.backend,
+            obs_normalizer,
+            progress,
+        )?;
         let runtime = OnPolicyRuntime::new(agent, sampler);
         Ok(OnPolicyAlgorithm::new(runtime, hooks))
     }
@@ -683,13 +708,16 @@ impl<M: OnPolicyLearner<Policy: ToSafetensors>, E: Env>
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<PPOCandle, E> {
-        self.builder.resources.backend = Backend::Candle(CandleBackend { device });
+        self.builder.config.backend =
+            BackendConfig::Candle(CandleDeviceConfig::from_device(&device));
+        self.builder.resources.candle_device = Some(device);
         self.with_agent(Builder::ppo_candle_agent)
     }
 
     /// Uses the default Burn backend for PPO learning.
     pub fn with_burn(mut self) -> OnPolicyBuilder<PPOBurn, E> {
-        self.builder.resources.backend = Backend::Burn(BurnBackendConfig);
+        self.builder.config.backend = BackendConfig::Burn(BurnBackendConfig);
+        self.builder.resources.candle_device = None;
         self.with_agent(Builder::ppo_burn_agent)
     }
 
@@ -778,13 +806,16 @@ impl<M: OnPolicyLearner<Policy: ToSafetensors>, E: Env>
     ///
     /// * `device` - Candle device on which policy and value learning will run.
     pub fn with_candle(mut self, device: Device) -> OnPolicyBuilder<A2CCandle, E> {
-        self.builder.resources.backend = Backend::Candle(CandleBackend { device });
+        self.builder.config.backend =
+            BackendConfig::Candle(CandleDeviceConfig::from_device(&device));
+        self.builder.resources.candle_device = Some(device);
         self.with_agent(Builder::a2c_candle_agent)
     }
 
     /// Uses the default Burn backend for A2C learning.
     pub fn with_burn(mut self) -> OnPolicyBuilder<A2CBurn, E> {
-        self.builder.resources.backend = Backend::Burn(BurnBackendConfig);
+        self.builder.config.backend = BackendConfig::Burn(BurnBackendConfig);
+        self.builder.resources.candle_device = None;
         self.with_agent(Builder::a2c_burn_agent)
     }
 

@@ -10,11 +10,12 @@ use r2l_core::{
     tensor::R2lTensor,
 };
 use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
+use serde::{Deserialize, Serialize};
 
 use crate::{hooks::sampler::SamplerHook, utils::RewardNormalizer};
 
 /// Controls observation normalization and optional clipping after normalization.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum ObsNormalizerConfig {
     /// Normalize observations using running mean and variance.
     Enabled {
@@ -40,11 +41,13 @@ impl ObsNormalizerConfig {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub(crate) struct RewardNormalizerConfig {
     pub(crate) gamma: f32,
     pub(crate) clip_reward: f32,
 }
 
+#[derive(Serialize, Deserialize)]
 pub(crate) struct SamplerConfiguration {
     pub(crate) rollout_mode: RolloutMode,
     pub(crate) execution_mode: SamplerExecutionMode,

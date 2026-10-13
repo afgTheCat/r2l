@@ -15,6 +15,7 @@ use r2l_core::{
     on_policy::learning_module::OnPolicyLearner, on_policy::losses::PolicyValueLosses,
     tensor::R2lTensor,
 };
+use serde::{Deserialize, Serialize};
 
 use self::{
     reporter::RolloutReporter,
@@ -24,7 +25,7 @@ use super::progress::SharedTrainingProgress;
 use crate::LearningRateSchedule;
 
 /// Policy-ratio clipping range applied over the progress of PPO training.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ClipRangeSchedule {
     /// Keep the clipping range fixed throughout training.
     Constant(f32),

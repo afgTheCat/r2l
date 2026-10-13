@@ -10,6 +10,7 @@ use r2l_sampler::RolloutSampler;
 
 use crate::{
     OnPolicyTrainingHooks, PPOBurn, SamplerHook,
+    backend::{BackendConfig, BurnBackendConfig},
     builders::{
         BuilderResources,
         algorithm::AlgoConfig,
@@ -74,6 +75,7 @@ impl SnapshotAlgo<PolicyValueLearnerSnapshot> {
         let hooks = hook_config.build(
             resources,
             &learner_config.policy_config,
+            BackendConfig::Burn(BurnBackendConfig),
             obs_normalizer,
             progress,
         )?;
