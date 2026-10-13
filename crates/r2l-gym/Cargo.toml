@@ -13,8 +13,5 @@ cuda = ["r2l-core/cuda"]
 r2l-core = { workspace = true, features = ["python"] }
 pyo3 = { workspace = true, features = ["auto-initialize", "abi3-py311"] }
 
-[dev-dependencies]
-once_cell = "1.21.4"
-
 [lints]
 workspace = true

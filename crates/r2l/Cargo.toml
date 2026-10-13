@@ -27,7 +27,6 @@ csv = "1.4.0"
 default = []
 gym = ["dep:r2l-gym"]
 python = ["r2l-core/python"]
-test-utils = []
 cuda = [
   "r2l-core/cuda",
   "r2l-distributions/cuda",
@@ -37,11 +36,6 @@ cuda = [
 
 [package.metadata.docs.rs]
 features = ["gym"]
-
-[dev-dependencies]
-r2l = { path = ".", features = ["test-utils"] }
-safetensors = { workspace = true }
-tempfile = "3.27.0"
 
 [lints]
 workspace = true

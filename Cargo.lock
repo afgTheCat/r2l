@@ -6631,16 +6631,13 @@ dependencies = [
  "csv",
  "derive_more",
  "itertools 0.15.0",
- "r2l",
  "r2l-agents",
  "r2l-core",
  "r2l-distributions",
  "r2l-gym",
  "r2l-sampler",
  "rand 0.10.3",
- "safetensors 0.8.0",
  "serde",
- "tempfile",
  "yaml_serde",
 ]
 
@@ -6745,7 +6742,6 @@ dependencies = [
 name = "r2l-gym"
 version = "0.0.3"
 dependencies = [
- "once_cell",
  "pyo3",
  "r2l-core",
 ]
