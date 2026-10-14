@@ -536,6 +536,9 @@ impl<H: SamplerHook> RolloutSampler<H> {
     ///
     /// # Errors
     /// Returns an error for direct samplers, incompatible statistics, or a failed environment reset.
+    ///
+    /// # Panics
+    /// Panics if the shared observation-state lock is poisoned.
     pub fn restore_obs_normalizer(&mut self, snapshot: NormalizerSnapshot) -> Result<()> {
         let Pool::Staged(pool) = &mut self.core.pool else {
             return Err(Error::invalid_state(

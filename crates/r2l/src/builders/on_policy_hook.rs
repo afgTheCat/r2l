@@ -130,7 +130,7 @@ impl OnPolicyHookConfig {
 
     pub(crate) fn build<A: Agent<Actor: ToSafetensors>, S: Sampler<Tensor = E::Tensor>, E: Env>(
         self,
-        env_builder: EnvBuilderType<E>,
+        env_builder: &EnvBuilderType<E>,
         policy: &PolicyBuilder,
         backend: BackendConfig,
         obs_normalizer: Option<Normalizer<E::Tensor>>,

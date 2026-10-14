@@ -21,6 +21,7 @@ use crate::{
     builders::{AlgoBackendConfig, BuilderConfig, PPOConfig},
     constants::{ACTOR_FILE, NORMALIZER_FILE},
     hooks::{on_policy::evaluation::ScheduledEvaluator, progress::TrainingCounters},
+    utils::RewardNormalizer,
 };
 
 const BUILDER_FILE: &str = "builder.yaml";
@@ -178,7 +179,7 @@ impl SnapshotAlgo {
                 .hook()
                 .reward_normalizer
                 .as_ref()
-                .map(|n| n.statistics()),
+                .map(RewardNormalizer::statistics),
             best_reward,
         };
         Self::validate_state(&recipe, &state)?;
@@ -232,10 +233,10 @@ impl SnapshotAlgo {
         if let Some(normalizer) = state.observation_normalizer {
             algo.runtime.sampler.restore_obs_normalizer(normalizer)?;
         }
-        if let Some(statistics) = state.reward_statistics {
-            if let Some(normalizer) = &mut algo.runtime.sampler.hook_mut().reward_normalizer {
-                normalizer.restore_statistics(statistics);
-            }
+        if let Some(statistics) = state.reward_statistics
+            && let Some(normalizer) = &mut algo.runtime.sampler.hook_mut().reward_normalizer
+        {
+            normalizer.restore_statistics(statistics);
         }
         algo.hooks
             .progress

@@ -22,10 +22,13 @@ use crate::{
     builders::{networks::NetworkBuilder, policy::PolicyBuilder},
 };
 
+/// Policy, value-network, and optimizer settings used to construct a learner.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LearnerConfig {
-    pub policy_config: PolicyBuilder,
+    pub(crate) policy_config: PolicyBuilder,
+    /// Architecture of the value network.
     pub value_network: NetworkConfig,
+    /// Optimizer settings for joint or separate policy and value updates.
     pub optimizer: OptimizerConfig,
 }
 
@@ -41,6 +44,13 @@ impl LearnerConfig {
         })
     }
 
+    /// Builds a Candle policy/value learner with fresh parameters and optimizer state.
+    ///
+    /// # Arguments
+    /// * `device` - Device on which the networks and their parameters are allocated.
+    ///
+    /// # Errors
+    /// Returns an error if the network configuration is invalid or backend initialization fails.
     pub fn build_candle_learner(&self, device: &Device) -> Result<CandlePolicyValueLearner, Error> {
         let (policy, policy_varmap) = self.policy_config.build_candle_with_varmap(device)?;
         let value_varmap = match self.optimizer {
@@ -75,6 +85,10 @@ impl LearnerConfig {
         CandlePolicyValueLearner::new(policy, value, optimizer, device.clone())
     }
 
+    /// Builds a Burn policy/value learner on the Flex device with fresh optimizer state.
+    ///
+    /// # Errors
+    /// Returns an error if the network configuration is invalid or policy construction fails.
     pub fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner, Error> {
         let device = BurnDevice::flex();
         let policy = self.policy_config.build_burn(&device)?;

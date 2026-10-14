@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use r2l_core::ModeActorWrapper;
 use r2l_core::on_policy::algorithm::{Agent, OnPolicyRuntime};
 use r2l_core::{
-    buffers::TrajectoryBatch,
+    buffers::{TrajectoryBatch, buffer::TrajectoryView},
     env::{Env, EnvBuilderType, normalizer::Normalizer},
     error::{Error, Result},
     models::{Actor, ToSafetensors},
@@ -116,7 +116,7 @@ pub(crate) struct EvaluationSampler<E: Env + 'static> {
 
 impl<E: Env> EvaluationSampler<E> {
     pub(crate) fn build(
-        env_builder: EnvBuilderType<E>,
+        env_builder: &EnvBuilderType<E>,
         n_episodes: NonZeroUsize,
         execution_mode: SamplerExecutionMode,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
@@ -124,9 +124,9 @@ impl<E: Env> EvaluationSampler<E> {
         let hook = SamplerHook::new(RolloutMode::EpisodeBound { n_episodes }, None);
         let sampler = match obs_normalizer {
             Some(normalizer) => {
-                OnPolicySampler::build_staged(&env_builder, hook, execution_mode, normalizer)?
+                OnPolicySampler::build_staged(env_builder, hook, execution_mode, normalizer)?
             }
-            None => OnPolicySampler::build_direct(&env_builder, hook, execution_mode)?,
+            None => OnPolicySampler::build_direct(env_builder, hook, execution_mode)?,
         };
         Ok(Self { sampler })
     }
@@ -146,7 +146,7 @@ impl<E: Env> EvaluationSampler<E> {
         let num_episodes: usize = trajectories
             .as_ref()
             .iter()
-            .map(|trajectory| trajectory.episode_terminations())
+            .map(TrajectoryView::episode_terminations)
             .sum();
         Ok(EvaluationResult::new(total_reward, num_episodes))
     }

@@ -13,7 +13,7 @@ use crate::{evaluator::BestPolicyEvaluator, hooks::progress::SharedTrainingProgr
 pub(crate) enum ScheduledEvaluator<E: Env + 'static> {
     Disabled,
     Enabled {
-        evaluator: BestPolicyEvaluator<E>,
+        evaluator: Box<BestPolicyEvaluator<E>>,
         rollouts_per_evaluation: NonZeroUsize,
         progress: SharedTrainingProgress,
         avg_reward_threshold: Option<f32>,
@@ -41,7 +41,7 @@ impl<E: Env> ScheduledEvaluator<E> {
         avg_reward_threshold: Option<f32>,
     ) -> Self {
         Self::Enabled {
-            evaluator,
+            evaluator: Box::new(evaluator),
             rollouts_per_evaluation,
             progress,
             avg_reward_threshold,

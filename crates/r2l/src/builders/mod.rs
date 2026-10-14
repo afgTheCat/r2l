@@ -483,7 +483,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
             .sampler_configuration
             .build_sampler(&self.env_builder, obs_normalizer.clone())?;
         let hooks = self.config.hook_config.build(
-            self.env_builder,
+            &self.env_builder,
             policy,
             backend,
             obs_normalizer,

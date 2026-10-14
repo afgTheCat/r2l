@@ -48,6 +48,10 @@ impl CNNLayer {
 }
 
 #[derive(Module, Debug)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "field names are part of Burn's saved record format"
+)]
 pub struct Cnn {
     #[module(skip)]
     shape: [NonZeroUsize; 3],

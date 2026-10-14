@@ -22,6 +22,7 @@ pub enum LinearLayer {
 }
 
 impl LinearLayer {
+    #[must_use]
     pub fn forward(&self, t: Tensor<2>) -> Tensor<2> {
         match &self {
             Self::LinearLayer(linear) => linear.forward(t),
@@ -64,6 +65,7 @@ pub struct Mlp {
 }
 
 impl Mlp {
+    #[must_use]
     pub fn forward(&self, mut t: Tensor<2>) -> Tensor<2> {
         for layer in &self.layers {
             t = layer.forward(t);

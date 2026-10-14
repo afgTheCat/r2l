@@ -53,6 +53,10 @@ struct TimingRecord {
 }
 
 impl TimingRecord {
+    #[allow(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "Serde's serialize_with requires a reference"
+    )]
     fn serialize_milliseconds<S: Serializer>(
         value: &f64,
         serializer: S,
@@ -101,7 +105,7 @@ impl EnabledTimingRecorder {
 
 pub(crate) enum TimingRecorder {
     Disabled,
-    Enabled(EnabledTimingRecorder),
+    Enabled(Box<EnabledTimingRecorder>),
 }
 
 impl TimingRecorder {
@@ -121,13 +125,13 @@ impl TimingRecorder {
     ) -> Result<Self, Error> {
         std::fs::create_dir_all(output_dir)?;
         let file = CsvArtifact::open(&output_dir.join(TRAINING_TIMINGS_FILE))?;
-        Ok(Self::Enabled(EnabledTimingRecorder {
+        Ok(Self::Enabled(Box::new(EnabledTimingRecorder {
             file,
             progress,
             timings: TrainingLoopTimings::default(),
             phase_recorder: None,
             training_started: Instant::now(),
-        }))
+        })))
     }
 
     pub(super) fn init(&mut self) {
