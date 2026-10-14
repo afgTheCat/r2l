@@ -21,20 +21,20 @@ The public traits and their method contracts are documented in the
 
 ## Samplers
 
-`r2l-sampler` provides two sampler implementations:
+`r2l-sampler` provides `RolloutSampler` with two collection strategies:
 
-- `DirectSampler` lets workers write transitions directly to output buffers;
-- `StagedSampler` receives transitions from workers and can update and apply
+- direct collection lets workers write transitions directly to output buffers;
+- staged collection receives transitions from workers and updates or applies
   clipped observation normalization before committing trajectories.
 
-Both samplers support `SamplerExecutionMode::SingleThreaded`, which steps
+Both strategies support `SamplerExecutionMode::SingleThreaded`, which steps
 environments on the current thread, and
 `SamplerExecutionMode::MultiThreaded`, which assigns each environment to a
 worker thread. Gymnasium environments still execute Python code under Python's
 interpreter lock, so threaded sampling should not be assumed to improve
 Gymnasium throughput.
 
-Rollout collection is hook-driven. The high-level algorithm builders expose
+Rollout collection uses one `SamplerHook` interface for both strategies. The high-level algorithm builders expose
 the standard policies through `with_rollout_steps` and
 `with_rollout_episodes`.
 
@@ -48,8 +48,9 @@ provides defaults for loss configuration, reporting, evaluation, and learning
 schedules.
 
 Applications construct complete runs with `PPOBuilder` or `A2CBuilder`.
-Backend and sampler choices change the concrete builder
-type while preserving the shared configuration. Applications that need custom
+Backend and rollout-bound choices change the concrete builder type while preserving
+the shared configuration. Observation normalization selects the collection strategy
+within the same sampler type. Applications that need custom
 agents, samplers, or hook compositions can use the lower-level traits from
 `r2l-core`, `r2l-agents`, and `r2l-sampler` directly.
 

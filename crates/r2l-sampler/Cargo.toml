@@ -12,6 +12,7 @@ r2l-core = { workspace = true }
 crossbeam = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
+serde = { workspace = true }
 
 [lints]
 workspace = true

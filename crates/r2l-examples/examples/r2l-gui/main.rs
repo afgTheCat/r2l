@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use egui::{Pos2, Rect, UiBuilder};
 use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
-use r2l::{PPOBuilder, PPORolloutStats, TrainingLimit};
+use r2l::{GradientClippingConfig, PPOBuilder, PPORolloutStats, TrainingLimit};
 use r2l_examples::EventBox;
 use r2l_sampler::SamplerExecutionMode;
 
@@ -42,8 +42,9 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.request_repaint_after(Duration::from_secs_f64(0.25));
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        ui.ctx()
+            .request_repaint_after(Duration::from_secs_f64(0.25));
         loop {
             let event = self.rx.try_recv();
             let Ok(event) = event else {
@@ -64,7 +65,7 @@ impl eframe::App for App {
             }
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             let available_rect = Rect::from_min_max(
                 Pos2::new(0., 0.),
                 Pos2::new(ui.available_width(), ui.available_height()),
@@ -117,14 +118,14 @@ fn train_ppo(
         .with_burn()
         .with_seed(0)
         .with_entropy_coefficient(ENT_COEFF)
-        .with_gradient_clipping(Some(MAX_GRAD_NORM))
+        .with_gradient_clipping(GradientClippingConfig::Norm(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))
         .with_rollout_steps(2048)
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
         .with_clip_range(clip_range)
-        .with_training_limit(TrainingLimit::rollouts(total_rollouts))
-        .with_rollout_reporter(Some(tx));
+        .with_training_limit(TrainingLimit::rollouts(total_rollouts));
     let mut ppo = ppo_builder.build()?;
+    ppo.runtime.agent.hooks.set_rollout_reporter(Some(tx));
     ppo.train()?;
     Ok(())
 }

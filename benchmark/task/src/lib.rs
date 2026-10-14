@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use r2l::{ClipRangeSchedule, LearningRateSchedule, ObsNormalizerConfig};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use yaml_serde::Value;
 
@@ -56,6 +57,24 @@ impl RlZooSchedule {
             Self::Constant(value) | Self::Linear(value) => value,
         }
     }
+
+    /// Converts this schedule into a learning-rate schedule.
+    #[must_use]
+    pub fn into_learning_rate_schedule(self) -> LearningRateSchedule {
+        match self {
+            Self::Constant(value) => LearningRateSchedule::Constant(value),
+            Self::Linear(value) => LearningRateSchedule::Linear(value),
+        }
+    }
+
+    /// Converts this schedule into a PPO clipping-range schedule.
+    #[must_use]
+    pub fn into_clip_range_schedule(self) -> ClipRangeSchedule {
+        match self {
+            Self::Constant(value) => ClipRangeSchedule::Constant(value as f32),
+            Self::Linear(value) => ClipRangeSchedule::Linear(value as f32),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for RlZooSchedule {
@@ -68,8 +87,7 @@ impl<'de> Deserialize<'de> for RlZooSchedule {
             return Ok(Self::Constant(value));
         }
 
-        let value = yaml_serde::from_value::<String>(value)
-            .map_err(|err| de::Error::custom(err.to_string()))?;
+        let value = yaml_serde::from_value::<String>(value).map_err(de::Error::custom)?;
         if let Some(value) = value.strip_prefix("lin_") {
             let value = value.parse().map_err(de::Error::custom)?;
             return Ok(Self::Linear(value));
@@ -122,6 +140,16 @@ impl RlZooNormalize {
             Self::Options { norm_reward, .. } => *norm_reward,
         }
     }
+
+    /// Builds observation normalization settings with clipping disabled.
+    #[must_use]
+    pub fn to_normalizer_config(&self) -> ObsNormalizerConfig {
+        if self.norm_obs() {
+            ObsNormalizerConfig::Enabled { clip: None }
+        } else {
+            ObsNormalizerConfig::Disabled
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for RlZooNormalize {
@@ -133,8 +161,7 @@ impl<'de> Deserialize<'de> for RlZooNormalize {
         if let Ok(enabled) = yaml_serde::from_value::<bool>(value.clone()) {
             return Ok(Self::Enabled(enabled));
         }
-        let value = yaml_serde::from_value::<String>(value)
-            .map_err(|err| de::Error::custom(err.to_string()))?;
+        let value = yaml_serde::from_value::<String>(value).map_err(de::Error::custom)?;
         let norm_obs = parse_python_bool_option(&value, "norm_obs").ok_or_else(|| {
             de::Error::custom(format!(
                 "missing norm_obs in RL Zoo normalize value: {value}"
