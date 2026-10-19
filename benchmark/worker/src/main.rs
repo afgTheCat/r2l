@@ -4,8 +4,8 @@ use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
 use r2l::{
-    AdamWConfig, GradientClippingConfig, OptimizerConfig, PPOBuilder, SdeConfig,
-    TrainingArtifactsConfig, TrainingLimit,
+    AdamWConfig, GradientClippingConfig, OptimizerConfig, PPOBuilder, RewardNormalizerConfig,
+    SdeConfig, TrainingArtifactsConfig, TrainingLimit,
 };
 use r2l_benchmark_task::{Backend, BenchmarkTask};
 
@@ -14,10 +14,27 @@ const TASK_ENV_VAR: &str = "R2L_TASK";
 
 fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
     let config = &task.rl_zoo_env_config;
+    let optimizer_config = OptimizerConfig::Joint(AdamWConfig {
+        learning_rate: config.learning_rate.into_learning_rate_schedule(),
+        gradient_clipping: GradientClippingConfig::Norm(config.max_grad_norm),
+        ..Default::default()
+    });
     let normalizer_config = config
         .normalize
         .to_normalizer_config()
         .with_clip(Some(10.0));
+    let sde_config = if config.use_sde {
+        if config.sde_sample_freq < -1 {
+            bail!("sde_sample_freq must be -1, zero, or a positive number of steps");
+        }
+        SdeConfig::Enabled {
+            resample_every: usize::try_from(config.sde_sample_freq)
+                .ok()
+                .and_then(std::num::NonZeroUsize::new),
+        }
+    } else {
+        SdeConfig::Disabled
+    };
     let artifacts_config = TrainingArtifactsConfig::new(&task.output_dir);
     let mut builder = PPOBuilder::gym(task.env_name.clone(), config.n_envs)?
         .with_rollout_steps(config.n_steps)
@@ -29,27 +46,17 @@ fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
         .with_total_epochs(config.n_epochs)
         .with_entropy_coefficient(config.ent_coef)
         .with_sample_size(config.batch_size)
-        .with_optimizer(OptimizerConfig::Joint(AdamWConfig {
-            learning_rate: config.learning_rate.into_learning_rate_schedule(),
-            gradient_clipping: GradientClippingConfig::Norm(config.max_grad_norm),
-            ..Default::default()
-        }))
+        .with_optimizer(optimizer_config)
         .with_clip_range_schedule(config.clip_range.into_clip_range_schedule())
         .with_log_std_init(config.log_std_init)
         .with_value_loss_coefficient(config.vf_coef)
-        .with_seed(0); // TODO: should we keep this?
-    if config.use_sde {
-        if config.sde_sample_freq < -1 {
-            bail!("sde_sample_freq must be -1, zero, or a positive number of steps");
-        }
-        builder = builder.with_sde(SdeConfig {
-            resample_every: usize::try_from(config.sde_sample_freq)
-                .ok()
-                .and_then(std::num::NonZeroUsize::new),
-        });
-    }
+        .with_sde(sde_config)
+        .with_seed(Some(0)); // TODO: should we keep this?
     if config.normalize.norm_reward() {
-        builder = builder.with_reward_normalizer(config.gamma, 10.0);
+        builder = builder.with_reward_normalizer(RewardNormalizerConfig::Enabled {
+            gamma: config.gamma,
+            clip_reward: 10.0,
+        });
     }
     match task.backend {
         Backend::Burn => builder.with_burn().build()?.train()?,

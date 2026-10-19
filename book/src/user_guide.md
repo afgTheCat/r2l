@@ -42,15 +42,15 @@ exploration (gSDE):
 ```rust,ignore
 use r2l::SdeConfig;
 
-let builder = builder.with_sde(SdeConfig::default());
+let builder = builder.with_sde(SdeConfig::Enabled { resample_every: None });
 ```
 
 Each environment samples its own noise matrix at the start of a rollout. The
 matrix acts on the policy's last hidden features, so nearby states receive
-related action noise. Set `SdeConfig::resample_every` to a `NonZeroUsize` to also
+related action noise. Set `resample_every` to `Some(NonZeroUsize)` to also
 refresh it after that many environment steps. Episode resets within a rollout
 keep the current matrix. Without gSDE, continuous policies sample independent
-Gaussian noise for every action.
+Gaussian noise for every action. `SdeConfig::Disabled` is the default.
 
 The implementation uses a learned scale for every feature/action pair and
 detaches features in the variance calculation, matching SB3's default gSDE
@@ -213,8 +213,9 @@ execution should not be assumed to improve Python-environment throughput.
 switches to staged sampling and normalizes observations before clipping them to
 ±10. Use `ObsNormalizerConfig::Enabled { clip: None }` to normalize without clipping,
 or `ObsNormalizerConfig::Disabled` to use staged sampling without normalization.
-Step-bounded rollouts can also normalize discounted rewards with
-`with_reward_normalizer(gamma, clip_reward)`.
+Both step-bounded and episode-bounded rollouts can normalize rewards using discounted
+returns with `with_reward_normalizer(RewardNormalizerConfig::Enabled { gamma, clip_reward })`.
+Use `RewardNormalizerConfig::Disabled` (the default) to leave rewards unnormalized.
 
 ## Training schedules
 
@@ -234,6 +235,7 @@ including when training consists of a single rollout.
 `OptimizerConfig::Split { policy, value }` for independent optimizers:
 
 ```rust
+# extern crate r2l;
 use r2l::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
 
 let optimizer = OptimizerConfig::Split {
@@ -273,7 +275,16 @@ Save the builder recipe before consuming the builder, then save state between
 completed training iterations (for example, after stopping training through its
 control channel):
 
-```rust
+```rust,no_run
+# extern crate r2l;
+# extern crate r2l_core;
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
+# let builder = r2l::PPOBuilder::gym("Pendulum-v1", 4)?.with_burn();
+# let env_builders = r2l_core::env::EnvBuilderType::homogeneous(
+#     r2l::GymEnvBuilder::new("Pendulum-v1"), 4,
+# )?;
+# let (endpoint, _control) = r2l::OnPolicyControlEndpoint::channel();
+# let (reporter, _reports) = std::sync::mpsc::channel();
 let snapshot = r2l::SnapshotAlgo::new("checkpoints/rollout-100");
 snapshot.save_builder(&builder)?; // builder must use Burn PPO
 let mut algo = builder.build()?;
@@ -285,6 +296,8 @@ let mut restored = snapshot.restore(env_builders)?;
 restored.hooks.set_control(endpoint);
 restored.runtime.agent.hooks.set_rollout_reporter(Some(reporter));
 restored.train()?;
+# Ok(())
+# }
 ```
 
 The directory contains `builder.yaml`, `learner.bpk`, and `state.yaml`, plus the

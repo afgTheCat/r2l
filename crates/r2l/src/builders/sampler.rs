@@ -41,17 +41,26 @@ impl ObsNormalizerConfig {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub(crate) struct RewardNormalizerConfig {
-    pub(crate) gamma: f32,
-    pub(crate) clip_reward: f32,
+/// Controls reward normalization using discounted returns and clipping.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub enum RewardNormalizerConfig {
+    /// Leave rewards unnormalized.
+    #[default]
+    Disabled,
+    /// Normalize rewards using the running variance of discounted returns.
+    Enabled {
+        /// Discount factor used to track discounted returns.
+        gamma: f32,
+        /// Absolute limit applied to normalized rewards.
+        clip_reward: f32,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct SamplerConfiguration {
     pub(crate) rollout_mode: RolloutMode,
     pub(crate) execution_mode: SamplerExecutionMode,
-    pub(crate) reward_normalizer: Option<RewardNormalizerConfig>,
+    pub(crate) reward_normalizer: RewardNormalizerConfig,
     pub(crate) obs_normalizer: ObsNormalizerConfig,
 }
 
@@ -60,7 +69,7 @@ impl Default for SamplerConfiguration {
         Self {
             rollout_mode: RolloutMode::step_bound(1024),
             execution_mode: SamplerExecutionMode::MultiThreaded,
-            reward_normalizer: None,
+            reward_normalizer: RewardNormalizerConfig::Disabled,
             obs_normalizer: ObsNormalizerConfig::Disabled,
         }
     }
@@ -81,14 +90,15 @@ impl SamplerConfiguration {
         env_builder: &EnvBuilderType<E>,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
     ) -> Result<OnPolicySampler<E>, Error> {
-        let reward_normalizer = self.reward_normalizer.as_ref().map(|config| {
-            RewardNormalizer::new(
+        let reward_normalizer = match self.reward_normalizer {
+            RewardNormalizerConfig::Disabled => None,
+            RewardNormalizerConfig::Enabled { gamma, clip_reward } => Some(RewardNormalizer::new(
                 NonZeroUsize::new(env_builder.num_envs())
                     .expect("environment builders are nonempty"),
-                config.gamma,
-                config.clip_reward,
-            )
-        });
+                gamma,
+                clip_reward,
+            )),
+        };
         let hook = SamplerHook::new(self.rollout_mode, reward_normalizer);
         match obs_normalizer {
             Some(normalizer) => {

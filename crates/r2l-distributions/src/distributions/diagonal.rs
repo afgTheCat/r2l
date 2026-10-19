@@ -56,10 +56,14 @@ impl<N: Network<Tensor: DistributionTensor>, P: TensorParameter<N::Tensor>> Diag
     ///
     /// `log_std` must have shape `[features, actions]`. Features are detached in
     /// the variance calculation, matching SB3's default `learn_features=false`.
+    /// With `SdeConfig::Disabled`, this delegates to `new` and expects `[1, actions]`.
     ///
     /// # Errors
     /// Returns an error if features are unavailable or parameter dimensions do not match.
     pub fn with_sde(mean: N, log_std: P, config: SdeConfig) -> Result<Self> {
+        if matches!(config, SdeConfig::Disabled) {
+            return Self::new(mean, log_std);
+        }
         let width = super::output_width(&mean)?;
         let features = mean
             .feature_size()

@@ -75,7 +75,7 @@ pub use backend::{BurnBackend, CandleDevice};
 pub use builders::{
     A2CBuilder, A2CBurn, A2CCandle, AdamWConfig, GradientClippingConfig, LearningRateSchedule,
     ObsNormalizerConfig, OnPolicyBuilder, OptimizerConfig, PPOBuilder, PPOBurn, PPOCandle,
-    TrainingArtifactsConfig,
+    RewardNormalizerConfig, TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
 pub use hooks::learning::stats::{A2CMinibatchStats, A2CRolloutStats};

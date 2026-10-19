@@ -116,7 +116,7 @@ fn train_ppo(
 ) -> anyhow::Result<()> {
     let ppo_builder = PPOBuilder::gym(ENV_NAME, 10)?
         .with_burn()
-        .with_seed(0)
+        .with_seed(Some(0))
         .with_entropy_coefficient(ENT_COEFF)
         .with_gradient_clipping(GradientClippingConfig::Norm(MAX_GRAD_NORM))
         .with_target_kl(Some(TARGET_KL))

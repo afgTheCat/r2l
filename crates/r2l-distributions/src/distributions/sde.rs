@@ -15,10 +15,16 @@ use serde::{Deserialize, Serialize};
 /// Noise uses the policy's last hidden features and a learned scale for every
 /// feature/action pair. Each rollout worker receives an independent matrix.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct SdeConfig {
-    /// Refresh noise after this many actions, in addition to each rollout boundary.
-    /// `None` keeps the same matrix throughout a rollout, including episode resets.
-    pub resample_every: Option<NonZeroUsize>,
+pub enum SdeConfig {
+    /// Use independent Gaussian noise for each action.
+    #[default]
+    Disabled,
+    /// Use state-dependent noise, refreshed at each rollout boundary.
+    Enabled {
+        /// Refresh noise after this many actions, in addition to each rollout boundary.
+        /// `None` keeps the same matrix throughout a rollout, including episode resets.
+        resample_every: Option<NonZeroUsize>,
+    },
 }
 
 #[derive(Debug)]
@@ -59,10 +65,11 @@ impl<T: DistributionTensor> StateDependentNoise<T> {
             Error::invalid_state("sample state-dependent noise", "noise lock was poisoned")
         })?;
         if noise.matrix.is_none()
-            || self
-                .config
-                .resample_every
-                .is_some_and(|period| noise.actions >= period.get())
+            || matches!(
+                self.config,
+                SdeConfig::Enabled { resample_every: Some(period) }
+                    if noise.actions >= period.get()
+            )
         {
             let values = with_rng(|rng| {
                 (0..log_std.size())

@@ -22,7 +22,7 @@ pub(crate) struct PolicyBuilder {
     pub(crate) action_space: Space<VecTensor>,
     pub(crate) network: NetworkConfig,
     pub(crate) log_std_init: f32,
-    pub(crate) sde: Option<SdeConfig>,
+    pub(crate) sde: SdeConfig,
 }
 
 impl PolicyBuilder {
@@ -35,7 +35,7 @@ impl PolicyBuilder {
                 activation: ActivationFunction::default(),
             }),
             log_std_init: 0.0,
-            sde: None,
+            sde: SdeConfig::Disabled,
         })
     }
 
@@ -55,7 +55,7 @@ impl PolicyBuilder {
         var_builder: &VarBuilder<'_>,
     ) -> Result<CandleDistributionKind> {
         let network = super::networks::NetworkBuilder::new(self.network.clone());
-        if let Some(config) = self.sde {
+        if let config @ SdeConfig::Enabled { .. } = self.sde {
             let width = self.sde_action_size()?;
             let mean = network.build_candle(
                 &self.observation_space.observation_shape(),
@@ -104,7 +104,7 @@ impl PolicyBuilder {
     /// Returns an error if the policy configuration is invalid or unsupported.
     pub(crate) fn build_burn(&self, device: &burn::tensor::Device) -> Result<BurnDistributionKind> {
         let network = super::networks::NetworkBuilder::new(self.network.clone());
-        if let Some(config) = self.sde {
+        if let config @ SdeConfig::Enabled { .. } = self.sde {
             let width = self.sde_action_size()?;
             let mean =
                 network.build_burn(&self.observation_space.observation_shape(), width, device)?;
@@ -144,5 +144,34 @@ impl PolicyBuilder {
                 format!("{:?}", self.action_space),
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disabling_sde_allows_discrete_actions_on_both_backends() -> Result<()> {
+        let description = EnvDescription::<VecTensor>::new(
+            Space::Box {
+                min: None,
+                max: None,
+                shape: r2l_core::Shape::from([4]),
+            },
+            Space::Discrete(2),
+        );
+        let mut builder = PolicyBuilder::new(&description)?;
+        assert!(matches!(builder.sde, SdeConfig::Disabled));
+        builder.sde = SdeConfig::Enabled {
+            resample_every: None,
+        };
+        assert!(builder.build_candle_with_varmap(&Device::Cpu).is_err());
+        assert!(builder.build_burn(&Default::default()).is_err());
+
+        builder.sde = SdeConfig::Disabled;
+        assert!(builder.build_candle_with_varmap(&Device::Cpu).is_ok());
+        assert!(builder.build_burn(&Default::default()).is_ok());
+        Ok(())
     }
 }

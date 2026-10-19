@@ -28,7 +28,7 @@ use r2l_distributions::learning_modules::candle_lm::PolicyValueLearner as Candle
 #[cfg(feature = "gym")]
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{RolloutMode, SamplerExecutionMode};
-pub use sampler::ObsNormalizerConfig;
+pub use sampler::{ObsNormalizerConfig, RewardNormalizerConfig};
 use serde::{Deserialize, Serialize};
 
 pub use crate::backend::{BurnBackendConfig, CandleDevice};
@@ -39,7 +39,7 @@ use crate::{
         algorithm::AlgoConfig,
         learner::{LearnerConfig, LearningHookConfig},
         on_policy_hook::OnPolicyHookConfig,
-        sampler::{RewardNormalizerConfig, SamplerConfiguration},
+        sampler::SamplerConfiguration,
     },
     hooks::{
         learning::{A2CLearningHook, ClipRangeSchedule, PPOLearningHook},
@@ -122,9 +122,13 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
     ///
     /// # Arguments
     ///
-    /// * `config` - The artifact output directory and the artifacts to produce.
-    pub fn with_training_artifacts(mut self, config: TrainingArtifactsConfig) -> Self {
-        self.config.hook_config.training_artifacts = Some(config);
+    /// * `config` - The artifact output directory and the artifacts to produce, or `None`
+    ///   to clear the artifact configuration.
+    pub fn with_training_artifacts(
+        mut self,
+        config: impl Into<Option<TrainingArtifactsConfig>>,
+    ) -> Self {
+        self.config.hook_config.training_artifacts = config.into();
         self
     }
 
@@ -187,9 +191,10 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
     ///
     /// # Arguments
     ///
-    /// * `seed` - Seed used to initialize the random number generators.
-    pub fn with_seed(mut self, seed: u64) -> Self {
-        self.config.seed = Some(seed);
+    /// * `seed` - Seed used to initialize the random number generators, or `None` to
+    ///   clear the configured seed.
+    pub fn with_seed(mut self, seed: Option<u64>) -> Self {
+        self.config.seed = seed;
         self
     }
 
@@ -270,7 +275,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
         self
     }
 
-    /// Enables generalized state-dependent exploration for continuous Box actions.
+    /// Configures generalized state-dependent exploration for continuous Box actions.
     ///
     /// Each environment gets independent noise at each rollout boundary. Evaluation
     /// uses the policy mean. With gSDE, `log_std_init` initializes the noise weights
@@ -278,9 +283,9 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
     ///
     /// # Arguments
     ///
-    /// * `config` - Controls additional noise refreshes within a rollout.
+    /// * `config` - Enables or disables gSDE and controls noise refreshes within a rollout.
     pub fn with_sde(mut self, config: crate::SdeConfig) -> Self {
-        self.config.learner_builder.policy_config.sde = Some(config);
+        self.config.learner_builder.policy_config.sde = config;
         self
     }
 
@@ -537,16 +542,15 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
         self
     }
 
-    /// Normalizes rewards using discounted returns and clips them to `clip_reward`.
+    /// Configures reward normalization using discounted returns and clipping.
     /// Works with both step-bound and episode-bound collection.
     ///
     /// # Arguments
     ///
-    /// * `gamma` - Discount factor used to track discounted returns.
-    /// * `clip_reward` - Absolute limit applied to normalized rewards.
-    pub fn with_reward_normalizer(mut self, gamma: f32, clip_reward: f32) -> Self {
-        self.config.sampler_configuration.reward_normalizer =
-            Some(RewardNormalizerConfig { gamma, clip_reward });
+    /// * `config` - Whether to normalize rewards, with the discount factor and clipping limit
+    ///   used when enabled.
+    pub fn with_reward_normalizer(mut self, config: RewardNormalizerConfig) -> Self {
+        self.config.sampler_configuration.reward_normalizer = config;
         self
     }
 

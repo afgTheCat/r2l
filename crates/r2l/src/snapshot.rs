@@ -278,11 +278,15 @@ impl SnapshotAlgo {
     }
 
     fn validate_state(recipe: &BuilderRecipe, state: &TrainingState) -> Result<()> {
-        use crate::ObsNormalizerConfig;
+        use crate::{ObsNormalizerConfig, RewardNormalizerConfig};
         let config = &recipe.config.sampler_configuration;
         if state.observation_normalizer.is_some()
             != matches!(config.obs_normalizer, ObsNormalizerConfig::Enabled { .. })
-            || state.reward_statistics.is_some() != config.reward_normalizer.is_some()
+            || state.reward_statistics.is_some()
+                != matches!(
+                    config.reward_normalizer,
+                    RewardNormalizerConfig::Enabled { .. }
+                )
         {
             return Err(Error::invalid_state(
                 "restore snapshot",

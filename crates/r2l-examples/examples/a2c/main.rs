@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 
     let a2c_builder = A2CBuilder::gym("Pendulum-v1", 10)?
         .with_candle(CandleDevice::Cpu)
-        .with_seed(0)
+        .with_seed(Some(0))
         .with_entropy_coefficient(0.2)
         .with_gradient_clipping(GradientClippingConfig::Norm(0.5))
         .with_rollout_steps(2048)
