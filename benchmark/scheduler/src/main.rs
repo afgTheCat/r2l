@@ -1,6 +1,7 @@
 //! Submits benchmark tasks to Google Batch.
 
 mod gcloud;
+mod rl_zoo;
 
 use std::{
     collections::BTreeMap,
@@ -12,7 +13,9 @@ use std::{
 };
 
 use anyhow::{Context, bail, ensure};
-use r2l_benchmark_task::{Backend, BenchmarkTask, RlZooEnvironmentConfig};
+use r2l::{BackendConfig, BurnBackendConfig, CandleDevice};
+use r2l_benchmark_task::BenchmarkTask;
+use rl_zoo::RlZooEnvironmentConfig;
 use yaml_serde::Value;
 
 use crate::gcloud::{
@@ -76,18 +79,24 @@ fn gather_tasks() -> anyhow::Result<Vec<BenchmarkTask>> {
     let zoo_config = ZooConfig::parse(&crate_dir.join(CONFIG_PATH))?;
     let log_dir = PathBuf::from(LOG_DIR);
 
-    Ok(zoo_config
-        .supported_envs
-        .into_iter()
-        .flat_map(|(env_name, rl_zoo_env_config)| {
-            [Backend::Burn, Backend::Candle, Backend::Sb3].map(|backend| BenchmarkTask {
-                output_dir: log_dir.join(backend.name()).join(&env_name),
-                rl_zoo_env_config: rl_zoo_env_config.clone(),
-                env_name: env_name.clone(),
-                backend,
-            })
-        })
-        .collect())
+    let mut tasks = Vec::new();
+    for (env_name, config) in zoo_config.supported_envs {
+        for (name, backend) in [
+            ("burn", BackendConfig::Burn(BurnBackendConfig)),
+            ("candle", BackendConfig::Candle(CandleDevice::Cpu)),
+        ] {
+            let task = config
+                .to_task(
+                    backend,
+                    env_name.clone(),
+                    &log_dir.join(name).join(&env_name),
+                )
+                .with_context(|| format!("failed to configure {name} benchmark for {env_name}"))?;
+            tasks.push(BenchmarkTask::R2l(Box::new(task)));
+        }
+        tasks.push(BenchmarkTask::Sb3 { env_name });
+    }
+    Ok(tasks)
 }
 
 struct Scheduler {

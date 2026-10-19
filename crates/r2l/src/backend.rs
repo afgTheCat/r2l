@@ -45,7 +45,9 @@ pub struct BurnBackendConfig;
 /// Serializable backend selection shared by training and inference recipes.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum BackendConfig {
+    /// Candle backend with the selected device.
     Candle(CandleDevice),
+    /// Burn Flex backend configuration.
     Burn(BurnBackendConfig),
 }
 

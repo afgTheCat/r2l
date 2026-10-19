@@ -25,7 +25,8 @@ use crate::{
 /// Policy, value-network, and optimizer settings used to construct a learner.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LearnerConfig {
-    pub(crate) policy_config: PolicyBuilder,
+    /// Policy architecture and exploration settings.
+    pub policy_config: PolicyBuilder,
     /// Architecture of the value network.
     pub value_network: NetworkConfig,
     /// Optimizer settings for joint or separate policy and value updates.
@@ -134,9 +135,18 @@ impl LearnerConfig {
 /// Loss settings shared by PPO and A2C learning hooks.
 #[derive(Serialize, Deserialize)]
 pub struct LearningHookConfig {
-    pub(super) normalize_advantage: bool,
-    pub(super) entropy_coeff: f32,
-    pub(super) vf_coeff: f32,
+    /// Whether to normalize advantages before learning.
+    pub normalize_advantage: bool,
+    /// Entropy bonus coefficient.
+    pub entropy_coeff: f32,
+    /// Value-loss coefficient.
+    pub vf_coeff: f32,
+}
+
+impl Default for LearningHookConfig {
+    fn default() -> Self {
+        Self::new(true)
+    }
 }
 
 impl LearningHookConfig {

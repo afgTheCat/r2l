@@ -12,10 +12,11 @@ pub(crate) mod sampler;
 
 use std::num::NonZeroUsize;
 
-pub use algorithm::{A2CConfig, AlgoBackendConfig, PPOConfig};
+pub use algorithm::{A2CConfig, AlgoBackendConfig, AlgoConfig, PPOConfig};
 use networks::NetworkConfig;
 pub use on_policy_hook::TrainingArtifactsConfig;
 pub use optimizer::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, OptimizerConfig};
+pub use policy::PolicyBuilder;
 use r2l_agents::on_policy_algorithms::{a2c::A2C, ppo::PPO};
 use r2l_core::error::Result;
 use r2l_core::{
@@ -28,7 +29,7 @@ use r2l_distributions::learning_modules::candle_lm::PolicyValueLearner as Candle
 #[cfg(feature = "gym")]
 use r2l_gym::{GymEnv, GymEnvBuilder};
 use r2l_sampler::{RolloutMode, SamplerExecutionMode};
-pub use sampler::{ObsNormalizerConfig, RewardNormalizerConfig};
+pub use sampler::{ObsNormalizerConfig, RewardNormalizerConfig, SamplerConfiguration};
 use serde::{Deserialize, Serialize};
 
 pub use crate::backend::{BurnBackendConfig, CandleDevice};
@@ -36,10 +37,8 @@ use crate::{
     OnPolicyHooks, TrainingLimit,
     backend::{Backend, BackendConfig},
     builders::{
-        algorithm::AlgoConfig,
         learner::{LearnerConfig, LearningHookConfig},
         on_policy_hook::OnPolicyHookConfig,
-        sampler::SamplerConfiguration,
     },
     hooks::{
         learning::{A2CLearningHook, ClipRangeSchedule, PPOLearningHook},
@@ -56,14 +55,21 @@ pub type A2CCandle = A2C<CandlePolicyValueLearner, A2CLearningHook>;
 /// A2C agent produced by a Burn-backed algorithm builder.
 pub type A2CBurn = A2C<BurnPolicyValueLearner, A2CLearningHook>;
 
-#[derive(Serialize, Deserialize)]
-pub(crate) struct BuilderConfig {
-    algo_config: AlgoConfig,
-    seed: Option<u64>,
-    pub(crate) hook_config: OnPolicyHookConfig,
-    pub(crate) learner_builder: LearnerConfig,
-    learning_hook: LearningHookConfig,
-    pub(crate) sampler_configuration: SamplerConfiguration,
+/// Serializable, environment-independent training settings shared by PPO and A2C.
+#[derive(Default, Serialize, Deserialize)]
+pub struct OnPolicyConfig {
+    /// Discounting, minibatch size, and progress logging.
+    pub algo_config: AlgoConfig,
+    /// Optional seed applied when constructing the algorithm.
+    pub seed: Option<u64>,
+    /// Training limits, evaluation, and artifact output.
+    pub hook_config: OnPolicyHookConfig,
+    /// Policy, value network, and optimizer settings.
+    pub learner_builder: LearnerConfig,
+    /// Advantage normalization and loss coefficients.
+    pub learning_hook: LearningHookConfig,
+    /// Rollout collection and normalization settings.
+    pub sampler_configuration: SamplerConfiguration,
 }
 
 /// Configures and builds a complete PPO or A2C training algorithm.
@@ -80,7 +86,7 @@ pub(crate) struct BuilderConfig {
 #[must_use]
 pub struct OnPolicyBuilder<A, B, E: Env + 'static> {
     pub(crate) algo_backend: AlgoBackendConfig<A, B>,
-    pub(crate) config: BuilderConfig,
+    pub(crate) config: OnPolicyConfig,
     pub(crate) env_builder: EnvBuilderType<E>,
 }
 
@@ -91,19 +97,31 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
         algo_backend: AlgoBackendConfig<A, B>,
     ) -> Result<Self> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
-        let learner_builder = LearnerConfig::default();
-        Ok(Self {
+        Ok(Self::from_config(
+            OnPolicyConfig::default(),
             algo_backend,
-            config: BuilderConfig {
-                algo_config: AlgoConfig::default(),
-                seed: None,
-                hook_config: OnPolicyHookConfig::default(),
-                learner_builder,
-                learning_hook: LearningHookConfig::new(true),
-                sampler_configuration: SamplerConfiguration::default(),
-            },
             env_builder,
-        })
+        ))
+    }
+
+    /// Combines serializable settings with runtime environment factories.
+    /// Environment spaces are resolved when the algorithm is built.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Shared on-policy training settings.
+    /// * `algo_backend` - Algorithm-specific settings and the concrete backend configuration.
+    /// * `env_builder` - Validated environment factories used for training and evaluation.
+    pub fn from_config(
+        config: OnPolicyConfig,
+        algo_backend: AlgoBackendConfig<A, B>,
+        env_builder: EnvBuilderType<E>,
+    ) -> Self {
+        Self {
+            algo_backend,
+            config,
+            env_builder,
+        }
     }
 
     fn n_envs(&self) -> NonZeroUsize {

@@ -71,11 +71,11 @@ mod inference;
 mod snapshot;
 mod utils;
 
-pub use backend::{BurnBackend, CandleDevice};
+pub use backend::{BackendConfig, BurnBackend, BurnBackendConfig, CandleDevice};
 pub use builders::{
-    A2CBuilder, A2CBurn, A2CCandle, AdamWConfig, GradientClippingConfig, LearningRateSchedule,
-    ObsNormalizerConfig, OnPolicyBuilder, OptimizerConfig, PPOBuilder, PPOBurn, PPOCandle,
-    RewardNormalizerConfig, TrainingArtifactsConfig,
+    A2CBuilder, A2CBurn, A2CCandle, AdamWConfig, AlgoBackendConfig, GradientClippingConfig,
+    LearningRateSchedule, ObsNormalizerConfig, OnPolicyBuilder, OnPolicyConfig, OptimizerConfig,
+    PPOBuilder, PPOBurn, PPOCandle, PPOConfig, RewardNormalizerConfig, TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
 pub use hooks::learning::stats::{A2CMinibatchStats, A2CRolloutStats};
@@ -93,7 +93,7 @@ pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};
 pub use r2l_core::error::{self, Error};
 pub use r2l_core::{
     Shape,
-    env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
+    env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Snapshot, Space},
     models::ActivationFunction,
     on_policy::algorithm::OnPolicyAlgorithm,
     tensor::VecTensor,
@@ -101,5 +101,5 @@ pub use r2l_core::{
 pub use r2l_distributions::distributions::sde::SdeConfig;
 #[cfg(feature = "gym")]
 pub use r2l_gym::{GymEnv, GymEnvBuilder};
-pub use r2l_sampler::{RolloutSampler, SamplerExecutionMode};
+pub use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
 pub use snapshot::SnapshotAlgo;

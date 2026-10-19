@@ -10,7 +10,6 @@ publish = false
 [dependencies]
 r2l = { workspace = true }
 serde = { workspace = true }
-yaml_serde = { workspace = true }
 
 [lints]
 workspace = true

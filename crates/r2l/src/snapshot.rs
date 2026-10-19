@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::{
     OnPolicyBuilder, OnPolicyHooks, PPOBuilder, PPOBurn,
     backend::BurnBackendConfig,
-    builders::{AlgoBackendConfig, BuilderConfig, PPOConfig},
+    builders::{AlgoBackendConfig, OnPolicyConfig, PPOConfig},
     constants::{ACTOR_FILE, NORMALIZER_FILE},
     hooks::{on_policy::evaluation::ScheduledEvaluator, progress::TrainingCounters},
     utils::RewardNormalizer,
@@ -29,7 +29,7 @@ const STATE_FILE: &str = "state.yaml";
 const LEARNER_FILE: &str = "learner.bpk";
 
 #[derive(Serialize, Deserialize)]
-struct BuilderRecipe<C = BuilderConfig, A = AlgoBackendConfig<PPOConfig, BurnBackendConfig>> {
+struct BuilderRecipe<C = OnPolicyConfig, A = AlgoBackendConfig<PPOConfig, BurnBackendConfig>> {
     version: u32,
     agent: String,
     config: C,
@@ -130,11 +130,11 @@ impl SnapshotAlgo {
                 "environment spaces differ from the snapshot",
             ));
         }
-        Ok(OnPolicyBuilder {
-            algo_backend: recipe.algo_backend,
-            config: recipe.config,
+        Ok(OnPolicyBuilder::from_config(
+            recipe.config,
+            recipe.algo_backend,
             env_builder,
-        })
+        ))
     }
 
     /// Loads the saved Burn model and optimizer records.

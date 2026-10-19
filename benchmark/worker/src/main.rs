@@ -3,88 +3,56 @@
 use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
-use r2l::{
-    AdamWConfig, GradientClippingConfig, OptimizerConfig, PPOBuilder, RewardNormalizerConfig,
-    SdeConfig, TrainingArtifactsConfig, TrainingLimit,
-};
-use r2l_benchmark_task::{Backend, BenchmarkTask};
+use r2l::{AlgoBackendConfig, BackendConfig, EnvBuilderType, GymEnvBuilder, OnPolicyBuilder};
+use r2l_benchmark_task::{BenchmarkTask, R2lTask};
 
 const SB3_SCRIPT_PATH: &str = "/opt/r2l/sb3/ppo.py";
 const TASK_ENV_VAR: &str = "R2L_TASK";
 
-fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
-    let config = &task.rl_zoo_env_config;
-    let optimizer_config = OptimizerConfig::Joint(AdamWConfig {
-        learning_rate: config.learning_rate.into_learning_rate_schedule(),
-        gradient_clipping: GradientClippingConfig::Norm(config.max_grad_norm),
-        ..Default::default()
-    });
-    let normalizer_config = config
-        .normalize
-        .to_normalizer_config()
-        .with_clip(Some(10.0));
-    let sde_config = if config.use_sde {
-        if config.sde_sample_freq < -1 {
-            bail!("sde_sample_freq must be -1, zero, or a positive number of steps");
-        }
-        SdeConfig::Enabled {
-            resample_every: usize::try_from(config.sde_sample_freq)
-                .ok()
-                .and_then(std::num::NonZeroUsize::new),
-        }
-    } else {
-        SdeConfig::Disabled
-    };
-    let reward_normalizer_config = if config.normalize.norm_reward() {
-        RewardNormalizerConfig::Enabled {
-            gamma: config.gamma,
-            clip_reward: 10.0,
-        }
-    } else {
-        RewardNormalizerConfig::Disabled
-    };
-    let artifacts_config = TrainingArtifactsConfig::new(&task.output_dir);
-    let builder = PPOBuilder::gym(task.env_name.clone(), config.n_envs)?
-        .with_rollout_steps(config.n_steps)
-        .with_training_limit(TrainingLimit::steps(config.n_timesteps))
-        .with_training_artifacts(artifacts_config)
-        .with_observation_normalizer(normalizer_config)
-        .with_lambda(config.gae_lambda)
-        .with_gamma(config.gamma)
-        .with_total_epochs(config.n_epochs)
-        .with_entropy_coefficient(config.ent_coef)
-        .with_sample_size(config.batch_size)
-        .with_optimizer(optimizer_config)
-        .with_clip_range_schedule(config.clip_range.into_clip_range_schedule())
-        .with_log_std_init(config.log_std_init)
-        .with_value_loss_coefficient(config.vf_coef)
-        .with_sde(sde_config)
-        .with_reward_normalizer(reward_normalizer_config)
-        .with_seed(Some(0)); // TODO: should we keep this?
+fn train_r2l(task: R2lTask) -> anyhow::Result<()> {
+    let env_builder =
+        EnvBuilderType::homogeneous(GymEnvBuilder::new(&task.env_name), task.n_envs.get())?;
     match task.backend {
-        Backend::Burn => builder.with_burn().build()?.train()?,
-        Backend::Candle => builder.build()?.train()?,
-        Backend::Sb3 => unreachable!(),
+        BackendConfig::Burn(backend) => OnPolicyBuilder::from_config(
+            task.config,
+            AlgoBackendConfig {
+                algo: task.ppo,
+                backend,
+            },
+            env_builder,
+        )
+        .build()?
+        .train()?,
+        BackendConfig::Candle(backend) => OnPolicyBuilder::from_config(
+            task.config,
+            AlgoBackendConfig {
+                algo: task.ppo,
+                backend,
+            },
+            env_builder,
+        )
+        .build()?
+        .train()?,
     }
     Ok(())
 }
 
-fn train_sb3(task: &BenchmarkTask) -> anyhow::Result<()> {
+fn train_sb3(env_name: &str) -> anyhow::Result<()> {
     let status = Command::new("python")
         .arg(SB3_SCRIPT_PATH)
-        .arg(&task.env_name)
+        .arg(env_name)
         .status()
         .with_context(|| format!("failed to run {SB3_SCRIPT_PATH}"))?;
     if !status.success() {
-        bail!("SB3 evaluation for {} exited with {status}", task.env_name);
+        bail!("SB3 evaluation for {env_name} exited with {status}");
     }
     Ok(())
 }
 
-fn run(task: &BenchmarkTask) -> anyhow::Result<()> {
-    match task.backend {
-        Backend::Burn | Backend::Candle => train_r2l(task),
-        Backend::Sb3 => train_sb3(task),
+fn run(task: BenchmarkTask) -> anyhow::Result<()> {
+    match task {
+        BenchmarkTask::R2l(task) => train_r2l(*task),
+        BenchmarkTask::Sb3 { env_name } => train_sb3(&env_name),
     }
 }
 
@@ -92,5 +60,5 @@ fn main() -> anyhow::Result<()> {
     let task = var(TASK_ENV_VAR).context(format!("{TASK_ENV_VAR} was not set"))?;
     let task: BenchmarkTask = serde_json::from_str(&task)
         .context(format!("{TASK_ENV_VAR} was not a valid task specification"))?;
-    run(&task)
+    run(task)
 }

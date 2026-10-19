@@ -17,10 +17,13 @@ use serde::{Deserialize, Serialize};
 /// Training learner builders and inference runners both use this
 /// configuration to construct the same policy architecture.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct PolicyBuilder {
-    pub(crate) network: NetworkConfig,
-    pub(crate) log_std_init: f32,
-    pub(crate) sde: SdeConfig,
+pub struct PolicyBuilder {
+    /// Policy network architecture, sized from the environment at build time.
+    pub network: NetworkConfig,
+    /// Initial log standard deviation for continuous actions.
+    pub log_std_init: f32,
+    /// State-dependent exploration settings.
+    pub sde: SdeConfig,
 }
 
 impl Default for PolicyBuilder {

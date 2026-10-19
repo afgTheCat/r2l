@@ -6655,6 +6655,7 @@ name = "r2l-benchmark-scheduler"
 version = "0.0.3"
 dependencies = [
  "anyhow",
+ "r2l",
  "r2l-benchmark-task",
  "serde",
  "serde_json",
@@ -6667,7 +6668,6 @@ version = "0.0.3"
 dependencies = [
  "r2l",
  "serde",
- "yaml_serde",
 ]
 
 [[package]]

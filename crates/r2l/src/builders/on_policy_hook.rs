@@ -114,9 +114,12 @@ impl TrainingArtifactsConfig {
 /// Evaluation and artifact settings for training lifecycle hooks.
 #[derive(Default, Serialize, Deserialize)]
 pub struct OnPolicyHookConfig {
-    pub(crate) training_limit: TrainingLimit,
-    pub(crate) avg_reward_threshold: Option<f32>,
-    pub(crate) training_artifacts: Option<TrainingArtifactsConfig>,
+    /// Schedule determining when training stops.
+    pub training_limit: TrainingLimit,
+    /// Optional evaluation reward threshold for stopping training.
+    pub avg_reward_threshold: Option<f32>,
+    /// Optional artifact output and evaluation configuration.
+    pub training_artifacts: Option<TrainingArtifactsConfig>,
 }
 
 impl OnPolicyHookConfig {

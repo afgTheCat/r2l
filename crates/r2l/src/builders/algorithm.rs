@@ -19,16 +19,21 @@ use crate::{
 /// Concrete algorithm and backend settings selected by an on-policy builder.
 #[derive(Serialize, Deserialize)]
 pub struct AlgoBackendConfig<A, B> {
-    pub(crate) algo: A,
-    pub(crate) backend: B,
+    /// Algorithm-specific settings.
+    pub algo: A,
+    /// Concrete backend configuration.
+    pub backend: B,
 }
 
 /// PPO-specific epoch, clipping, and early-stopping settings.
 #[derive(Serialize, Deserialize)]
 pub struct PPOConfig {
-    pub(crate) total_epochs: NonZeroUsize,
-    pub(crate) clip_range_schedule: ClipRangeSchedule,
-    pub(crate) target_kl: Option<f32>,
+    /// Maximum optimization epochs per rollout.
+    pub total_epochs: NonZeroUsize,
+    /// Policy-ratio clipping schedule.
+    pub clip_range_schedule: ClipRangeSchedule,
+    /// Optional KL-divergence threshold for early stopping.
+    pub target_kl: Option<f32>,
 }
 
 impl Default for PPOConfig {
@@ -47,11 +52,15 @@ pub struct A2CConfig;
 
 /// Learning settings shared by PPO and A2C.
 #[derive(Serialize, Deserialize)]
-pub(crate) struct AlgoConfig {
-    pub(crate) gamma: f32,
-    pub(crate) lambda: f32,
-    pub(crate) sample_size: NonZeroUsize,
-    pub(crate) log_progress: bool,
+pub struct AlgoConfig {
+    /// Discount factor used for returns.
+    pub gamma: f32,
+    /// Generalized advantage estimation decay factor.
+    pub lambda: f32,
+    /// Number of samples per minibatch.
+    pub sample_size: NonZeroUsize,
+    /// Whether to print rollout statistics.
+    pub log_progress: bool,
 }
 
 impl Default for AlgoConfig {

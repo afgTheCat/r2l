@@ -56,12 +56,17 @@ pub enum RewardNormalizerConfig {
     },
 }
 
+/// Serializable rollout collection and normalization settings.
 #[derive(Serialize, Deserialize)]
-pub(crate) struct SamplerConfiguration {
-    pub(crate) rollout_mode: RolloutMode,
-    pub(crate) execution_mode: SamplerExecutionMode,
-    pub(crate) reward_normalizer: RewardNormalizerConfig,
-    pub(crate) obs_normalizer: ObsNormalizerConfig,
+pub struct SamplerConfiguration {
+    /// Step or episode limit per environment and rollout.
+    pub rollout_mode: RolloutMode,
+    /// How environment workers are executed.
+    pub execution_mode: SamplerExecutionMode,
+    /// Reward normalization and clipping.
+    pub reward_normalizer: RewardNormalizerConfig,
+    /// Observation normalization and clipping.
+    pub obs_normalizer: ObsNormalizerConfig,
 }
 
 impl Default for SamplerConfiguration {
