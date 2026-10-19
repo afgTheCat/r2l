@@ -6,7 +6,7 @@ use std::{
 };
 
 use r2l_core::{
-    env::{Env, EnvBuilderType, normalizer::NormalizerSnapshot},
+    env::{Env, EnvBuilderType, EnvDescription, normalizer::NormalizerSnapshot},
     error::{Error, Result},
     on_policy::algorithm::OnPolicyAlgorithm,
     running_mean::RunningMeanStdF32,
@@ -35,6 +35,7 @@ struct BuilderRecipe<C = BuilderConfig, A = AlgoBackendConfig<PPOConfig, BurnBac
     config: C,
     algo_backend: A,
     n_envs: usize,
+    description: EnvDescription<VecTensor>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -81,12 +82,17 @@ impl SnapshotAlgo {
         builder: &PPOBuilder<E, BurnBackendConfig>,
     ) -> Result<()> {
         fs::create_dir_all(&self.directory)?;
+        let description = builder.env_builder.env_description()?;
         let recipe = BuilderRecipe {
             version: 1,
             agent: "ppo_burn".to_owned(),
             config: &builder.config,
             algo_backend: &builder.algo_backend,
             n_envs: builder.env_builder.num_envs(),
+            description: EnvDescription::new(
+                description.observation_space.convert()?,
+                description.action_space.convert()?,
+            ),
         };
         self.write_new(BUILDER_FILE, &recipe)
     }
@@ -112,13 +118,12 @@ impl SnapshotAlgo {
             ));
         }
         let description = env_builder.env_description()?;
-        let policy = &recipe.config.learner_builder.policy_config;
         let observation = description.observation_space.convert::<VecTensor>()?;
         let action = description.action_space.convert::<VecTensor>()?;
         if yaml_serde::to_value(&observation).map_err(Error::wrap)?
-            != yaml_serde::to_value(&policy.observation_space).map_err(Error::wrap)?
+            != yaml_serde::to_value(&recipe.description.observation_space).map_err(Error::wrap)?
             || yaml_serde::to_value(&action).map_err(Error::wrap)?
-                != yaml_serde::to_value(&policy.action_space).map_err(Error::wrap)?
+                != yaml_serde::to_value(&recipe.description.action_space).map_err(Error::wrap)?
         {
             return Err(Error::invalid_state(
                 "restore builder",

@@ -18,47 +18,47 @@ use serde::{Deserialize, Serialize};
 /// configuration to construct the same policy architecture.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PolicyBuilder {
-    pub(crate) observation_space: Space<VecTensor>,
-    pub(crate) action_space: Space<VecTensor>,
     pub(crate) network: NetworkConfig,
     pub(crate) log_std_init: f32,
     pub(crate) sde: SdeConfig,
 }
 
-impl PolicyBuilder {
-    pub(crate) fn new<T: R2lTensor>(env_description: &EnvDescription<T>) -> Result<Self> {
-        Ok(Self {
-            observation_space: env_description.observation_space.convert()?,
-            action_space: env_description.action_space.convert()?,
+impl Default for PolicyBuilder {
+    fn default() -> Self {
+        Self {
             network: NetworkConfig::Mlp(MlpConfig {
                 hidden_layers: vec![64, 64],
                 activation: ActivationFunction::default(),
             }),
             log_std_init: 0.0,
             sde: SdeConfig::Disabled,
-        })
+        }
     }
+}
 
-    pub(crate) fn build_candle_with_varmap(
+impl PolicyBuilder {
+    pub(crate) fn build_candle_with_varmap<T: R2lTensor>(
         &self,
+        description: &EnvDescription<T>,
         device: &Device,
     ) -> Result<(CandleDistributionKind, VarMap)> {
         let varmap = VarMap::new();
         let var_builder =
             r2l_distributions::networks::candle::seeded_var_builder(&varmap, DType::F32, device);
-        let policy = self.build_candle(&var_builder)?;
+        let policy = self.build_candle(description, &var_builder)?;
         Ok((policy, varmap))
     }
 
-    pub(crate) fn build_candle(
+    pub(crate) fn build_candle<T: R2lTensor>(
         &self,
+        description: &EnvDescription<T>,
         var_builder: &VarBuilder<'_>,
     ) -> Result<CandleDistributionKind> {
         let network = super::networks::NetworkBuilder::new(self.network.clone());
         if let config @ SdeConfig::Enabled { .. } = self.sde {
-            let width = self.sde_action_size()?;
+            let width = Self::sde_action_size(&description.action_space)?;
             let mean = network.build_candle(
-                &self.observation_space.observation_shape(),
+                &description.observation_space.observation_shape(),
                 width,
                 &var_builder.pp("policy"),
             )?;
@@ -75,10 +75,10 @@ impl PolicyBuilder {
             ));
         }
         CandleDistributionKind::from_space(
-            self.action_space.clone(),
+            description.action_space.convert::<VecTensor>()?,
             &mut |prefix, width| {
                 network.build_candle(
-                    &self.observation_space.observation_shape(),
+                    &description.observation_space.observation_shape(),
                     width,
                     &var_builder.pp(prefix),
                 )
@@ -97,17 +97,25 @@ impl PolicyBuilder {
     ///
     /// # Arguments
     ///
+    /// * `description` - Observation and action spaces used to size the policy.
     /// * `device` - Device on which network parameters and Gaussian log deviations are initialized.
     ///
     /// # Errors
     ///
     /// Returns an error if the policy configuration is invalid or unsupported.
-    pub(crate) fn build_burn(&self, device: &burn::tensor::Device) -> Result<BurnDistributionKind> {
+    pub(crate) fn build_burn<T: R2lTensor>(
+        &self,
+        description: &EnvDescription<T>,
+        device: &burn::tensor::Device,
+    ) -> Result<BurnDistributionKind> {
         let network = super::networks::NetworkBuilder::new(self.network.clone());
         if let config @ SdeConfig::Enabled { .. } = self.sde {
-            let width = self.sde_action_size()?;
-            let mean =
-                network.build_burn(&self.observation_space.observation_shape(), width, device)?;
+            let width = Self::sde_action_size(&description.action_space)?;
+            let mean = network.build_burn(
+                &description.observation_space.observation_shape(),
+                width,
+                device,
+            )?;
             let features = mean
                 .feature_size()
                 .expect("built-in networks expose features");
@@ -121,9 +129,13 @@ impl PolicyBuilder {
             )?));
         }
         BurnDistributionKind::from_space(
-            self.action_space.clone(),
+            description.action_space.convert::<VecTensor>()?,
             &mut |_, width| {
-                network.build_burn(&self.observation_space.observation_shape(), width, device)
+                network.build_burn(
+                    &description.observation_space.observation_shape(),
+                    width,
+                    device,
+                )
             },
             &mut |_, width| {
                 Ok(burn::module::Param::from_tensor(burn::Tensor::full(
@@ -135,13 +147,13 @@ impl PolicyBuilder {
         )
     }
 
-    fn sde_action_size(&self) -> Result<usize> {
-        match &self.action_space {
+    fn sde_action_size<T: R2lTensor>(action_space: &Space<T>) -> Result<usize> {
+        match action_space {
             Space::Box { shape, .. } => Ok(shape.num_elements()),
             _ => Err(r2l_core::error::Error::invalid_parameter(
                 "gSDE action space",
                 "a continuous Box space",
-                format!("{:?}", self.action_space),
+                format!("{action_space:?}"),
             )),
         }
     }
@@ -161,17 +173,33 @@ mod tests {
             },
             Space::Discrete(2),
         );
-        let mut builder = PolicyBuilder::new(&description)?;
+        let mut builder = PolicyBuilder::default();
         assert!(matches!(builder.sde, SdeConfig::Disabled));
         builder.sde = SdeConfig::Enabled {
             resample_every: None,
         };
-        assert!(builder.build_candle_with_varmap(&Device::Cpu).is_err());
-        assert!(builder.build_burn(&Default::default()).is_err());
+        assert!(
+            builder
+                .build_candle_with_varmap(&description, &Device::Cpu)
+                .is_err()
+        );
+        assert!(
+            builder
+                .build_burn(&description, &Default::default())
+                .is_err()
+        );
 
         builder.sde = SdeConfig::Disabled;
-        assert!(builder.build_candle_with_varmap(&Device::Cpu).is_ok());
-        assert!(builder.build_burn(&Default::default()).is_ok());
+        assert!(
+            builder
+                .build_candle_with_varmap(&description, &Device::Cpu)
+                .is_ok()
+        );
+        assert!(
+            builder
+                .build_burn(&description, &Default::default())
+                .is_ok()
+        );
         Ok(())
     }
 }

@@ -19,7 +19,7 @@ pub use optimizer::{AdamWConfig, GradientClippingConfig, LearningRateSchedule, O
 use r2l_agents::on_policy_algorithms::{a2c::A2C, ppo::PPO};
 use r2l_core::error::Result;
 use r2l_core::{
-    env::{Env, EnvBuilder, EnvBuilderType},
+    env::{Env, EnvBuilder, EnvBuilderType, EnvDescription},
     models::{ActivationFunction, ToSafetensors},
     on_policy::algorithm::{Agent, OnPolicyAlgorithm, OnPolicyRuntime},
 };
@@ -91,7 +91,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
         algo_backend: AlgoBackendConfig<A, B>,
     ) -> Result<Self> {
         let env_builder = EnvBuilderType::homogeneous(env_builder, n_envs)?;
-        let learner_builder = LearnerConfig::new(&env_builder.env_description()?)?;
+        let learner_builder = LearnerConfig::default();
         Ok(Self {
             algo_backend,
             config: BuilderConfig {
@@ -475,6 +475,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
     fn finish_build<AG: Agent<Actor: ToSafetensors>>(
         self,
         agent: AG,
+        description: &EnvDescription<E::Tensor>,
         backend: BackendConfig,
         progress: SharedTrainingProgress,
     ) -> Result<OnPolicyAlgorithm<OnPolicyHooks<AG, E>>> {
@@ -482,7 +483,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
         let obs_normalizer = self
             .config
             .sampler_configuration
-            .build_obs_normalizer(policy.observation_space.observation_shape());
+            .build_obs_normalizer(description.observation_space.observation_shape());
         let sampler = self
             .config
             .sampler_configuration
@@ -490,6 +491,7 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
         let hooks = self.config.hook_config.build(
             &self.env_builder,
             policy,
+            description,
             backend,
             obs_normalizer,
             progress,
@@ -587,21 +589,29 @@ impl<A, B, E: Env> OnPolicyBuilder<A, B, E> {
 }
 
 impl<A, E: Env> OnPolicyBuilder<A, CandleDevice, E> {
-    fn build_learner(&self) -> Result<CandlePolicyValueLearner> {
+    fn build_learner(
+        &self,
+        description: &EnvDescription<E::Tensor>,
+    ) -> Result<CandlePolicyValueLearner> {
         let device = self.algo_backend.backend.build()?;
         if let Some(seed) = self.config.seed {
             Backend::Candle(device.clone()).seed(seed)?;
         }
-        self.config.learner_builder.build_candle_learner(&device)
+        self.config
+            .learner_builder
+            .build_candle_learner(description, &device)
     }
 }
 
 impl<A, E: Env> OnPolicyBuilder<A, BurnBackendConfig, E> {
-    fn build_learner(&self) -> Result<BurnPolicyValueLearner> {
+    fn build_learner(
+        &self,
+        description: &EnvDescription<E::Tensor>,
+    ) -> Result<BurnPolicyValueLearner> {
         if let Some(seed) = self.config.seed {
             Backend::Burn.seed(seed)?;
         }
-        self.config.learner_builder.build_burn_learner()
+        self.config.learner_builder.build_burn_learner(description)
     }
 }
 
@@ -665,7 +675,8 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, CandleDevice, E> {
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
     pub fn build(self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<PPOCandle, E>>> {
         let progress = self.progress();
-        let learner = self.build_learner()?;
+        let description = self.env_builder.env_description()?;
+        let learner = self.build_learner(&description)?;
         let agent = self.config.algo_config.build_ppo(
             &self.algo_backend.algo,
             learner,
@@ -674,8 +685,8 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, CandleDevice, E> {
             progress.clone(),
             self.n_envs(),
         );
-        let backend = BackendConfig::Candle(self.algo_backend.backend);
-        self.finish_build(agent, backend, progress)
+        let backend = BackendConfig::from(self.algo_backend.backend);
+        self.finish_build(agent, &description, backend, progress)
     }
 }
 
@@ -693,7 +704,8 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, BurnBackendConfig, E> {
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
     pub fn build(self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<PPOBurn, E>>> {
         let progress = self.progress();
-        let learner = self.build_learner()?;
+        let description = self.env_builder.env_description()?;
+        let learner = self.build_learner(&description)?;
         let agent = self.config.algo_config.build_ppo(
             &self.algo_backend.algo,
             learner,
@@ -702,8 +714,8 @@ impl<E: Env> OnPolicyBuilder<PPOConfig, BurnBackendConfig, E> {
             progress.clone(),
             self.n_envs(),
         );
-        let backend = BackendConfig::Burn(self.algo_backend.backend);
-        self.finish_build(agent, backend, progress)
+        let backend = BackendConfig::from(self.algo_backend.backend);
+        self.finish_build(agent, &description, backend, progress)
     }
 }
 
@@ -721,7 +733,8 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, CandleDevice, E> {
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
     pub fn build(self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<A2CCandle, E>>> {
         let progress = self.progress();
-        let learner = self.build_learner()?;
+        let description = self.env_builder.env_description()?;
+        let learner = self.build_learner(&description)?;
         let agent = self.config.algo_config.build_a2c(
             learner,
             &self.config.learning_hook,
@@ -730,7 +743,7 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, CandleDevice, E> {
             self.n_envs(),
         );
         let backend = BackendConfig::Candle(self.algo_backend.backend);
-        self.finish_build(agent, backend, progress)
+        self.finish_build(agent, &description, backend, progress)
     }
 }
 
@@ -748,7 +761,8 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, BurnBackendConfig, E> {
     /// Panics if the tensor backend cannot create enabled observation-normalization statistics.
     pub fn build(self) -> Result<OnPolicyAlgorithm<OnPolicyHooks<A2CBurn, E>>> {
         let progress = self.progress();
-        let learner = self.build_learner()?;
+        let description = self.env_builder.env_description()?;
+        let learner = self.build_learner(&description)?;
         let agent = self.config.algo_config.build_a2c(
             learner,
             &self.config.learning_hook,
@@ -757,7 +771,7 @@ impl<E: Env> OnPolicyBuilder<A2CConfig, BurnBackendConfig, E> {
             self.n_envs(),
         );
         let backend = BackendConfig::Burn(self.algo_backend.backend);
-        self.finish_build(agent, backend, progress)
+        self.finish_build(agent, &description, backend, progress)
     }
 }
 

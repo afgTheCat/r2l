@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use r2l_core::{
     env::{
-        Env, EnvBuilderType,
+        Env, EnvBuilderType, EnvDescription,
         normalizer::{Normalizer, NormalizerMode},
     },
     error::Error,
@@ -132,6 +132,7 @@ impl OnPolicyHookConfig {
         self,
         env_builder: &EnvBuilderType<E>,
         policy: &PolicyBuilder,
+        description: &EnvDescription<E::Tensor>,
         backend: BackendConfig,
         obs_normalizer: Option<Normalizer<E::Tensor>>,
         progress: SharedTrainingProgress,
@@ -144,8 +145,16 @@ impl OnPolicyHookConfig {
             } else {
                 InferenceObservationMode::Raw
             };
-            InferenceConfig::new(policy.clone(), observation_mode, backend)
-                .write_to_dir(&config.output_dir)?;
+            InferenceConfig::new(
+                policy.clone(),
+                EnvDescription::new(
+                    description.observation_space.convert()?,
+                    description.action_space.convert()?,
+                ),
+                observation_mode,
+                backend,
+            )
+            .write_to_dir(&config.output_dir)?;
         }
         let evaluator = if self.needs_evaluator() {
             let defaults = EvaluationSettings::default();

@@ -32,27 +32,36 @@ pub struct LearnerConfig {
     pub optimizer: OptimizerConfig,
 }
 
-impl LearnerConfig {
-    pub(crate) fn new<T: R2lTensor>(env_description: &EnvDescription<T>) -> Result<Self, Error> {
-        Ok(Self {
-            policy_config: PolicyBuilder::new(env_description)?,
+impl Default for LearnerConfig {
+    fn default() -> Self {
+        Self {
+            policy_config: PolicyBuilder::default(),
             value_network: NetworkConfig::Mlp(MlpConfig {
                 hidden_layers: vec![64, 64],
                 activation: ActivationFunction::default(),
             }),
             optimizer: OptimizerConfig::default(),
-        })
+        }
     }
+}
 
+impl LearnerConfig {
     /// Builds a Candle policy/value learner with fresh parameters and optimizer state.
     ///
     /// # Arguments
+    /// * `description` - Observation and action spaces used to size the networks.
     /// * `device` - Device on which the networks and their parameters are allocated.
     ///
     /// # Errors
     /// Returns an error if the network configuration is invalid or backend initialization fails.
-    pub fn build_candle_learner(&self, device: &Device) -> Result<CandlePolicyValueLearner, Error> {
-        let (policy, policy_varmap) = self.policy_config.build_candle_with_varmap(device)?;
+    pub fn build_candle_learner<T: R2lTensor>(
+        &self,
+        description: &EnvDescription<T>,
+        device: &Device,
+    ) -> Result<CandlePolicyValueLearner, Error> {
+        let (policy, policy_varmap) = self
+            .policy_config
+            .build_candle_with_varmap(description, device)?;
         let value_varmap = match self.optimizer {
             OptimizerConfig::Joint(_) => policy_varmap.clone(),
             OptimizerConfig::Split { .. } => candle_nn::VarMap::new(),
@@ -63,7 +72,7 @@ impl LearnerConfig {
             device,
         );
         let value = NetworkBuilder::new(self.value_network.clone()).build_candle(
-            &self.policy_config.observation_space.observation_shape(),
+            &description.observation_space.observation_shape(),
             1,
             &vb.pp("value"),
         )?;
@@ -87,13 +96,19 @@ impl LearnerConfig {
 
     /// Builds a Burn policy/value learner on the Flex device with fresh optimizer state.
     ///
+    /// # Arguments
+    /// * `description` - Observation and action spaces used to size the networks.
+    ///
     /// # Errors
     /// Returns an error if the network configuration is invalid or policy construction fails.
-    pub fn build_burn_learner(&self) -> Result<BurnPolicyValueLearner, Error> {
+    pub fn build_burn_learner<T: R2lTensor>(
+        &self,
+        description: &EnvDescription<T>,
+    ) -> Result<BurnPolicyValueLearner, Error> {
         let device = BurnDevice::flex();
-        let policy = self.policy_config.build_burn(&device)?;
+        let policy = self.policy_config.build_burn(description, &device)?;
         let value_net = NetworkBuilder::new(self.value_network.clone()).build_burn(
-            &self.policy_config.observation_space.observation_shape(),
+            &description.observation_space.observation_shape(),
             1,
             &device,
         )?;

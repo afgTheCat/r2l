@@ -6,13 +6,13 @@ use candle_nn::VarBuilder;
 use r2l_core::{
     ActorWrapper,
     env::{
-        Env,
+        Env, EnvDescription,
         normalizer::{Normalizer, NormalizerSnapshot},
     },
     error::{BoxedError, BrokenArtifact, Error},
     models::Actor,
     rng::sample_u64,
-    tensor::R2lTensor,
+    tensor::{R2lTensor, VecTensor},
 };
 use r2l_distributions::learning_modules::burn_lm::BurnDistributionKind;
 use r2l_distributions::learning_modules::candle_lm::CandleDistributionKind;
@@ -80,6 +80,7 @@ pub(crate) enum InferenceObservationMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct InferenceConfig {
     policy_builder: PolicyBuilder,
+    description: EnvDescription<VecTensor>,
     observation_mode: InferenceObservationMode,
     backend: BackendConfig,
 }
@@ -88,11 +89,13 @@ impl InferenceConfig {
     /// Creates an inference configuration.
     pub(crate) fn new(
         policy_builder: PolicyBuilder,
+        description: EnvDescription<VecTensor>,
         observation_mode: InferenceObservationMode,
         backend: BackendConfig,
     ) -> Self {
         Self {
             policy_builder,
+            description,
             observation_mode,
             backend,
         }
@@ -185,14 +188,14 @@ impl<T: R2lTensor> InferencePolicy<T> {
                         .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 let actor = config
                     .policy_builder
-                    .build_candle(&var_builder)
+                    .build_candle(&config.description, &var_builder)
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Candle(ActorWrapper::new(actor))
             }
             Backend::Burn => {
                 let actor = config
                     .policy_builder
-                    .build_burn(&BurnDevice::flex())?
+                    .build_burn(&config.description, &BurnDevice::flex())?
                     .load_from_bytes(actor_bytes)
                     .map_err(|error| actor_artifact.decode_error(Box::new(error)))?;
                 InferenceActor::Burn(Box::new(ActorWrapper::new(actor)))

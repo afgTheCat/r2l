@@ -136,7 +136,7 @@ impl<T: R2lTensor> Space<T> {
 }
 
 /// Observation and action space metadata for an environment.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvDescription<T: R2lTensor> {
     /// Space returned by [`Env::reset`] and [`Env::step`].
     pub observation_space: Space<T>,

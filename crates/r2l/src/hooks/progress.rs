@@ -77,11 +77,16 @@ pub(crate) struct TrainingProgress {
     counters: TrainingCounters,
     training_limit: TrainingLimit,
     total_rollouts: Option<usize>,
+    n_envs: NonZeroUsize,
 }
 
 pub(crate) type SharedTrainingProgress = Rc<RefCell<TrainingProgress>>;
 
 impl TrainingProgress {
+    pub(crate) fn n_envs(&self) -> NonZeroUsize {
+        self.n_envs
+    }
+
     pub(crate) fn counters(&self) -> TrainingCounters {
         self.counters.clone()
     }
@@ -96,7 +101,7 @@ impl TrainingProgress {
     ///
     /// * `training_limit` - Determines when the training loop stops.
     /// * `rollout_mode` - Collection bound used to calculate the total rollout count once.
-    /// * `n_envs` - Number of training environments used in that calculation.
+    /// * `n_envs` - Number of training environments, also used to size rollout reward tracking.
     pub(crate) fn shared(
         training_limit: TrainingLimit,
         rollout_mode: RolloutMode,
@@ -115,6 +120,7 @@ impl TrainingProgress {
             counters: TrainingCounters::default(),
             training_limit,
             total_rollouts,
+            n_envs,
         }
         .into_shared()
     }

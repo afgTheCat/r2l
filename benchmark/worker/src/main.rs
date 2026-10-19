@@ -35,8 +35,16 @@ fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
     } else {
         SdeConfig::Disabled
     };
+    let reward_normalizer_config = if config.normalize.norm_reward() {
+        RewardNormalizerConfig::Enabled {
+            gamma: config.gamma,
+            clip_reward: 10.0,
+        }
+    } else {
+        RewardNormalizerConfig::Disabled
+    };
     let artifacts_config = TrainingArtifactsConfig::new(&task.output_dir);
-    let mut builder = PPOBuilder::gym(task.env_name.clone(), config.n_envs)?
+    let builder = PPOBuilder::gym(task.env_name.clone(), config.n_envs)?
         .with_rollout_steps(config.n_steps)
         .with_training_limit(TrainingLimit::steps(config.n_timesteps))
         .with_training_artifacts(artifacts_config)
@@ -51,13 +59,8 @@ fn train_r2l(task: &BenchmarkTask) -> anyhow::Result<()> {
         .with_log_std_init(config.log_std_init)
         .with_value_loss_coefficient(config.vf_coef)
         .with_sde(sde_config)
+        .with_reward_normalizer(reward_normalizer_config)
         .with_seed(Some(0)); // TODO: should we keep this?
-    if config.normalize.norm_reward() {
-        builder = builder.with_reward_normalizer(RewardNormalizerConfig::Enabled {
-            gamma: config.gamma,
-            clip_reward: 10.0,
-        });
-    }
     match task.backend {
         Backend::Burn => builder.with_burn().build()?.train()?,
         Backend::Candle => builder.build()?.train()?,

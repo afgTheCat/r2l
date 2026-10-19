@@ -304,7 +304,9 @@ impl PPOLearningHook {
     ///
     /// * `tx` - Channel receiving rollout statistics, or `None` to disable channel delivery.
     pub fn set_rollout_reporter(&mut self, tx: Option<Sender<PPORolloutStats>>) {
-        self.algorithm.reporter.set_sender(tx);
+        self.algorithm
+            .reporter
+            .set_sender(tx, self.progress.borrow().n_envs());
     }
 }
 
@@ -315,6 +317,8 @@ impl A2CLearningHook {
     ///
     /// * `tx` - Channel receiving rollout statistics, or `None` to disable channel delivery.
     pub fn set_rollout_reporter(&mut self, tx: Option<Sender<A2CRolloutStats>>) {
-        self.algorithm.reporter.set_sender(tx);
+        self.algorithm
+            .reporter
+            .set_sender(tx, self.progress.borrow().n_envs());
     }
 }

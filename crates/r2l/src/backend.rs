@@ -44,9 +44,21 @@ pub struct BurnBackendConfig;
 
 /// Serializable backend selection shared by training and inference recipes.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub(crate) enum BackendConfig {
+pub enum BackendConfig {
     Candle(CandleDevice),
     Burn(BurnBackendConfig),
+}
+
+impl From<CandleDevice> for BackendConfig {
+    fn from(value: CandleDevice) -> Self {
+        Self::Candle(value)
+    }
+}
+
+impl From<BurnBackendConfig> for BackendConfig {
+    fn from(value: BurnBackendConfig) -> Self {
+        Self::Burn(value)
+    }
 }
 
 impl Default for BackendConfig {

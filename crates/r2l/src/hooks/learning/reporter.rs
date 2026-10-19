@@ -55,7 +55,7 @@ impl<R: Default + Display> EnabledRolloutReporter<R> {
 
 /// Shared reward tracking and delivery, retaining the existing statistics payloads.
 pub(crate) enum RolloutReporter<R> {
-    Disabled { n_envs: NonZeroUsize },
+    Disabled,
     Enabled(EnabledRolloutReporter<R>),
 }
 
@@ -67,16 +67,13 @@ impl<R> RolloutReporter<R> {
 }
 
 impl<R: Default + Display> RolloutReporter<R> {
-    pub(crate) fn set_sender(&mut self, tx: Option<Sender<R>>) {
+    pub(crate) fn set_sender(&mut self, tx: Option<Sender<R>>, n_envs: NonZeroUsize) {
         match self {
-            Self::Disabled { n_envs } => *self = Self::new(tx, false, *n_envs),
+            Self::Disabled => *self = Self::new(tx, false, n_envs),
             Self::Enabled(reporter) => {
                 reporter.tx = tx;
                 if reporter.tx.is_none() && !reporter.log_progress {
-                    *self = Self::Disabled {
-                        n_envs: NonZeroUsize::new(reporter.unfinished_episode_rewards.len())
-                            .expect("environment reward streams are nonempty"),
-                    };
+                    *self = Self::Disabled;
                 }
             }
         }
@@ -91,7 +88,7 @@ impl<R: Default + Display> RolloutReporter<R> {
     /// * `n_envs` - Number of environment reward streams to track.
     pub(crate) fn new(tx: Option<Sender<R>>, log_progress: bool, n_envs: NonZeroUsize) -> Self {
         if tx.is_none() && !log_progress {
-            return Self::Disabled { n_envs };
+            return Self::Disabled;
         }
         Self::Enabled(EnabledRolloutReporter {
             report: R::default(),
