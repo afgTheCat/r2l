@@ -4,23 +4,28 @@ use std::{
     thread,
 };
 
-use candle_core::Device;
-use r2l::{A2CBuilder, A2CRolloutStats, SamplerExecutionMode, TrainingLimit};
+use r2l::{
+    A2CBuilder, A2CRolloutStats, CandleDevice, GradientClippingConfig, SamplerExecutionMode,
+    TrainingLimit,
+};
 
 fn main() -> anyhow::Result<()> {
     let (update_tx, update_rx): (Sender<A2CRolloutStats>, Receiver<A2CRolloutStats>) =
         mpsc::channel();
 
     let a2c_builder = A2CBuilder::gym("Pendulum-v1", 10)?
-        .with_candle(Device::Cpu)
-        .with_seed(0)
+        .with_candle(CandleDevice::Cpu)
+        .with_seed(Some(0))
         .with_entropy_coefficient(0.2)
-        .with_gradient_clipping(Some(0.5))
+        .with_gradient_clipping(GradientClippingConfig::Norm(0.5))
         .with_rollout_steps(2048)
         .with_execution_mode(SamplerExecutionMode::SingleThreaded)
-        .with_training_limit(TrainingLimit::rollouts(300))
-        .with_rollout_reporter(Some(update_tx));
+        .with_training_limit(TrainingLimit::rollouts(300));
     let mut a2c = a2c_builder.build()?;
+    a2c.runtime
+        .agent
+        .hooks
+        .set_rollout_reporter(Some(update_tx));
     let t = thread::spawn(move || {
         while let Ok(stats) = update_rx.recv() {
             println!("avg reward: {}", stats.average_reward);

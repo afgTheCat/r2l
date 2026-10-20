@@ -9,6 +9,9 @@
 //!
 //! The Gymnasium integration is available through the opt-in `gym` feature. It
 //! requires Python 3.11 or newer with the `gymnasium` package installed.
+//! For custom Python integrations, the `python` feature enables conversion of
+//! `PyO3` errors into [`Error`] via `?`, without enabling Gymnasium. Applications
+//! choose their own Python initialization and ABI settings.
 //!
 //! ```no_run
 //! use r2l::PPOBuilder;
@@ -51,43 +54,52 @@
 //! - [r2l-core](https://docs.rs/r2l-core) — core traits and data types.
 //! - [r2l-sampler](https://docs.rs/r2l-sampler) — rollout samplers.
 //! - [r2l-gym](https://docs.rs/r2l-gym) — Gymnasium-backed environments.
-//! - [r2l-burn](https://docs.rs/r2l-burn) — Burn-backed policy and learner implementations.
-//! - [r2l-candle](https://docs.rs/r2l-candle) — Candle-backed policy and learner implementations.
+//! - [r2l-distributions](https://docs.rs/r2l-distributions) — Policies, networks and learners for Burn and Candle.
 //! - [r2l-agents](https://docs.rs/r2l-agents) — core RL algorithm implementations.
 
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
 
-mod builders;
+pub mod backend;
+/// Algorithm and network builders.
+pub mod builders;
+mod constants;
+mod csv_artifact;
 mod evaluator;
 mod hooks;
 mod inference;
+mod snapshot;
 mod utils;
 
-use burn::backend::{Autodiff, NdArray};
-
-/// Default autodifferentiation backend used by Burn-based builders.
-pub type BurnBackend = Autodiff<NdArray>;
-
+pub use backend::{BackendConfig, BurnBackend, BurnBackendConfig, CandleDevice};
 pub use builders::{
-    A2CBuilder, A2CBurn, A2CCandle, AdamWParams, OnPolicyBuilder, PPOBuilder, PPOBurn, PPOCandle,
-    TrainingArtifactsConfig,
+    A2CBuilder, A2CBurn, A2CCandle, AdamWConfig, AlgoBackendConfig, GradientClippingConfig,
+    LearningRateSchedule, ObsNormalizerConfig, OnPolicyBuilder, OnPolicyConfig, OptimizerConfig,
+    PPOBuilder, PPOBurn, PPOCandle, PPOConfig, RewardNormalizerConfig, TrainingArtifactsConfig,
 };
 pub use evaluator::EvaluationSettings;
-pub use hooks::a2c::{A2CMinibatchStats, A2CRolloutStats};
-pub use hooks::on_policy::{
-    LearningRateSchedule, OnPolicyControlHandle, OnPolicyTrainingHooks, TrainingLimit,
+pub use hooks::learning::stats::{A2CMinibatchStats, A2CRolloutStats};
+pub use hooks::learning::stats::{PPOMinibatchStats, PPORolloutStats};
+pub use hooks::learning::{
+    A2CLearningHook, A2CSettings, ClipRangeSchedule, LearningHook, PPOLearningHook, PPOSettings,
 };
-pub use hooks::ppo::{ClipRangeSchedule, PPOMinibatchStats, PPORolloutStats};
-pub use hooks::sampler::{EpisodeBoundHook, StepBoundHook};
+pub use hooks::on_policy::{
+    OnPolicyHooks, OnPolicyTrainingHooks,
+    commands::{OnPolicyControlEndpoint, OnPolicyControlHandle},
+};
+pub use hooks::progress::TrainingLimit;
+pub use hooks::sampler::{OnPolicySampler, SamplerHook};
 pub use inference::{InferenceEnv, InferencePolicy, InferenceRunner};
 pub use r2l_core::error::{self, Error};
 pub use r2l_core::{
-    env::{Env, EnvBuilder, EnvDescription, Snapshot, Space},
+    Shape,
+    env::{Env, EnvBuilder, EnvBuilderType, EnvDescription, Snapshot, Space},
     models::ActivationFunction,
     on_policy::algorithm::OnPolicyAlgorithm,
     tensor::VecTensor,
 };
+pub use r2l_distributions::distributions::sde::SdeConfig;
 #[cfg(feature = "gym")]
 pub use r2l_gym::{GymEnv, GymEnvBuilder};
-pub use r2l_sampler::{DirectSampler, SamplerExecutionMode, StagedSampler};
+pub use r2l_sampler::{RolloutMode, RolloutSampler, SamplerExecutionMode};
+pub use snapshot::SnapshotAlgo;

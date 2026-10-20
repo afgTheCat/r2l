@@ -1,4 +1,7 @@
-use crate::{error::TensorError, tensor::R2lTensor};
+use serde::{Deserialize, Serialize};
+
+use crate::Shape;
+use crate::{error::TensorError, tensor::R2lTensor, utils::slice_mean};
 
 type Result<T> = std::result::Result<T, TensorError>;
 
@@ -16,17 +19,18 @@ pub struct RunningMeanStd<T: R2lTensor> {
 impl<T: R2lTensor> RunningMeanStd<T> {
     /// Creates zero-count statistics for tensors with `shape`.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an error if the tensor backend cannot create tensors with `shape`.
-    pub fn new(shape: Vec<usize>) -> Result<Self> {
-        let mean = T::zeros(shape.clone())?;
-        let var = T::zeros(shape)?;
-        Ok(Self {
+    /// Panics if [`R2lTensor::zeros`] cannot create tensors with `shape`.
+    pub fn new(shape: impl Into<Shape>) -> Self {
+        let shape = shape.into();
+        let mean = T::zeros(shape.clone());
+        let var = T::zeros(shape);
+        Self {
             mean,
             var,
             count: 0.,
-        })
+        }
     }
 
     pub fn build(mean: T, var: T, count: f32) -> Self {
@@ -83,7 +87,7 @@ impl<T: R2lTensor> RunningMeanStd<T> {
 }
 
 /// Running mean and variance for scalar `f32` samples.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RunningMeanStdF32 {
     /// Current scalar mean.
     pub mean: f32,
@@ -99,6 +103,16 @@ impl Default for RunningMeanStdF32 {
 }
 
 impl RunningMeanStdF32 {
+    /// Whether the statistics contain finite moments and a nonnegative count and variance.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.mean.is_finite()
+            && self.var.is_finite()
+            && self.var >= 0.0
+            && self.count.is_finite()
+            && self.count >= 0.0
+    }
+
     /// Creates scalar running statistics with a small initial sample count.
     #[must_use]
     pub fn new() -> Self {
@@ -140,7 +154,7 @@ impl RunningMeanStdF32 {
             return;
         }
         let batch_count = samples.len() as f32;
-        let batch_mean = samples.iter().sum::<f32>() / batch_count;
+        let batch_mean = slice_mean(samples);
         let batch_var = samples
             .iter()
             .map(|sample| (*sample - batch_mean).powi(2))

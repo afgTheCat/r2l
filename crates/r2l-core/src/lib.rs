@@ -3,8 +3,12 @@
 //! `r2l-core` is the contracts crate. It defines the small set of interfaces
 //! that environments, samplers, policies, agents, learners, and tensor
 //! backends agree on. Backend-specific implementations live in crates such as
-//! `r2l-burn` and `r2l-candle`; concrete algorithms and builders live outside
+//! `r2l-distributions`; concrete algorithms and builders live outside
 //! this crate as well.
+//!
+//! The optional `python` feature lets functions returning [`error::Result`]
+//! propagate `PyO3` errors with `?`. It does not enable Python auto-initialization
+//! or select an ABI version.
 //!
 //! Most downstream code should start with the prelude:
 //!
@@ -44,17 +48,22 @@ pub mod env;
 pub mod error;
 /// Actor, policy, value-function, and learner traits.
 pub mod models;
+/// Backend-independent network architecture configurations.
+pub mod networks;
 /// Shared interfaces for on-policy training loops.
 pub mod on_policy;
 /// Reproducible random-number utilities.
 pub mod rng;
 /// Online mean and variance estimators.
 pub mod running_mean;
+/// Shared tensor, space, and network dimensions.
+pub mod shape;
 /// Backend-neutral tensor interfaces and adapters.
 pub mod tensor;
-mod utils;
+pub mod utils;
 
-pub use utils::actor_wrapper::ActorWrapper;
+pub use shape::Shape;
+pub use utils::actor_wrapper::{ActorWrapper, ModeActorWrapper};
 
 /// Control-flow result returned by training hooks.
 ///
@@ -65,6 +74,16 @@ pub enum HookResult {
     Continue,
     /// Stop the current training loop at the current hook boundary.
     Break,
+}
+
+impl HookResult {
+    #[must_use]
+    pub const fn and(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Continue, Self::Continue) => Self::Continue,
+            _ => Self::Break,
+        }
+    }
 }
 
 #[macro_export]
@@ -100,6 +119,6 @@ pub mod prelude {
         ActivationFunction, Actor, Learner, Policy, ToSafetensors, ValueFunction,
     };
     pub use crate::on_policy::learning_module::OnPolicyLearner;
-    pub use crate::on_policy::losses::FromPolicyValueLosses;
-    pub use crate::tensor::{R2lTensor, VecTensor};
+    pub use crate::on_policy::losses::PolicyValueLosses;
+    pub use crate::tensor::{DistributionTensor, OnPolicyTensor, R2lTensor, TensorOps, VecTensor};
 }

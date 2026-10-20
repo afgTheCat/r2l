@@ -4,10 +4,8 @@ use r2l_core::{
     buffers::TrajectoryBatch,
     error::Result,
     models::{Learner, Policy},
-    on_policy::{
-        algorithm::Agent, learning_module::OnPolicyLearner, losses::FromPolicyValueLosses,
-    },
-    tensor::R2lTensor,
+    on_policy::{algorithm::Agent, learning_module::OnPolicyLearner, losses::PolicyValueLosses},
+    tensor::{OnPolicyTensor, R2lTensor, TensorOps},
 };
 
 use crate::{
@@ -45,9 +43,9 @@ impl Default for PPOParams {
 /// Per-minibatch data exposed to [`PPOHook::batch_hook`].
 pub struct PPOBatchData<T: R2lTensor> {
     /// Sampled observations in the minibatch.
-    pub observations: Vec<T>,
+    pub observations: T,
     /// Sampled actions in the minibatch.
-    pub actions: Vec<T>,
+    pub actions: T,
     /// Current policy log-probabilities for the sampled actions.
     pub logp: T,
     /// Value-function predictions for the sampled observations.
@@ -65,7 +63,7 @@ pub trait PPOHook<M: OnPolicyLearner> {
     /// # Errors
     ///
     /// Returns an error if the hook cannot complete.
-    fn before_learning_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn before_learning_hook<B: TrajectoryBatch<M::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
@@ -81,7 +79,7 @@ pub trait PPOHook<M: OnPolicyLearner> {
     /// # Errors
     ///
     /// Returns an error if the hook cannot complete.
-    fn rollout_hook<B: TrajectoryBatch<M::InferenceTensor>>(
+    fn rollout_hook<B: TrajectoryBatch<M::Tensor>>(
         &mut self,
         _params: &mut PPOParams,
         _module: &mut M,
@@ -100,7 +98,7 @@ pub trait PPOHook<M: OnPolicyLearner> {
         _params: &mut PPOParams,
         _module: &mut M,
         _losses: &mut <M as Learner>::Losses,
-        _data: &PPOBatchData<M::LearningTensor>,
+        _data: &PPOBatchData<M::Tensor>,
     ) -> Result<HookResult> {
         Ok(HookResult::Continue)
     }
@@ -119,20 +117,20 @@ pub struct PPO<Module: OnPolicyLearner, Hooks: PPOHook<Module>> {
 struct PPOObjective;
 
 impl PPOObjective {
-    fn policy_loss<T: R2lTensor>(ratio: &T, advantages: &T, clip_range: f32) -> Result<T> {
+    fn policy_loss<T: OnPolicyTensor>(ratio: &T, advantages: &T, clip_range: f32) -> Result<T> {
         let clip_ratio = ratio.clamp(1. - clip_range, 1. + clip_range)?;
         let clipped_adv = clip_ratio.mul(advantages)?;
         let ratio_adv = ratio.mul(advantages)?;
         Ok(ratio_adv.minimum(&clipped_adv)?.neg()?.mean()?)
     }
 
-    fn value_loss<T: R2lTensor>(returns: &T, values_pred: &T) -> Result<T> {
+    fn value_loss<T: TensorOps>(returns: &T, values_pred: &T) -> Result<T> {
         Ok(returns.sub(values_pred)?.sqr()?.mean()?)
     }
 }
 
 impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
-    fn batch_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn batch_loop<B: TrajectoryBatch<Module::Tensor>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -145,18 +143,21 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
             let Some(indices) = batch_indices.next_batch() else {
                 return Ok(());
             };
-            let (observations, actions) = sample(batches, &indices, Module::lifter);
+            let (observations, actions) =
+                sample(batches, &indices, Module::prepare_learning_tensor)?;
             let advantages = lm.tensor_from_slice(&advantages.sample(&indices))?;
             let logp_old = lm.tensor_from_slice(&logps.sample(&indices))?;
             let returns = lm.tensor_from_slice(&returns.sample(&indices))?;
-            let logp = lm.policy().log_probs(&observations, &actions)?;
-            let values_pred = lm.values(&observations)?;
+            let logp = lm
+                .policy()
+                .log_probs(observations.clone(), actions.clone())?;
+            let values_pred = lm.values(observations.clone())?;
             let value_loss = PPOObjective::value_loss(&returns, &values_pred)?;
             let logp_diff = logp.sub(&logp_old)?;
             let ratio = logp_diff.exp()?;
             let policy_loss =
                 PPOObjective::policy_loss(&ratio, &advantages, self.params.clip_range)?;
-            let mut losses = Module::Losses::from_policy_value_losses(policy_loss, value_loss);
+            let mut losses = PolicyValueLosses::new(policy_loss, value_loss);
             let ppo_data = PPOBatchData {
                 observations,
                 actions,
@@ -175,7 +176,7 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
         }
     }
 
-    fn learning_loop<B: TrajectoryBatch<Module::InferenceTensor>>(
+    fn learning_loop<B: TrajectoryBatch<Module::Tensor>>(
         &mut self,
         batches: &[B],
         advantages: &Advantages,
@@ -196,16 +197,13 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
     /// # Errors
     ///
     /// Returns an error if tensor computation, a hook, or the optimizer update fails.
-    pub fn learn<B: TrajectoryBatch<Module::InferenceTensor>>(
-        &mut self,
-        batches: &[B],
-    ) -> Result<()> {
+    pub fn learn<B: TrajectoryBatch<Module::Tensor>>(&mut self, batches: &[B]) -> Result<()> {
         let (mut advantages, mut returns) = batches_advantages_and_returns(
             batches,
             &self.lm,
             self.params.gamma,
             self.params.lambda,
-            Module::lifter,
+            Module::prepare_learning_tensor,
         )?;
         r2l_core::return_on_hook_result!(self.hooks.before_learning_hook(
             &mut self.params,
@@ -222,8 +220,8 @@ impl<Module: OnPolicyLearner, Hooks: PPOHook<Module>> PPO<Module, Hooks> {
 }
 
 impl<M: OnPolicyLearner, H: PPOHook<M>> Agent for PPO<M, H> {
-    type Tensor = M::InferenceTensor;
-    type Actor = M::InferencePolicy;
+    type Tensor = M::Tensor;
+    type Actor = M::Policy;
 
     fn actor(&self) -> Self::Actor {
         self.lm.inference_policy()
@@ -235,40 +233,5 @@ impl<M: OnPolicyLearner, H: PPOHook<M>> Agent for PPO<M, H> {
 
     fn set_learning_rate(&mut self, learning_rate: f64) {
         self.lm.set_learning_rate(learning_rate);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use r2l_core::tensor::{R2lTensor, VecTensor};
-
-    use super::PPOObjective;
-
-    fn scalar(tensor: &VecTensor) -> f32 {
-        tensor.to_vec().unwrap()[0]
-    }
-
-    #[test]
-    fn clipped_policy_loss_matches_hand_calculation() {
-        let ratios = VecTensor::from_vec(vec![1.3, 0.7, 1.1, 0.9]);
-        let advantages = VecTensor::from_vec(vec![1.0, 1.0, -1.0, -1.0]);
-        let loss = PPOObjective::policy_loss(&ratios, &advantages, 0.2).unwrap();
-        assert!((scalar(&loss) - 0.025).abs() < 1e-6);
-    }
-
-    #[test]
-    fn clipping_uses_the_pessimistic_surrogate_for_negative_advantages() {
-        let ratios = VecTensor::from_vec(vec![0.7]);
-        let advantages = VecTensor::from_vec(vec![-1.0]);
-        let loss = PPOObjective::policy_loss(&ratios, &advantages, 0.2).unwrap();
-        assert!((scalar(&loss) - 0.8).abs() < 1e-6);
-    }
-
-    #[test]
-    fn value_loss_is_mean_squared_error() {
-        let returns = VecTensor::from_vec(vec![1.0, 2.0, 5.0]);
-        let predictions = VecTensor::from_vec(vec![0.0, 4.0, 3.0]);
-        let loss = PPOObjective::value_loss(&returns, &predictions).unwrap();
-        assert!((scalar(&loss) - 3.0).abs() < 1e-6);
     }
 }

@@ -41,10 +41,22 @@ pub enum TrajectoryViewsWrapper<'a, T: R2lTensor> {
 }
 
 impl<T: R2lTensor> TrajectoryViewsWrapper<'_, T> {
+    /// Converts environment tensors to `[1, features]` rows for the learner.
+    /// Existing rows can be borrowed when their tensor type already matches.
+    ///
+    /// # Errors
+    /// Returns an error if any observation or action cannot be converted.
     pub fn from_view<'b, S: R2lTensor>(
         view: &'b TrajectoryView<'b, S>,
     ) -> Result<TrajectoryViewsWrapper<'b, T>, TensorError> {
-        if TypeId::of::<S>() == TypeId::of::<T>() {
+        if TypeId::of::<S>() == TypeId::of::<T>()
+            && view
+                .states()
+                .iter()
+                .chain(view.next_states())
+                .chain(view.actions())
+                .all(|tensor| matches!(tensor.to_shape().dims(), [1, _]))
+        {
             let states = unsafe { &*(std::ptr::from_ref::<[S]>(view.states()) as *const [T]) };
             let next_states =
                 unsafe { &*(std::ptr::from_ref::<[S]>(view.next_states()) as *const [T]) };
@@ -61,17 +73,17 @@ impl<T: R2lTensor> TrajectoryViewsWrapper<'_, T> {
         let states = view
             .states()
             .iter()
-            .map(T::convert)
+            .map(|tensor| T::from_vec_and_shape(tensor.to_vec()?, [1, tensor.size()]))
             .collect::<Result<Vec<_>, _>>()?;
         let next_states = view
             .next_states()
             .iter()
-            .map(T::convert)
+            .map(|tensor| T::from_vec_and_shape(tensor.to_vec()?, [1, tensor.size()]))
             .collect::<Result<Vec<_>, _>>()?;
         let actions = view
             .actions()
             .iter()
-            .map(T::convert)
+            .map(|tensor| T::from_vec_and_shape(tensor.to_vec()?, [1, tensor.size()]))
             .collect::<Result<Vec<_>, _>>()?;
         let rewards = view.rewards().to_vec();
         let terminated = view.terminated().to_vec();
