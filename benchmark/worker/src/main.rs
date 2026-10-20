@@ -3,39 +3,10 @@
 use std::{env::var, process::Command};
 
 use anyhow::{Context, bail};
-use r2l::{AlgoBackendConfig, BackendConfig, EnvBuilderType, GymEnvBuilder, OnPolicyBuilder};
-use r2l_benchmark_task::{BenchmarkTask, R2lTask};
+use r2l_benchmark_task::BenchmarkTask;
 
 const SB3_SCRIPT_PATH: &str = "/opt/r2l/sb3/ppo.py";
 const TASK_ENV_VAR: &str = "R2L_TASK";
-
-fn train_r2l(task: R2lTask) -> anyhow::Result<()> {
-    let env_builder =
-        EnvBuilderType::homogeneous(GymEnvBuilder::new(&task.env_name), task.n_envs.get())?;
-    match task.backend {
-        BackendConfig::Burn(backend) => OnPolicyBuilder::from_config(
-            task.config,
-            AlgoBackendConfig {
-                algo: task.ppo,
-                backend,
-            },
-            env_builder,
-        )
-        .build()?
-        .train()?,
-        BackendConfig::Candle(backend) => OnPolicyBuilder::from_config(
-            task.config,
-            AlgoBackendConfig {
-                algo: task.ppo,
-                backend,
-            },
-            env_builder,
-        )
-        .build()?
-        .train()?,
-    }
-    Ok(())
-}
 
 fn train_sb3(env_name: &str) -> anyhow::Result<()> {
     let status = Command::new("python")
@@ -51,7 +22,7 @@ fn train_sb3(env_name: &str) -> anyhow::Result<()> {
 
 fn run(task: BenchmarkTask) -> anyhow::Result<()> {
     match task {
-        BenchmarkTask::R2l(task) => train_r2l(*task),
+        BenchmarkTask::R2l(task) => task.execute().map_err(anyhow::Error::from),
         BenchmarkTask::Sb3 { env_name } => train_sb3(&env_name),
     }
 }
